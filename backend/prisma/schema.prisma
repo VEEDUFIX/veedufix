@@ -1,0 +1,431 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  CUSTOMER
+  WORKER
+  ADMIN
+}
+
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+  PREFER_NOT_TO_SAY
+}
+
+enum BookingStatus {
+  PENDING
+  ACCEPTED
+  WORKER_ASSIGNED
+  EN_ROUTE
+  ARRIVED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+  REFUNDED
+}
+
+enum VerificationStatus {
+  PENDING
+  VERIFIED
+  REJECTED
+  SUSPENDED
+}
+
+enum PaymentStatus {
+  PENDING
+  AUTHORIZED
+  CAPTURED
+  FAILED
+  REFUNDED
+}
+
+enum CouponType {
+  PERCENTAGE
+  FIXED
+}
+
+model City {
+  id            String   @id @default(cuid())
+  name          String   @unique
+  state         String
+  country       String   @default("India")
+  slug          String   @unique
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  users         User[]
+  workers       WorkerProfile[]
+  serviceAreas  ServiceArea[]
+  addresses     Address[]
+  bookings      Booking[]
+}
+
+model User {
+  id               String   @id @default(cuid())
+  role             UserRole @default(CUSTOMER)
+  name             String
+  email            String?  @unique
+  phone            String?  @unique
+  passwordHash     String?
+  avatarUrl        String?
+  walletBalance    Decimal  @default(0.0) @db.Decimal(12, 2)
+  emailVerifiedAt  DateTime?
+  phoneVerifiedAt   DateTime?
+  isActive         Boolean  @default(true)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  cityId           String?
+  city             City?    @relation(fields: [cityId], references: [id])
+  addresses        Address[]
+  bookings         Booking[] @relation("CustomerBookings")
+  reviewsWritten   Review[]  @relation("ReviewerReviews")
+  notifications    Notification[]
+  refreshTokens    RefreshToken[]
+  workerProfile    WorkerProfile?
+  authSessions     AuthSession[]
+}
+
+model WorkerProfile {
+  id                  String             @id @default(cuid())
+  userId              String             @unique
+  user                User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  cityId              String
+  city                City               @relation(fields: [cityId], references: [id])
+  displayName         String
+  bio                 String?
+  experienceYears     Int                @default(0)
+  serviceRadiusKm     Int                @default(10)
+  basePrice           Decimal            @default(0.0) @db.Decimal(12, 2)
+  commissionRate      Decimal            @default(0.0) @db.Decimal(5, 2)
+  averageRating       Decimal            @default(0.0) @db.Decimal(3, 2)
+  completedJobsCount  Int                @default(0)
+  verificationStatus  VerificationStatus @default(PENDING)
+  isAvailable         Boolean            @default(false)
+  isOnline            Boolean            @default(false)
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+  skills              WorkerSkill[]
+  documents           WorkerDocument[]
+  portfolioPhotos     WorkerPortfolioPhoto[]
+  bookings            Booking[]          @relation("AssignedWorkerBookings")
+  reviews             Review[]
+  workingHours        WorkingHour[]
+  holidays            Holiday[]
+  earnings            WalletTransaction[]
+}
+
+model WalletTransaction {
+  id            String   @id @default(cuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workerId      String?
+  worker        WorkerProfile? @relation(fields: [workerId], references: [id], onDelete: Cascade)
+  type          String
+  amount        Decimal  @db.Decimal(12, 2)
+  referenceType String?
+  referenceId   String?
+  balanceAfter  Decimal  @db.Decimal(12, 2)
+  metadata      Json?
+  createdAt     DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@index([workerId, createdAt])
+}
+
+model ServiceCategory {
+  id          String          @id @default(cuid())
+  name        String          @unique
+  slug        String          @unique
+  iconUrl     String?
+  sortOrder   Int             @default(0)
+  isActive    Boolean         @default(true)
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+  subcategories ServiceSubcategory[]
+}
+
+model ServiceSubcategory {
+  id            String          @id @default(cuid())
+  categoryId    String
+  category      ServiceCategory @relation(fields: [categoryId], references: [id])
+  name          String
+  slug          String          @unique
+  description   String?
+  basePrice     Decimal         @default(0.0) @db.Decimal(12, 2)
+  isActive      Boolean         @default(true)
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+  services      BookingService[]
+  workerSkills  WorkerSkill[]
+}
+
+model ServiceArea {
+  id        String   @id @default(cuid())
+  cityId    String
+  city      City     @relation(fields: [cityId], references: [id])
+  name      String
+  slug      String
+  pincode   String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([cityId, slug])
+}
+
+model Address {
+  id            String   @id @default(cuid())
+  userId        String
+  cityId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  city          City     @relation(fields: [cityId], references: [id])
+  label         String
+  line1         String
+  line2         String?
+  landmark      String?
+  pincode       String
+  latitude      Decimal? @db.Decimal(10, 7)
+  longitude     Decimal? @db.Decimal(10, 7)
+  isDefault     Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  bookings      Booking[]
+}
+
+model Booking {
+  id              String         @id @default(cuid())
+  code            String         @unique
+  customerId      String
+  customer        User           @relation("CustomerBookings", fields: [customerId], references: [id], onDelete: Cascade)
+  workerId        String?
+  worker          WorkerProfile? @relation("AssignedWorkerBookings", fields: [workerId], references: [id], onDelete: SetNull)
+  cityId          String
+  city            City           @relation(fields: [cityId], references: [id])
+  addressId       String
+  address         Address        @relation(fields: [addressId], references: [id])
+  status          BookingStatus   @default(PENDING)
+  scheduledAt     DateTime
+  notes           String?
+  customerNotes   String?
+  completionOtp   String?
+  subtotalAmount  Decimal        @db.Decimal(12, 2)
+  discountAmount  Decimal        @default(0.0) @db.Decimal(12, 2)
+  taxAmount       Decimal        @default(0.0) @db.Decimal(12, 2)
+  totalAmount     Decimal        @db.Decimal(12, 2)
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  services        BookingService[]
+  payments        Payment[]
+  reviews         Review[]
+  timeline        BookingTimelineEvent[]
+
+  @@index([customerId, status])
+  @@index([workerId, status])
+  @@index([cityId, status])
+}
+
+model BookingService {
+  id                  String             @id @default(cuid())
+  bookingId           String
+  booking             Booking            @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  serviceSubcategoryId String
+  serviceSubcategory  ServiceSubcategory  @relation(fields: [serviceSubcategoryId], references: [id])
+  quantity            Int                @default(1)
+  unitPrice           Decimal            @db.Decimal(12, 2)
+  totalPrice          Decimal            @db.Decimal(12, 2)
+  createdAt           DateTime           @default(now())
+}
+
+model Payment {
+  id              String        @id @default(cuid())
+  bookingId       String
+  booking         Booking       @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  status          PaymentStatus @default(PENDING)
+  provider        String
+  providerRef     String?       @unique
+  amount          Decimal       @db.Decimal(12, 2)
+  currency        String        @default("INR")
+  notes           Json?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+}
+
+model Review {
+  id            String   @id @default(cuid())
+  bookingId     String   @unique
+  booking       Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  reviewerId    String
+  reviewer      User     @relation("ReviewerReviews", fields: [reviewerId], references: [id], onDelete: Cascade)
+  workerId      String
+  worker        WorkerProfile @relation(fields: [workerId], references: [id], onDelete: Cascade)
+  rating        Int
+  comment       String?
+  mediaUrls     Json?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model Notification {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title       String
+  body        String
+  type        String
+  data        Json?
+  isRead      Boolean  @default(false)
+  createdAt   DateTime @default(now())
+}
+
+model Coupon {
+  id              String      @id @default(cuid())
+  code            String      @unique
+  description     String?
+  type            CouponType
+  value           Decimal     @db.Decimal(12, 2)
+  minOrderAmount  Decimal?    @db.Decimal(12, 2)
+  maxDiscount     Decimal?    @db.Decimal(12, 2)
+  startsAt        DateTime?
+  endsAt          DateTime?
+  usageLimit      Int?
+  perUserLimit    Int?        @default(1)
+  isActive        Boolean     @default(true)
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+}
+
+model Commissions {
+  id          String   @id @default(cuid())
+  cityId      String?
+  city        City?    @relation(fields: [cityId], references: [id])
+  rate        Decimal  @db.Decimal(5, 2)
+  fixedFee    Decimal  @default(0.0) @db.Decimal(12, 2)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model SupportTicket {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subject     String
+  message     String
+  status      String   @default("OPEN")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Document {
+  id           String   @id @default(cuid())
+  userId       String?
+  user         User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workerId     String?
+  worker       WorkerProfile? @relation(fields: [workerId], references: [id], onDelete: Cascade)
+  type         String
+  url          String
+  metadata     Json?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model RefreshToken {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash   String   @unique
+  expiresAt   DateTime
+  createdAt   DateTime @default(now())
+  revokedAt   DateTime?
+}
+
+model AuthSession {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  provider    String
+  providerId  String   @unique
+  accessToken String?
+  refreshToken String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model WorkerSkill {
+  id                  String             @id @default(cuid())
+  workerId            String
+  worker              WorkerProfile      @relation(fields: [workerId], references: [id], onDelete: Cascade)
+  serviceSubcategoryId String
+  serviceSubcategory  ServiceSubcategory  @relation(fields: [serviceSubcategoryId], references: [id])
+  yearsExperience     Int                @default(0)
+  isPrimary           Boolean            @default(false)
+  createdAt           DateTime           @default(now())
+
+  @@unique([workerId, serviceSubcategoryId])
+}
+
+model WorkerDocument {
+  id          String   @id @default(cuid())
+  workerId    String
+  worker      WorkerProfile @relation(fields: [workerId], references: [id], onDelete: Cascade)
+  type        String
+  url         String
+  verifiedAt  DateTime?
+  rejectedAt  DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model WorkerPortfolioPhoto {
+  id          String   @id @default(cuid())
+  workerId    String
+  worker      WorkerProfile @relation(fields: [workerId], references: [id], onDelete: Cascade)
+  url         String
+  caption     String?
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model WorkingHour {
+  id          String   @id @default(cuid())
+  workerId    String
+  worker      WorkerProfile @relation(fields: [workerId], references: [id], onDelete: Cascade)
+  dayOfWeek   Int
+  startTime   String
+  endTime     String
+  isOpen      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([workerId, dayOfWeek])
+}
+
+model Holiday {
+  id          String   @id @default(cuid())
+  workerId    String
+  worker      WorkerProfile @relation(fields: [workerId], references: [id], onDelete: Cascade)
+  startsAt    DateTime
+  endsAt      DateTime
+  reason      String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model BookingTimelineEvent {
+  id          String   @id @default(cuid())
+  bookingId   String
+  booking     Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  status      BookingStatus
+  title       String
+  description String?
+  createdAt   DateTime @default(now())
+}

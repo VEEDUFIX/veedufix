@@ -1,0 +1,9 @@
+{
+  "name": "VeeduFix Admin",
+  "short_name": "VeeduFix Admin",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#0F766E",
+  "description": "Admin panel for the VeeduFix marketplace"
+}

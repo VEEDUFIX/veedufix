@@ -1,0 +1,213 @@
+import 'package:flutter/material.dart';
+
+class PremiumSectionHeader extends StatelessWidget {
+  const PremiumSectionHeader({
+    super.key,
+    required this.title,
+    this.subtitle,
+    this.actionLabel,
+    this.onAction,
+  });
+
+  final String title;
+  final String? subtitle;
+  final String? actionLabel;
+  final VoidCallback? onAction;
+
+  @override
+  Widget build(BuildContext context) {
+    final textTheme = Theme.of(context).textTheme;
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                style: textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
+              ),
+              if (subtitle != null) ...[
+                const SizedBox(height: 4),
+                Text(
+                  subtitle!,
+                  style: textTheme.bodyMedium?.copyWith(
+                    color: textTheme.bodySmall?.color?.withValues(alpha: 0.75),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+        if (actionLabel != null && onAction != null)
+          TextButton(onPressed: onAction, child: Text(actionLabel!)),
+      ],
+    );
+  }
+}
+
+class PremiumStatCard extends StatelessWidget {
+  const PremiumStatCard({
+    super.key,
+    required this.label,
+    required this.value,
+    required this.icon,
+    required this.accentColor,
+  });
+
+  final String label;
+  final String value;
+  final IconData icon;
+  final Color accentColor;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(
+          color: accentColor.withValues(alpha: 0.15),
+        ),
+      ),
+      child: Row(
+        children: [
+          Container(
+            height: 44,
+            width: 44,
+            decoration: BoxDecoration(
+              color: accentColor.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: Icon(icon, color: accentColor),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.72),
+                      ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  value,
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w800,
+                      ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class PremiumGlassCard extends StatelessWidget {
+  const PremiumGlassCard({
+    super.key,
+    required this.child,
+  });
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(28),
+        gradient: LinearGradient(
+          colors: [
+            Theme.of(context).colorScheme.surface.withValues(alpha: 0.96),
+            Theme.of(context).colorScheme.surface.withValues(alpha: 0.82),
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        border: Border.all(
+          color: Theme.of(context).colorScheme.outlineVariant.withValues(alpha: 0.5),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.06),
+            blurRadius: 30,
+            offset: const Offset(0, 18),
+          ),
+        ],
+      ),
+      child: child,
+    );
+  }
+}
+
+class PremiumEmptyState extends StatelessWidget {
+  const PremiumEmptyState({
+    super.key,
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    this.actionLabel,
+    this.onAction,
+  });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final String? actionLabel;
+  final VoidCallback? onAction;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              height: 72,
+              width: 72,
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.7),
+                borderRadius: BorderRadius.circular(24),
+              ),
+              child: Icon(
+                icon,
+                size: 34,
+                color: Theme.of(context).colorScheme.primary,
+              ),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              title,
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                    fontWeight: FontWeight.w800,
+                  ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              subtitle,
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.72),
+                  ),
+            ),
+            if (actionLabel != null && onAction != null) ...[
+              const SizedBox(height: 16),
+              FilledButton(onPressed: onAction, child: Text(actionLabel!)),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
