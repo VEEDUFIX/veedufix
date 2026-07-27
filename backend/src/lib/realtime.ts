@@ -1,6 +1,6 @@
 import type { IncomingMessage, Server as HttpServer } from "http";
 import type { Socket } from "net";
-import { WebSocket, WebSocketServer } from "ws";
+import { WebSocket, WebSocketServer, type RawData } from "ws";
 import { prisma } from "./prisma.js";
 import { logger } from "./logger.js";
 import { redis } from "./redis.js";
@@ -175,7 +175,7 @@ async function bindTrackingSocket(socket: WebSocket, request: IncomingMessage) {
     })
   );
 
-  socket.on("message", (raw) => {
+  socket.on("message", (raw: RawData) => {
     try {
       const text = raw.toString("utf8");
       const data = JSON.parse(text) as { type?: string };
@@ -255,7 +255,7 @@ async function bindNotificationSocket(socket: WebSocket, request: IncomingMessag
 function onUpgrade(request: IncomingMessage, socket: Socket, head: Buffer) {
   const url = new URL(request.url ?? "", "http://localhost");
   if (url.pathname === PATH_TRACKING) {
-    websocketServer?.handleUpgrade(request, socket, head, (ws) => {
+    websocketServer?.handleUpgrade(request, socket, head, (ws: WebSocket) => {
       void bindTrackingSocket(ws, request).catch((error) => {
         logger.warn({ error }, "Tracking websocket rejected");
         ws.close(1008, "Unauthorized");
@@ -265,7 +265,7 @@ function onUpgrade(request: IncomingMessage, socket: Socket, head: Buffer) {
   }
 
   if (url.pathname === PATH_NOTIFICATIONS) {
-    websocketServer?.handleUpgrade(request, socket, head, (ws) => {
+    websocketServer?.handleUpgrade(request, socket, head, (ws: WebSocket) => {
       void bindNotificationSocket(ws, request).catch((error) => {
         logger.warn({ error }, "Notification websocket rejected");
         ws.close(1008, "Unauthorized");
