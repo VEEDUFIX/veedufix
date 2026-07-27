@@ -5,6 +5,7 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 enum UserRole {
@@ -24,11 +25,14 @@ enum BookingStatus {
   PENDING
   ACCEPTED
   WORKER_ASSIGNED
+  DISPATCH_FAILED
   EN_ROUTE
   ARRIVED
   IN_PROGRESS
   COMPLETED
   CANCELLED
+  CANCELLED_MANUAL
+  CANCELLED_NO_SHOW
   REFUNDED
 }
 
@@ -52,6 +56,22 @@ enum CouponType {
   FIXED
 }
 
+enum PriceRuleType {
+  BASE
+  CITY
+  SEASONAL
+  PROMOTIONAL
+  SURGE
+  WORKER
+}
+
+enum CatalogImportStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
 model City {
   id            String   @id @default(cuid())
   name          String   @unique
@@ -66,6 +86,8 @@ model City {
   serviceAreas  ServiceArea[]
   addresses     Address[]
   bookings      Booking[]
+  servicePriceRules ServicePriceRule[]
+  commissions   Commissions[]
 }
 
 model User {
@@ -85,21 +107,43 @@ model User {
   cityId           String?
   city             City?    @relation(fields: [cityId], references: [id])
   addresses        Address[]
+  savedAddresses   SavedAddress[]
   bookings         Booking[] @relation("CustomerBookings")
   reviewsWritten   Review[]  @relation("ReviewerReviews")
   notifications    Notification[]
   refreshTokens    RefreshToken[]
   workerProfile    WorkerProfile?
   authSessions     AuthSession[]
+  catalogImportJobs CatalogImportJob[]
+  walletTransactions WalletTransaction[]
+  supportTickets   SupportTicket[]
+  documents        Document[]
 }
 
 model WorkerProfile {
   id                  String             @id @default(cuid())
   userId              String             @unique
   user                User               @relation(fields: [userId], references: [id], onDelete: Cascade)
-  cityId              String
-  city                City               @relation(fields: [cityId], references: [id])
-  displayName         String
+  onboardingStatus    String             @default("pending_documents")
+  fullName            String?
+  dateOfBirth         DateTime?
+  addressLine1        String?
+  city                String?
+  pincode             String?
+  aadhaarNumber       String?
+  aadhaarDocUrl       String?
+  bankAccountNumber   String?
+  bankIfsc            String?
+  upiId               String?
+  rejectionReason     String?
+  reviewedBy          String?
+  reviewedAt          DateTime?
+  submittedAt         DateTime?
+  cityId              String?
+  cityRelation        City?              @relation(fields: [cityId], references: [id])
+  latitude            Decimal?           @db.Decimal(10, 7)
+  longitude           Decimal?           @db.Decimal(10, 7)
+  displayName         String?
   bio                 String?
   experienceYears     Int                @default(0)
   serviceRadiusKm     Int                @default(10)
@@ -107,6 +151,7 @@ model WorkerProfile {
   commissionRate      Decimal            @default(0.0) @db.Decimal(5, 2)
   averageRating       Decimal            @default(0.0) @db.Decimal(3, 2)
   completedJobsCount  Int                @default(0)
+  noShowCount         Int                @default(0)
   verificationStatus  VerificationStatus @default(PENDING)
   isAvailable         Boolean            @default(false)
   isOnline            Boolean            @default(false)
@@ -119,7 +164,10 @@ model WorkerProfile {
   reviews             Review[]
   workingHours        WorkingHour[]
   holidays            Holiday[]
+  workerServices      WorkerService[]
   earnings            WalletTransaction[]
+  profileDocuments    Document[]
+  availability        WorkerAvailability[]
 }
 
 model WalletTransaction {
@@ -141,30 +189,86 @@ model WalletTransaction {
 }
 
 model ServiceCategory {
-  id          String          @id @default(cuid())
-  name        String          @unique
-  slug        String          @unique
-  iconUrl     String?
-  sortOrder   Int             @default(0)
-  isActive    Boolean         @default(true)
-  createdAt   DateTime        @default(now())
-  updatedAt   DateTime        @updatedAt
-  subcategories ServiceSubcategory[]
+  id              String                     @id @default(cuid())
+  name            String                     @unique
+  slug            String                     @unique
+  description     String?
+  iconUrl         String?
+  seoTitle        String?
+  seoDescription  String?
+  sortOrder       Int                        @default(0)
+  isActive        Boolean                    @default(true)
+  featured        Boolean                    @default(false)
+  popular         Boolean                    @default(false)
+  createdAt       DateTime                   @default(now())
+  updatedAt       DateTime                   @updatedAt
+  services        Service[]
+  subcategories   ServiceSubcategory[]
+  workerSkills    WorkerSkill[]
+  translations    ServiceCategoryTranslation[]
 }
 
 model ServiceSubcategory {
-  id            String          @id @default(cuid())
-  categoryId    String
-  category      ServiceCategory @relation(fields: [categoryId], references: [id])
-  name          String
-  slug          String          @unique
-  description   String?
-  basePrice     Decimal         @default(0.0) @db.Decimal(12, 2)
-  isActive      Boolean         @default(true)
-  createdAt     DateTime        @default(now())
-  updatedAt     DateTime        @updatedAt
-  services      BookingService[]
-  workerSkills  WorkerSkill[]
+  id              String                     @id @default(cuid())
+  categoryId      String
+  category        ServiceCategory            @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  name            String
+  slug            String                     @unique
+  description     String?
+  iconUrl         String?
+  seoTitle        String?
+  seoDescription  String?
+  basePrice       Decimal                    @default(0.0) @db.Decimal(12, 2)
+  sortOrder       Int                        @default(0)
+  rating          Decimal                    @default(0.0) @db.Decimal(3, 2)
+  reviewCount     Int                        @default(0)
+  isActive        Boolean                    @default(true)
+  createdAt       DateTime                   @default(now())
+  updatedAt       DateTime                   @updatedAt
+  bookingServices BookingService[]
+  catalogServices Service[]
+  translations    ServiceSubcategoryTranslation[]
+}
+
+model Service {
+  id                    String                @id @default(cuid())
+  categoryId            String
+  category              ServiceCategory       @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  subcategoryId         String
+  subcategory           ServiceSubcategory    @relation(fields: [subcategoryId], references: [id], onDelete: Cascade)
+  name                  String
+  slug                  String                @unique
+  code                  String                @unique
+  description           String?
+  shortDescription      String?
+  startingPrice         Decimal               @db.Decimal(12, 2)
+  estimatedDurationMins  Int
+  warrantyDays          Int                   @default(0)
+  gstApplicable         Boolean               @default(true)
+  emergencyAvailable    Boolean               @default(false)
+  homeVisit             Boolean               @default(true)
+  isActive              Boolean               @default(true)
+  featured              Boolean               @default(false)
+  popular               Boolean               @default(false)
+  rating                Decimal               @default(0.0) @db.Decimal(3, 2)
+  reviewCount           Int                   @default(0)
+  cancellationPolicy    String?
+  seoTitle              String?
+  seoDescription        String?
+  seoKeywords           String?
+  iconUrl               String?
+  sortOrder             Int                   @default(0)
+  createdAt             DateTime              @default(now())
+  updatedAt             DateTime              @updatedAt
+  translations          ServiceTranslation[]
+  images                ServiceImage[]
+  requiredSkills        ServiceRequiredSkill[]
+  requiredTools         ServiceRequiredTool[]
+  requiredDocuments     ServiceRequiredDocument[]
+  pricingRules          ServicePriceRule[]
+  workerServices        WorkerService[]
+  bookingServices       BookingService[]
+  searchKeywords        ServiceSearchKeyword[]
 }
 
 model ServiceArea {
@@ -200,6 +304,25 @@ model Address {
   bookings      Booking[]
 }
 
+model SavedAddress {
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  label        String
+  addressLine1 String
+  addressLine2 String?
+  landmark     String?
+  city         String
+  pincode      String
+  lat          Float
+  lng          Float
+  isDefault    Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([userId, isDefault, createdAt])
+}
+
 model Booking {
   id              String         @id @default(cuid())
   code            String         @unique
@@ -207,6 +330,8 @@ model Booking {
   customer        User           @relation("CustomerBookings", fields: [customerId], references: [id], onDelete: Cascade)
   workerId        String?
   worker          WorkerProfile? @relation("AssignedWorkerBookings", fields: [workerId], references: [id], onDelete: SetNull)
+  bookingType     String         @default("instant")
+  scheduledFor    DateTime?
   cityId          String
   city            City           @relation(fields: [cityId], references: [id])
   addressId       String
@@ -226,22 +351,130 @@ model Booking {
   payments        Payment[]
   reviews         Review[]
   timeline        BookingTimelineEvent[]
+  jobExecution    JobExecution?
+  payout          Payout?
+  disputes        Dispute[]
+  dispatchOffers  DispatchOffer[]
+  refunds         Refund[]
 
   @@index([customerId, status])
   @@index([workerId, status])
   @@index([cityId, status])
 }
 
+model WorkerAvailability {
+  id         String        @id @default(cuid())
+  workerId   String
+  worker     WorkerProfile @relation(fields: [workerId], references: [id], onDelete: Cascade)
+  dayOfWeek  Int
+  startTime  String
+  endTime    String
+  createdAt  DateTime      @default(now())
+
+  @@index([workerId, dayOfWeek])
+}
+
+model Payout {
+  id               String   @id @default(cuid())
+  bookingId        String   @unique
+  booking          Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  workerId         String
+  amount           Float
+  commissionAmount Float
+  status           String   @default("pending")
+  razorpayPayoutId String?
+  failureReason    String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@index([status, createdAt])
+}
+
+model JobExecution {
+  id                 String    @id @default(cuid())
+  bookingId          String    @unique
+  booking            Booking   @relation(fields: [bookingId], references: [id])
+  otpStart           String?
+  otpStartExpiresAt   DateTime?
+  otpStartVerifiedAt  DateTime?
+  otpEnd             String?
+  otpEndExpiresAt    DateTime?
+  otpEndVerifiedAt   DateTime?
+  status             String    @default("assigned")
+  arrivedAt          DateTime?
+  startedAt          DateTime?
+  completedAt        DateTime?
+  beforePhotos       String[]
+  afterPhotos        String[]
+  checklist          Json?
+  workerLat         Float?
+  workerLng         Float?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+}
+
+model Dispute {
+  id             String    @id @default(cuid())
+  bookingId      String
+  booking        Booking   @relation(fields: [bookingId], references: [id])
+  raisedBy       String
+  reason         String
+  status         String    @default("open")
+  resolutionNote String?
+  resolvedBy     String?
+  resolvedAt     DateTime?
+  refundId       String?   @unique
+  refund         Refund?   @relation("DisputeRefund", fields: [refundId], references: [id], onDelete: SetNull)
+  createdAt      DateTime  @default(now())
+}
+
+model DispatchOffer {
+  id          String   @id @default(cuid())
+  bookingId   String
+  booking     Booking  @relation(fields: [bookingId], references: [id])
+  workerId    String
+  rank        Int
+  status      String   @default("pending")
+  offeredAt   DateTime @default(now())
+  expiresAt   DateTime
+  respondedAt DateTime?
+  createdAt   DateTime @default(now())
+
+  @@index([bookingId])
+  @@index([status, expiresAt])
+}
+
+model Refund {
+  id               String   @id @default(cuid())
+  bookingId        String
+  booking          Booking  @relation(fields: [bookingId], references: [id])
+  disputeId        String?
+  dispute          Dispute? @relation("DisputeRefund")
+  amount           Float
+  reason           String
+  status           String   @default("pending")
+  razorpayRefundId String?
+  failureReason    String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@index([bookingId])
+  @@index([status, createdAt])
+  @@index([disputeId])
+}
+
 model BookingService {
-  id                  String             @id @default(cuid())
-  bookingId           String
-  booking             Booking            @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  id                   String                @id @default(cuid())
+  bookingId            String
+  booking              Booking               @relation(fields: [bookingId], references: [id], onDelete: Cascade)
   serviceSubcategoryId String
-  serviceSubcategory  ServiceSubcategory  @relation(fields: [serviceSubcategoryId], references: [id])
-  quantity            Int                @default(1)
-  unitPrice           Decimal            @db.Decimal(12, 2)
-  totalPrice          Decimal            @db.Decimal(12, 2)
-  createdAt           DateTime           @default(now())
+  serviceSubcategory   ServiceSubcategory    @relation(fields: [serviceSubcategoryId], references: [id])
+  serviceId            String?
+  service              Service?              @relation(fields: [serviceId], references: [id], onDelete: SetNull)
+  quantity             Int                   @default(1)
+  unitPrice            Decimal               @db.Decimal(12, 2)
+  totalPrice           Decimal               @db.Decimal(12, 2)
+  createdAt            DateTime              @default(now())
 }
 
 model Payment {
@@ -360,16 +593,211 @@ model AuthSession {
 }
 
 model WorkerSkill {
-  id                  String             @id @default(cuid())
-  workerId            String
-  worker              WorkerProfile      @relation(fields: [workerId], references: [id], onDelete: Cascade)
-  serviceSubcategoryId String
-  serviceSubcategory  ServiceSubcategory  @relation(fields: [serviceSubcategoryId], references: [id])
-  yearsExperience     Int                @default(0)
-  isPrimary           Boolean            @default(false)
-  createdAt           DateTime           @default(now())
+  id                  String         @id @default(cuid())
+  workerProfileId     String
+  workerProfile       WorkerProfile   @relation(fields: [workerProfileId], references: [id], onDelete: Cascade)
+  categoryId          String
+  category            ServiceCategory @relation(fields: [categoryId], references: [id])
+  certificationDocUrl String?
+  verifiedByAdmin     Boolean         @default(false)
+  yearsExperience     Int             @default(0)
+  isPrimary           Boolean         @default(false)
+  createdAt           DateTime        @default(now())
 
-  @@unique([workerId, serviceSubcategoryId])
+  @@unique([workerProfileId, categoryId])
+  @@index([workerProfileId])
+  @@index([categoryId])
+}
+
+model WorkerService {
+  id                  String                @id @default(cuid())
+  workerId            String
+  worker              WorkerProfile         @relation(fields: [workerId], references: [id], onDelete: Cascade)
+  serviceId           String
+  service             Service               @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  yearsExperience     Int                   @default(0)
+  customPrice         Decimal?              @db.Decimal(12, 2)
+  serviceRadiusKm     Int?
+  isAvailable         Boolean               @default(true)
+  emergencyEnabled    Boolean               @default(false)
+  homeVisitEnabled    Boolean               @default(true)
+  createdAt           DateTime              @default(now())
+  updatedAt           DateTime              @updatedAt
+
+  @@unique([workerId, serviceId])
+}
+
+model ServiceCategoryTranslation {
+  id            String          @id @default(cuid())
+  categoryId    String
+  category      ServiceCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  locale        String
+  name          String
+  description   String?
+  seoTitle      String?
+  seoDescription String?
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  @@unique([categoryId, locale])
+  @@index([locale])
+}
+
+model ServiceSubcategoryTranslation {
+  id            String             @id @default(cuid())
+  subcategoryId String
+  subcategory   ServiceSubcategory @relation(fields: [subcategoryId], references: [id], onDelete: Cascade)
+  locale        String
+  name          String
+  description   String?
+  seoTitle      String?
+  seoDescription String?
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+
+  @@unique([subcategoryId, locale])
+  @@index([locale])
+}
+
+model ServiceTranslation {
+  id              String   @id @default(cuid())
+  serviceId       String
+  service         Service  @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  locale          String
+  name            String
+  shortDescription String?
+  description     String?
+  seoTitle        String?
+  seoDescription  String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([serviceId, locale])
+  @@index([locale])
+}
+
+model ServiceImage {
+  id          String   @id @default(cuid())
+  serviceId   String
+  service     Service  @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  url         String
+  altText     String?
+  sortOrder   Int      @default(0)
+  isPrimary   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([serviceId, sortOrder])
+}
+
+model Skill {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  slug        String   @unique
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  serviceRequirements ServiceRequiredSkill[]
+}
+
+model Tool {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  slug        String   @unique
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  serviceRequirements ServiceRequiredTool[]
+}
+
+model ServiceRequiredSkill {
+  id          String   @id @default(cuid())
+  serviceId   String
+  service     Service  @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  skillId     String
+  skill       Skill    @relation(fields: [skillId], references: [id], onDelete: Cascade)
+  isMandatory Boolean  @default(true)
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+
+  @@unique([serviceId, skillId])
+}
+
+model ServiceRequiredTool {
+  id          String   @id @default(cuid())
+  serviceId   String
+  service     Service  @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  toolId      String
+  tool        Tool     @relation(fields: [toolId], references: [id], onDelete: Cascade)
+  isMandatory Boolean  @default(true)
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+
+  @@unique([serviceId, toolId])
+}
+
+model ServiceRequiredDocument {
+  id          String   @id @default(cuid())
+  serviceId   String
+  service     Service  @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  name        String
+  slug        String
+  isMandatory Boolean  @default(true)
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([serviceId, slug])
+}
+
+model ServicePriceRule {
+  id            String         @id @default(cuid())
+  serviceId     String
+  service       Service        @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  cityId        String?
+  city          City?          @relation(fields: [cityId], references: [id], onDelete: SetNull)
+  type          PriceRuleType
+  title         String
+  description   String?
+  currency      String         @default("INR")
+  price         Decimal        @db.Decimal(12, 2)
+  startsAt      DateTime?
+  endsAt        DateTime?
+  isActive      Boolean        @default(true)
+  priority      Int            @default(0)
+  metadata      Json?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  @@index([serviceId, cityId, isActive])
+}
+
+model ServiceSearchKeyword {
+  id          String   @id @default(cuid())
+  serviceId   String
+  service     Service  @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  keyword     String
+  weight      Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([serviceId, keyword])
+  @@index([keyword])
+}
+
+model CatalogImportJob {
+  id            String              @id @default(cuid())
+  createdById   String?
+  createdBy     User?               @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  fileUrl       String?
+  source        String?
+  status        CatalogImportStatus @default(PENDING)
+  totalRows     Int                 @default(0)
+  processedRows Int                 @default(0)
+  failedRows    Int                 @default(0)
+  report        Json?
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
 }
 
 model WorkerDocument {

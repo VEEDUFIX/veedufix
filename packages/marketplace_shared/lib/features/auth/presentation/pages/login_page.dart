@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:google_sign_in/google_sign_in.dart';
 
 import '../../../auth/presentation/providers/auth_providers.dart';
 import '../../../../core/widgets/gradient_hero.dart';
@@ -18,14 +17,6 @@ class _LoginPageState extends ConsumerState<LoginPage> {
   final _identifierController = TextEditingController(text: '+91 ');
   final _nameController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
-  final _googleSignIn = GoogleSignIn(
-    scopes: const ['email', 'profile'],
-    serverClientId: const String.fromEnvironment(
-      'GOOGLE_SERVER_CLIENT_ID',
-      defaultValue: '',
-    ),
-  );
-  bool _isPhone = true;
   bool _isLoading = false;
 
   @override
@@ -42,7 +33,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
     setState(() => _isLoading = true);
     try {
       final result = await ref.read(authControllerProvider.notifier).requestOtp(
-            channel: _isPhone ? 'PHONE' : 'EMAIL',
+            channel: 'PHONE',
             identifier: _identifierController.text.trim(),
           );
       if (!mounted) return;
@@ -53,7 +44,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
         );
       }
       context.go('/otp', extra: {
-        'channel': _isPhone ? 'PHONE' : 'EMAIL',
+        'channel': 'PHONE',
         'identifier': _identifierController.text.trim(),
         'role': 'CUSTOMER',
         'name': _nameController.text.trim(),
@@ -62,34 +53,6 @@ class _LoginPageState extends ConsumerState<LoginPage> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Unable to request OTP: $error')),
-      );
-    } finally {
-      if (mounted) setState(() => _isLoading = false);
-    }
-  }
-
-  Future<void> _signInWithGoogle() async {
-    setState(() => _isLoading = true);
-    try {
-      final account = await _googleSignIn.signIn();
-      if (account == null) {
-        return;
-      }
-      final auth = await account.authentication;
-      final idToken = auth.idToken;
-      if (idToken == null || idToken.isEmpty) {
-        throw StateError('Google did not return an identity token.');
-      }
-      await ref.read(authControllerProvider.notifier).signInWithGoogle(
-            idToken: idToken,
-            role: 'CUSTOMER',
-          );
-      if (!mounted) return;
-      context.go('/app');
-    } catch (error) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Google sign-in failed: $error')),
       );
     } finally {
       if (mounted) setState(() => _isLoading = false);
@@ -158,47 +121,26 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                       ),
                       const SizedBox(height: 8),
                       Text(
-                        'Use mobile OTP, email, or Google to continue.',
+                        'Use your mobile number and OTP to continue.',
                         style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                               color: scheme.onSurfaceVariant,
                             ),
                       ),
                       const SizedBox(height: 24),
-                      SegmentedButton<bool>(
-                        segments: const [
-                          ButtonSegment(value: true, label: Text('Phone')),
-                          ButtonSegment(value: false, label: Text('Email')),
-                        ],
-                        selected: {_isPhone},
-                        onSelectionChanged: (selection) {
-                          setState(() {
-                            _isPhone = selection.first;
-                            _identifierController.text =
-                                _isPhone ? '+91 ' : '';
-                          });
-                        },
-                      ),
-                      const SizedBox(height: 16),
                       TextFormField(
                         controller: _identifierController,
-                        keyboardType:
-                            _isPhone ? TextInputType.phone : TextInputType.emailAddress,
+                        keyboardType: TextInputType.phone,
                         decoration: InputDecoration(
-                          labelText: _isPhone ? 'Mobile number' : 'Email address',
-                          prefixIcon: Icon(
-                            _isPhone ? Icons.phone_rounded : Icons.email_rounded,
-                          ),
+                          labelText: 'Mobile number',
+                          prefixIcon: const Icon(Icons.phone_rounded),
                         ),
                         validator: (value) {
                           final text = value?.trim() ?? '';
                           if (text.isEmpty) {
-                            return 'Enter a valid ${_isPhone ? 'mobile number' : 'email address'}';
-                          }
-                          if (_isPhone && text.length < 10) {
                             return 'Enter a valid mobile number';
                           }
-                          if (!_isPhone && !text.contains('@')) {
-                            return 'Enter a valid email address';
+                          if (text.length < 10) {
+                            return 'Enter a valid mobile number';
                           }
                           return null;
                         },
@@ -222,12 +164,6 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                       PrimaryActionButton(
                         label: _isLoading ? 'Sending OTP...' : 'Send OTP',
                         onPressed: _isLoading ? null : _requestOtp,
-                      ),
-                      const SizedBox(height: 16),
-                      OutlinedButton.icon(
-                        onPressed: _isLoading ? null : _signInWithGoogle,
-                        icon: const Icon(Icons.g_mobiledata_rounded),
-                        label: const Text('Continue with Google'),
                       ),
                     ],
                   ),

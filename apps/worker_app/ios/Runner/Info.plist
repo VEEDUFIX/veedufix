@@ -66,5 +66,9 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>We use your location to mark job arrivals accurately.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>We use your photo library to attach job before and after photos.</string>
 </dict>
 </plist>

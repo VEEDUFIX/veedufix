@@ -1,21 +1,29 @@
 import { NextFunction, Request, Response } from "express";
-import { AnyZodObject } from "zod";
+import { z } from "zod";
 
-export function validate(schema: {
-  body?: AnyZodObject;
-  query?: AnyZodObject;
-  params?: AnyZodObject;
-}) {
+type ValidatedRequestShape = {
+  body?: unknown;
+  query?: unknown;
+  params?: unknown;
+};
+
+export function validate(schema: z.ZodTypeAny) {
   return (request: Request, response: Response, next: NextFunction): void => {
     try {
-      if (schema.body) {
-        request.body = schema.body.parse(request.body);
+      const parsed = schema.parse({
+        body: request.body,
+        query: request.query,
+        params: request.params
+      }) as ValidatedRequestShape;
+
+      if (parsed.body !== undefined) {
+        request.body = parsed.body;
       }
-      if (schema.query) {
-        request.query = schema.query.parse(request.query) as typeof request.query;
+      if (parsed.query !== undefined) {
+        request.query = parsed.query as typeof request.query;
       }
-      if (schema.params) {
-        request.params = schema.params.parse(request.params) as typeof request.params;
+      if (parsed.params !== undefined) {
+        request.params = parsed.params as typeof request.params;
       }
       next();
     } catch (error) {

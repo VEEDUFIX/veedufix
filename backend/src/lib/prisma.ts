@@ -16,7 +16,12 @@ if (!globalThis.prisma) {
   globalThis.prisma = prisma;
 }
 
-prisma.$on("query", (event) => {
+const prismaEvents = prisma as unknown as {
+  $on(eventType: "query", callback: (event: { query: string; duration: number; target?: string }) => void): void;
+  $on(eventType: "error", callback: (event: { message: string; target?: string }) => void): void;
+};
+
+prismaEvents.$on("query", (event) => {
   logger.debug({
     query: event.query,
     durationMs: event.duration,
@@ -24,6 +29,6 @@ prisma.$on("query", (event) => {
   });
 });
 
-prisma.$on("error", (event) => {
+prismaEvents.$on("error", (event) => {
   logger.error({ message: event.message, target: event.target });
 });

@@ -1,6 +1,7 @@
 import compression from "compression";
 import cors from "cors";
 import express from "express";
+import type { Request } from "express";
 import helmet from "helmet";
 import rateLimit from "express-rate-limit";
 import pinoHttp from "pino-http";
@@ -8,7 +9,28 @@ import { env } from "./config/env.js";
 import { errorHandler, notFoundHandler } from "./middleware/error-handler.js";
 import { logger } from "./lib/logger.js";
 import { authRouter } from "./modules/auth/auth.routes.js";
+import { catalogRouter, adminCatalogRouter } from "./modules/catalog/catalog.routes.js";
+import { disputeRouter } from "./modules/dispute/dispute.routes.js";
+import { cancellationRouter } from "./modules/matching/cancellation.routes.js";
+import { opsRouter } from "./modules/ops/ops.routes.js";
+import { jobExecutionRouter } from "./modules/job-execution/job-execution.routes.js";
 import { healthRouter } from "./modules/health/health.routes.js";
+import { mediaRouter } from "./modules/media/media.routes.js";
+import { matchingRouter } from "./modules/matching/matching.routes.js";
+import { addressRouter } from "./modules/address/address.routes.js";
+import { availabilityRouter } from "./modules/availability/availability.routes.js";
+import { paymentsRouter } from "./modules/payments/payments.routes.js";
+import { payoutRouter } from "./modules/payout/payout.routes.js";
+import { earningsRouter } from "./modules/earnings/earnings.routes.js";
+import { refundRouter } from "./modules/refund/refund.routes.js";
+import {
+  adminWorkerDirectoryRouter,
+  adminWorkerReviewRouter,
+  workerOnboardingRouter
+} from "./modules/worker-onboarding/worker-onboarding.routes.js";
+import { workerPoolRouter } from "./modules/worker-pool/worker-pool.routes.js";
+import { uploadRouter } from "./modules/upload/upload.routes.js";
+import { webhooksRouter } from "./modules/webhooks/webhooks.routes.js";
 import { usersRouter } from "./modules/users/users.routes.js";
 
 export function createApp() {
@@ -26,7 +48,14 @@ export function createApp() {
       credentials: true
     })
   );
-  app.use(express.json({ limit: "2mb" }));
+  app.use(
+    express.json({
+      limit: "2mb",
+      verify: (request, _response, buffer) => {
+        (request as Request & { rawBody?: string }).rawBody = buffer.toString("utf8");
+      }
+    })
+  );
   app.use(express.urlencoded({ extended: true }));
   app.use(compression());
   app.use(
@@ -47,6 +76,29 @@ export function createApp() {
 
   app.use("/api/health", healthRouter);
   app.use("/api/auth", authRouter);
+  app.use("/api/catalog", catalogRouter);
+  app.use("/api/admin/catalog", adminCatalogRouter);
+  app.use("/api", disputeRouter);
+  app.use("/api", cancellationRouter);
+  app.use("/api/worker/onboarding", workerOnboardingRouter);
+  app.use("/api/admin/worker-review", adminWorkerReviewRouter);
+  app.use("/api/admin/workers", adminWorkerDirectoryRouter);
+  app.use("/api/admin/worker-pool", workerPoolRouter);
+  app.use("/api/admin/ops", opsRouter);
+  app.use("/api", matchingRouter);
+  app.use("/api", jobExecutionRouter);
+  app.use("/api/media", mediaRouter);
+  app.use("/api/uploads", uploadRouter);
+  app.use("/uploads", uploadRouter);
+  app.use("/api/payments", paymentsRouter);
+  app.use("/api/orders", paymentsRouter);
+  app.use("/api/payment", paymentsRouter);
+  app.use("/api", addressRouter);
+  app.use("/api", availabilityRouter);
+  app.use("/api", earningsRouter);
+  app.use("/api/admin/payouts", payoutRouter);
+  app.use("/api/admin/refunds", refundRouter);
+  app.use("/api/webhooks", webhooksRouter);
   app.use("/api/users", usersRouter);
 
   app.use(notFoundHandler);

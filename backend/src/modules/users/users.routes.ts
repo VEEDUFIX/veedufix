@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { requireAuth, type AuthenticatedRequest } from "../../middleware/auth.js";
 import { prisma } from "../../lib/prisma.js";
+import { serializeWorkerProfile } from "../worker-onboarding/worker-onboarding.service.js";
 
 export const usersRouter = Router();
 
@@ -19,5 +20,10 @@ usersRouter.get("/me", requireAuth, async (request: AuthenticatedRequest, respon
     return;
   }
 
-  response.status(200).json({ user });
+  response.status(200).json({
+    user: {
+      ...user,
+      workerProfile: user.workerProfile ? serializeWorkerProfile(user.workerProfile) : null
+    }
+  });
 });

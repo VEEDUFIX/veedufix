@@ -12,9 +12,11 @@ class AppShellPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final location = GoRouterState.of(context).matchedLocation;
-    final destinations = const ['/admin', '/analytics', '/profile'];
+    final destinations = const ['/admin', '/analytics', '/ops/overview', '/profile'];
 
-    final matchedIndex = destinations.indexWhere((path) => path == location);
+    final matchedIndex = destinations.indexWhere(
+      (path) => location == path || (path == '/ops/overview' && location.startsWith('/ops/')),
+    );
     final index = matchedIndex < 0 ? 0 : matchedIndex;
 
     return Scaffold(
@@ -34,6 +36,11 @@ class AppShellPage extends StatelessWidget {
             icon: Icon(Icons.insights_outlined),
             selectedIcon: Icon(Icons.insights_rounded),
             label: 'Analytics',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.monitor_heart_outlined),
+            selectedIcon: Icon(Icons.monitor_heart_rounded),
+            label: 'Ops',
           ),
           NavigationDestination(
             icon: Icon(Icons.person_outline_rounded),

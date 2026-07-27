@@ -1,0 +1,926 @@
+import 'package:dio/dio.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:marketplace_shared/marketplace_shared.dart';
+
+enum WorkerOnboardingActionKind {
+  idle,
+  loading,
+  savingProfile,
+  uploadingDocument,
+  savingSkills,
+  submitting,
+}
+
+class WorkerOnboardingSkillItem {
+  const WorkerOnboardingSkillItem({
+    required this.categoryId,
+    required this.categoryName,
+    this.categorySlug,
+    this.categoryIconUrl,
+    this.certificationDocUrl,
+  });
+
+  final String categoryId;
+  final String categoryName;
+  final String? categorySlug;
+  final String? categoryIconUrl;
+  final String? certificationDocUrl;
+
+  factory WorkerOnboardingSkillItem.fromJson(Map<String, dynamic> json) {
+    final category = json['category'] is Map<String, dynamic>
+        ? json['category'] as Map<String, dynamic>
+        : const <String, dynamic>{};
+    return WorkerOnboardingSkillItem(
+      categoryId: json['categoryId'] as String? ?? category['id'] as String? ?? '',
+      categoryName: category['name'] as String? ?? json['name'] as String? ?? '',
+      categorySlug: category['slug'] as String?,
+      categoryIconUrl: category['iconUrl'] as String?,
+      certificationDocUrl: json['certificationDocUrl'] as String?,
+    );
+  }
+}
+
+class WorkerOnboardingProfile {
+  const WorkerOnboardingProfile({
+    required this.onboardingStatus,
+    required this.fullName,
+    required this.dateOfBirth,
+    required this.addressLine1,
+    required this.city,
+    required this.pincode,
+    required this.aadhaarNumber,
+    required this.aadhaarDocUrl,
+    required this.upiId,
+    required this.bankAccountNumber,
+    required this.bankIfsc,
+    required this.rejectionReason,
+    required this.skills,
+  });
+
+  final String onboardingStatus;
+  final String? fullName;
+  final DateTime? dateOfBirth;
+  final String? addressLine1;
+  final String? city;
+  final String? pincode;
+  final String? aadhaarNumber;
+  final String? aadhaarDocUrl;
+  final String? upiId;
+  final String? bankAccountNumber;
+  final String? bankIfsc;
+  final String? rejectionReason;
+  final List<WorkerOnboardingSkillItem> skills;
+
+  factory WorkerOnboardingProfile.fromJson(Map<String, dynamic> json) {
+    return WorkerOnboardingProfile(
+      onboardingStatus: json['onboardingStatus'] as String? ?? 'pending_documents',
+      fullName: json['fullName'] as String?,
+      dateOfBirth: DateTime.tryParse(json['dateOfBirth'] as String? ?? ''),
+      addressLine1: json['addressLine1'] as String?,
+      city: json['city'] as String?,
+      pincode: json['pincode'] as String?,
+      aadhaarNumber: json['aadhaarNumber'] as String?,
+      aadhaarDocUrl: json['aadhaarDocUrl'] as String?,
+      upiId: json['upiId'] as String?,
+      bankAccountNumber: json['bankAccountNumber'] as String?,
+      bankIfsc: json['bankIfsc'] as String?,
+      rejectionReason: json['rejectionReason'] as String?,
+      skills: _decodeSkills(json['skills']),
+    );
+  }
+
+  Set<String> get selectedCategoryIds =>
+      skills.map((skill) => skill.categoryId).where((value) => value.isNotEmpty).toSet();
+
+  String? maskedAadhaar() {
+    final raw = aadhaarNumber?.replaceAll(RegExp(r'[^0-9]'), '') ?? '';
+    if (raw.isEmpty) {
+      return null;
+    }
+
+    final last4 = raw.length >= 4 ? raw.substring(raw.length - 4) : raw.padLeft(4, '0');
+    return 'XXXX-XXXX-$last4';
+  }
+}
+
+class WorkerOnboardingDraft {
+  const WorkerOnboardingDraft({
+    this.fullName = '',
+    this.dateOfBirth,
+    this.addressLine1 = '',
+    this.city = '',
+    this.pincode = '',
+    this.aadhaarNumber = '',
+    this.upiId = '',
+    this.bankAccountNumber = '',
+    this.bankIfsc = '',
+    this.selectedCategoryIds = const <String>{},
+    this.certificationFiles = const <String, XFile>{},
+    this.certificationUrls = const <String, String>{},
+    this.aadhaarDocumentFile,
+    this.savedAadhaarMask,
+  });
+
+  final String fullName;
+  final DateTime? dateOfBirth;
+  final String addressLine1;
+  final String city;
+  final String pincode;
+  final String aadhaarNumber;
+  final String upiId;
+  final String bankAccountNumber;
+  final String bankIfsc;
+  final Set<String> selectedCategoryIds;
+  final Map<String, XFile> certificationFiles;
+  final Map<String, String> certificationUrls;
+  final XFile? aadhaarDocumentFile;
+  final String? savedAadhaarMask;
+
+  WorkerOnboardingDraft copyWith({
+    String? fullName,
+    Object? dateOfBirth = _unset,
+    String? addressLine1,
+    String? city,
+    String? pincode,
+    String? aadhaarNumber,
+    String? upiId,
+    String? bankAccountNumber,
+    String? bankIfsc,
+    Set<String>? selectedCategoryIds,
+    Map<String, XFile>? certificationFiles,
+    Map<String, String>? certificationUrls,
+    Object? aadhaarDocumentFile = _unset,
+    Object? savedAadhaarMask = _unset,
+  }) {
+    return WorkerOnboardingDraft(
+      fullName: fullName ?? this.fullName,
+      dateOfBirth: identical(dateOfBirth, _unset) ? this.dateOfBirth : dateOfBirth as DateTime?,
+      addressLine1: addressLine1 ?? this.addressLine1,
+      city: city ?? this.city,
+      pincode: pincode ?? this.pincode,
+      aadhaarNumber: aadhaarNumber ?? this.aadhaarNumber,
+      upiId: upiId ?? this.upiId,
+      bankAccountNumber: bankAccountNumber ?? this.bankAccountNumber,
+      bankIfsc: bankIfsc ?? this.bankIfsc,
+      selectedCategoryIds: selectedCategoryIds ?? this.selectedCategoryIds,
+      certificationFiles: certificationFiles ?? this.certificationFiles,
+      certificationUrls: certificationUrls ?? this.certificationUrls,
+      aadhaarDocumentFile: identical(aadhaarDocumentFile, _unset)
+          ? this.aadhaarDocumentFile
+          : aadhaarDocumentFile as XFile?,
+      savedAadhaarMask: identical(savedAadhaarMask, _unset)
+          ? this.savedAadhaarMask
+          : savedAadhaarMask as String?,
+    );
+  }
+
+  bool get hasIdentityDocument => savedAadhaarMask != null;
+}
+
+class WorkerOnboardingState {
+  const WorkerOnboardingState({
+    this.profile,
+    this.categories = const <CatalogCategory>[],
+    this.draft = const WorkerOnboardingDraft(),
+    this.currentStep = 0,
+    this.isLoadingProfile = false,
+    this.isLoadingCategories = false,
+    this.isSavingProfile = false,
+    this.isUploadingDocument = false,
+    this.isSavingSkills = false,
+    this.isSubmitting = false,
+    this.isEditMode = false,
+    this.errorMessage,
+    this.submitError,
+    this.missingFields = const <String>[],
+  });
+
+  final WorkerOnboardingProfile? profile;
+  final List<CatalogCategory> categories;
+  final WorkerOnboardingDraft draft;
+  final int currentStep;
+  final bool isLoadingProfile;
+  final bool isLoadingCategories;
+  final bool isSavingProfile;
+  final bool isUploadingDocument;
+  final bool isSavingSkills;
+  final bool isSubmitting;
+  final bool isEditMode;
+  final String? errorMessage;
+  final String? submitError;
+  final List<String> missingFields;
+
+  String get status => profile?.onboardingStatus ?? 'pending_documents';
+  String? get rejectionReason => profile?.rejectionReason;
+
+  bool get isBusy =>
+      isLoadingProfile || isLoadingCategories || isSavingProfile || isUploadingDocument || isSavingSkills || isSubmitting;
+
+  WorkerOnboardingState copyWith({
+    Object? profile = _unset,
+    List<CatalogCategory>? categories,
+    WorkerOnboardingDraft? draft,
+    int? currentStep,
+    bool? isLoadingProfile,
+    bool? isLoadingCategories,
+    bool? isSavingProfile,
+    bool? isUploadingDocument,
+    bool? isSavingSkills,
+    bool? isSubmitting,
+    bool? isEditMode,
+    Object? errorMessage = _unset,
+    Object? submitError = _unset,
+    List<String>? missingFields,
+  }) {
+    return WorkerOnboardingState(
+      profile: identical(profile, _unset) ? this.profile : profile as WorkerOnboardingProfile?,
+      categories: categories ?? this.categories,
+      draft: draft ?? this.draft,
+      currentStep: currentStep ?? this.currentStep,
+      isLoadingProfile: isLoadingProfile ?? this.isLoadingProfile,
+      isLoadingCategories: isLoadingCategories ?? this.isLoadingCategories,
+      isSavingProfile: isSavingProfile ?? this.isSavingProfile,
+      isUploadingDocument: isUploadingDocument ?? this.isUploadingDocument,
+      isSavingSkills: isSavingSkills ?? this.isSavingSkills,
+      isSubmitting: isSubmitting ?? this.isSubmitting,
+      isEditMode: isEditMode ?? this.isEditMode,
+      errorMessage: identical(errorMessage, _unset) ? this.errorMessage : errorMessage as String?,
+      submitError: identical(submitError, _unset) ? this.submitError : submitError as String?,
+      missingFields: missingFields ?? this.missingFields,
+    );
+  }
+}
+
+class WorkerOnboardingApi {
+  WorkerOnboardingApi(this._dio);
+
+  final Dio _dio;
+
+  Future<WorkerOnboardingProfile> fetchStatus() async {
+    final response = await _dio.get<Map<String, dynamic>>('/worker/onboarding/status');
+    final payload = response.data ?? <String, dynamic>{};
+    final profile = payload['profile'];
+    if (profile is Map<String, dynamic>) {
+      return WorkerOnboardingProfile.fromJson(profile);
+    }
+    throw StateError('Onboarding status response was malformed.');
+  }
+
+  Future<WorkerOnboardingProfile> updateProfile({
+    required String fullName,
+    required DateTime? dateOfBirth,
+    required String addressLine1,
+    required String city,
+    required String pincode,
+    required String upiId,
+    required String bankAccountNumber,
+    required String bankIfsc,
+    required String aadhaarNumber,
+  }) async {
+    final response = await _dio.post<Map<String, dynamic>>(
+      '/worker/onboarding/profile',
+      data: {
+        'fullName': fullName,
+        'dateOfBirth': dateOfBirth?.toIso8601String(),
+        'addressLine1': addressLine1,
+        'city': city,
+        'pincode': pincode,
+        'upiId': upiId,
+        'bankAccountNumber': bankAccountNumber,
+        'bankIfsc': bankIfsc,
+        'aadhaarNumber': aadhaarNumber,
+      },
+    );
+    return _parseProfileResponse(response.data);
+  }
+
+  Future<WorkerOnboardingProfile> uploadDocument({
+    required String docType,
+    required String fileUrl,
+    String? categoryId,
+  }) async {
+    final response = await _dio.post<Map<String, dynamic>>(
+      '/worker/onboarding/documents',
+      data: {
+        'docType': docType,
+        'fileUrl': fileUrl,
+        if (categoryId != null) 'categoryId': categoryId,
+      },
+    );
+    return _parseProfileResponse(response.data);
+  }
+
+  Future<WorkerOnboardingProfile> addSkill(String categoryId) async {
+    final response = await _dio.post<Map<String, dynamic>>(
+      '/worker/onboarding/skills',
+      data: {
+        'categoryId': categoryId,
+      },
+    );
+    return _parseProfileResponse(response.data);
+  }
+
+  Future<WorkerOnboardingProfile> submitForReview() async {
+    final response = await _dio.post<Map<String, dynamic>>(
+      '/worker/onboarding/submit',
+      data: const <String, dynamic>{},
+    );
+    return _parseProfileResponse(response.data);
+  }
+
+  Future<List<CatalogCategory>> fetchCategories() async {
+    final response = await _dio.get<Map<String, dynamic>>('/catalog');
+    final payload = response.data ?? <String, dynamic>{};
+    final categories = payload['categories'];
+    if (categories is! List) {
+      return const <CatalogCategory>[];
+    }
+
+    return categories
+        .whereType<Map<String, dynamic>>()
+        .map(CatalogCategory.fromJson)
+        .toList(growable: false);
+  }
+
+  Future<String> uploadDocumentAsset({
+    required XFile file,
+    required String userId,
+    required String type,
+  }) async {
+    final fileName = file.name.isNotEmpty ? file.name : 'document.jpg';
+
+    final signatureResponse = await _dio.post<Map<String, dynamic>>(
+      '/uploads/signature',
+      data: {
+        'bookingId': 'onboarding-$userId',
+        'type': 'before',
+      },
+    );
+
+    final payload = signatureResponse.data ?? <String, dynamic>{};
+    final uploadUrl = payload['uploadUrl'] as String? ?? '';
+    final folder = payload['folder'] as String? ?? '';
+    final apiKey = payload['apiKey'] as String? ?? '';
+    final timestamp = payload['timestamp'];
+    final signature = payload['signature'] as String? ?? '';
+
+    if (uploadUrl.isEmpty || apiKey.isEmpty || folder.isEmpty || signature.isEmpty) {
+      throw StateError('Cloudinary signature response was incomplete.');
+    }
+
+    try {
+      return await _uploadDirectToCloudinary(
+        uploadUrl: uploadUrl,
+        apiKey: apiKey,
+        folder: folder,
+        timestamp: timestamp,
+        signature: signature,
+        file: file,
+        fileName: fileName,
+      );
+    } catch (_) {
+      final fallback = await _dio.post<Map<String, dynamic>>(
+        '/media/workers/document',
+        data: FormData.fromMap({
+          'type': type,
+          'file': await MultipartFile.fromFile(file.path, filename: fileName),
+        }),
+        options: Options(
+          contentType: Headers.multipartFormDataContentType,
+          responseType: ResponseType.json,
+        ),
+      );
+      final fallbackData = fallback.data ?? <String, dynamic>{};
+      final document = fallbackData['document'];
+      if (document is Map<String, dynamic>) {
+        final url = document['url'] as String?;
+        if (url != null && url.isNotEmpty) {
+          return url;
+        }
+      }
+
+      throw StateError('Cloudinary upload failed.');
+    }
+  }
+
+  Future<String> _uploadDirectToCloudinary({
+    required String uploadUrl,
+    required String apiKey,
+    required String folder,
+    required dynamic timestamp,
+    required String signature,
+    required XFile file,
+    required String fileName,
+  }) async {
+    final uploadDio = Dio(
+      BaseOptions(
+        connectTimeout: const Duration(seconds: 30),
+        receiveTimeout: const Duration(seconds: 30),
+        sendTimeout: const Duration(seconds: 30),
+      ),
+    );
+
+    final formData = FormData.fromMap({
+      'file': await MultipartFile.fromFile(file.path, filename: fileName),
+      'api_key': apiKey,
+      'folder': folder,
+      'timestamp': timestamp.toString(),
+      'signature': signature,
+    });
+
+    final response = await uploadDio.post<Map<String, dynamic>>(
+      uploadUrl,
+      data: formData,
+      options: Options(
+        contentType: Headers.multipartFormDataContentType,
+        responseType: ResponseType.json,
+      ),
+    );
+
+    final data = response.data ?? <String, dynamic>{};
+    final secureUrl = data['secure_url'] as String?;
+    if (secureUrl == null || secureUrl.isEmpty) {
+      throw StateError('Cloudinary did not return a secure URL.');
+    }
+    return secureUrl;
+  }
+
+  WorkerOnboardingProfile _parseProfileResponse(Map<String, dynamic>? data) {
+    final payload = data ?? <String, dynamic>{};
+    final profile = payload['profile'];
+    if (profile is Map<String, dynamic>) {
+      return WorkerOnboardingProfile.fromJson(profile);
+    }
+    throw StateError('Onboarding response was malformed.');
+  }
+}
+
+final workerOnboardingApiProvider = Provider<WorkerOnboardingApi>((ref) {
+  return WorkerOnboardingApi(ref.watch(apiClientProvider).dio);
+});
+
+final workerOnboardingStatusProvider = FutureProvider<WorkerOnboardingProfile?>((ref) async {
+  try {
+    return await ref.watch(workerOnboardingApiProvider).fetchStatus();
+  } catch (_) {
+    return null;
+  }
+});
+
+final onboardingControllerProvider = StateNotifierProvider<WorkerOnboardingController, WorkerOnboardingState>((ref) {
+  return WorkerOnboardingController(ref);
+});
+
+class WorkerOnboardingController extends StateNotifier<WorkerOnboardingState> {
+  WorkerOnboardingController(this.ref) : super(const WorkerOnboardingState());
+
+  final Ref ref;
+  final ImagePicker _imagePicker = ImagePicker();
+
+  WorkerOnboardingApi get _api => ref.read(workerOnboardingApiProvider);
+
+  Future<void> bootstrap({
+    bool editMode = false,
+    int? step,
+  }) async {
+    if (state.isLoadingProfile || state.isLoadingCategories) {
+      return;
+    }
+
+    state = state.copyWith(
+      isLoadingProfile: true,
+      isLoadingCategories: true,
+      errorMessage: null,
+      submitError: null,
+      missingFields: const <String>[],
+      isEditMode: editMode,
+    );
+
+    try {
+      final results = await Future.wait([
+        _api.fetchStatus(),
+        _api.fetchCategories(),
+      ]);
+
+      final profile = results[0] as WorkerOnboardingProfile;
+      final categories = results[1] as List<CatalogCategory>;
+      state = state.copyWith(
+        profile: profile,
+        categories: categories,
+        draft: _draftFromProfile(profile),
+        currentStep: _resolveInitialStep(profile, editMode: editMode, step: step),
+      );
+    } catch (error) {
+      state = state.copyWith(
+        errorMessage: _readErrorMessage(error),
+      );
+    } finally {
+      state = state.copyWith(
+        isLoadingProfile: false,
+        isLoadingCategories: false,
+      );
+    }
+  }
+
+  Future<void> refreshStatus() async {
+    final profile = await _api.fetchStatus();
+    state = state.copyWith(
+      profile: profile,
+      draft: _draftFromProfile(profile).copyWith(
+        selectedCategoryIds: state.draft.selectedCategoryIds,
+        certificationFiles: state.draft.certificationFiles,
+      ),
+    );
+  }
+
+  void setStep(int step) {
+    state = state.copyWith(currentStep: step.clamp(0, 4));
+  }
+
+  void nextStep() {
+    setStep(state.currentStep + 1);
+  }
+
+  void previousStep() {
+    setStep(state.currentStep - 1);
+  }
+
+  void setEditMode(bool editMode, {int? step}) {
+    state = state.copyWith(
+      isEditMode: editMode,
+      currentStep: step ?? state.currentStep,
+    );
+  }
+
+  void updatePersonalDetails({
+    String? fullName,
+    DateTime? dateOfBirth,
+    String? addressLine1,
+    String? city,
+    String? pincode,
+  }) {
+    state = state.copyWith(
+      draft: state.draft.copyWith(
+        fullName: fullName,
+        dateOfBirth: dateOfBirth,
+        addressLine1: addressLine1,
+        city: city,
+        pincode: pincode,
+      ),
+    );
+  }
+
+  void updateIdentityDetails({
+    String? aadhaarNumber,
+    XFile? aadhaarDocumentFile,
+    String? savedAadhaarMask,
+  }) {
+    state = state.copyWith(
+      draft: state.draft.copyWith(
+        aadhaarNumber: aadhaarNumber,
+        aadhaarDocumentFile: aadhaarDocumentFile,
+        savedAadhaarMask: savedAadhaarMask,
+      ),
+    );
+  }
+
+  void setAadhaarDocumentFile(XFile? file) {
+    state = state.copyWith(
+      draft: state.draft.copyWith(aadhaarDocumentFile: file),
+    );
+  }
+
+  void updateBankDetails({
+    String? upiId,
+    String? bankAccountNumber,
+    String? bankIfsc,
+  }) {
+    state = state.copyWith(
+      draft: state.draft.copyWith(
+        upiId: upiId,
+        bankAccountNumber: bankAccountNumber,
+        bankIfsc: bankIfsc,
+      ),
+    );
+  }
+
+  void toggleCategory(String categoryId, bool selected) {
+    final nextSelection = Set<String>.from(state.draft.selectedCategoryIds);
+    if (selected) {
+      nextSelection.add(categoryId);
+    } else {
+      nextSelection.remove(categoryId);
+    }
+
+    state = state.copyWith(
+      draft: state.draft.copyWith(selectedCategoryIds: nextSelection),
+    );
+  }
+
+  void setCertificationFile(String categoryId, XFile file) {
+    final files = Map<String, XFile>.from(state.draft.certificationFiles)..[categoryId] = file;
+    state = state.copyWith(
+      draft: state.draft.copyWith(certificationFiles: files),
+    );
+  }
+
+  void clearCertificationFile(String categoryId) {
+    final files = Map<String, XFile>.from(state.draft.certificationFiles)..remove(categoryId);
+    state = state.copyWith(
+      draft: state.draft.copyWith(certificationFiles: files),
+    );
+  }
+
+  Future<void> savePersonalDetails() async {
+    state = state.copyWith(isSavingProfile: true, errorMessage: null);
+    try {
+      final profile = await _api.updateProfile(
+        fullName: state.draft.fullName.trim(),
+        dateOfBirth: state.draft.dateOfBirth,
+        addressLine1: state.draft.addressLine1.trim(),
+        city: state.draft.city.trim(),
+        pincode: state.draft.pincode.trim(),
+        upiId: state.draft.upiId.trim(),
+        bankAccountNumber: state.draft.bankAccountNumber.trim(),
+        bankIfsc: state.draft.bankIfsc.trim(),
+        aadhaarNumber: state.draft.aadhaarNumber.trim(),
+      );
+      state = state.copyWith(
+        profile: profile,
+        draft: _draftFromProfile(profile).copyWith(
+          selectedCategoryIds: state.draft.selectedCategoryIds,
+          certificationFiles: state.draft.certificationFiles,
+        ),
+      );
+    } catch (error) {
+      state = state.copyWith(errorMessage: _readErrorMessage(error));
+      rethrow;
+    } finally {
+      state = state.copyWith(isSavingProfile: false);
+    }
+  }
+
+  Future<void> saveIdentityDocument(XFile documentFile) async {
+    state = state.copyWith(isUploadingDocument: true, errorMessage: null);
+    try {
+      final userId = ref.read(authControllerProvider).valueOrNull?.user.id ?? 'worker';
+      final fileUrl = await _api.uploadDocumentAsset(
+        file: documentFile,
+        userId: userId,
+        type: 'aadhaar',
+      );
+      final profile = await _api.uploadDocument(
+        docType: 'aadhaar',
+        fileUrl: fileUrl,
+      );
+      state = state.copyWith(
+        profile: profile,
+        draft: _draftFromProfile(profile).copyWith(
+          selectedCategoryIds: state.draft.selectedCategoryIds,
+          certificationFiles: state.draft.certificationFiles,
+          aadhaarDocumentFile: null,
+        ),
+      );
+    } catch (error) {
+      state = state.copyWith(errorMessage: _readErrorMessage(error));
+      rethrow;
+    } finally {
+      state = state.copyWith(isUploadingDocument: false);
+    }
+  }
+
+  Future<void> saveSkills() async {
+    state = state.copyWith(isSavingSkills: true, errorMessage: null);
+    try {
+      var profile = state.profile;
+      final userId = ref.read(authControllerProvider).valueOrNull?.user.id ?? 'worker';
+
+      for (final categoryId in state.draft.selectedCategoryIds) {
+        profile = await _api.addSkill(categoryId);
+        final certificate = state.draft.certificationFiles[categoryId];
+        if (certificate != null) {
+          final uploadedUrl = await _api.uploadDocumentAsset(
+            file: certificate,
+            userId: userId,
+            type: 'skill_certification',
+          );
+          profile = await _api.uploadDocument(
+            docType: 'skill_certification',
+            fileUrl: uploadedUrl,
+            categoryId: categoryId,
+          );
+        }
+      }
+
+      if (profile != null) {
+        state = state.copyWith(
+          profile: profile,
+          draft: _draftFromProfile(profile).copyWith(
+            certificationFiles: state.draft.certificationFiles,
+          ),
+        );
+      }
+    } catch (error) {
+      state = state.copyWith(errorMessage: _readErrorMessage(error));
+      rethrow;
+    } finally {
+      state = state.copyWith(isSavingSkills: false);
+    }
+  }
+
+  Future<void> saveBankDetails() async {
+    await savePersonalDetails();
+  }
+
+  Future<WorkerOnboardingProfile?> submitForReview() async {
+    state = state.copyWith(isSubmitting: true, errorMessage: null, submitError: null, missingFields: const <String>[]);
+    try {
+      final profile = await _api.submitForReview();
+      state = state.copyWith(
+        profile: profile,
+        draft: _draftFromProfile(profile).copyWith(
+          selectedCategoryIds: state.draft.selectedCategoryIds,
+          certificationFiles: state.draft.certificationFiles,
+        ),
+      );
+      ref.invalidate(workerOnboardingStatusProvider);
+      return profile;
+    } catch (error) {
+      final message = _readErrorMessage(error);
+      final missingFields = _extractMissingFields(error);
+      state = state.copyWith(
+        submitError: message,
+        missingFields: missingFields,
+        currentStep: missingFields.isNotEmpty ? _stepForField(missingFields.first) : state.currentStep,
+      );
+      rethrow;
+    } finally {
+      state = state.copyWith(isSubmitting: false);
+    }
+  }
+
+  Future<void> loadCategories() async {
+    if (state.categories.isNotEmpty) {
+      return;
+    }
+    state = state.copyWith(isLoadingCategories: true);
+    try {
+      final categories = await _api.fetchCategories();
+      state = state.copyWith(categories: categories);
+    } finally {
+      state = state.copyWith(isLoadingCategories: false);
+    }
+  }
+
+  Future<void> pickAndSaveIdentityDocument() async {
+    final picked = await _imagePicker.pickImage(
+      source: ImageSource.gallery,
+      imageQuality: 88,
+    );
+    if (picked == null) {
+      return;
+    }
+    await saveIdentityDocument(picked);
+  }
+
+  Future<void> pickAndSetCertificationFile(String categoryId) async {
+    final picked = await _imagePicker.pickImage(
+      source: ImageSource.gallery,
+      imageQuality: 88,
+    );
+    if (picked == null) {
+      return;
+    }
+    setCertificationFile(categoryId, picked);
+  }
+
+  WorkerOnboardingDraft _draftFromProfile(WorkerOnboardingProfile profile) {
+    return WorkerOnboardingDraft(
+      fullName: profile.fullName ?? '',
+      dateOfBirth: profile.dateOfBirth,
+      addressLine1: profile.addressLine1 ?? '',
+      city: profile.city ?? '',
+      pincode: profile.pincode ?? '',
+      aadhaarNumber: '',
+      upiId: profile.upiId ?? '',
+      bankAccountNumber: profile.bankAccountNumber ?? '',
+      bankIfsc: profile.bankIfsc ?? '',
+      selectedCategoryIds: profile.selectedCategoryIds,
+      aadhaarDocumentFile: state.draft.aadhaarDocumentFile,
+      savedAadhaarMask: profile.maskedAadhaar(),
+      certificationFiles: state.draft.certificationFiles,
+      certificationUrls: _certificationUrlsFromProfile(profile),
+    );
+  }
+
+  Map<String, String> _certificationUrlsFromProfile(WorkerOnboardingProfile profile) {
+    final urls = <String, String>{};
+    for (final skill in profile.skills) {
+      if (skill.certificationDocUrl != null && skill.certificationDocUrl!.isNotEmpty) {
+        urls[skill.categoryId] = skill.certificationDocUrl!;
+      }
+    }
+    return urls;
+  }
+
+  int _resolveInitialStep(WorkerOnboardingProfile profile, {required bool editMode, int? step}) {
+    if (step != null) {
+      return step.clamp(0, 4);
+    }
+
+    if (editMode) {
+      return _stepForProfile(profile);
+    }
+
+    return _stepForProfile(profile);
+  }
+
+  int _stepForProfile(WorkerOnboardingProfile profile) {
+    if (profile.fullName == null ||
+        profile.dateOfBirth == null ||
+        profile.addressLine1 == null ||
+        profile.city == null ||
+        profile.pincode == null) {
+      return 0;
+    }
+
+    if (profile.aadhaarDocUrl == null || profile.aadhaarDocUrl!.isEmpty) {
+      return 1;
+    }
+
+    if (profile.selectedCategoryIds.isEmpty) {
+      return 2;
+    }
+
+    if (profile.upiId == null || profile.upiId!.isEmpty) {
+      return 3;
+    }
+
+    return 4;
+  }
+
+  int _stepForField(String field) {
+    switch (field) {
+      case 'fullName':
+      case 'dateOfBirth':
+      case 'addressLine1':
+      case 'city':
+      case 'pincode':
+        return 0;
+      case 'aadhaarNumber':
+      case 'aadhaarDocUrl':
+        return 1;
+      case 'skills':
+        return 2;
+      case 'upiId':
+      case 'bankAccountNumber':
+      case 'bankIfsc':
+        return 3;
+      default:
+        return 0;
+    }
+  }
+
+  List<String> _extractMissingFields(Object error) {
+    if (error is DioException) {
+      final data = error.response?.data;
+      if (data is Map<String, dynamic>) {
+        final missingFields = data['missingFields'];
+        if (missingFields is List) {
+          return missingFields.whereType<String>().toList(growable: false);
+        }
+      }
+    }
+    return const <String>[];
+  }
+
+  String _readErrorMessage(Object error) {
+    if (error is DioException) {
+      final data = error.response?.data;
+      if (data is Map<String, dynamic>) {
+        final message = data['message'];
+        if (message is String && message.trim().isNotEmpty) {
+          return message;
+        }
+      }
+      if (error.message != null && error.message!.trim().isNotEmpty) {
+        return error.message!;
+      }
+    }
+    return error.toString();
+  }
+}
+
+List<WorkerOnboardingSkillItem> _decodeSkills(dynamic data) {
+  if (data is! List) {
+    return const <WorkerOnboardingSkillItem>[];
+  }
+
+  return data
+      .whereType<Map<String, dynamic>>()
+      .map(WorkerOnboardingSkillItem.fromJson)
+      .toList(growable: false);
+}
+
+const Object _unset = Object();

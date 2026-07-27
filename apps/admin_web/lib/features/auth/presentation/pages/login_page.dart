@@ -12,57 +12,17 @@ class LoginPage extends ConsumerStatefulWidget {
 }
 
 class _LoginPageState extends ConsumerState<LoginPage> {
-  final _identifierController = TextEditingController(text: '+91 ');
-  final _nameController = TextEditingController();
-  final _formKey = GlobalKey<FormState>();
-  final _googleSignIn = GoogleSignIn(
-    scopes: const ['email', 'profile'],
-    serverClientId: const String.fromEnvironment(
-      'GOOGLE_SERVER_CLIENT_ID',
-      defaultValue: '',
-    ),
-  );
-  bool _isPhone = true;
+  late final GoogleSignIn _googleSignIn;
   bool _isLoading = false;
 
   @override
-  void dispose() {
-    _identifierController.dispose();
-    _nameController.dispose();
-    super.dispose();
-  }
-
-  Future<void> _requestOtp() async {
-    if (!_formKey.currentState!.validate()) {
-      return;
-    }
-    setState(() => _isLoading = true);
-    try {
-      final result = await ref.read(authControllerProvider.notifier).requestOtp(
-            channel: _isPhone ? 'PHONE' : 'EMAIL',
-            identifier: _identifierController.text.trim(),
-          );
-      if (!mounted) return;
-      final debugOtp = result['debugOtp'] as String?;
-      if (debugOtp != null && debugOtp.isNotEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Development OTP: $debugOtp')),
-        );
-      }
-      context.go('/otp', extra: {
-        'channel': _isPhone ? 'PHONE' : 'EMAIL',
-        'identifier': _identifierController.text.trim(),
-        'role': 'ADMIN',
-        'name': _nameController.text.trim(),
-      });
-    } catch (error) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Unable to request OTP: $error')),
-      );
-    } finally {
-      if (mounted) setState(() => _isLoading = false);
-    }
+  void initState() {
+    super.initState();
+    final environment = ref.read(environmentProvider);
+    _googleSignIn = GoogleSignIn(
+      scopes: const ['email', 'profile'],
+      serverClientId: environment.googleServerClientId.isEmpty ? null : environment.googleServerClientId,
+    );
   }
 
   Future<void> _signInWithGoogle() async {
@@ -82,7 +42,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
             role: 'ADMIN',
           );
       if (!mounted) return;
-      context.go('/app');
+      context.go('/admin');
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -95,143 +55,91 @@ class _LoginPageState extends ConsumerState<LoginPage> {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-
     return Scaffold(
-      body: CustomScrollView(
-        slivers: [
-          SliverToBoxAdapter(
-            child: GradientHero(
-              title: 'Admin control center.',
-              subtitle:
-                  'Oversee workers, bookings, revenue, and city operations from one secure panel.',
-              actionLabel: 'Continue',
-              action: _requestOtp,
-              child: Container(
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.08),
-                  borderRadius: BorderRadius.circular(28),
-                  border: Border.all(
-                    color: Colors.white.withValues(alpha: 0.12),
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            colors: [Color(0xFF06131F), Color(0xFF0F766E), Color(0xFF14B8A6)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+        ),
+        child: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(24),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 560),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const Icon(
+                    Icons.admin_panel_settings_rounded,
+                    size: 64,
+                    color: Colors.white,
                   ),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Operations dashboard for city admins',
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w700,
-                          ),
+                  const SizedBox(height: 20),
+                  Text(
+                    'VeeduFix Admin',
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.displaySmall?.copyWith(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w900,
+                        ),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    'Google sign-in for city operations, support, pricing, and platform control.',
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          color: Colors.white.withValues(alpha: 0.88),
+                          height: 1.4,
+                        ),
+                  ),
+                  const SizedBox(height: 28),
+                  Card(
+                    elevation: 0,
+                    color: Colors.white.withValues(alpha: 0.12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(28),
+                      side: BorderSide(color: Colors.white.withValues(alpha: 0.16)),
                     ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Verification, pricing, support, and analytics in one place.',
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                            color: Colors.white.withValues(alpha: 0.85),
+                    child: Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Text(
+                            'Authorized admin access only',
+                            textAlign: TextAlign.center,
+                            style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w800,
+                                ),
                           ),
+                          const SizedBox(height: 10),
+                          Text(
+                            'Continue with your approved Google account to access the dashboard.',
+                            textAlign: TextAlign.center,
+                            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                  color: Colors.white.withValues(alpha: 0.84),
+                                ),
+                          ),
+                          const SizedBox(height: 24),
+                          FilledButton.icon(
+                            onPressed: _isLoading ? null : _signInWithGoogle,
+                            icon: const Icon(Icons.g_mobiledata_rounded),
+                            label: Text(_isLoading ? 'Signing in...' : 'Continue with Google'),
+                          ),
+                        ],
+                      ),
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ),
           ),
-          SliverPadding(
-            padding: const EdgeInsets.all(20),
-            sliver: SliverList.list(
-              children: [
-                Form(
-                  key: _formKey,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Sign in to the admin panel',
-                        style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                              fontWeight: FontWeight.w800,
-                            ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        'Use email OTP or Google to continue.',
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                              color: scheme.onSurfaceVariant,
-                            ),
-                      ),
-                      const SizedBox(height: 24),
-                      SegmentedButton<bool>(
-                        segments: const [
-                          ButtonSegment(value: true, label: Text('Phone')),
-                          ButtonSegment(value: false, label: Text('Email')),
-                        ],
-                        selected: {_isPhone},
-                        onSelectionChanged: (selection) {
-                          setState(() {
-                            _isPhone = selection.first;
-                            _identifierController.text =
-                                _isPhone ? '+91 ' : '';
-                          });
-                        },
-                      ),
-                      const SizedBox(height: 16),
-                      TextFormField(
-                        controller: _identifierController,
-                        keyboardType:
-                            _isPhone ? TextInputType.phone : TextInputType.emailAddress,
-                        decoration: InputDecoration(
-                          labelText: _isPhone ? 'Mobile number' : 'Email address',
-                          prefixIcon: Icon(
-                            _isPhone ? Icons.phone_rounded : Icons.email_rounded,
-                          ),
-                        ),
-                        validator: (value) {
-                          final text = value?.trim() ?? '';
-                          if (text.isEmpty) {
-                            return 'Enter a valid ${_isPhone ? 'mobile number' : 'email address'}';
-                          }
-                          if (_isPhone && text.length < 10) {
-                            return 'Enter a valid mobile number';
-                          }
-                          if (!_isPhone && !text.contains('@')) {
-                            return 'Enter a valid email address';
-                          }
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: 16),
-                      TextFormField(
-                        controller: _nameController,
-                        decoration: const InputDecoration(
-                          labelText: 'Your name',
-                          prefixIcon: Icon(Icons.person_rounded),
-                        ),
-                        validator: (value) {
-                          if ((value ?? '').trim().length < 2) {
-                            return 'Enter your name';
-                          }
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: 24),
-                      PrimaryActionButton(
-                        label: _isLoading ? 'Sending OTP...' : 'Send OTP',
-                        onPressed: _isLoading ? null : _requestOtp,
-                      ),
-                      const SizedBox(height: 16),
-                      OutlinedButton.icon(
-                        onPressed: _isLoading ? null : _signInWithGoogle,
-                        icon: const Icon(Icons.g_mobiledata_rounded),
-                        label: const Text('Continue with Google'),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }

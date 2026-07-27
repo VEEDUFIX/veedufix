@@ -14,6 +14,7 @@ import { verifyGoogleIdToken } from "../../lib/firebase.js";
 
 type LoginChannel = "PHONE" | "EMAIL";
 type LoginRole = "CUSTOMER" | "WORKER" | "ADMIN";
+type SessionProvider = "PHONE" | "EMAIL" | "GOOGLE";
 
 type AuthResult = {
   user: {
@@ -44,12 +45,25 @@ function refreshTokenHash(token: string): string {
   return createHash("sha256").update(token).digest("hex");
 }
 
-async function upsertAuthSession(userId: string, provider: string, providerId: string, accessToken: string, refreshToken: string): Promise<string> {
-  const session = await prisma.authSession.create({
-    data: {
+async function upsertAuthSession(
+  userId: string,
+  provider: SessionProvider,
+  providerId: string,
+  accessToken: string,
+  refreshToken: string
+): Promise<string> {
+  const session = await prisma.authSession.upsert({
+    where: { providerId },
+    create: {
       userId,
       provider,
       providerId,
+      accessToken,
+      refreshToken
+    },
+    update: {
+      userId,
+      provider,
       accessToken,
       refreshToken
     }
@@ -150,7 +164,13 @@ export async function verifyOtp(input: {
   const accessToken = signAccessToken({ sub: user.id, role: user.role, sessionId });
   const refreshToken = signRefreshToken({ sub: user.id, role: user.role, sessionId });
   await persistRefreshToken(user.id, refreshToken, extractExpirySeconds(process.env.JWT_REFRESH_TTL ?? "30d"));
-  await upsertAuthSession(user.id, input.channel, normalized, accessToken, refreshToken);
+  await upsertAuthSession(
+    user.id,
+    input.channel,
+    `${input.channel.toLowerCase()}:${normalized}`,
+    accessToken,
+    refreshToken
+  );
 
   return {
     user: {
@@ -190,6 +210,13 @@ export async function refreshSession(refreshToken: string): Promise<AuthResult> 
     data: { revokedAt: new Date() }
   });
   await persistRefreshToken(stored.userId, nextRefreshToken, extractExpirySeconds(process.env.JWT_REFRESH_TTL ?? "30d"));
+  await prisma.authSession.updateMany({
+    where: { refreshToken },
+    data: {
+      accessToken,
+      refreshToken: nextRefreshToken
+    }
+  });
 
   return {
     user: {
@@ -210,9 +237,12 @@ export async function signInWithGoogle(input: {
   role: LoginRole;
 }): Promise<AuthResult> {
   const googleClaims = await verifyGoogleIdToken(input.idToken);
-  const email = googleClaims.email?.toLowerCase() ?? `google-${createHash("sha1").update(input.idToken).digest("hex").slice(0, 10)}@placeholder.local`;
+  const email =
+    googleClaims.email?.toLowerCase() ??
+    `google-${googleClaims.sub}@placeholder.local`;
   const name = googleClaims.name ?? "Google User";
   const avatarUrl = googleClaims.picture ?? null;
+  const providerId = `google:${googleClaims.sub}`;
 
   const user = await prisma.user.upsert({
     where: { email },
@@ -235,6 +265,7 @@ export async function signInWithGoogle(input: {
   const accessToken = signAccessToken({ sub: user.id, role: user.role, sessionId });
   const refreshToken = signRefreshToken({ sub: user.id, role: user.role, sessionId });
   await persistRefreshToken(user.id, refreshToken, extractExpirySeconds(process.env.JWT_REFRESH_TTL ?? "30d"));
+  await upsertAuthSession(user.id, "GOOGLE", providerId, accessToken, refreshToken);
 
   return {
     user: {
@@ -254,5 +285,12 @@ export async function signOut(refreshToken: string): Promise<void> {
   await prisma.refreshToken.updateMany({
     where: { tokenHash: refreshTokenHash(refreshToken) },
     data: { revokedAt: new Date() }
+  });
+  await prisma.authSession.updateMany({
+    where: { refreshToken },
+    data: {
+      accessToken: null,
+      refreshToken: null
+    }
   });
 }

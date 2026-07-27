@@ -7,6 +7,10 @@ import '../features/auth/presentation/pages/login_page.dart';
 import '../features/auth/presentation/pages/otp_page.dart';
 import '../features/home/presentation/pages/home_page.dart';
 import '../features/booking/presentation/pages/bookings_page.dart';
+import '../features/booking/presentation/pages/arrival_otp_page.dart';
+import '../features/booking/presentation/pages/booking_rating_page.dart';
+import '../features/booking/presentation/pages/completion_otp_page.dart';
+import '../features/profile/presentation/pages/saved_addresses_page.dart';
 import '../features/profile/presentation/pages/profile_page.dart';
 import '../features/shell/presentation/pages/app_shell_page.dart';
 
@@ -54,6 +58,31 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/otp',
         builder: (context, state) => const OtpPage(),
+      ),
+      GoRoute(
+        path: '/arrival-otp',
+        builder: (context, state) {
+          final bookingId = state.uri.queryParameters['bookingId'] ?? '';
+          return ArrivalOtpPage(bookingId: bookingId);
+        },
+      ),
+      GoRoute(
+        path: '/completion-otp',
+        builder: (context, state) {
+          final bookingId = state.uri.queryParameters['bookingId'] ?? '';
+          return CompletionOtpPage(bookingId: bookingId);
+        },
+      ),
+      GoRoute(
+        path: '/addresses',
+        builder: (context, state) => const SavedAddressesPage(),
+      ),
+      GoRoute(
+        path: '/booking-rating',
+        builder: (context, state) {
+          final bookingId = state.uri.queryParameters['bookingId'] ?? '';
+          return BookingRatingPage(bookingId: bookingId);
+        },
       ),
       ShellRoute(
         builder: (context, state, child) => AppShellPage(child: child),

@@ -20,9 +20,12 @@ String splashTitleForMode(AppMode mode) {
 
 String splashSubtitleForMode(AppMode mode) {
   return switch (mode) {
-    AppMode.customer => 'Book verified professionals, track visits, and manage every service request.',
-    AppMode.worker => 'Accept bookings, keep customers updated, and grow with every completed job.',
-    AppMode.admin => 'Review demand, approvals, support, and revenue without leaving the dashboard.',
+    AppMode.customer =>
+      'Book verified professionals, track visits, and manage every service request.',
+    AppMode.worker =>
+      'Accept bookings, keep customers updated, and grow with every completed job.',
+    AppMode.admin =>
+      'Review demand, approvals, support, and revenue without leaving the dashboard.',
   };
 }
 
@@ -56,9 +59,39 @@ String splashRouteForMode(AppMode mode) {
 
 Set<String> allowedRoutesForMode(AppMode mode) {
   return switch (mode) {
-    AppMode.customer => const {'/app', '/bookings', '/profile'},
-    AppMode.worker => const {'/worker', '/jobs', '/earnings', '/profile'},
-    AppMode.admin => const {'/admin', '/analytics', '/profile'},
+    AppMode.customer => const {
+        '/app',
+        '/bookings',
+        '/arrival-otp',
+        '/completion-otp',
+        '/booking-rating',
+        '/profile',
+        '/addresses',
+      },
+    AppMode.worker => const {
+        '/worker',
+        '/jobs',
+        '/job-execution',
+        '/earnings',
+        '/profile',
+        '/onboarding',
+        '/onboarding/status',
+        '/availability',
+      },
+    AppMode.admin => const {
+        '/admin',
+        '/analytics',
+        '/profile',
+        '/catalog',
+        '/finance',
+        '/finance/payouts',
+        '/finance/refunds',
+        '/worker-review',
+        '/workers',
+        '/ops/overview',
+        '/ops/live-jobs',
+        '/ops/alerts',
+        '/ops/disputes',
+      },
   };
 }
-
