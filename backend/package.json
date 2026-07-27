@@ -16,6 +16,8 @@
   },
   "dependencies": {
     "@prisma/client": "^6.15.0",
+    "@types/express": "^5.0.3",
+    "@types/multer": "^1.4.12",
     "bcryptjs": "^3.0.2",
     "cloudinary": "^2.6.0",
     "compression": "^1.7.5",
@@ -38,9 +40,7 @@
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",
     "@types/cors": "^2.8.19",
-    "@types/express": "^5.0.3",
     "@types/jsonwebtoken": "^9.0.10",
-    "@types/multer": "^1.4.12",
     "@types/node": "^24.3.1",
     "@types/ws": "^8.5.12",
     "@typescript-eslint/eslint-plugin": "^8.39.0",
