@@ -12,7 +12,7 @@ import { authRouter } from "./modules/auth/auth.routes.js";
 import { catalogRouter, adminCatalogRouter } from "./modules/catalog/catalog.routes.js";
 import { disputeRouter } from "./modules/dispute/dispute.routes.js";
 import { cancellationRouter } from "./modules/matching/cancellation.routes.js";
-import { opsRouter } from "./modules/ops/ops.routes.js";
+import { opsRouter, adminAlertsRouter } from "./modules/ops/ops.routes.js";
 import { jobExecutionRouter } from "./modules/job-execution/job-execution.routes.js";
 import { healthRouter } from "./modules/health/health.routes.js";
 import { mediaRouter } from "./modules/media/media.routes.js";
@@ -85,6 +85,7 @@ export function createApp() {
   app.use("/api/admin/workers", adminWorkerDirectoryRouter);
   app.use("/api/admin/worker-pool", workerPoolRouter);
   app.use("/api/admin/ops", opsRouter);
+  app.use("/api/admin/alerts", adminAlertsRouter);
   app.use("/api", matchingRouter);
   app.use("/api", jobExecutionRouter);
   app.use("/api/media", mediaRouter);

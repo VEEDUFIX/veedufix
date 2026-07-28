@@ -6,7 +6,11 @@ import {
   WorkerStatusConflictError,
   addSkill,
   approveWorker,
+  getAadhaarSignedUrl,
   getOnboardingStatus,
+  getOwnAadhaarSignedUrl,
+  getOwnSkillCertSignedUrl,
+  getSkillCertSignedUrl,
   getWorkerDirectory,
   getWorkerHistory,
   listPendingReview,
@@ -222,6 +226,76 @@ export async function getWorkerHistoryHandler(
     const profileId = String(request.params.profileId);
     const result = await getWorkerHistory(profileId);
     response.status(200).json(result);
+  } catch (error) {
+    sendError(response, error);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// KYC document access handlers
+// Response shape: { url: string, expiresAt: string (ISO 8601) }
+// ---------------------------------------------------------------------------
+
+function kycDocResponse(response: Response, signedUrl: string, ttlSeconds = 300): void {
+  const expiresAt = new Date(Date.now() + ttlSeconds * 1000).toISOString();
+  response.status(200).json({ url: signedUrl, expiresAt });
+}
+
+/** GET /api/worker/onboarding/documents/aadhaar  (WORKER — own document) */
+export async function getOwnAadhaarDocHandler(
+  request: AuthenticatedRequest,
+  response: Response,
+  _next: NextFunction
+) {
+  try {
+    const url = await getOwnAadhaarSignedUrl(request.auth!.userId);
+    kycDocResponse(response, url);
+  } catch (error) {
+    sendError(response, error);
+  }
+}
+
+/** GET /api/worker/onboarding/documents/skills/:skillId/certification  (WORKER — own) */
+export async function getOwnSkillCertDocHandler(
+  request: AuthenticatedRequest,
+  response: Response,
+  _next: NextFunction
+) {
+  try {
+    const skillId = String(request.params.skillId);
+    const url = await getOwnSkillCertSignedUrl(request.auth!.userId, skillId);
+    kycDocResponse(response, url);
+  } catch (error) {
+    sendError(response, error);
+  }
+}
+
+/** GET /api/admin/worker-review/:profileId/documents/aadhaar  (ADMIN) */
+export async function getAdminAadhaarDocHandler(
+  request: AuthenticatedRequest,
+  response: Response,
+  _next: NextFunction
+) {
+  try {
+    const profileId = String(request.params.profileId);
+    const url = await getAadhaarSignedUrl(profileId);
+    kycDocResponse(response, url);
+  } catch (error) {
+    sendError(response, error);
+  }
+}
+
+/** GET /api/admin/worker-review/:profileId/documents/skills/:skillId/certification  (ADMIN) */
+export async function getAdminSkillCertDocHandler(
+  request: AuthenticatedRequest,
+  response: Response,
+  _next: NextFunction
+) {
+  try {
+    const profileId = String(request.params.profileId);
+    const skillId = String(request.params.skillId);
+    const url = await getSkillCertSignedUrl(skillId, profileId);
+    kycDocResponse(response, url);
   } catch (error) {
     sendError(response, error);
   }

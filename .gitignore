@@ -14,7 +14,6 @@ coverage/
 *.iml
 *.log
 backend/.turbo/
-backend/prisma/migrations/
 backend/node_modules/
 backend/dist/
 apps/**/.dart_tool/

@@ -18,14 +18,17 @@ class WorkerOnboardingSkillItem {
     required this.categoryName,
     this.categorySlug,
     this.categoryIconUrl,
-    this.certificationDocUrl,
+    this.hasCertificationDoc = false,
   });
 
   final String categoryId;
   final String categoryName;
   final String? categorySlug;
   final String? categoryIconUrl;
-  final String? certificationDocUrl;
+  /// True when the server has a certification document on file for this skill.
+  /// The actual URL is never sent to the client; use the authenticated
+  /// document-access endpoint if the document itself needs to be viewed.
+  final bool hasCertificationDoc;
 
   factory WorkerOnboardingSkillItem.fromJson(Map<String, dynamic> json) {
     final category = json['category'] is Map<String, dynamic>
@@ -36,7 +39,10 @@ class WorkerOnboardingSkillItem {
       categoryName: category['name'] as String? ?? json['name'] as String? ?? '',
       categorySlug: category['slug'] as String?,
       categoryIconUrl: category['iconUrl'] as String?,
-      certificationDocUrl: json['certificationDocUrl'] as String?,
+      // New field from the API; backward-compat: fall back to checking the
+      // old certificationDocUrl field for responses from an older backend.
+      hasCertificationDoc: json['hasCertificationDoc'] as bool? ??
+          (json['certificationDocUrl'] as String?)?.isNotEmpty == true,
     );
   }
 }
@@ -50,7 +56,7 @@ class WorkerOnboardingProfile {
     required this.city,
     required this.pincode,
     required this.aadhaarNumber,
-    required this.aadhaarDocUrl,
+    required this.hasAadhaarDoc,
     required this.upiId,
     required this.bankAccountNumber,
     required this.bankIfsc,
@@ -65,7 +71,10 @@ class WorkerOnboardingProfile {
   final String? city;
   final String? pincode;
   final String? aadhaarNumber;
-  final String? aadhaarDocUrl;
+  /// True when the server has an Aadhaar document on file.
+  /// The raw URL is never sent to the client; use the authenticated
+  /// document-access endpoint if the document itself needs to be viewed.
+  final bool hasAadhaarDoc;
   final String? upiId;
   final String? bankAccountNumber;
   final String? bankIfsc;
@@ -81,7 +90,10 @@ class WorkerOnboardingProfile {
       city: json['city'] as String?,
       pincode: json['pincode'] as String?,
       aadhaarNumber: json['aadhaarNumber'] as String?,
-      aadhaarDocUrl: json['aadhaarDocUrl'] as String?,
+      // New field from the API; backward-compat: fall back to checking the
+      // old aadhaarDocUrl field for responses from an older backend.
+      hasAadhaarDoc: json['hasAadhaarDoc'] as bool? ??
+          (json['aadhaarDocUrl'] as String?)?.isNotEmpty == true,
       upiId: json['upiId'] as String?,
       bankAccountNumber: json['bankAccountNumber'] as String?,
       bankIfsc: json['bankIfsc'] as String?,
@@ -117,7 +129,7 @@ class WorkerOnboardingDraft {
     this.bankIfsc = '',
     this.selectedCategoryIds = const <String>{},
     this.certificationFiles = const <String, XFile>{},
-    this.certificationUrls = const <String, String>{},
+    this.certificationUrls = const <String, bool>{},
     this.aadhaarDocumentFile,
     this.savedAadhaarMask,
   });
@@ -133,7 +145,10 @@ class WorkerOnboardingDraft {
   final String bankIfsc;
   final Set<String> selectedCategoryIds;
   final Map<String, XFile> certificationFiles;
-  final Map<String, String> certificationUrls;
+  /// Maps categoryId → true for skills that have a certification document on
+  /// the server. The raw URL is never sent to the client; use the
+  /// authenticated document-access endpoint when the document must be viewed.
+  final Map<String, bool> certificationUrls;
   final XFile? aadhaarDocumentFile;
   final String? savedAadhaarMask;
 
@@ -149,7 +164,7 @@ class WorkerOnboardingDraft {
     String? bankIfsc,
     Set<String>? selectedCategoryIds,
     Map<String, XFile>? certificationFiles,
-    Map<String, String>? certificationUrls,
+    Map<String, bool>? certificationUrls,
     Object? aadhaarDocumentFile = _unset,
     Object? savedAadhaarMask = _unset,
   }) {
@@ -814,14 +829,18 @@ class WorkerOnboardingController extends StateNotifier<WorkerOnboardingState> {
     );
   }
 
-  Map<String, String> _certificationUrlsFromProfile(WorkerOnboardingProfile profile) {
-    final urls = <String, String>{};
+  /// Returns a map of categoryId → hasCertificationDoc (bool) for skills
+  /// that have a certification document on file.  The raw URL is never
+  /// available on the client; use the authenticated document-access endpoint
+  /// to retrieve the actual document when needed.
+  Map<String, bool> _certificationUrlsFromProfile(WorkerOnboardingProfile profile) {
+    final result = <String, bool>{};
     for (final skill in profile.skills) {
-      if (skill.certificationDocUrl != null && skill.certificationDocUrl!.isNotEmpty) {
-        urls[skill.categoryId] = skill.certificationDocUrl!;
+      if (skill.hasCertificationDoc) {
+        result[skill.categoryId] = true;
       }
     }
-    return urls;
+    return result;
   }
 
   int _resolveInitialStep(WorkerOnboardingProfile profile, {required bool editMode, int? step}) {
@@ -845,7 +864,7 @@ class WorkerOnboardingController extends StateNotifier<WorkerOnboardingState> {
       return 0;
     }
 
-    if (profile.aadhaarDocUrl == null || profile.aadhaarDocUrl!.isEmpty) {
+    if (!profile.hasAadhaarDoc) {
       return 1;
     }
 
@@ -869,7 +888,7 @@ class WorkerOnboardingController extends StateNotifier<WorkerOnboardingState> {
       case 'pincode':
         return 0;
       case 'aadhaarNumber':
-      case 'aadhaarDocUrl':
+      case 'hasAadhaarDoc':
         return 1;
       case 'skills':
         return 2;

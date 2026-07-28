@@ -3,6 +3,14 @@ export type ChecklistValidationResult = {
   missingItems: string[];
 };
 
+type ChecklistCacheEntry = {
+  expiresAt: number;
+  result: ChecklistValidationResult;
+};
+
+const CHECKLIST_CACHE_TTL_MS = 5 * 60 * 1000;
+const checklistCache = new Map<string, ChecklistCacheEntry>();
+
 function normalizeChecklistItem(item: unknown, index: number): { label: string; complete: boolean } {
   if (typeof item === "string") {
     return {
@@ -43,11 +51,20 @@ function normalizeChecklistItem(item: unknown, index: number): { label: string; 
 }
 
 export function validateChecklistCompletion(
-  _serviceId: string,
+  serviceId: string,
   submittedChecklist: unknown
 ): ChecklistValidationResult {
+  const cacheKey = `${serviceId}:${JSON.stringify(submittedChecklist)}`;
+  const now = Date.now();
+  const cached = checklistCache.get(cacheKey);
+  if (cached && cached.expiresAt > now) {
+    return cached.result;
+  }
+
   if (submittedChecklist === null || submittedChecklist === undefined) {
-    return { isComplete: true, missingItems: [] };
+    const result = { isComplete: true, missingItems: [] };
+    checklistCache.set(cacheKey, { expiresAt: now + CHECKLIST_CACHE_TTL_MS, result });
+    return result;
   }
 
   const items: Array<{ label: string; complete: boolean }> = Array.isArray(submittedChecklist)
@@ -64,8 +81,11 @@ export function validateChecklistCompletion(
 
   const missingItems = items.filter((item) => !item.complete).map((item) => item.label);
 
-  return {
+  const result = {
     isComplete: missingItems.length === 0,
     missingItems
   };
+
+  checklistCache.set(cacheKey, { expiresAt: now + CHECKLIST_CACHE_TTL_MS, result });
+  return result;
 }

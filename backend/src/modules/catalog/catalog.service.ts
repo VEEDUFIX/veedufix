@@ -1,5 +1,7 @@
 import { Prisma, PriceRuleType } from "@prisma/client";
 import { prisma } from "../../lib/prisma.js";
+import { logger } from "../../lib/logger.js";
+import { redis } from "../../lib/redis.js";
 
 type LocaleInput = {
   locale?: string;
@@ -33,6 +35,101 @@ type CatalogNode = {
     seoDescription?: string;
   }>;
 };
+
+const CATALOG_CACHE_TTL_SECONDS = 600;
+const CATALOG_CACHE_VERSION_KEY = "cache:catalog:version";
+
+async function getCatalogCacheVersion(): Promise<number> {
+  // Redis is a performance optimization only - any Redis failure must degrade to direct DB access, never fail the request.
+  try {
+    const rawVersion = await redis.get(CATALOG_CACHE_VERSION_KEY);
+    const version = Number(rawVersion ?? "1");
+    return Number.isFinite(version) && version > 0 ? version : 1;
+  } catch (error) {
+    logger.error(
+      {
+        error,
+        operation: "redis.get",
+        key: CATALOG_CACHE_VERSION_KEY
+      },
+      "Catalog cache version lookup failed"
+    );
+    return 1;
+  }
+}
+
+async function invalidateCatalogCache(): Promise<void> {
+  // Redis is a performance optimization only - any Redis failure must degrade to direct DB access, never fail the request.
+  try {
+    await redis.incr(CATALOG_CACHE_VERSION_KEY);
+  } catch (error) {
+    logger.error(
+      {
+        error,
+        operation: "redis.incr",
+        key: CATALOG_CACHE_VERSION_KEY
+      },
+      "Catalog cache invalidation failed"
+    );
+  }
+}
+
+function buildCatalogCacheKey(version: number, scope: string, parts: Array<string | null | undefined>): string {
+  return ["catalog", `v${version}`, scope, ...parts.map((part) => part ?? "all")].join(":");
+}
+
+async function readCatalogCache<T>(
+  scope: string,
+  parts: Array<string | null | undefined>,
+  loader: () => Promise<T>
+): Promise<T> {
+  // Redis is a performance optimization only - any Redis failure must degrade to direct DB access, never fail the request.
+  const version = await getCatalogCacheVersion();
+  const cacheKey = buildCatalogCacheKey(version, scope, parts);
+  let cached: string | null = null;
+  try {
+    cached = await redis.get(cacheKey);
+  } catch (error) {
+    logger.error(
+      {
+        error,
+        operation: "redis.get",
+        key: cacheKey
+      },
+      "Catalog cache read failed"
+    );
+  }
+
+  if (cached) {
+    try {
+      return JSON.parse(cached) as T;
+    } catch (error) {
+      logger.error(
+        {
+          error,
+          operation: "json.parse",
+          key: cacheKey
+        },
+        "Catalog cache parse failed"
+      );
+    }
+  }
+
+  const value = await loader();
+  try {
+    await redis.set(cacheKey, JSON.stringify(value), "EX", CATALOG_CACHE_TTL_SECONDS);
+  } catch (error) {
+    logger.error(
+      {
+        error,
+        operation: "redis.set",
+        key: cacheKey
+      },
+      "Catalog cache write failed"
+    );
+  }
+  return value;
+}
 
 function slugify(value: string): string {
   return value
@@ -177,68 +274,73 @@ function pickBaseServicePrice(service: {
 
 async function resolveCatalogTree(cityId?: string, locale?: string, includeInactive = false) {
   const where = includeInactive ? {} : { isActive: true };
-
-  const categories = await prisma.serviceCategory.findMany({
-    where,
-    orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
-    include: {
-      ...catalogInclude(cityId)
-    }
-  });
-
-  return categories;
+  return readCatalogCache("tree", [cityId, locale, includeInactive ? "inactive" : "active"], async () =>
+    prisma.serviceCategory.findMany({
+      where,
+      orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+      include: {
+        ...catalogInclude(cityId)
+      }
+    })
+  );
 }
 
 async function resolveServiceBySlug(slug: string, cityId?: string) {
-  return prisma.service.findUnique({
-    where: { slug },
-    include: serviceInclude(cityId)
-  });
+  return readCatalogCache("service", [slug, cityId], async () =>
+    prisma.service.findUnique({
+      where: { slug },
+      include: serviceInclude(cityId)
+    })
+  );
 }
 
 async function resolveCategoryBySlug(slug: string) {
-  return prisma.serviceCategory.findUnique({
-    where: { slug },
-    include: {
-      translations: true,
-      subcategories: {
-        orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
-        include: {
-          translations: true,
-          catalogServices: {
-            where: { isActive: true },
-            orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
-            include: {
-              translations: true,
-              images: {
-                orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }]
+  return readCatalogCache("category", [slug], async () =>
+    prisma.serviceCategory.findUnique({
+      where: { slug },
+      include: {
+        translations: true,
+        subcategories: {
+          orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+          include: {
+            translations: true,
+            catalogServices: {
+              where: { isActive: true },
+              orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+              include: {
+                translations: true,
+                images: {
+                  orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }]
+                }
               }
             }
           }
         }
       }
-    }
-  });
+    })
+  );
 }
 
 async function resolveSubcategoryBySlug(slug: string) {
-  return prisma.serviceSubcategory.findUnique({
-    where: { slug },
-    include: {
-      translations: true,
-      category: { include: { translations: true } },
-      catalogServices: {
-        where: { isActive: true },
-        orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
-        include: {
-          translations: true,
-          images: {
-            orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }]
+  return readCatalogCache("subcategory", [slug], async () =>
+    prisma.serviceSubcategory.findUnique({
+      where: { slug },
+      include: {
+        translations: true,
+        category: { include: { translations: true } },
+        catalogServices: {
+          where: { isActive: true },
+          orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+          include: {
+            translations: true,
+            images: {
+              orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }]
+            }
           }
         }
       }
-    }
-  });
+    })
+  );
 }
 
 async function searchCatalog(input: PublicCatalogFilter) {
@@ -293,54 +395,56 @@ async function searchCatalog(input: PublicCatalogFilter) {
 }
 
 async function getAutocompleteSuggestions(query: string, limit: number, cityId?: string) {
-  const [services, categories, subcategories] = await Promise.all([
-    prisma.service.findMany({
-      where: {
-        isActive: true,
-        OR: [
-          { name: { contains: query, mode: "insensitive" } },
-          { code: { contains: query, mode: "insensitive" } },
-          { slug: { contains: query, mode: "insensitive" } }
-        ]
-      },
-      take: limit,
-      orderBy: [{ popular: "desc" }, { reviewCount: "desc" }],
-      select: {
-        name: true,
-        slug: true,
-        category: { select: { slug: true } },
-        subcategory: { select: { slug: true } }
-      }
-    }),
-    prisma.serviceCategory.findMany({
-      where: {
-        isActive: true,
-        OR: [
-          { name: { contains: query, mode: "insensitive" } },
-          { slug: { contains: query, mode: "insensitive" } }
-        ]
-      },
-      take: limit,
-      orderBy: [{ popular: "desc" }, { sortOrder: "asc" }],
-      select: { name: true, slug: true }
-    }),
-    prisma.serviceSubcategory.findMany({
-      where: {
-        isActive: true,
-        OR: [
-          { name: { contains: query, mode: "insensitive" } },
-          { slug: { contains: query, mode: "insensitive" } }
-        ]
-      },
-      take: limit,
-      orderBy: [{ rating: "desc" }, { sortOrder: "asc" }],
-      select: {
-        name: true,
-        slug: true,
-        category: { select: { slug: true } }
-      }
-    })
-  ]);
+  const [services, categories, subcategories] = await readCatalogCache("autocomplete", [query, String(limit), cityId], async () =>
+    Promise.all([
+      prisma.service.findMany({
+        where: {
+          isActive: true,
+          OR: [
+            { name: { contains: query, mode: "insensitive" } },
+            { code: { contains: query, mode: "insensitive" } },
+            { slug: { contains: query, mode: "insensitive" } }
+          ]
+        },
+        take: limit,
+        orderBy: [{ popular: "desc" }, { reviewCount: "desc" }],
+        select: {
+          name: true,
+          slug: true,
+          category: { select: { slug: true } },
+          subcategory: { select: { slug: true } }
+        }
+      }),
+      prisma.serviceCategory.findMany({
+        where: {
+          isActive: true,
+          OR: [
+            { name: { contains: query, mode: "insensitive" } },
+            { slug: { contains: query, mode: "insensitive" } }
+          ]
+        },
+        take: limit,
+        orderBy: [{ popular: "desc" }, { sortOrder: "asc" }],
+        select: { name: true, slug: true }
+      }),
+      prisma.serviceSubcategory.findMany({
+        where: {
+          isActive: true,
+          OR: [
+            { name: { contains: query, mode: "insensitive" } },
+            { slug: { contains: query, mode: "insensitive" } }
+          ]
+        },
+        take: limit,
+        orderBy: [{ rating: "desc" }, { sortOrder: "asc" }],
+        select: {
+          name: true,
+          slug: true,
+          category: { select: { slug: true } }
+        }
+      })
+    ])
+  );
 
   return {
     services: services.map((item) => ({
@@ -364,56 +468,66 @@ async function getAutocompleteSuggestions(query: string, limit: number, cityId?:
   };
 }
 
+async function getHomeCatalogSections(cityId?: string) {
+  return readCatalogCache("home-sections", [cityId], async () => {
+    const [featuredServices, popularServices, trendingServices, recommendedServices] = await Promise.all([
+      prisma.service.findMany({
+        where: { isActive: true, featured: true },
+        take: 8,
+        orderBy: [{ sortOrder: "asc" }, { reviewCount: "desc" }],
+        include: serviceInclude(cityId)
+      }),
+      prisma.service.findMany({
+        where: { isActive: true, popular: true },
+        take: 8,
+        orderBy: [{ reviewCount: "desc" }, { rating: "desc" }],
+        include: serviceInclude(cityId)
+      }),
+      prisma.service.findMany({
+        where: { isActive: true },
+        take: 8,
+        orderBy: [{ reviewCount: "desc" }, { updatedAt: "desc" }],
+        include: serviceInclude(cityId)
+      }),
+      prisma.service.findMany({
+        where: { isActive: true, OR: [{ featured: true }, { popular: true }] },
+        take: 8,
+        orderBy: [{ rating: "desc" }, { reviewCount: "desc" }],
+        include: serviceInclude(cityId)
+      })
+    ]);
+
+    return {
+      featuredServices,
+      popularServices,
+      trendingServices,
+      recommendedServices
+    };
+  });
+}
+
 async function getHomeCatalog(cityId?: string, userId?: string) {
-  const [featuredServices, popularServices, trendingServices, recommendedServices, recentBookings] = await Promise.all([
-    prisma.service.findMany({
-      where: { isActive: true, featured: true },
-      take: 8,
-      orderBy: [{ sortOrder: "asc" }, { reviewCount: "desc" }],
-      include: serviceInclude(cityId)
-    }),
-    prisma.service.findMany({
-      where: { isActive: true, popular: true },
-      take: 8,
-      orderBy: [{ reviewCount: "desc" }, { rating: "desc" }],
-      include: serviceInclude(cityId)
-    }),
-    prisma.service.findMany({
-      where: { isActive: true },
-      take: 8,
-      orderBy: [{ reviewCount: "desc" }, { updatedAt: "desc" }],
-      include: serviceInclude(cityId)
-    }),
-    prisma.service.findMany({
-      where: { isActive: true, OR: [{ featured: true }, { popular: true }] },
-      take: 8,
-      orderBy: [{ rating: "desc" }, { reviewCount: "desc" }],
-      include: serviceInclude(cityId)
-    }),
-    userId
-      ? prisma.booking.findMany({
-          where: { customerId: userId },
-          take: 6,
-          orderBy: [{ createdAt: "desc" }],
-          include: {
-            services: {
-              include: {
-                service: {
-                  include: serviceInclude(cityId)
-                },
-                serviceSubcategory: true
-              }
+  const sections = await getHomeCatalogSections(cityId);
+  const recentBookings = userId
+    ? await prisma.booking.findMany({
+        where: { customerId: userId },
+        take: 6,
+        orderBy: [{ createdAt: "desc" }],
+        include: {
+          services: {
+            include: {
+              service: {
+                include: serviceInclude(cityId)
+              },
+              serviceSubcategory: true
             }
           }
-        })
-      : Promise.resolve([])
-  ]);
+        }
+      })
+    : [];
 
   return {
-    featuredServices,
-    popularServices,
-    trendingServices,
-    recommendedServices,
+    ...sections,
     recentBookings
   };
 }
@@ -433,7 +547,7 @@ async function createCategory(data: {
 }) {
   const rawSlug = data.slug ?? slugify(data.name);
   const slug = await ensureUniqueSlug((candidate) => prisma.serviceCategory.findUnique({ where: { slug: candidate } }), rawSlug);
-  return prisma.serviceCategory.create({
+  const created = await prisma.serviceCategory.create({
     data: {
       name: data.name,
       slug,
@@ -460,6 +574,9 @@ async function createCategory(data: {
     },
     include: catalogInclude()
   });
+
+  await invalidateCatalogCache();
+  return created;
 }
 
 async function updateCategory(id: string, data: Record<string, unknown>) {
@@ -470,7 +587,7 @@ async function updateCategory(id: string, data: Record<string, unknown>) {
 
   const nextSlug = typeof data.slug === "string" ? await ensureUniqueSlug((candidate) => prisma.serviceCategory.findFirst({ where: { slug: candidate, NOT: { id } } }), data.slug) : existing.slug;
 
-  await prisma.serviceCategory.update({
+  const updated = await prisma.serviceCategory.update({
     where: { id },
     data: {
       name: typeof data.name === "string" ? data.name : undefined,
@@ -486,6 +603,7 @@ async function updateCategory(id: string, data: Record<string, unknown>) {
     }
   });
 
+  await invalidateCatalogCache();
   return prisma.serviceCategory.findUnique({
     where: { id },
     include: catalogInclude()
@@ -525,7 +643,7 @@ async function createSubcategory(data: {
 }) {
   const rawSlug = data.slug ?? slugify(data.name);
   const slug = await ensureUniqueSlug((candidate) => prisma.serviceSubcategory.findUnique({ where: { slug: candidate } }), rawSlug);
-  return prisma.serviceSubcategory.create({
+  const created = await prisma.serviceSubcategory.create({
     data: {
       categoryId: data.categoryId,
       name: data.name,
@@ -557,6 +675,9 @@ async function createSubcategory(data: {
       catalogServices: true
     }
   });
+
+  await invalidateCatalogCache();
+  return created;
 }
 
 async function updateSubcategory(id: string, data: Record<string, unknown>) {
@@ -584,6 +705,8 @@ async function updateSubcategory(id: string, data: Record<string, unknown>) {
       isActive: typeof data.isActive === "boolean" ? data.isActive : undefined
     }
   });
+
+  await invalidateCatalogCache();
 
   return prisma.serviceSubcategory.findUnique({
     where: { id },
@@ -630,7 +753,7 @@ async function createService(data: {
   const slug = await ensureUniqueSlug((candidate) => prisma.service.findUnique({ where: { slug: candidate } }), rawSlug);
   const code = data.code ?? uniqueCode("SRV", data.name);
 
-  return prisma.service.create({
+  const created = await prisma.service.create({
     data: {
       categoryId: data.categoryId,
       subcategoryId: data.subcategoryId,
@@ -714,6 +837,9 @@ async function createService(data: {
     },
     include: serviceInclude()
   });
+
+  await invalidateCatalogCache();
+  return created;
 }
 
 async function updateService(id: string, data: Record<string, unknown>) {
@@ -822,6 +948,8 @@ async function updateService(id: string, data: Record<string, unknown>) {
     });
   }
 
+  await invalidateCatalogCache();
+
   return prisma.service.findUnique({
     where: { id },
     include: serviceInclude()
@@ -839,6 +967,7 @@ async function addServiceImages(id: string, images: Array<{ url: string; altText
       isPrimary: image.isPrimary ?? false
     }))
   });
+  await invalidateCatalogCache();
   return prisma.service.findUnique({ where: { id }, include: serviceInclude() });
 }
 
@@ -854,7 +983,7 @@ async function upsertPriceRule(serviceId: string, data: {
   isActive?: boolean;
   priority?: number;
 }) {
-  return prisma.servicePriceRule.create({
+  const created = await prisma.servicePriceRule.create({
     data: {
       serviceId,
       cityId: data.cityId,
@@ -869,10 +998,13 @@ async function upsertPriceRule(serviceId: string, data: {
       priority: data.priority ?? 0
     }
   });
+
+  await invalidateCatalogCache();
+  return created;
 }
 
 async function updatePriceRule(id: string, data: Record<string, unknown>) {
-  return prisma.servicePriceRule.update({
+  const updated = await prisma.servicePriceRule.update({
     where: { id },
     data: {
       cityId: typeof data.cityId === "string" ? data.cityId : undefined,
@@ -887,6 +1019,9 @@ async function updatePriceRule(id: string, data: Record<string, unknown>) {
       priority: typeof data.priority === "number" ? data.priority : undefined
     }
   });
+
+  await invalidateCatalogCache();
+  return updated;
 }
 
 async function importCatalog(categories: Array<Record<string, unknown>>) {
@@ -911,6 +1046,7 @@ async function importCatalog(categories: Array<Record<string, unknown>>) {
     }
   }
 
+  await invalidateCatalogCache();
   return { categoryCount, subcategoryCount, serviceCount };
 }
 

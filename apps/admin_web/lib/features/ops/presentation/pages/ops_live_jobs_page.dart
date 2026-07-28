@@ -185,22 +185,7 @@ class _OpsLiveJobsPageState extends ConsumerState<OpsLiveJobsPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF9F5EC),
-      appBar: AppBar(
-        backgroundColor: const Color(0xFFF9F5EC),
-        surfaceTintColor: Colors.transparent,
-        title: Text(
-          'Live jobs',
-          style: GoogleFonts.poppins(fontWeight: FontWeight.w800),
-        ),
-        actions: [
-          IconButton(
-            onPressed: _reload,
-            icon: const Icon(Icons.refresh_rounded),
-            tooltip: 'Refresh',
-          ),
-        ],
-      ),
+      backgroundColor: Colors.transparent,
       body: FutureBuilder<OpsOverviewSnapshot>(
         future: _snapshotFuture,
         builder: (context, snapshot) {
@@ -240,70 +225,80 @@ class _OpsLiveJobsPageState extends ConsumerState<OpsLiveJobsPage> {
 
           final jobs = snapshot.data?.liveJobs ?? const <OpsLiveJob>[];
 
-          return Container(
-            decoration: const BoxDecoration(
-              gradient: LinearGradient(
-                colors: [Color(0xFFF9F5EC), Color(0xFFFFFCF8)],
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-              ),
-            ),
-            child: RefreshIndicator(
-              onRefresh: _reload,
-              child: ListView(
-                padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+          return RefreshIndicator(
+            onRefresh: _reload,
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(32),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _SurfacePanel(
-                    child: Padding(
-                      padding: const EdgeInsets.all(20),
-                      child: Column(
+                  // Header
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'Active jobs right now',
+                            'Active Jobs',
                             style: GoogleFonts.poppins(
-                              fontSize: 28,
+                              fontSize: 32,
                               fontWeight: FontWeight.w800,
-                              color: const Color(0xFF13110F),
-                              letterSpacing: -0.4,
+                              color: Colors.black87,
+                              letterSpacing: -0.5,
                             ),
                           ),
                           const SizedBox(height: 8),
                           Text(
-                            'Track bookings currently assigned, arrived, or in progress. Highlighted rows are at risk of a no-show timeout.',
+                            'Track bookings currently assigned, arrived, or in progress. Highlighted rows indicate no-show risk.',
                             style: GoogleFonts.inter(
-                              color: const Color(0xFF6B6256),
-                              height: 1.45,
+                              color: Colors.black54,
+                              fontSize: 16,
                             ),
-                          ),
-                          const SizedBox(height: 16),
-                          Wrap(
-                            spacing: 12,
-                            runSpacing: 12,
-                            children: [
-                              _SummaryBadge(
-                                  label: 'Assigned',
-                                  value:
-                                      '${jobs.where((job) => job.status == 'assigned').length}'),
-                              _SummaryBadge(
-                                  label: 'Arrived',
-                                  value:
-                                      '${jobs.where((job) => job.status == 'arrived').length}'),
-                              _SummaryBadge(
-                                  label: 'In progress',
-                                  value:
-                                      '${jobs.where((job) => job.status == 'in_progress').length}'),
-                              _SummaryBadge(
-                                  label: 'No-show risk',
-                                  value:
-                                      '${jobs.where((job) => job.isNoShowRisk).length}'),
-                            ],
                           ),
                         ],
                       ),
-                    ),
+                      FilledButton.icon(
+                        onPressed: _reload,
+                        icon: const Icon(Icons.refresh_rounded, size: 18),
+                        label: const Text('Refresh'),
+                        style: FilledButton.styleFrom(
+                          backgroundColor: Colors.white,
+                          foregroundColor: Colors.black87,
+                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            side: const BorderSide(color: Color(0xFFE5E7EB)),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 32),
+                  Wrap(
+                    spacing: 12,
+                    runSpacing: 12,
+                    children: [
+                      _SummaryBadge(
+                          label: 'Assigned',
+                          value:
+                              '${jobs.where((job) => job.status == 'assigned').length}'),
+                      _SummaryBadge(
+                          label: 'Arrived',
+                          value:
+                              '${jobs.where((job) => job.status == 'arrived').length}'),
+                      _SummaryBadge(
+                          label: 'In progress',
+                          value:
+                              '${jobs.where((job) => job.status == 'in_progress').length}'),
+                      _SummaryBadge(
+                          label: 'No-show risk',
+                          value:
+                              '${jobs.where((job) => job.isNoShowRisk).length}'),
+                    ],
+                  ),
+                  const SizedBox(height: 32),
                   if (jobs.isEmpty)
                     const _SurfacePanel(
                       child: Padding(
@@ -322,7 +317,7 @@ class _OpsLiveJobsPageState extends ConsumerState<OpsLiveJobsPage> {
                         scrollDirection: Axis.horizontal,
                         child: DataTable(
                           headingRowColor:
-                              const WidgetStatePropertyAll(Color(0xFFF7F1E4)),
+                              const WidgetStatePropertyAll(Color(0xFFF9FAFB)),
                           columns: const [
                             DataColumn(label: Text('Booking')),
                             DataColumn(label: Text('Customer')),
@@ -529,22 +524,22 @@ class _SummaryBadge extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
-        color: const Color(0xFFF7F1E4),
+        color: const Color(0xFFF3F4F6),
         borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: const Color(0xFFE5D8C6)),
+        border: Border.all(color: const Color(0xFFE5E7EB)),
       ),
       child: RichText(
         text: TextSpan(
           style: GoogleFonts.inter(
-            color: const Color(0xFF13110F),
+            color: const Color(0xFF374151),
             fontSize: 13,
-            fontWeight: FontWeight.w700,
+            fontWeight: FontWeight.w600,
           ),
           children: [
             TextSpan(text: '$label: '),
             TextSpan(
               text: value,
-              style: const TextStyle(fontWeight: FontWeight.w900),
+              style: const TextStyle(fontWeight: FontWeight.w800, color: Colors.black87),
             ),
           ],
         ),
@@ -560,14 +555,19 @@ class _SurfacePanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      elevation: 0,
-      color: Colors.white,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(18),
-        side: const BorderSide(color: Color(0xFFE5D8C6)),
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFE5E7EB)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.01),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
-      shadowColor: Colors.black.withValues(alpha: 0.06),
       child: child,
     );
   }

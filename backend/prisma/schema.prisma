@@ -132,6 +132,7 @@ model WorkerProfile {
   pincode             String?
   aadhaarNumber       String?
   aadhaarDocUrl       String?
+  aadhaarDocPublicId  String?
   bankAccountNumber   String?
   bankIfsc            String?
   upiId               String?
@@ -168,6 +169,8 @@ model WorkerProfile {
   earnings            WalletTransaction[]
   profileDocuments    Document[]
   availability        WorkerAvailability[]
+
+  @@index([onboardingStatus, verificationStatus])
 }
 
 model WalletTransaction {
@@ -360,6 +363,10 @@ model Booking {
   @@index([customerId, status])
   @@index([workerId, status])
   @@index([cityId, status])
+  @@index([status])
+  @@index([scheduledFor])
+  @@index([customerId])
+  @@index([workerId])
 }
 
 model WorkerAvailability {
@@ -388,6 +395,8 @@ model Payout {
   updatedAt        DateTime @updatedAt
 
   @@index([status, createdAt])
+  @@index([status])
+  @@index([workerId])
 }
 
 model JobExecution {
@@ -411,6 +420,8 @@ model JobExecution {
   workerLng         Float?
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
+
+  @@index([status])
 }
 
 model Dispute {
@@ -461,6 +472,7 @@ model Refund {
   @@index([bookingId])
   @@index([status, createdAt])
   @@index([disputeId])
+  @@index([status])
 }
 
 model BookingService {
@@ -504,6 +516,8 @@ model Review {
   mediaUrls     Json?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
+
+  @@index([workerId])
 }
 
 model Notification {
@@ -516,6 +530,21 @@ model Notification {
   data        Json?
   isRead      Boolean  @default(false)
   createdAt   DateTime @default(now())
+}
+
+model OpsAlert {
+  id        String   @id @default(cuid())
+  sourceId  String   @unique
+  type      String
+  bookingId String?
+  message   String
+  metadata  Json?
+  severity  String   @default("high")
+  status    String   @default("open")
+  createdAt DateTime @default(now())
+
+  @@index([type, severity, status, createdAt])
+  @@index([bookingId, status, createdAt])
 }
 
 model Coupon {
@@ -598,8 +627,9 @@ model WorkerSkill {
   workerProfile       WorkerProfile   @relation(fields: [workerProfileId], references: [id], onDelete: Cascade)
   categoryId          String
   category            ServiceCategory @relation(fields: [categoryId], references: [id])
-  certificationDocUrl String?
-  verifiedByAdmin     Boolean         @default(false)
+  certificationDocUrl      String?
+  certificationDocPublicId String?
+  verifiedByAdmin          Boolean         @default(false)
   yearsExperience     Int             @default(0)
   isPrimary           Boolean         @default(false)
   createdAt           DateTime        @default(now())
@@ -607,6 +637,7 @@ model WorkerSkill {
   @@unique([workerProfileId, categoryId])
   @@index([workerProfileId])
   @@index([categoryId])
+  @@index([categoryId, verifiedByAdmin])
 }
 
 model WorkerService {

@@ -1,7 +1,15 @@
 import { BookingStatus, Prisma } from "@prisma/client";
 import { prisma } from "../../lib/prisma.js";
+import { publishNotificationEvent } from "../../lib/realtime.js";
 
 const ACTIVE_JOB_EXECUTION_STATUSES = ["assigned", "arrived", "in_progress"] as const;
+const DEFAULT_ALERT_PAGE_SIZE = 25;
+const ALERT_KIND_BY_TYPE = {
+  dispatch_failure: "dispatch_failure",
+  payout_failure: "payout_failure",
+  refund_failure: "refund_failure",
+  payment_mismatch: "payment_mismatch"
+} as const;
 
 export type OpsSummaryCounts = {
   activeJobsCount: number;
@@ -41,7 +49,7 @@ export type OpsLiveJob = {
   updatedAt: Date;
 };
 
-export type OpsAlertKind = "dispatch_failure" | "payout_failure" | "refund_failure";
+export type OpsAlertKind = "dispatch_failure" | "payout_failure" | "refund_failure" | "payment_mismatch";
 
 export type OpsAlert = {
   id: string;
@@ -55,6 +63,42 @@ export type OpsAlert = {
   amount: number | null;
   createdAt: Date;
   retryAvailable: boolean;
+};
+
+export type OpsAlertRecord = Prisma.OpsAlertGetPayload<{
+  select: {
+    id: true;
+    sourceId: true;
+    type: true;
+    bookingId: true;
+    message: true;
+    metadata: true;
+    severity: true;
+    status: true;
+    createdAt: true;
+  };
+}>;
+
+export type OpsAlertListFilters = {
+  type?: OpsAlertKind;
+  severity?: "low" | "medium" | "high" | "critical";
+  status?: "open" | "acknowledged" | "resolved";
+  page?: number;
+  pageSize?: number;
+};
+
+type OpsAlertMetadata = {
+  bookingCode?: string;
+  customerName?: string;
+  amount?: number | null;
+  retryAvailable?: boolean;
+  title?: string;
+  sourceLabel?: string;
+  expectedAmountPaise?: number;
+  actualCapturedAmountPaise?: number;
+  timestamp?: string;
+  customerId?: string;
+  [key: string]: unknown;
 };
 
 export type OpsOverview = {
@@ -182,6 +226,175 @@ function normalizeChecklist(checklist: unknown): OpsLiveJobChecklistItem[] {
       complete: true
     }
   ];
+}
+
+function parseAlertMetadata(metadata: Prisma.JsonValue | null | undefined): OpsAlertMetadata {
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) {
+    return {};
+  }
+
+  return metadata as OpsAlertMetadata;
+}
+
+function resolveAlertKind(type: string): OpsAlertKind {
+  switch (type) {
+    case "dispatch_failure":
+    case "payout_failure":
+    case "refund_failure":
+    case "payment_mismatch":
+      return type;
+    default:
+      return "dispatch_failure";
+  }
+}
+
+function mapOpsAlert(alert: OpsAlertRecord): OpsAlert {
+  const metadata = parseAlertMetadata(alert.metadata);
+  const retryAvailable = typeof metadata.retryAvailable === "boolean" ? metadata.retryAvailable : alert.type !== "payment_mismatch";
+
+  return {
+    id: alert.id,
+    kind: resolveAlertKind(alert.type),
+    title:
+      (typeof metadata.title === "string" && metadata.title.trim()) ||
+      `${alert.type.replace(/_/g, " ")}${metadata.bookingCode ? ` for booking ${metadata.bookingCode}` : ""}`,
+    message: alert.message,
+    sourceId: alert.sourceId,
+    bookingId: alert.bookingId,
+    bookingCode: typeof metadata.bookingCode === "string" ? metadata.bookingCode : null,
+    customerName: typeof metadata.customerName === "string" ? metadata.customerName : null,
+    amount: typeof metadata.amount === "number" ? metadata.amount : null,
+    createdAt: alert.createdAt,
+    retryAvailable
+  };
+}
+
+function normalizeAlertKind(value?: string): OpsAlertKind | undefined {
+  if (!value) {
+    return undefined;
+  }
+
+  return resolveAlertKind(value);
+}
+
+async function notifyAdminAlertRecipients(title: string, body: string, data: Record<string, unknown>): Promise<void> {
+  const admins = await prisma.user.findMany({
+    where: { role: "ADMIN", isActive: true },
+    select: { id: true }
+  });
+
+  await Promise.all(
+    admins.map((admin) =>
+      publishNotificationEvent({
+        userId: admin.id,
+        title,
+        body,
+        type: "ops_alert",
+        data
+      })
+    )
+  );
+}
+
+export async function raiseOpsAlert(input: {
+  type: OpsAlertKind;
+  sourceId: string;
+  bookingId?: string | null;
+  severity?: "low" | "medium" | "high" | "critical";
+  status?: "open" | "acknowledged" | "resolved";
+  message: string;
+  metadata?: OpsAlertMetadata;
+}): Promise<OpsAlertRecord> {
+  const alert = await prisma.opsAlert.upsert({
+    where: { sourceId: input.sourceId },
+    create: {
+      sourceId: input.sourceId,
+      type: input.type,
+      bookingId: input.bookingId ?? null,
+      message: input.message,
+      metadata: (input.metadata ?? {}) as Prisma.InputJsonValue,
+      severity: input.severity ?? "high",
+      status: input.status ?? "open"
+    },
+    update: {
+      type: input.type,
+      bookingId: input.bookingId ?? null,
+      message: input.message,
+      metadata: (input.metadata ?? {}) as Prisma.InputJsonValue,
+      severity: input.severity ?? "high",
+      status: input.status ?? "open"
+    },
+    select: {
+      id: true,
+      sourceId: true,
+      type: true,
+      bookingId: true,
+      message: true,
+      metadata: true,
+      severity: true,
+      status: true,
+      createdAt: true
+    }
+  });
+
+  const metadata = parseAlertMetadata(alert.metadata);
+  const title = typeof metadata.title === "string" && metadata.title.trim() ? metadata.title.trim() : alert.type.replace(/_/g, " ");
+
+  await notifyAdminAlertRecipients(title, alert.message, {
+    alertId: alert.id,
+    type: alert.type,
+    sourceId: alert.sourceId,
+    bookingId: alert.bookingId,
+    severity: alert.severity,
+    status: alert.status,
+    createdAt: alert.createdAt.toISOString(),
+    ...metadata
+  });
+
+  return alert;
+}
+
+export async function listOpsAlerts(filters: OpsAlertListFilters = {}): Promise<{
+  items: OpsAlert[];
+  total: number;
+  page: number;
+  pageSize: number;
+}> {
+  const page = filters.page ?? 1;
+  const pageSize = filters.pageSize ?? DEFAULT_ALERT_PAGE_SIZE;
+  const where: Prisma.OpsAlertWhereInput = {
+    ...(filters.type ? { type: filters.type } : {}),
+    ...(filters.severity ? { severity: filters.severity } : {}),
+    ...(filters.status ? { status: filters.status } : {})
+  };
+
+  const [items, total] = await Promise.all([
+    prisma.opsAlert.findMany({
+      where,
+      orderBy: [{ createdAt: "desc" }],
+      take: pageSize,
+      skip: (page - 1) * pageSize,
+      select: {
+        id: true,
+        sourceId: true,
+        type: true,
+        bookingId: true,
+        message: true,
+        metadata: true,
+        severity: true,
+        status: true,
+        createdAt: true
+      }
+    }),
+    prisma.opsAlert.count({ where })
+  ]);
+
+  return {
+    items: items.map(mapOpsAlert),
+    total,
+    page,
+    pageSize
+  };
 }
 
 function mapLiveJob(
@@ -357,9 +570,7 @@ export async function getOpsOverview(): Promise<OpsOverview> {
     failedRefundsCount,
     pendingWorkerReviewsCount,
     liveBookings,
-    dispatchFailureBookings,
-    failedPayouts,
-    failedRefunds
+    alertPage
   ] = await Promise.all([
     prisma.jobExecution.count({
       where: {
@@ -446,57 +657,9 @@ export async function getOpsOverview(): Promise<OpsOverview> {
         { updatedAt: "desc" }
       ]
     }),
-    prisma.booking.findMany({
-      where: {
-        status: BookingStatus.DISPATCH_FAILED
-      },
-      include: {
-        customer: {
-          select: {
-            name: true
-          }
-        },
-        city: {
-          select: {
-            name: true
-          }
-        }
-      },
-      orderBy: { updatedAt: "desc" }
-    }),
-    prisma.payout.findMany({
-      where: {
-        status: "failed"
-      },
-      include: {
-        booking: {
-          include: {
-            customer: {
-              select: {
-                name: true
-              }
-            }
-          }
-        }
-      },
-      orderBy: { createdAt: "desc" }
-    }),
-    prisma.refund.findMany({
-      where: {
-        status: "failed"
-      },
-      include: {
-        booking: {
-          include: {
-            customer: {
-              select: {
-                name: true
-              }
-            }
-          }
-        }
-      },
-      orderBy: { createdAt: "desc" }
+    listOpsAlerts({
+      status: "open",
+      pageSize: DEFAULT_ALERT_PAGE_SIZE
     })
   ]);
 
@@ -510,10 +673,6 @@ export async function getOpsOverview(): Promise<OpsOverview> {
       pendingWorkerReviewsCount
     },
     liveJobs: liveBookings.map(mapLiveJob),
-    alerts: [
-      ...dispatchFailureBookings.map(mapDispatchFailureAlert),
-      ...failedPayouts.map(mapPayoutFailureAlert),
-      ...failedRefunds.map(mapRefundFailureAlert)
-    ].sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime())
+    alerts: alertPage.items
   };
 }

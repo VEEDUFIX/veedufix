@@ -1,7 +1,8 @@
 import { Prisma, VerificationStatus } from "@prisma/client";
 import { prisma } from "../../lib/prisma.js";
 import { logger } from "../../lib/logger.js";
-import { uploadBufferToCloudinary } from "../../lib/cloudinary.js";
+import { uploadBufferToCloudinary, generateSignedUrl } from "../../lib/cloudinary.js";
+import { maskWorkerFinancialFields } from "../../lib/mask-worker.js";
 
 export class IncompleteProfileError extends Error {
   missingFields: string[];
@@ -138,16 +139,6 @@ function roundToTwo(value: number): number {
   return Math.round((value + Number.EPSILON) * 100) / 100;
 }
 
-function maskAadhaarNumber(value: string | null | undefined): string | null {
-  if (!value) {
-    return null;
-  }
-
-  const digits = value.replace(/\D/g, "");
-  const last4 = digits.slice(-4).padStart(4, "0");
-  return `XXXX-XXXX-${last4}`;
-}
-
 function toDate(value: Date | string | undefined): Date | undefined {
   if (!value) {
     return undefined;
@@ -156,18 +147,30 @@ function toDate(value: Date | string | undefined): Date | undefined {
   return value instanceof Date ? value : new Date(value);
 }
 
+/**
+ * Transforms a raw Prisma WorkerProfile into a client-safe shape:
+ * - Masks sensitive financial fields (aadhaarNumber, bankAccountNumber, upiId)
+ *   via the shared maskWorkerFinancialFields utility.
+ * - bankIfsc is intentionally left unmasked (public bank branch code).
+ * - Strips redundant skill relation data down to only what the client needs.
+ */
 function normalizeProfile(profile: WorkerProfileWithRelations | MinimalWorkerProfile | null) {
   if (!profile) {
     return null;
   }
 
+  // Destructure raw KYC doc fields — never send these to any client.
+  const { aadhaarDocUrl, aadhaarDocPublicId, ...rest } = maskWorkerFinancialFields(profile) as typeof profile & { aadhaarDocPublicId?: string | null };
+
   const base = {
-    ...profile,
-    aadhaarNumber: maskAadhaarNumber(profile.aadhaarNumber),
+    ...rest,
+    // Boolean presence indicator replaces the raw URL in every response.
+    hasAadhaarDoc: Boolean(aadhaarDocUrl?.trim()),
     skills: profile.skills.map((skill: WorkerSkillWithCategory) => ({
       id: skill.id,
       categoryId: skill.categoryId,
-      certificationDocUrl: skill.certificationDocUrl,
+      // Boolean presence indicator — raw certificationDocUrl is intentionally omitted.
+      hasCertificationDoc: Boolean(skill.certificationDocUrl?.trim()),
       verifiedByAdmin: skill.verifiedByAdmin,
       yearsExperience: skill.yearsExperience,
       isPrimary: skill.isPrimary,
@@ -272,7 +275,19 @@ function missingProfileFields(profile: MinimalWorkerProfile): string[] {
   return missingFields;
 }
 
-async function uploadToCloudinaryFolder(fileUrl: string, folder: string, publicIdPrefix: string) {
+/**
+ * Uploads a KYC document to Cloudinary with type:"authenticated", which
+ * prevents unauthenticated access to the raw asset URL.  Signed URLs are
+ * generated on demand by the document-access endpoints.
+ *
+ * Returns both the secure_url (for storage) and the public_id (for future
+ * signed-URL generation without URL string-parsing).
+ */
+async function uploadKycDocument(
+  fileUrl: string,
+  folder: string,
+  publicIdPrefix: string
+): Promise<{ url: string; publicId: string }> {
   let buffer: Buffer;
 
   if (fileUrl.startsWith("data:")) {
@@ -292,10 +307,13 @@ async function uploadToCloudinaryFolder(fileUrl: string, folder: string, publicI
     folder,
     public_id: `${publicIdPrefix}-${Date.now()}`,
     resource_type: "auto",
+    // type:"authenticated" makes the asset inaccessible without a signed URL.
+    // Do NOT change this for KYC documents.
+    type: "authenticated",
     overwrite: true
   });
 
-  return uploaded.secure_url;
+  return { url: uploaded.secure_url, publicId: uploaded.public_id };
 }
 
 export async function createOrGetProfile(userId: string) {
@@ -332,13 +350,14 @@ export async function uploadDocument(
 ) {
   const profile = await ensureWorkerProfile(userId);
   const folder = `veedufix/kyc/${userId}/${docType}`;
-  const uploadedUrl = await uploadToCloudinaryFolder(fileUrl, folder, `kyc-${userId}-${docType}`);
+  const { url, publicId } = await uploadKycDocument(fileUrl, folder, `kyc-${userId}-${docType}`);
 
   if (docType === "aadhaar") {
     await prisma.workerProfile.update({
       where: { id: profile.id },
       data: {
-        aadhaarDocUrl: uploadedUrl
+        aadhaarDocUrl: url,
+        aadhaarDocPublicId: publicId
       }
     });
 
@@ -359,11 +378,13 @@ export async function uploadDocument(
     create: {
       workerProfileId: profile.id,
       categoryId,
-      certificationDocUrl: uploadedUrl,
+      certificationDocUrl: url,
+      certificationDocPublicId: publicId,
       verifiedByAdmin: false
     },
     update: {
-      certificationDocUrl: uploadedUrl,
+      certificationDocUrl: url,
+      certificationDocPublicId: publicId,
       verifiedByAdmin: false
     }
   });
@@ -795,3 +816,94 @@ export async function isWorkerEligible(userId: string): Promise<boolean> {
 export function serializeWorkerProfile(profile: unknown) {
   return normalizeProfile(profile as WorkerProfileWithRelations | MinimalWorkerProfile | null);
 }
+
+// ---------------------------------------------------------------------------
+// KYC Document signed-URL helpers
+// ---------------------------------------------------------------------------
+// Each function retrieves the stored public_id from the DB, then delegates
+// to generateSignedUrl() to produce a 5-minute signed Cloudinary URL.
+// Callers must already have verified authorization (owner or ADMIN) before
+// invoking these — these functions do NOT perform auth checks.
+// ---------------------------------------------------------------------------
+
+/**
+ * Returns a short-lived signed URL for a worker's Aadhaar document.
+ * Called by the WORKER (self) via getOwnAadhaarSignedUrl.
+ */
+export async function getAadhaarSignedUrl(workerProfileId: string): Promise<string> {
+  const profile = await prisma.workerProfile.findUnique({
+    where: { id: workerProfileId },
+    select: { aadhaarDocPublicId: true, aadhaarDocUrl: true }
+  });
+
+  if (!profile) throw new WorkerProfileNotFoundError();
+
+  const publicId = profile.aadhaarDocPublicId;
+  if (!publicId) {
+    throw new WorkerProfileNotFoundError("No Aadhaar document found for this profile");
+  }
+
+  return generateSignedUrl(publicId);
+}
+
+/**
+ * Looks up the authenticated worker's own profile by userId, then calls
+ * getAadhaarSignedUrl.
+ */
+export async function getOwnAadhaarSignedUrl(userId: string): Promise<string> {
+  const profile = await prisma.workerProfile.findUnique({
+    where: { userId },
+    select: { id: true }
+  });
+
+  if (!profile) throw new WorkerProfileNotFoundError();
+
+  return getAadhaarSignedUrl(profile.id);
+}
+
+/**
+ * Returns a short-lived signed URL for a WorkerSkill certification document.
+ * When workerProfileId is supplied, ownership is verified before returning
+ * the URL (used by admin path to ensure the skillId actually belongs to the
+ * named profile, preventing cross-profile enumeration).
+ */
+export async function getSkillCertSignedUrl(
+  skillId: string,
+  workerProfileId?: string
+): Promise<string> {
+  const skill = await prisma.workerSkill.findUnique({
+    where: { id: skillId },
+    select: { certificationDocPublicId: true, workerProfileId: true }
+  });
+
+  if (!skill) throw new WorkerProfileNotFoundError("Skill not found");
+
+  if (workerProfileId && skill.workerProfileId !== workerProfileId) {
+    throw new WorkerProfileNotFoundError("Skill does not belong to this profile");
+  }
+
+  if (!skill.certificationDocPublicId) {
+    throw new WorkerProfileNotFoundError("No certification document found for this skill");
+  }
+
+  return generateSignedUrl(skill.certificationDocPublicId);
+}
+
+/**
+ * Looks up the authenticated worker's own profile by userId, verifies the
+ * skill belongs to them, then calls getSkillCertSignedUrl.
+ */
+export async function getOwnSkillCertSignedUrl(
+  userId: string,
+  skillId: string
+): Promise<string> {
+  const profile = await prisma.workerProfile.findUnique({
+    where: { userId },
+    select: { id: true }
+  });
+
+  if (!profile) throw new WorkerProfileNotFoundError();
+
+  return getSkillCertSignedUrl(skillId, profile.id);
+}
+

@@ -20,7 +20,6 @@ export async function verifyOtpHandler(request: Request, response: Response): Pr
     channel: request.body.channel,
     identifier: request.body.identifier,
     otp: request.body.otp,
-    role: request.body.role,
     name: request.body.name
   });
 
@@ -34,8 +33,7 @@ export async function refreshTokenHandler(request: Request, response: Response):
 
 export async function googleAuthHandler(request: Request, response: Response): Promise<void> {
   const result = await signInWithGoogle({
-    idToken: request.body.idToken,
-    role: request.body.role
+    idToken: request.body.idToken
   });
   response.status(200).json(result);
 }

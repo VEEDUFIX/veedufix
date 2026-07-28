@@ -3,6 +3,7 @@ import Razorpay from "razorpay";
 import { env } from "../../config/env.js";
 import { prisma } from "../../lib/prisma.js";
 import { logger } from "../../lib/logger.js";
+import { maskWorkerFinancialFields } from "../../lib/mask-worker.js";
 
 export class RefundNotFoundError extends Error {
   constructor(message = "Refund not found") {
@@ -352,7 +353,19 @@ export async function getAllRefunds(filters: RefundListFilters = {}): Promise<{
   ]);
 
   return {
-    items,
+    // Mask sensitive worker financial fields before sending to the client.
+    // The worker's real data is untouched in the DB and available for any
+    // internal operations (e.g. payout processing).
+    items: items.map((item) => {
+      if (!item.booking.worker) return item;
+      return {
+        ...item,
+        booking: {
+          ...item.booking,
+          worker: maskWorkerFinancialFields(item.booking.worker)
+        }
+      };
+    }),
     total,
     page,
     pageSize

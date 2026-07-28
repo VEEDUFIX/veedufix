@@ -15,8 +15,9 @@ export async function createPaymentOrderHandler(request: Request, response: Resp
 
   const result = await createPaymentOrder({
     userId: authRequest.auth.userId,
-    amountPaise: request.body.amountPaise,
-    description: request.body.description,
+    cityId: request.body.cityId,
+    items: request.body.items,
+    couponCode: request.body.couponCode,
     bookingType: request.body.bookingType,
     scheduledFor: request.body.scheduledFor
   });

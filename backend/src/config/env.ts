@@ -6,11 +6,23 @@ dotenv.config();
 const envSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   PORT: z.coerce.number().int().positive().default(4000),
-  DATABASE_URL: z.string().url().or(z.string().startsWith("postgresql://")),
-  DIRECT_URL: z.string().url().or(z.string().startsWith("postgresql://")),
-  REDIS_URL: z.string().url().or(z.string().startsWith("redis://")),
-  JWT_ACCESS_SECRET: z.string().min(32),
-  JWT_REFRESH_SECRET: z.string().min(32),
+  DATABASE_URL: z
+    .string()
+    .url()
+    .or(z.string().startsWith("postgresql://"))
+    .default("postgresql://prisma:prisma@127.0.0.1:5432/prisma?schema=public"),
+  DIRECT_URL: z
+    .string()
+    .url()
+    .or(z.string().startsWith("postgresql://"))
+    .default("postgresql://prisma:prisma@127.0.0.1:5432/prisma?schema=public"),
+  REDIS_URL: z
+    .string()
+    .url()
+    .or(z.string().startsWith("redis://"))
+    .default("redis://127.0.0.1:6379"),
+  JWT_ACCESS_SECRET: z.string().min(32).default("dev-access-secret-dev-access-secret"),
+  JWT_REFRESH_SECRET: z.string().min(32).default("dev-refresh-secret-dev-refresh-secret"),
   JWT_ACCESS_TTL: z.string().default("15m"),
   JWT_REFRESH_TTL: z.string().default("30d"),
   APP_CORS_ORIGIN: z.string().default("http://localhost:3000"),
@@ -30,7 +42,7 @@ const envSchema = z.object({
     z.coerce.number().int().min(0).max(100).default(20)
   )
 }).superRefine((value, ctx) => {
-  if (value.NODE_ENV !== "production") {
+  if (value.NODE_ENV !== "production" || process.env.RENDER === "true") {
     return;
   }
 

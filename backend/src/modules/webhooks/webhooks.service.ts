@@ -54,6 +54,11 @@ function asJsonInput(value: Record<string, unknown>): Prisma.InputJsonValue {
   return value as Prisma.InputJsonValue;
 }
 
+function toPaise(amount: Prisma.Decimal | number | string): number {
+  const value = typeof amount === "number" ? amount : Number(amount);
+  return Math.max(0, Math.round(value * 100));
+}
+
 async function notifyUser(userId: string, title: string, body: string, data?: Record<string, unknown>) {
   const jsonData = data ? (data as Prisma.InputJsonValue) : undefined;
 
@@ -79,7 +84,8 @@ async function notifyUser(userId: string, title: string, body: string, data?: Re
 async function updatePaymentForWebhook(
   orderId: string,
   status: PaymentStatus,
-  notes: Record<string, unknown>
+  notes: Record<string, unknown>,
+  capturedAmountPaise?: number
 ) {
   const payment = await prisma.payment.findUnique({
     where: { providerRef: orderId },
@@ -89,6 +95,54 @@ async function updatePaymentForWebhook(
   if (!payment) {
     logger.warn({ orderId, status }, "Webhook received for unknown payment");
     return null;
+  }
+
+  const expectedAmountPaise = toPaise(payment.booking.totalAmount);
+  const recordedAmountPaise = toPaise(payment.amount);
+  const razorpayAmountPaise = capturedAmountPaise ?? recordedAmountPaise;
+
+  if (status === PaymentStatus.CAPTURED) {
+    if (recordedAmountPaise !== expectedAmountPaise || razorpayAmountPaise !== expectedAmountPaise) {
+      const updatedPayment = await prisma.payment.update({
+        where: { id: payment.id },
+        data: {
+          status: PaymentStatus.FAILED,
+          notes: {
+            ...(payment.notes && typeof payment.notes === "object" ? (payment.notes as Record<string, unknown>) : {}),
+            ...compactNotes(notes),
+            amountMismatch: true,
+            expectedAmountPaise,
+            recordedAmountPaise,
+            razorpayAmountPaise,
+            flaggedAt: new Date().toISOString()
+          } as Prisma.InputJsonValue
+        },
+        include: {
+          booking: true
+        }
+      });
+
+      logger.warn(
+        {
+          orderId,
+          bookingId: payment.bookingId,
+          expectedAmountPaise,
+          recordedAmountPaise,
+          razorpayAmountPaise
+        },
+        "Webhook payment amount mismatch"
+      );
+
+      await publishTrackingEvent({
+        bookingId: payment.bookingId,
+        bookingCode: payment.booking.code,
+        status: "PAYMENT_AMOUNT_MISMATCH",
+        message: "Payment amount did not match the booking total",
+        paymentId: String(notes.paymentId ?? payment.id)
+      });
+
+      return updatedPayment;
+    }
   }
 
   const updatedPayment = await prisma.payment.update({
@@ -203,7 +257,7 @@ export async function handleRazorpayWebhook(
       webhookEvent: event,
       paymentId: paymentEntity?.id,
       paymentStatus: paymentEntity?.status
-    });
+    }, paymentEntity?.amount);
   } else if (event === "payment.failed") {
     await updatePaymentForWebhook(orderId, PaymentStatus.FAILED, {
       webhookEvent: event,

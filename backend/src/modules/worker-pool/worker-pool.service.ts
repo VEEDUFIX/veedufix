@@ -1,6 +1,5 @@
 import { Prisma, VerificationStatus } from "@prisma/client";
 import { prisma } from "../../lib/prisma.js";
-import { isWorkerEligible } from "../worker-onboarding/worker-onboarding.service.js";
 
 type WorkerPoolQuery = {
   page?: number;
@@ -56,7 +55,9 @@ function normalizeWorkerPoolItem(worker: WorkerPoolItem) {
       id: skill.id,
       categoryId: skill.categoryId,
       verifiedByAdmin: skill.verifiedByAdmin,
-      certificationDocUrl: skill.certificationDocUrl,
+      // hasCertificationDoc replaces the raw certificationDocUrl — use the
+      // authenticated doc-access endpoint to retrieve the actual document.
+      hasCertificationDoc: Boolean(skill.certificationDocUrl?.trim()),
       yearsExperience: skill.yearsExperience,
       isPrimary: skill.isPrimary,
       category: {
@@ -118,14 +119,7 @@ export async function listEligibleWorkers(query: WorkerPoolQuery = {}) {
     })
   ]);
 
-  const checked = await Promise.all(
-    workers.map(async (worker) => {
-      const eligible = await isWorkerEligible(worker.userId);
-      return eligible ? worker : null;
-    })
-  );
-
-  const items = checked.filter((worker): worker is WorkerPoolItem => worker !== null);
+  const items = workers;
 
   return {
     items: items.map(normalizeWorkerPoolItem),
@@ -135,4 +129,3 @@ export async function listEligibleWorkers(query: WorkerPoolQuery = {}) {
     totalPages: Math.max(1, Math.ceil(total / limit))
   };
 }
-

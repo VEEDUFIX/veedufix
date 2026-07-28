@@ -29,7 +29,7 @@ class WorkerReviewProfile {
     required this.city,
     required this.pincode,
     required this.aadhaarNumber,
-    required this.aadhaarDocUrl,
+    required this.hasAadhaarDoc,
     required this.upiId,
     required this.bankAccountNumber,
     required this.bankIfsc,
@@ -50,7 +50,10 @@ class WorkerReviewProfile {
   final String? city;
   final String? pincode;
   final String? aadhaarNumber;
-  final String? aadhaarDocUrl;
+  /// True when the server has an Aadhaar document on file.
+  /// The raw URL is never sent to the client; use [WorkerReviewApi.fetchAadhaarDocUrl]
+  /// to obtain a short-lived signed URL for viewing.
+  final bool hasAadhaarDoc;
   final String? upiId;
   final String? bankAccountNumber;
   final String? bankIfsc;
@@ -73,7 +76,10 @@ class WorkerReviewProfile {
       city: json['city'] as String?,
       pincode: json['pincode'] as String?,
       aadhaarNumber: json['aadhaarNumber'] as String?,
-      aadhaarDocUrl: json['aadhaarDocUrl'] as String?,
+      // Backward-compat: fall back to old aadhaarDocUrl field if the new
+      // hasAadhaarDoc field is not present (older backend response).
+      hasAadhaarDoc: json['hasAadhaarDoc'] as bool? ??
+          (json['aadhaarDocUrl'] as String?)?.isNotEmpty == true,
       upiId: json['upiId'] as String?,
       bankAccountNumber: json['bankAccountNumber'] as String?,
       bankIfsc: json['bankIfsc'] as String?,
@@ -159,7 +165,7 @@ class WorkerReviewSkill {
   const WorkerReviewSkill({
     required this.id,
     required this.categoryId,
-    required this.certificationDocUrl,
+    required this.hasCertificationDoc,
     required this.verifiedByAdmin,
     required this.yearsExperience,
     required this.isPrimary,
@@ -168,7 +174,9 @@ class WorkerReviewSkill {
 
   final String id;
   final String categoryId;
-  final String? certificationDocUrl;
+  /// True when the server has a certification document on file for this skill.
+  /// Use [WorkerReviewApi.fetchCertDocUrl] to obtain a short-lived signed URL.
+  final bool hasCertificationDoc;
   final bool verifiedByAdmin;
   final num? yearsExperience;
   final bool isPrimary;
@@ -181,7 +189,9 @@ class WorkerReviewSkill {
     return WorkerReviewSkill(
       id: json['id'] as String? ?? '',
       categoryId: json['categoryId'] as String? ?? categoryJson['id'] as String? ?? '',
-      certificationDocUrl: json['certificationDocUrl'] as String?,
+      // Backward-compat: fall back to old certificationDocUrl field.
+      hasCertificationDoc: json['hasCertificationDoc'] as bool? ??
+          (json['certificationDocUrl'] as String?)?.isNotEmpty == true,
       verifiedByAdmin: json['verifiedByAdmin'] as bool? ?? false,
       yearsExperience: json['yearsExperience'] as num?,
       isPrimary: json['isPrimary'] as bool? ?? false,
@@ -289,6 +299,31 @@ class WorkerReviewApi {
       return WorkerReviewProfile.fromJson(profile);
     }
     throw StateError('Worker review response was malformed.');
+  }
+
+  /// Requests a short-lived (5-minute) signed Cloudinary URL for a worker's
+  /// Aadhaar document.  Requires ADMIN auth (handled by the Dio interceptor).
+  Future<String> fetchAadhaarDocUrl(String profileId) async {
+    final response = await _dio
+        .get<Map<String, dynamic>>('/admin/worker-review/$profileId/documents/aadhaar');
+    final url = response.data?['url'] as String?;
+    if (url == null || url.isEmpty) {
+      throw StateError('Server returned no URL for Aadhaar document.');
+    }
+    return url;
+  }
+
+  /// Requests a short-lived (5-minute) signed Cloudinary URL for a skill's
+  /// certification document.  Requires ADMIN auth.
+  Future<String> fetchCertDocUrl(String profileId, String skillId) async {
+    final response = await _dio.get<Map<String, dynamic>>(
+      '/admin/worker-review/$profileId/documents/skills/$skillId/certification',
+    );
+    final url = response.data?['url'] as String?;
+    if (url == null || url.isEmpty) {
+      throw StateError('Server returned no URL for certification document.');
+    }
+    return url;
   }
 }
 

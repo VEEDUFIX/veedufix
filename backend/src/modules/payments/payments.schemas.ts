@@ -3,11 +3,23 @@ import { z } from "zod";
 export const createPaymentOrderSchema = z.object({
   body: z
     .object({
-      amountPaise: z.number().int().positive().min(100),
-      description: z.string().min(3).max(160),
+      cityId: z.string().min(1),
+      couponCode: z.string().trim().min(1).max(64).optional(),
+      items: z
+        .array(
+          z
+            .object({
+              serviceId: z.string().min(1),
+              quantity: z.coerce.number().int().min(1).default(1),
+              variantSelections: z.record(z.unknown()).optional()
+            })
+            .strict()
+        )
+        .min(1),
       bookingType: z.enum(["instant", "scheduled"]).default("instant"),
       scheduledFor: z.coerce.date().optional()
     })
+    .strict()
     .superRefine((body, ctx) => {
       if (body.bookingType === "scheduled") {
         if (!body.scheduledFor) {

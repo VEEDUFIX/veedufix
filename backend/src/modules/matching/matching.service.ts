@@ -3,14 +3,13 @@ import cron from "node-cron";
 import { prisma } from "../../lib/prisma.js";
 import { logger } from "../../lib/logger.js";
 import { publishNotificationEvent, publishTrackingEvent } from "../../lib/realtime.js";
-import { isWorkerAvailableAt } from "../availability/availability.service.js";
-import { isWorkerEligible } from "../worker-onboarding/worker-onboarding.service.js";
 
 export const MAX_CONCURRENT_JOBS = 1;
 const OFFER_WINDOW_MS = 90_000;
 const SCHEDULED_OFFER_WINDOW_MS = 2 * 60 * 60 * 1000;
 const RADIUS_STEPS_KM = [3, 6, 10] as const;
 const ACTIVE_JOB_EXECUTION_STATUSES = ["assigned", "arrived", "in_progress"] as const;
+const NON_ACTIVE_BOOKING_STATUSES = ["CANCELLED", "CANCELLED_MANUAL", "CANCELLED_NO_SHOW", "REFUNDED"] as const;
 const DEFAULT_RATING = 4.0;
 const DEFAULT_RECENCY = 0.5;
 
@@ -491,6 +490,89 @@ async function getActiveJobWorkerIds(workerIds: string[]): Promise<Set<string>> 
   return blocked;
 }
 
+function getBoundingBox(
+  center: { latitude: number; longitude: number },
+  radiusKm: number
+): { minLatitude: number; maxLatitude: number; minLongitude: number; maxLongitude: number } {
+  const latitudeDelta = radiusKm / 111.32;
+  const longitudeDelta = radiusKm / (111.32 * Math.max(Math.cos((center.latitude * Math.PI) / 180), 0.01));
+
+  return {
+    minLatitude: center.latitude - latitudeDelta,
+    maxLatitude: center.latitude + latitudeDelta,
+    minLongitude: center.longitude - longitudeDelta,
+    maxLongitude: center.longitude + longitudeDelta
+  };
+}
+
+async function filterWorkersAvailableAt(workers: WorkerPoolCandidate[], dateTime: Date): Promise<WorkerPoolCandidate[]> {
+  if (workers.length === 0) {
+    return [];
+  }
+
+  const workerIds = workers.map((worker) => worker.id);
+  const dayOfWeek = dateTime.getDay();
+  const minuteOfDay = dateTime.getHours() * 60 + dateTime.getMinutes();
+  const windowStart = new Date(dateTime.getTime() - 30 * 60 * 1000);
+  const windowEnd = new Date(dateTime.getTime() + 30 * 60 * 1000);
+
+  const [slots, bookingConflicts] = await Promise.all([
+    prisma.workerAvailability.findMany({
+      where: {
+        workerId: { in: workerIds },
+        dayOfWeek
+      },
+      select: {
+        workerId: true,
+        startTime: true,
+        endTime: true
+      }
+    }),
+    prisma.booking.findMany({
+      where: {
+        workerId: { in: workerIds },
+        bookingType: "scheduled",
+        scheduledFor: {
+          gte: windowStart,
+          lte: windowEnd
+        },
+        status: {
+          notIn: [...NON_ACTIVE_BOOKING_STATUSES]
+        }
+      },
+      select: {
+        workerId: true
+      }
+    })
+  ]);
+
+  const slotsByWorker = new Map<string, Array<{ startTime: string; endTime: string }>>();
+  for (const slot of slots) {
+    const workerSlots = slotsByWorker.get(slot.workerId) ?? [];
+    workerSlots.push({ startTime: slot.startTime, endTime: slot.endTime });
+    slotsByWorker.set(slot.workerId, workerSlots);
+  }
+
+  const blockedWorkers = new Set(
+    bookingConflicts.map((booking) => booking.workerId).filter((workerId): workerId is string => Boolean(workerId))
+  );
+
+  return workers.filter((worker) => {
+    if (blockedWorkers.has(worker.id)) {
+      return false;
+    }
+
+    const workerSlots = slotsByWorker.get(worker.id) ?? [];
+    return workerSlots.some((slot) => {
+      const [startHour, startMinute] = slot.startTime.split(":").map(Number);
+      const [endHour, endMinute] = slot.endTime.split(":").map(Number);
+      const startMinutes = startHour * 60 + startMinute;
+      const endMinutes = endHour * 60 + endMinute;
+      return minuteOfDay >= startMinutes && minuteOfDay < endMinutes;
+    });
+  });
+}
+
 async function getBookingForDispatch(bookingId: string): Promise<BookingWithDispatchData> {
   const booking = await prisma.booking.findUnique({
     where: { id: bookingId },
@@ -522,10 +604,13 @@ async function getCandidateWorkers(
 ): Promise<WorkerPoolCandidate[]> {
   const categoryId = resolveBookingCategoryId(booking);
   const excludedWorkerIds = new Set(excludeWorkerIds);
+  const bookingLocation = resolveBookingLocation(booking);
+  const searchBounds = getBoundingBox(bookingLocation, RADIUS_STEPS_KM[RADIUS_STEPS_KM.length - 1]);
 
   const workers = await prisma.workerProfile.findMany({
     where: {
       onboardingStatus: "approved",
+      verificationStatus: VerificationStatus.VERIFIED,
       ...(excludedWorkerIds.size > 0
         ? {
             id: {
@@ -533,6 +618,14 @@ async function getCandidateWorkers(
             }
           }
         : {}),
+      latitude: {
+        gte: searchBounds.minLatitude,
+        lte: searchBounds.maxLatitude
+      },
+      longitude: {
+        gte: searchBounds.minLongitude,
+        lte: searchBounds.maxLongitude
+      },
       skills: {
         some: {
           categoryId,
@@ -559,13 +652,7 @@ async function getCandidateWorkers(
     }
   });
 
-  const approvedEligibleWorkers: WorkerPoolCandidate[] = [];
-  for (const worker of workers) {
-    const eligible = await isWorkerEligible(worker.userId);
-    if (eligible && !excludedWorkerIds.has(worker.id)) {
-      approvedEligibleWorkers.push(worker);
-    }
-  }
+  const approvedEligibleWorkers = workers;
 
   if (options.includeBusyWorkers) {
     return approvedEligibleWorkers;
@@ -617,13 +704,7 @@ async function rankCandidates(
   });
   const workers =
     options.availabilityAt && candidateWorkers.length > 0
-      ? (
-          await Promise.all(
-            candidateWorkers.map(async (worker) =>
-              (await isWorkerAvailableAt(worker.id, options.availabilityAt!)) ? worker : null
-            )
-          )
-        ).filter((worker): worker is WorkerPoolCandidate => worker !== null)
+      ? await filterWorkersAvailableAt(candidateWorkers, options.availabilityAt)
       : candidateWorkers;
   const workerIds = workers.map((worker) => worker.id);
   const lastCompletionMap = await getLastCompletionByWorker(workerIds);

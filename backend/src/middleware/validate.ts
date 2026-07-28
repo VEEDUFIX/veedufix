@@ -1,5 +1,5 @@
 import { NextFunction, Request, Response } from "express";
-import { z } from "zod";
+import { z, ZodError } from "zod";
 
 type ValidatedRequestShape = {
   body?: unknown;
@@ -20,16 +20,30 @@ export function validate(schema: z.ZodTypeAny) {
         request.body = parsed.body;
       }
       if (parsed.query !== undefined) {
-        request.query = parsed.query as typeof request.query;
+        Object.defineProperty(request, 'query', { value: parsed.query, writable: true });
       }
       if (parsed.params !== undefined) {
-        request.params = parsed.params as typeof request.params;
+        Object.defineProperty(request, 'params', { value: parsed.params, writable: true });
       }
       next();
     } catch (error) {
+      if (error instanceof ZodError) {
+        // Return structured, field-level issue objects so clients know exactly
+        // which field failed and why (path + message), consistent with the
+        // global error-handler's ZodError branch.
+        response.status(400).json({
+          message: "Validation failed",
+          issues: error.issues.map((issue) => ({
+            path: issue.path.join("."),
+            message: issue.message
+          }))
+        });
+        return;
+      }
+
       response.status(400).json({
         message: "Validation failed",
-        issues: error instanceof Error ? error.message : "Unknown validation error"
+        issues: [{ path: "", message: error instanceof Error ? error.message : "Unknown validation error" }]
       });
     }
   };

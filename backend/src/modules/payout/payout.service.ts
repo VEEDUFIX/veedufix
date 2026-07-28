@@ -3,6 +3,7 @@ import { randomUUID } from "crypto";
 import { env } from "../../config/env.js";
 import { prisma } from "../../lib/prisma.js";
 import { logger } from "../../lib/logger.js";
+import { maskWorkerFinancialFields } from "../../lib/mask-worker.js";
 
 type PayoutStatus = "pending" | "processing" | "success" | "failed";
 
@@ -443,7 +444,7 @@ export async function retryPayout(payoutId: string) {
 
   await attemptPayout(updated);
 
-  return prisma.payout.findUnique({
+  const result = await prisma.payout.findUnique({
     where: { id: payoutId },
     include: {
       booking: {
@@ -457,6 +458,20 @@ export async function retryPayout(payoutId: string) {
       }
     }
   });
+
+  // Mask worker financial fields before returning to the client.
+  // The actual payout was already processed above using the real data.
+  if (result?.booking.worker) {
+    return {
+      ...result,
+      booking: {
+        ...result.booking,
+        worker: maskWorkerFinancialFields(result.booking.worker)
+      }
+    };
+  }
+
+  return result;
 }
 
 export async function getAllPayouts(filters: PayoutFilters = {}) {
@@ -491,7 +506,18 @@ export async function getAllPayouts(filters: PayoutFilters = {}) {
   ]);
 
   return {
-    items,
+    items: items.map((item) => {
+      if (!item.booking.worker) return item;
+      return {
+        ...item,
+        booking: {
+          ...item.booking,
+          // Mask sensitive financial fields before serializing into the response.
+          // The real field values remain in the DB and are used internally for payouts.
+          worker: maskWorkerFinancialFields(item.booking.worker)
+        }
+      };
+    }),
     page,
     limit,
     total,

@@ -1,6 +1,13 @@
 import { Router } from "express";
 import { validate } from "../../middleware/validate.js";
 import {
+  makeGoogleAuthLimiter,
+  makeOtpRequestLimiter,
+  makeOtpVerifyLimiter,
+  makeRefreshLimiter,
+  makeSignOutLimiter
+} from "../../lib/rate-limit.js";
+import {
   authProviderSchema,
   refreshTokenSchema,
   requestOtpSchema,
@@ -17,8 +24,35 @@ import {
 
 export const authRouter = Router();
 
-authRouter.post("/otp/request", validate(requestOtpSchema), requestOtpHandler);
-authRouter.post("/otp/verify", validate(verifyOtpSchema), verifyOtpHandler);
-authRouter.post("/google", validate(authProviderSchema), googleAuthHandler);
-authRouter.post("/refresh", validate(refreshTokenSchema), refreshTokenHandler);
-authRouter.post("/signout", validate(signOutSchema), signOutHandler);
+// Rate limiters are instantiated once at module load and shared across all
+// requests to the same endpoint.  Instantiating here (rather than inline)
+// keeps the limiter state consistent across requests.
+//
+// Middleware order: validate → rateLimiter → handler
+//   validate() runs first so req.body is Zod-parsed before the limiter's
+//   keyGenerator reads req.body.identifier.
+const otpRequestLimiter = makeOtpRequestLimiter();
+const otpVerifyLimiter = makeOtpVerifyLimiter();
+const googleAuthLimiter = makeGoogleAuthLimiter();
+const refreshLimiter = makeRefreshLimiter();
+const signOutLimiter = makeSignOutLimiter();
+
+// POST /api/auth/otp/request
+// Limit: 3 req / 10 min per (IP + identifier)  — prevents OTP spam / SMS-cost abuse
+authRouter.post("/otp/request", validate(requestOtpSchema), otpRequestLimiter, requestOtpHandler);
+
+// POST /api/auth/otp/verify
+// Limit: 5 req / 10 min per (IP + identifier)  — prevents OTP brute-force guessing
+authRouter.post("/otp/verify", validate(verifyOtpSchema), otpVerifyLimiter, verifyOtpHandler);
+
+// POST /api/auth/google
+// Limit: 10 req / min per IP  — general abuse protection for token exchange
+authRouter.post("/google", validate(authProviderSchema), googleAuthLimiter, googleAuthHandler);
+
+// POST /api/auth/refresh
+// Limit: 20 req / min per IP  — prevents automated refresh-token grinding
+authRouter.post("/refresh", validate(refreshTokenSchema), refreshLimiter, refreshTokenHandler);
+
+// POST /api/auth/signout
+// Limit: 30 req / min per IP  — loose cap against scripted session-destruction
+authRouter.post("/signout", validate(signOutSchema), signOutLimiter, signOutHandler);

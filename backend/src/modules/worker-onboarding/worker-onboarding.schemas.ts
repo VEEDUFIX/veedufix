@@ -118,3 +118,43 @@ export const adminWorkerHistoryParamsSchema = z.object({
     profileId: z.string().trim().min(1)
   })
 });
+
+// ---------------------------------------------------------------------------
+// KYC document access schemas
+// ---------------------------------------------------------------------------
+
+/** Worker self-access: GET /worker/onboarding/documents/aadhaar (no params needed) */
+export const workerDocAadhaarSchema = z.object({
+  body: z.object({}).optional(),
+  query: z.object({}).optional(),
+  params: z.object({}).optional()
+});
+
+/** Worker self-access: GET /worker/onboarding/documents/skills/:skillId/certification */
+export const workerDocSkillParamsSchema = z.object({
+  body: z.object({}).optional(),
+  query: z.object({}).optional(),
+  params: z.object({
+    skillId: z.string().trim().min(1)
+  })
+});
+
+/** Admin access: GET /admin/worker-review/:profileId/documents/aadhaar */
+export const adminDocAadhaarParamsSchema = z.object({
+  body: z.object({}).optional(),
+  query: z.object({}).optional(),
+  params: z.object({
+    profileId: z.string().trim().min(1)
+  })
+});
+
+/** Admin access: GET /admin/worker-review/:profileId/documents/skills/:skillId/certification */
+export const adminDocSkillParamsSchema = z.object({
+  body: z.object({}).optional(),
+  query: z.object({}).optional(),
+  params: z.object({
+    profileId: z.string().trim().min(1),
+    skillId: z.string().trim().min(1)
+  })
+});
+

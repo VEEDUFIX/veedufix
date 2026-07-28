@@ -172,7 +172,7 @@ class _OnboardingFlowPageState extends ConsumerState<OnboardingFlowPage> {
 
     final state = ref.read(onboardingControllerProvider);
     final documentFile = state.draft.aadhaarDocumentFile;
-    final hasSavedDocument = state.profile?.aadhaarDocUrl?.isNotEmpty ?? false;
+    final hasSavedDocument = state.profile?.hasAadhaarDoc ?? false;
 
     if (documentFile == null && !hasSavedDocument) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -993,7 +993,7 @@ class _OnboardingFlowPageState extends ConsumerState<OnboardingFlowPage> {
             ),
             _SummaryItem(
               label: 'Aadhaar document',
-              value: state.draft.aadhaarDocumentFile?.name ?? (profile?.aadhaarDocUrl != null ? 'Uploaded' : 'Not uploaded'),
+              value: state.draft.aadhaarDocumentFile?.name ?? (profile?.hasAadhaarDoc == true ? 'Uploaded' : 'Not uploaded'),
             ),
           ],
         ),

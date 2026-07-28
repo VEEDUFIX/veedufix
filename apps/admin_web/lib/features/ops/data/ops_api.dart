@@ -171,6 +171,7 @@ class OpsAlert {
   bool get isDispatchFailure => kind == 'dispatch_failure';
   bool get isPayoutFailure => kind == 'payout_failure';
   bool get isRefundFailure => kind == 'refund_failure';
+  bool get isPaymentMismatch => kind == 'payment_mismatch';
 }
 
 class OpsOverviewSnapshot {

@@ -126,22 +126,7 @@ class _OpsAlertsPageState extends ConsumerState<OpsAlertsPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF9F5EC),
-      appBar: AppBar(
-        backgroundColor: const Color(0xFFF9F5EC),
-        surfaceTintColor: Colors.transparent,
-        title: Text(
-          'Operations alerts',
-          style: GoogleFonts.poppins(fontWeight: FontWeight.w800),
-        ),
-        actions: [
-          IconButton(
-            onPressed: _reload,
-            icon: const Icon(Icons.refresh_rounded),
-            tooltip: 'Refresh',
-          ),
-        ],
-      ),
+      backgroundColor: Colors.transparent,
       body: FutureBuilder<OpsOverviewSnapshot>(
         future: _snapshotFuture,
         builder: (context, snapshot) {
@@ -181,63 +166,76 @@ class _OpsAlertsPageState extends ConsumerState<OpsAlertsPage> {
 
           final alerts = snapshot.data?.alerts ?? const <OpsAlert>[];
 
-          return Container(
-            decoration: const BoxDecoration(
-              gradient: LinearGradient(
-                colors: [Color(0xFFF9F5EC), Color(0xFFFFFCF8)],
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-              ),
-            ),
-            child: RefreshIndicator(
-              onRefresh: _reload,
-              child: ListView(
-                padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+          return RefreshIndicator(
+            onRefresh: _reload,
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(32),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _SurfacePanel(
-                    child: Padding(
-                      padding: const EdgeInsets.all(20),
-                      child: Column(
+                  // Header
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'Unified alerts queue',
+                            'Unified Alerts Queue',
                             style: GoogleFonts.poppins(
-                              fontSize: 28,
+                              fontSize: 32,
                               fontWeight: FontWeight.w800,
-                              color: const Color(0xFF13110F),
-                              letterSpacing: -0.4,
+                              color: Colors.black87,
+                              letterSpacing: -0.5,
                             ),
                           ),
                           const SizedBox(height: 8),
                           Text(
-                            'Handle failed dispatches, refunds, and payouts from one queue without switching modules.',
+                            'Handle failed dispatches, refunds, payouts, and payment mismatches from one queue.',
                             style: GoogleFonts.inter(
-                              color: const Color(0xFF6B6256),
-                              height: 1.45,
+                              color: Colors.black54,
+                              fontSize: 16,
                             ),
-                          ),
-                          const SizedBox(height: 16),
-                          Wrap(
-                            spacing: 10,
-                            runSpacing: 10,
-                            children: [
-                              _InfoChip(
-                                  label:
-                                      '${alerts.where((alert) => alert.isDispatchFailure).length} dispatch failures'),
-                              _InfoChip(
-                                  label:
-                                      '${alerts.where((alert) => alert.isPayoutFailure).length} payout failures'),
-                              _InfoChip(
-                                  label:
-                                      '${alerts.where((alert) => alert.isRefundFailure).length} refund failures'),
-                            ],
                           ),
                         ],
                       ),
-                    ),
+                      FilledButton.icon(
+                        onPressed: _reload,
+                        icon: const Icon(Icons.refresh_rounded, size: 18),
+                        label: const Text('Refresh'),
+                        style: FilledButton.styleFrom(
+                          backgroundColor: Colors.white,
+                          foregroundColor: Colors.black87,
+                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            side: const BorderSide(color: Color(0xFFE5E7EB)),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 32),
+                  Wrap(
+                    spacing: 12,
+                    runSpacing: 12,
+                    children: [
+                      _InfoChip(
+                          label:
+                              '${alerts.where((alert) => alert.isDispatchFailure).length} dispatch failures'),
+                      _InfoChip(
+                          label:
+                              '${alerts.where((alert) => alert.isPayoutFailure).length} payout failures'),
+                      _InfoChip(
+                          label:
+                              '${alerts.where((alert) => alert.isRefundFailure).length} refund failures'),
+                      _InfoChip(
+                          label:
+                              '${alerts.where((alert) => alert.isPaymentMismatch).length} payment mismatches'),
+                    ],
+                  ),
+                  const SizedBox(height: 32),
                   if (alerts.isEmpty)
                     const _SurfacePanel(
                       child: Padding(
@@ -358,12 +356,14 @@ class _AlertIcon extends StatelessWidget {
     final color = switch (kind) {
       'payout_failure' => const Color(0xFF0F766E),
       'refund_failure' => const Color(0xFF8B5CF6),
+      'payment_mismatch' => const Color(0xFFF59E0B),
       _ => const Color(0xFFEF4444),
     };
 
     final icon = switch (kind) {
       'payout_failure' => Icons.payments_rounded,
       'refund_failure' => Icons.undo_rounded,
+      'payment_mismatch' => Icons.currency_rupee_rounded,
       _ => Icons.notification_important_rounded,
     };
 
@@ -389,6 +389,7 @@ class _RetryBadge extends StatelessWidget {
     final label = switch (kind) {
       'payout_failure' => 'Retry payout',
       'refund_failure' => 'Retry refund',
+      'payment_mismatch' => 'Investigate',
       _ => 'Redispatch',
     };
 
@@ -478,14 +479,19 @@ class _SurfacePanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      elevation: 0,
-      color: Colors.white,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(18),
-        side: const BorderSide(color: Color(0xFFE5D8C6)),
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFE5E7EB)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.01),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
-      shadowColor: Colors.black.withValues(alpha: 0.06),
       child: child,
     );
   }

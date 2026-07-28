@@ -297,9 +297,26 @@ class _WorkerReviewDetailPageState extends ConsumerState<WorkerReviewDetailPage>
                 children: [
                   _DetailRow(label: 'Aadhaar', value: profile.maskedAadhaar),
                   const SizedBox(height: 6),
-                  if (profile.aadhaarDocUrl != null && profile.aadhaarDocUrl!.isNotEmpty)
+                  if (profile.hasAadhaarDoc)
                     TextButton.icon(
-                      onPressed: _busy ? null : () => _openUrl(profile.aadhaarDocUrl!),
+                      onPressed: _busy
+                          ? null
+                          : () async {
+                              setState(() => _busy = true);
+                              try {
+                                final url = await _api.fetchAadhaarDocUrl(profile.id);
+                                await _openUrl(url);
+                              } catch (_) {
+                                if (context.mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                        content: Text('Unable to open Aadhaar document.')),
+                                  );
+                                }
+                              } finally {
+                                if (mounted) setState(() => _busy = false);
+                              }
+                            },
                       icon: const Icon(Icons.open_in_new_rounded),
                       label: const Text('Open Aadhaar document'),
                     )
@@ -372,9 +389,28 @@ class _WorkerReviewDetailPageState extends ConsumerState<WorkerReviewDetailPage>
                           value: skill.verifiedByAdmin ? 'Yes' : 'No',
                         ),
                         const SizedBox(height: 6),
-                        if (skill.certificationDocUrl != null && skill.certificationDocUrl!.isNotEmpty)
+                        if (skill.hasCertificationDoc)
                           TextButton.icon(
-                            onPressed: _busy ? null : () => _openUrl(skill.certificationDocUrl!),
+                            onPressed: _busy
+                                ? null
+                                : () async {
+                                    setState(() => _busy = true);
+                                    try {
+                                      final url = await _api.fetchCertDocUrl(
+                                          profile.id, skill.id);
+                                      await _openUrl(url);
+                                    } catch (_) {
+                                      if (context.mounted) {
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          const SnackBar(
+                                              content: Text(
+                                                  'Unable to open certification document.')),
+                                        );
+                                      }
+                                    } finally {
+                                      if (mounted) setState(() => _busy = false);
+                                    }
+                                  },
                             icon: const Icon(Icons.open_in_new_rounded),
                             label: const Text('Open certification'),
                           )

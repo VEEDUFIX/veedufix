@@ -119,7 +119,6 @@ export async function verifyOtp(input: {
   channel: LoginChannel;
   identifier: string;
   otp: string;
-  role: LoginRole;
   name?: string;
 }): Promise<AuthResult> {
   const normalized = normalizeIdentifier(input.identifier, input.channel);
@@ -148,12 +147,12 @@ export async function verifyOtp(input: {
         ? { email: normalized }
         : { phone: normalized },
     update: {
-      role: input.role,
+      // Role is intentionally NOT updated here — existing role is preserved.
       name: input.name ?? undefined,
       ...(input.channel === "EMAIL" ? { emailVerifiedAt: new Date() } : { phoneVerifiedAt: new Date() })
     },
     create: {
-      role: input.role,
+      role: "CUSTOMER",
       name: input.name ?? "New User",
       ...baseData,
       ...(input.channel === "EMAIL" ? { emailVerifiedAt: new Date() } : { phoneVerifiedAt: new Date() })
@@ -234,7 +233,6 @@ export async function refreshSession(refreshToken: string): Promise<AuthResult> 
 
 export async function signInWithGoogle(input: {
   idToken: string;
-  role: LoginRole;
 }): Promise<AuthResult> {
   const googleClaims = await verifyGoogleIdToken(input.idToken);
   const email =
@@ -247,13 +245,13 @@ export async function signInWithGoogle(input: {
   const user = await prisma.user.upsert({
     where: { email },
     update: {
-      role: input.role,
+      // Role is intentionally NOT updated here — existing role is preserved.
       name,
       avatarUrl,
       emailVerifiedAt: new Date()
     },
     create: {
-      role: input.role,
+      role: "CUSTOMER",
       name,
       email,
       avatarUrl,

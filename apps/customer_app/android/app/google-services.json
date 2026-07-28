@@ -1,0 +1,98 @@
+{
+  "project_info": {
+    "project_number": "1043931578949",
+    "project_id": "veedufix-144b4",
+    "storage_bucket": "veedufix-144b4.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1043931578949:android:d6243b103b8676e5c7d92c",
+        "android_client_info": {
+          "package_name": "com.veedufix.customer"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "1043931578949-4o93shk3cs0p72cjjao3m7saghn5n02q.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.veedufix.customer",
+            "certificate_hash": "e3ef8b867f8bc1053ea745ee6af3721cba190c60"
+          }
+        },
+        {
+          "client_id": "1043931578949-a2867o3l8mr733vcojs7kr5hhqe1pcnm.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBlyoZ-18pxvxJZn0MxNEo_XxWUl29TARA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "1043931578949-a2867o3l8mr733vcojs7kr5hhqe1pcnm.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "1043931578949-frkl101kqu8m41sm7q6lcl4rv3roj3e4.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.veedufix.customer"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1043931578949:android:16ba63fb63a6c712c7d92c",
+        "android_client_info": {
+          "package_name": "com.veedufix.partner"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "1043931578949-dvdpunnsralcgj1ut1dbvlrgb24ojdks.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.veedufix.partner",
+            "certificate_hash": "e3ef8b867f8bc1053ea745ee6af3721cba190c60"
+          }
+        },
+        {
+          "client_id": "1043931578949-a2867o3l8mr733vcojs7kr5hhqe1pcnm.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBlyoZ-18pxvxJZn0MxNEo_XxWUl29TARA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "1043931578949-a2867o3l8mr733vcojs7kr5hhqe1pcnm.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "1043931578949-frkl101kqu8m41sm7q6lcl4rv3roj3e4.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.veedufix.customer"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
