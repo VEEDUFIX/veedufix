@@ -22,7 +22,6 @@ class _LoginPageState extends ConsumerState<LoginPage> {
     _googleSignIn = GoogleSignIn(
       scopes: const ['email', 'profile'],
       clientId: environment.googleServerClientId.isEmpty ? null : environment.googleServerClientId,
-      serverClientId: environment.googleServerClientId.isEmpty ? null : environment.googleServerClientId,
     );
   }
 
