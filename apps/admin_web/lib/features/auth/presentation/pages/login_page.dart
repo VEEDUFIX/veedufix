@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+import 'package:google_sign_in_web/google_sign_in_web.dart' as web;
 import 'package:marketplace_shared/marketplace_shared.dart';
 
 class LoginPage extends ConsumerStatefulWidget {
@@ -24,6 +25,32 @@ class _LoginPageState extends ConsumerState<LoginPage> {
       clientId: environment.googleServerClientId.isEmpty ? null : environment.googleServerClientId,
       serverClientId: environment.googleServerClientId.isEmpty ? null : environment.googleServerClientId,
     );
+
+    _googleSignIn.onCurrentUserChanged.listen((GoogleSignInAccount? account) async {
+      if (account != null) {
+        setState(() => _isLoading = true);
+        try {
+          final auth = await account.authentication;
+          final idToken = auth.idToken;
+          if (idToken == null || idToken.isEmpty) {
+            throw StateError('Google did not return an identity token.');
+          }
+          await ref.read(authControllerProvider.notifier).signInWithGoogle(
+                idToken: idToken,
+                role: 'ADMIN',
+              );
+          if (!mounted) return;
+          context.go('/admin');
+        } catch (error) {
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Google sign-in failed: $error')),
+          );
+        } finally {
+          if (mounted) setState(() => _isLoading = false);
+        }
+      }
+    });
   }
 
   Future<void> _signInWithGoogle() async {
@@ -127,10 +154,15 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                                 ),
                           ),
                           const SizedBox(height: 24),
-                          FilledButton.icon(
-                            onPressed: _isLoading ? null : _signInWithGoogle,
-                            icon: const Icon(Icons.g_mobiledata_rounded),
-                            label: Text(_isLoading ? 'Signing in...' : 'Continue with Google'),
+                          Container(
+                            alignment: Alignment.center,
+                            height: 44,
+                            child: web.GoogleSignInPlugin().renderButton(
+                              configuration: web.GSIButtonConfiguration(
+                                size: web.GSIButtonSize.large,
+                                text: web.GSIButtonText.continueWith,
+                              ),
+                            ),
                           ),
                         ],
                       ),
