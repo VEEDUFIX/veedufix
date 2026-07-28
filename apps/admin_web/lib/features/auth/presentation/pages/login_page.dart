@@ -40,6 +40,12 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                 idToken: idToken,
                 role: 'ADMIN',
               );
+          
+          final authState = ref.read(authControllerProvider);
+          if (authState.hasError) {
+            throw authState.error ?? StateError('Backend authentication failed');
+          }
+
           if (!mounted) return;
           context.go('/admin');
         } catch (error) {
