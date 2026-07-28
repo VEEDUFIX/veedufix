@@ -20,8 +20,9 @@ class _LoginPageState extends ConsumerState<LoginPage> {
     super.initState();
     final environment = ref.read(environmentProvider);
     _googleSignIn = GoogleSignIn(
-      scopes: const ['email', 'profile'],
+      scopes: const ['openid', 'email', 'profile'],
       clientId: environment.googleServerClientId.isEmpty ? null : environment.googleServerClientId,
+      serverClientId: environment.googleServerClientId.isEmpty ? null : environment.googleServerClientId,
     );
   }
 
