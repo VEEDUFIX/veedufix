@@ -1,6 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:marketplace_shared/marketplace_shared.dart';
+import '../../../../core/widgets/shimmer_placeholder.dart';
+import '../../../../core/widgets/metallic_card.dart';
+import '../../../../core/widgets/liquid_refresh.dart';
+import '../../../search/presentation/widgets/ai_assistant_sheet.dart';
 
 class HomePage extends ConsumerWidget {
   const HomePage({super.key});
@@ -12,10 +17,17 @@ class HomePage extends ConsumerWidget {
     final firstName = userName.trim().split(RegExp(r'\s+')).first;
     final colorScheme = Theme.of(context).colorScheme;
 
+    final catalogAsync = ref.watch(homeCatalogProvider);
+    final professionalsAsync = ref.watch(homeProfessionalsProvider);
+
     return Scaffold(
-      body: RefreshIndicator(
-        onRefresh: () async {},
-        color: colorScheme.primary,
+      body: LiquidRefresh(
+        onRefresh: () async {
+          await Future.wait([
+            ref.refresh(homeCatalogProvider.future),
+            ref.refresh(homeProfessionalsProvider.future),
+          ]);
+        },
         child: ListView(
           padding: const EdgeInsets.fromLTRB(20, 16, 20, 28),
           children: [
@@ -27,7 +39,7 @@ class HomePage extends ConsumerWidget {
             const SizedBox(height: 18),
             _SearchBar(
               hint: 'What service do you need?',
-              onVoiceTap: () {},
+              onVoiceTap: () => showAiAssistantSheet(context),
             ),
             const SizedBox(height: 18),
             const _SectionLabel(
@@ -37,15 +49,36 @@ class HomePage extends ConsumerWidget {
             const SizedBox(height: 12),
             SizedBox(
               height: 112,
-              child: ListView.separated(
-                scrollDirection: Axis.horizontal,
-                itemCount: _categories.length,
-                separatorBuilder: (_, __) => const SizedBox(width: 12),
-                itemBuilder: (context, index) {
-                  final category = _categories[index];
-                  return _CategoryChip(category: category);
-                },
-              ),
+              child: catalogAsync.isLoading
+                  ? ListView.separated(
+                      scrollDirection: Axis.horizontal,
+                      itemCount: 4,
+                      separatorBuilder: (_, __) => const SizedBox(width: 12),
+                      itemBuilder: (context, index) => const Column(
+                        children: [
+                          ShimmerPlaceholder(width: 72, height: 72, borderRadius: 28),
+                          SizedBox(height: 10),
+                          ShimmerPlaceholder(width: 60, height: 12, borderRadius: 6),
+                        ],
+                      ),
+                    )
+                  : ListView.separated(
+                      scrollDirection: Axis.horizontal,
+                      itemCount: (catalogAsync.valueOrNull?.categories.length ?? 0) > 0
+                          ? catalogAsync.valueOrNull!.categories.length
+                          : _categories.length,
+                      separatorBuilder: (_, __) => const SizedBox(width: 12),
+                      itemBuilder: (context, index) {
+                        final hasData = (catalogAsync.valueOrNull?.categories.length ?? 0) > 0;
+                        final category = hasData
+                            ? catalogAsync.valueOrNull!.categories[index]
+                            : _categories[index];
+                        return _CategoryChip(
+                          category: category,
+                          // If it's a real API model, map it. The widget expects a Map mock currently.
+                        );
+                      },
+                    ),
             ),
             const SizedBox(height: 18),
             _FeaturedBanner(
@@ -60,20 +93,46 @@ class HomePage extends ConsumerWidget {
               subtitle: 'Curated for fast booking and transparent pricing.',
             ),
             const SizedBox(height: 12),
-            GridView.builder(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              itemCount: _services.length,
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 2,
-                mainAxisSpacing: 12,
-                crossAxisSpacing: 12,
-                childAspectRatio: 0.88,
-              ),
-              itemBuilder: (context, index) {
-                return _ServiceCard(service: _services[index]);
-              },
-            ),
+            catalogAsync.isLoading
+                ? GridView.builder(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    itemCount: 4,
+                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: 2,
+                      mainAxisSpacing: 12,
+                      crossAxisSpacing: 12,
+                      childAspectRatio: 0.88,
+                    ),
+                    itemBuilder: (context, index) => const ShimmerPlaceholder(
+                      width: double.infinity,
+                      height: double.infinity,
+                      borderRadius: 24,
+                    ),
+                  )
+                : GridView.builder(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    itemCount: (catalogAsync.valueOrNull?.trending.length ?? 0) > 0
+                        ? catalogAsync.valueOrNull!.trending.length
+                        : _services.length,
+                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: 2,
+                      mainAxisSpacing: 12,
+                      crossAxisSpacing: 12,
+                      childAspectRatio: 0.88,
+                    ),
+                    itemBuilder: (context, index) {
+                      final hasData = (catalogAsync.valueOrNull?.trending.length ?? 0) > 0;
+                      final service = hasData
+                          ? catalogAsync.valueOrNull!.trending[index]
+                          : _services[index];
+                      return _ServiceCard(
+                        service: service,
+                        // If it's a real API model, map it. The widget expects a Map mock currently.
+                      );
+                    },
+                  ),
             const SizedBox(height: 20),
             const _SectionLabel(
               title: 'Nearby professionals',
@@ -82,14 +141,34 @@ class HomePage extends ConsumerWidget {
             const SizedBox(height: 12),
             SizedBox(
               height: 238,
-              child: ListView.separated(
-                scrollDirection: Axis.horizontal,
-                itemCount: _professionals.length,
-                separatorBuilder: (_, __) => const SizedBox(width: 12),
-                itemBuilder: (context, index) {
-                  return _ProfessionalCard(professional: _professionals[index]);
-                },
-              ),
+              child: professionalsAsync.isLoading
+                  ? ListView.separated(
+                      scrollDirection: Axis.horizontal,
+                      itemCount: 3,
+                      separatorBuilder: (_, __) => const SizedBox(width: 12),
+                      itemBuilder: (_, __) => const ShimmerPlaceholder(
+                        width: 240,
+                        height: 238,
+                        borderRadius: 24,
+                      ),
+                    )
+                  : (professionalsAsync.valueOrNull ?? const <HomeProfessional>[]).isEmpty
+                      ? const Center(
+                          child: Text(
+                            'No professionals available right now.',
+                            style: TextStyle(color: Colors.grey),
+                          ),
+                        )
+                      : ListView.separated(
+                          scrollDirection: Axis.horizontal,
+                          itemCount: professionalsAsync.valueOrNull!.length,
+                          separatorBuilder: (_, __) => const SizedBox(width: 12),
+                          itemBuilder: (context, index) {
+                            return _ProfessionalCard(
+                              professional: professionalsAsync.valueOrNull![index],
+                            );
+                          },
+                        ),
             ),
             const SizedBox(height: 20),
             const _SectionLabel(
@@ -97,30 +176,43 @@ class HomePage extends ConsumerWidget {
               subtitle: 'Highly reviewed specialists with completed jobs.',
             ),
             const SizedBox(height: 12),
-            ..._topRated.map(
-              (professional) => Padding(
-                padding: const EdgeInsets.only(bottom: 12),
-                child: _TopRatedCard(professional: professional),
+            if (professionalsAsync.isLoading)
+              ...List.generate(
+                2,
+                (_) => const Padding(
+                  padding: EdgeInsets.only(bottom: 12),
+                  child: ShimmerPlaceholder(
+                    width: double.infinity,
+                    height: 80,
+                    borderRadius: 24,
+                  ),
+                ),
+              )
+            else
+              ...(professionalsAsync.valueOrNull ?? const <HomeProfessional>[]).map(
+                (professional) => Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: _TopRatedCard(professional: professional),
+                ),
               ),
-            ),
             const SizedBox(height: 8),
             const _SectionLabel(
               title: 'Offers',
               subtitle: 'Savings, coupons, and referral rewards.',
             ),
             const SizedBox(height: 12),
-            _OfferBanner(
+            MetallicCard(
               title: 'Festival offers',
               subtitle: 'Up to 25% off on essential home services this week.',
               icon: Icons.local_activity_rounded,
-              accent: colorScheme.primary,
+              baseColor: colorScheme.primary,
             ),
             const SizedBox(height: 12),
-            const _OfferBanner(
+            const MetallicCard(
               title: 'Referral rewards',
               subtitle: 'Invite friends and earn credits on your next booking.',
               icon: Icons.card_giftcard_rounded,
-              accent: Color(0xFF10B981),
+              baseColor: Color(0xFF10B981),
             ),
           ],
         ),
@@ -199,7 +291,7 @@ class _HomeHeader extends StatelessWidget {
             ],
           ),
           child: IconButton(
-            onPressed: () {},
+            onPressed: () => context.push('/notifications'),
             icon: const Icon(Icons.notifications_none_rounded),
             color: colorScheme.onSurface,
           ),
@@ -217,8 +309,10 @@ class _LocationChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+    return TapScale(
+      onTap: () {},
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
         color: colorScheme.surface,
         borderRadius: BorderRadius.circular(18),
@@ -246,7 +340,7 @@ class _LocationChip extends StatelessWidget {
           ),
         ],
       ),
-    );
+    ));
   }
 }
 
@@ -262,8 +356,10 @@ class _SearchBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+    return TapScale(
+      onTap: () => context.push('/search'),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       decoration: BoxDecoration(
         color: colorScheme.surface,
         borderRadius: BorderRadius.circular(22),
@@ -304,7 +400,7 @@ class _SearchBar extends StatelessWidget {
           ),
         ],
       ),
-    );
+    ));
   }
 }
 
@@ -341,44 +437,53 @@ class _Category {
 class _CategoryChip extends StatelessWidget {
   const _CategoryChip({required this.category});
 
-  final _Category category;
+  final Object category;
+
+  String get _title => category is CatalogCategory ? (category as CatalogCategory).name : (category as _Category).title;
+  IconData get _icon => category is CatalogCategory ? Icons.home_repair_service_rounded : (category as _Category).icon;
+  Color get _accent => category is CatalogCategory ? const Color(0xFF6366F1) : (category as _Category).accent;
 
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     return SizedBox(
       width: 84,
-      child: Column(
+      child: TapScale(
+        onTap: () {},
+        child: Column(
         children: [
-          Container(
-            height: 72,
-            width: 72,
-            decoration: BoxDecoration(
-              color: colorScheme.surface,
-              borderRadius: BorderRadius.circular(28),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.06),
-                  blurRadius: 24,
-                  offset: const Offset(0, 12),
+          Hero(
+            tag: 'category_${category is CatalogCategory ? (category as CatalogCategory).id : (category as _Category).title}',
+            child: Container(
+              height: 72,
+              width: 72,
+              decoration: BoxDecoration(
+                color: colorScheme.surface,
+                borderRadius: BorderRadius.circular(28),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.06),
+                    blurRadius: 24,
+                    offset: const Offset(0, 12),
+                  ),
+                ],
+              ),
+              child: Center(
+                child: Container(
+                  height: 52,
+                  width: 52,
+                  decoration: BoxDecoration(
+                    color: _accent.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Icon(_icon, color: _accent),
                 ),
-              ],
-            ),
-            child: Center(
-              child: Container(
-                height: 52,
-                width: 52,
-                decoration: BoxDecoration(
-                  color: category.accent.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Icon(category.icon, color: category.accent),
               ),
             ),
           ),
           const SizedBox(height: 10),
           Text(
-            category.title,
+            _title,
             textAlign: TextAlign.center,
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
@@ -389,7 +494,7 @@ class _CategoryChip extends StatelessWidget {
           ),
         ],
       ),
-    );
+    ));
   }
 }
 
@@ -414,36 +519,53 @@ class _Service {
 class _ServiceCard extends StatelessWidget {
   const _ServiceCard({required this.service});
 
-  final _Service service;
+  final Object service;
+
+  String get _title => service is CatalogService ? (service as CatalogService).name : (service as _Service).title;
+  String get _price => service is CatalogService ? '₹${(service as CatalogService).startingPrice.toInt()}' : (service as _Service).price;
+  double get _rating => service is CatalogService ? (service as CatalogService).rating : (service as _Service).rating;
+  String get _jobs => service is CatalogService ? '${(service as CatalogService).reviewCount} reviews' : (service as _Service).jobs;
+  IconData get _icon => service is CatalogService ? Icons.design_services_rounded : (service as _Service).icon;
+  Color get _accent => service is CatalogService ? const Color(0xFF6366F1) : (service as _Service).accent;
 
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    return PremiumGlassCard(
+    return PremiumCard(
+      onTap: () {
+        if (service is CatalogService) {
+          context.push('/service?id=${(service as CatalogService).slug}');
+        } else {
+          context.push('/service');
+        }
+      },
       child: Padding(
         padding: const EdgeInsets.all(14),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Container(
-              height: 96,
-              width: double.infinity,
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [
-                    service.accent.withValues(alpha: 0.22),
-                    service.accent.withValues(alpha: 0.06),
-                  ],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
+            Hero(
+              tag: 'service_${service is CatalogService ? (service as CatalogService).slug : (service as _Service).title}',
+              child: Container(
+                height: 96,
+                width: double.infinity,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      _accent.withValues(alpha: 0.22),
+                      _accent.withValues(alpha: 0.06),
+                    ],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: BorderRadius.circular(20),
                 ),
-                borderRadius: BorderRadius.circular(20),
+                child: Icon(_icon, size: 38, color: _accent),
               ),
-              child: Icon(service.icon, size: 38, color: service.accent),
             ),
             const SizedBox(height: 12),
             Text(
-              service.title,
+              _title,
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
               style: Theme.of(context).textTheme.titleMedium?.copyWith(
@@ -455,7 +577,7 @@ class _ServiceCard extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
-                  service.price,
+                  _price,
                   style: Theme.of(context).textTheme.labelLarge?.copyWith(
                         fontWeight: FontWeight.w800,
                         color: colorScheme.primary,
@@ -466,7 +588,7 @@ class _ServiceCard extends StatelessWidget {
                     const Icon(Icons.star_rounded, size: 16, color: Color(0xFFF59E0B)),
                     const SizedBox(width: 4),
                     Text(
-                    service.rating.toStringAsFixed(1),
+                    _rating.toStringAsFixed(1),
                       style: Theme.of(context).textTheme.labelMedium?.copyWith(
                             fontWeight: FontWeight.w700,
                           ),
@@ -477,7 +599,7 @@ class _ServiceCard extends StatelessWidget {
             ),
             const SizedBox(height: 4),
             Text(
-              service.jobs,
+              _jobs,
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
                     color: colorScheme.onSurfaceVariant,
                   ),
@@ -489,38 +611,17 @@ class _ServiceCard extends StatelessWidget {
   }
 }
 
-class _Professional {
-  const _Professional({
-    required this.name,
-    required this.role,
-    required this.experience,
-    required this.rating,
-    required this.distance,
-    required this.price,
-    required this.verified,
-    required this.accent,
-  });
-
-  final String name;
-  final String role;
-  final String experience;
-  final double rating;
-  final String distance;
-  final String price;
-  final bool verified;
-  final Color accent;
-}
-
 class _ProfessionalCard extends StatelessWidget {
   const _ProfessionalCard({required this.professional});
 
-  final _Professional professional;
+  final HomeProfessional professional;
 
   @override
   Widget build(BuildContext context) {
     return SizedBox(
       width: 240,
-      child: PremiumGlassCard(
+      child: PremiumCard(
+        onTap: () {},
         child: Padding(
           padding: const EdgeInsets.all(14),
           child: Column(
@@ -602,12 +703,13 @@ class _ProfessionalCard extends StatelessWidget {
 class _TopRatedCard extends StatelessWidget {
   const _TopRatedCard({required this.professional});
 
-  final _Professional professional;
+  final HomeProfessional professional;
 
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    return PremiumGlassCard(
+    return PremiumCard(
+      onTap: () {},
       child: ListTile(
         contentPadding: const EdgeInsets.all(16),
         leading: CircleAvatar(
@@ -722,7 +824,8 @@ class _FeaturedBanner extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    return PremiumGlassCard(
+    return PremiumCard(
+      onTap: onAction,
       child: Container(
         decoration: BoxDecoration(
           gradient: LinearGradient(
@@ -799,64 +902,7 @@ class _FeaturedBanner extends StatelessWidget {
   }
 }
 
-class _OfferBanner extends StatelessWidget {
-  const _OfferBanner({
-    required this.title,
-    required this.subtitle,
-    required this.icon,
-    required this.accent,
-  });
 
-  final String title;
-  final String subtitle;
-  final IconData icon;
-  final Color accent;
-
-  @override
-  Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    return PremiumGlassCard(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Row(
-          children: [
-            Container(
-              height: 54,
-              width: 54,
-              decoration: BoxDecoration(
-                color: accent.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(18),
-              ),
-              child: Icon(icon, color: accent),
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.w800,
-                        ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    subtitle,
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: colorScheme.onSurfaceVariant,
-                        ),
-                  ),
-                ],
-              ),
-            ),
-            Icon(Icons.arrow_forward_ios_rounded, size: 16, color: colorScheme.onSurfaceVariant),
-          ],
-        ),
-      ),
-    );
-  }
-}
 
 const List<_Category> _categories = <_Category>[
   _Category(title: 'Electrician', icon: Icons.electrical_services_rounded, accent: Color(0xFFC2A15E)),
@@ -905,68 +951,4 @@ const List<_Service> _services = <_Service>[
   ),
 ];
 
-const List<_Professional> _professionals = <_Professional>[
-  _Professional(
-    name: 'Imran Khan',
-    role: 'AC Technician',
-    experience: '8 years experience',
-    rating: 4.9,
-    distance: '1.8 km away',
-    price: '₹799 / visit',
-    verified: true,
-    accent: Color(0xFF38BDF8),
-  ),
-  _Professional(
-    name: 'Suresh Babu',
-    role: 'Electrician',
-    experience: '11 years experience',
-    rating: 4.8,
-    distance: '2.4 km away',
-    price: '₹699 / visit',
-    verified: true,
-    accent: Color(0xFFC2A15E),
-  ),
-  _Professional(
-    name: 'Fazila Noor',
-    role: 'Home Cleaning',
-    experience: '6 years experience',
-    rating: 4.9,
-    distance: '2.9 km away',
-    price: '₹899 / visit',
-    verified: true,
-    accent: Color(0xFF10B981),
-  ),
-];
 
-const List<_Professional> _topRated = <_Professional>[
-  _Professional(
-    name: 'Arun Raj',
-    role: 'Plumber',
-    experience: '420 completed jobs',
-    rating: 4.9,
-    distance: '3.2 km away',
-    price: '₹649 / visit',
-    verified: true,
-    accent: Color(0xFF10B981),
-  ),
-  _Professional(
-    name: 'Kavya Nair',
-    role: 'Painter',
-    experience: '368 completed jobs',
-    rating: 4.8,
-    distance: '1.7 km away',
-    price: '₹549 / visit',
-    verified: true,
-    accent: Color(0xFFEF4444),
-  ),
-  _Professional(
-    name: 'Mohamed Ali',
-    role: 'Laptop Repair',
-    experience: '512 completed jobs',
-    rating: 4.9,
-    distance: '4.0 km away',
-    price: '₹1,199 / visit',
-    verified: true,
-    accent: Color(0xFF8B5CF6),
-  ),
-];

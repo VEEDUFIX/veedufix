@@ -32,6 +32,11 @@ import { workerPoolRouter } from "./modules/worker-pool/worker-pool.routes.js";
 import { uploadRouter } from "./modules/upload/upload.routes.js";
 import { webhooksRouter } from "./modules/webhooks/webhooks.routes.js";
 import { usersRouter } from "./modules/users/users.routes.js";
+import { adminAnalyticsRouter } from "./modules/analytics/analytics.routes.js";
+import { chatRouter } from "./modules/chat/chat.routes.js";
+import { reviewsRouter } from "./modules/reviews/reviews.routes.js";
+import { walletRouter } from "./modules/wallet/wallet.routes.js";
+import { aiRouter } from "./modules/ai/ai.routes.js";
 
 export function createApp() {
   const app = express();
@@ -99,8 +104,13 @@ export function createApp() {
   app.use("/api", earningsRouter);
   app.use("/api/admin/payouts", payoutRouter);
   app.use("/api/admin/refunds", refundRouter);
+  app.use("/api/admin/analytics", adminAnalyticsRouter);
   app.use("/api/webhooks", webhooksRouter);
   app.use("/api/users", usersRouter);
+  app.use("/api/chat", chatRouter);
+  app.use("/api/reviews", reviewsRouter);
+  app.use("/api/wallet", walletRouter);
+  app.use("/api/ai", aiRouter);
 
   app.use(notFoundHandler);
   app.use(errorHandler);

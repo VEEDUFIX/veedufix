@@ -151,9 +151,9 @@ class _DisputeDetailPageState extends ConsumerState<DisputeDetailPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF9F5EC),
+      backgroundColor: Colors.transparent,
       appBar: AppBar(
-        backgroundColor: const Color(0xFFF9F5EC),
+        backgroundColor: Colors.transparent,
         surfaceTintColor: Colors.transparent,
         title: Text(
           'Dispute detail',
@@ -186,13 +186,7 @@ class _DisputeDetailPageState extends ConsumerState<DisputeDetailPage> {
           final isResolved = dispute.status.startsWith('resolved_');
 
           return Container(
-            decoration: const BoxDecoration(
-              gradient: LinearGradient(
-                colors: [Color(0xFFF9F5EC), Color(0xFFFFFCF8)],
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-              ),
-            ),
+            color: Colors.transparent,
             child: RefreshIndicator(
               onRefresh: _reload,
               child: ListView(
@@ -210,7 +204,7 @@ class _DisputeDetailPageState extends ConsumerState<DisputeDetailPage> {
                               fontSize: 28,
                               fontWeight: FontWeight.w900,
                               letterSpacing: -0.4,
-                              color: const Color(0xFF13110F),
+                              color: Colors.black87,
                             ),
                           ),
                           const SizedBox(height: 8),
@@ -686,14 +680,19 @@ class _SurfacePanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      elevation: 0,
-      color: Colors.white,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(18),
-        side: const BorderSide(color: Color(0xFFE5D8C6)),
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFE5E7EB)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.01),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
-      shadowColor: Colors.black.withValues(alpha: 0.06),
       child: child,
     );
   }

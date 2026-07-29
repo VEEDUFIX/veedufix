@@ -235,7 +235,7 @@ class _WorkerDirectoryDetailPageState
               child: ListView(
                 padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
                 children: [
-                PremiumGlassCard(
+                _SurfaceCard(
                   child: Padding(
                     padding: const EdgeInsets.all(20),
                     child: Column(
@@ -357,7 +357,7 @@ class _WorkerDirectoryDetailPageState
                   children: [
                     SizedBox(
                       width: 420,
-                      child: PremiumGlassCard(
+                      child: _SurfaceCard(
                         child: Padding(
                           padding: const EdgeInsets.all(18),
                           child: Column(
@@ -394,7 +394,7 @@ class _WorkerDirectoryDetailPageState
                     ),
                     SizedBox(
                       width: 420,
-                      child: PremiumGlassCard(
+                      child: _SurfaceCard(
                         child: Padding(
                           padding: const EdgeInsets.all(18),
                           child: Column(
@@ -431,7 +431,7 @@ class _WorkerDirectoryDetailPageState
                     ),
                     SizedBox(
                       width: 420,
-                      child: PremiumGlassCard(
+                      child: _SurfaceCard(
                         child: Padding(
                           padding: const EdgeInsets.all(18),
                           child: Column(
@@ -475,7 +475,7 @@ class _WorkerDirectoryDetailPageState
                 ),
                 if (_hasDocumentLinks(worker)) ...[
                   const SizedBox(height: 16),
-                  PremiumGlassCard(
+                  _SurfaceCard(
                     child: Padding(
                       padding: const EdgeInsets.all(18),
                       child: Column(
@@ -659,6 +659,29 @@ class _DetailRow extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _SurfaceCard extends StatelessWidget {
+  const _SurfaceCard({this.child});
+  final Widget? child;
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFE5E7EB)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.01),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: child,
     );
   }
 }

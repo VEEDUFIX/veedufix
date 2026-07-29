@@ -1,10 +1,13 @@
 import { type Request, type Response } from "express";
 import { type AuthenticatedRequest } from "../../middleware/auth.js";
+import { writeAuditLog } from "../../lib/audit.js";
 import {
   RefundConflictError,
   RefundNotFoundError,
   getAllRefunds,
-  retryRefund
+  retryRefund,
+  bulkRetryFailedRefunds,
+  exportRefundsCsv
 } from "./refund.service.js";
 
 function handleRefundError(response: Response, error: unknown): boolean {
@@ -54,10 +57,38 @@ export async function retryRefundHandler(request: Request, response: Response): 
 
   try {
     const result = await retryRefund(String(request.params.refundId));
+    void writeAuditLog({ adminId: authRequest.auth.userId, action: "refund.retried", targetType: "refund", targetId: String(request.params.refundId) });
     response.status(200).json({ refund: result });
   } catch (error) {
     if (!handleRefundError(response, error)) {
       throw error;
     }
+  }
+}
+
+export async function bulkRetryRefundsHandler(request: Request, response: Response): Promise<void> {
+  const authRequest = request as AuthenticatedRequest;
+  if (!authRequest.auth) {
+    response.status(401).json({ message: "Authentication required" });
+    return;
+  }
+  try {
+    const result = await bulkRetryFailedRefunds();
+    void writeAuditLog({ adminId: authRequest.auth.userId, action: "refund.bulk_retried", targetType: "refund", targetId: "bulk", metadata: { ...result } });
+    response.status(200).json(result);
+  } catch (error) {
+    if (!handleRefundError(response, error)) throw error;
+  }
+}
+
+export async function exportRefundsCsvHandler(request: Request, response: Response): Promise<void> {
+  try {
+    const status = typeof request.query.status === "string" ? request.query.status as any : undefined;
+    const csv = await exportRefundsCsv({ status });
+    response.setHeader("Content-Type", "text/csv");
+    response.setHeader("Content-Disposition", `attachment; filename="refunds-${Date.now()}.csv"`);
+    response.status(200).send(csv);
+  } catch (error) {
+    if (!handleRefundError(response, error)) throw error;
   }
 }

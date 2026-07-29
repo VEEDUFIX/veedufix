@@ -528,3 +528,73 @@ export async function getAllPayouts(filters: PayoutFilters = {}) {
 export async function listPayouts(filters: PayoutFilters = {}) {
   return getAllPayouts(filters);
 }
+
+export async function bulkRetryFailedPayouts(): Promise<{ attempted: number; succeeded: number; failed: number }> {
+  const failedPayouts = await prisma.payout.findMany({
+    where: { status: "failed" },
+    include: {
+      booking: {
+        include: {
+          worker: { include: { user: true } }
+        }
+      }
+    },
+    orderBy: { createdAt: "asc" },
+    take: 50 // process in batches to avoid overwhelming the payment gateway
+  });
+
+  let succeeded = 0;
+  let failed = 0;
+
+  for (const payout of failedPayouts) {
+    try {
+      await prisma.payout.update({
+        where: { id: payout.id },
+        data: { status: "pending", failureReason: null }
+      });
+      await attemptPayout({ ...payout, status: "pending", failureReason: null });
+
+      const result = await prisma.payout.findUnique({ where: { id: payout.id }, select: { status: true } });
+      if (result?.status === "success") {
+        succeeded++;
+      } else {
+        failed++;
+      }
+    } catch {
+      failed++;
+    }
+  }
+
+  return { attempted: failedPayouts.length, succeeded, failed };
+}
+
+export async function exportPayoutsCsv(filters: PayoutFilters = {}): Promise<string> {
+  const where: Prisma.PayoutWhereInput = {
+    ...(filters.status ? { status: filters.status } : {}),
+    ...(filters.workerId ? { workerId: filters.workerId } : {})
+  };
+
+  const items = await prisma.payout.findMany({
+    where,
+    include: {
+      booking: {
+        include: {
+          worker: { include: { user: true } }
+        }
+      }
+    },
+    orderBy: [{ createdAt: "desc" }],
+    take: 5000
+  });
+
+  const header = ["ID", "Booking Code", "Worker Name", "Amount (Rs.)", "Status", "Failure Reason", "Created At"];
+  const rows = items.map((p) => {
+    const worker = p.booking?.worker;
+    const workerName = worker?.fullName ?? worker?.user?.name ?? "Unknown";
+    const amount = (Number(p.amount ?? 0) / 100).toFixed(2);
+    const reason = (p.failureReason ?? "").replace(/"/g, "'");
+    return [p.id, p.booking?.code ?? "", workerName, amount, p.status, `"${reason}"`, p.createdAt.toISOString()].join(",");
+  });
+
+  return [header.join(","), ...rows].join("\n");
+}

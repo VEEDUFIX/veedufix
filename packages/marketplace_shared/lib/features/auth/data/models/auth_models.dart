@@ -8,6 +8,7 @@ class AuthUserModel extends AuthUser {
     required super.email,
     required super.phone,
     required super.avatarUrl,
+    super.cityId,
   });
 
   factory AuthUserModel.fromJson(Map<String, dynamic> json) {
@@ -18,6 +19,7 @@ class AuthUserModel extends AuthUser {
       email: json['email'] as String?,
       phone: json['phone'] as String?,
       avatarUrl: json['avatarUrl'] as String?,
+      cityId: json['cityId'] as String?,
     );
   }
 
@@ -28,6 +30,7 @@ class AuthUserModel extends AuthUser {
         'email': email,
         'phone': phone,
         'avatarUrl': avatarUrl,
+        'cityId': cityId,
       };
 }
 

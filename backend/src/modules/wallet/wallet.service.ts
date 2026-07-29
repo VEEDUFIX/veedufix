@@ -1,0 +1,110 @@
+import { prisma as db } from "../../lib/prisma.js";
+
+const REFERRAL_REWARD_AMOUNT = 50.0;
+
+export async function getWalletBalance(userId: string) {
+  const user = await db.user.findUnique({
+    where: { id: userId },
+    select: { walletBalance: true, referralCode: true }
+  });
+  
+  if (!user) {
+    throw new Error("User not found");
+  }
+  
+  return user;
+}
+
+export async function generateReferralCode(userId: string) {
+  const code = Math.random().toString(36).substring(2, 8).toUpperCase();
+  await db.user.update({
+    where: { id: userId },
+    data: { referralCode: code }
+  });
+  return code;
+}
+
+export async function applyReferralCode(userId: string, referralCode: string) {
+  const referrer = await db.user.findUnique({
+    where: { referralCode }
+  });
+
+  if (!referrer) {
+    throw new Error("Invalid referral code");
+  }
+
+  if (referrer.id === userId) {
+    throw new Error("Cannot use your own referral code");
+  }
+
+  // Check if user already used a referral code
+  const existing = await db.referral.findFirst({
+    where: { referredUserId: userId }
+  });
+
+  if (existing) {
+    throw new Error("Referral code already applied");
+  }
+
+  // Create the referral record
+  await db.referral.create({
+    data: {
+      referrerId: referrer.id,
+      referredUserId: userId,
+      status: "completed",
+      rewardAmount: REFERRAL_REWARD_AMOUNT
+    }
+  });
+
+  // Update referrer balance
+  const updatedReferrer = await db.user.update({
+    where: { id: referrer.id },
+    data: {
+      walletBalance: { increment: REFERRAL_REWARD_AMOUNT }
+    }
+  });
+
+  // Create transaction for referrer
+  await db.walletTransaction.create({
+    data: {
+      userId: referrer.id,
+      type: "REFERRAL_BONUS",
+      amount: REFERRAL_REWARD_AMOUNT,
+      balanceAfter: updatedReferrer.walletBalance
+    }
+  });
+
+  // Update referred user balance
+  const updatedReferred = await db.user.update({
+    where: { id: userId },
+    data: {
+      walletBalance: { increment: REFERRAL_REWARD_AMOUNT }
+    }
+  });
+
+  // Create transaction for referred
+  await db.walletTransaction.create({
+    data: {
+      userId: userId,
+      type: "REFERRAL_BONUS_RECEIVED",
+      amount: REFERRAL_REWARD_AMOUNT,
+      balanceAfter: updatedReferred.walletBalance
+    }
+  });
+
+  return { success: true, rewardAmount: REFERRAL_REWARD_AMOUNT };
+}
+
+export async function getTransactions(userId: string, workerId?: string) {
+  if (workerId) {
+    return await db.walletTransaction.findMany({
+      where: { workerId },
+      orderBy: { createdAt: "desc" }
+    });
+  } else {
+    return await db.walletTransaction.findMany({
+      where: { userId },
+      orderBy: { createdAt: "desc" }
+    });
+  }
+}

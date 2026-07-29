@@ -17,8 +17,8 @@ type RealtimeEnvelope<T extends Record<string, unknown>> = {
 
 type TrackingPayload = {
   bookingId: string;
-  status: string;
-  message: string;
+  status?: string;
+  message?: string;
   actorRole?: Role;
   bookingCode?: string;
   paymentId?: string | null;
@@ -26,6 +26,8 @@ type TrackingPayload = {
   photoUrl?: string;
   photoPublicId?: string;
   photoFolder?: string;
+  lat?: number;
+  lng?: number;
 };
 
 type NotificationPayload = {
@@ -153,7 +155,10 @@ async function authorizeConnection(
 async function bindTrackingSocket(socket: WebSocket, request: IncomingMessage) {
   const context = await authorizeConnection("tracking", request);
   const bookingId = parseBookingId(request);
-  const channel = channelForTracking(bookingId!);
+  if (!bookingId) {
+    throw new Error("Missing bookingId query parameter");
+  }
+  const channel = channelForTracking(bookingId);
   await context.subscriber.subscribe(channel);
 
   context.subscriber.on("message", (_channel, message) => {
@@ -178,13 +183,20 @@ async function bindTrackingSocket(socket: WebSocket, request: IncomingMessage) {
   socket.on("message", (raw: RawData) => {
     try {
       const text = raw.toString("utf8");
-      const data = JSON.parse(text) as { type?: string };
+      const data = JSON.parse(text) as { type?: string; payload?: any };
       if (data.type === "ping") {
         sendJson(socket, {
           type: "pong",
           channel: "tracking",
           timestamp: new Date().toISOString(),
           payload: {}
+        });
+      } else if (data.type === "location.update" && context.auth.role === "WORKER") {
+        void emitTrackingEvent({
+          bookingId,
+          actorRole: "WORKER",
+          lat: data.payload?.lat,
+          lng: data.payload?.lng,
         });
       }
     } catch {

@@ -1,4 +1,5 @@
 import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter/foundation.dart';
 
 class AppEnvironment {
   const AppEnvironment({
@@ -17,9 +18,13 @@ class AppEnvironment {
   });
 
   factory AppEnvironment.fromDartDefines() {
-    const apiBaseUrl = String.fromEnvironment(
+    final String defaultApiUrl = (!kIsWeb && defaultTargetPlatform == TargetPlatform.android)
+        ? 'http://10.0.2.2:4000/api'
+        : 'http://localhost:4000/api';
+
+    final apiBaseUrl = String.fromEnvironment(
       'API_BASE_URL',
-      defaultValue: 'http://localhost:4000/api',
+      defaultValue: defaultApiUrl,
     );
     const firebaseProjectId = String.fromEnvironment(
       'FIREBASE_PROJECT_ID',
@@ -63,7 +68,7 @@ class AppEnvironment {
       defaultValue: '',
     );
 
-    return const AppEnvironment(
+    return AppEnvironment(
       apiBaseUrl: apiBaseUrl,
       firebaseProjectId: firebaseProjectId,
       firebaseApiKey: firebaseApiKey,

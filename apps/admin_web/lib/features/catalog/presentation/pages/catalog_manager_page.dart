@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:marketplace_shared/marketplace_shared.dart';
 
 class CatalogManagerPage extends ConsumerStatefulWidget {
@@ -726,11 +727,11 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
 
     return DefaultTabController(
       length: 5,
       child: Scaffold(
+        backgroundColor: Colors.transparent,
         body: SafeArea(
           child: FutureBuilder<_CatalogSnapshot>(
             future: _snapshotFuture,
@@ -753,17 +754,20 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
                                 children: [
                                   Text(
                                     'Catalog Manager',
-                                    style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                                          fontWeight: FontWeight.w900,
-                                          letterSpacing: -0.5,
-                                        ),
+                                    style: GoogleFonts.poppins(
+                                      fontSize: 32,
+                                      fontWeight: FontWeight.w800,
+                                      color: Colors.black87,
+                                      letterSpacing: -0.5,
+                                    ),
                                   ),
-                                  const SizedBox(height: 4),
+                                  const SizedBox(height: 8),
                                   Text(
                                     'Manage categories, services, pricing, images, and bulk imports without code changes.',
-                                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                          color: colorScheme.onSurfaceVariant,
-                                        ),
+                                    style: GoogleFonts.inter(
+                                      color: Colors.black54,
+                                      fontSize: 16,
+                                    ),
                                   ),
                                 ],
                               ),
@@ -778,50 +782,6 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
                               onPressed: loading ? null : () => _createService(data ?? const _CatalogSnapshot.empty()),
                               icon: const Icon(Icons.add_rounded),
                               label: const Text('New service'),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 18),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: PremiumStatCard(
-                                label: 'Categories',
-                                value: '${data?.categories.length ?? 0}',
-                                icon: Icons.category_rounded,
-                                accentColor: const Color(0xFFC2A15E),
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: PremiumStatCard(
-                                label: 'Services',
-                                value: '${data?.services.length ?? 0}',
-                                icon: Icons.home_repair_service_rounded,
-                                accentColor: const Color(0xFF10B981),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 12),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: PremiumStatCard(
-                                label: 'Subcategories',
-                                value: '${data?.subcategories.length ?? 0}',
-                                icon: Icons.account_tree_rounded,
-                                accentColor: const Color(0xFF38BDF8),
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: PremiumStatCard(
-                                label: 'Pricing rules',
-                                value: '${data?.services.fold<int>(0, (sum, service) => sum + service.pricingRules.length) ?? 0}',
-                                icon: Icons.payments_rounded,
-                                accentColor: const Color(0xFFF59E0B),
-                              ),
                             ),
                           ],
                         ),
@@ -897,13 +857,14 @@ class _SearchBar extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface,
-        borderRadius: BorderRadius.circular(22),
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFE5E7EB)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 24,
-            offset: const Offset(0, 10),
+            color: Colors.black.withValues(alpha: 0.01),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
           ),
         ],
       ),
@@ -914,10 +875,10 @@ class _SearchBar extends StatelessWidget {
           Expanded(
             child: Text(
               'Search category, service, slug, or keyword',
-              style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    fontWeight: FontWeight.w600,
-                  ),
+              style: GoogleFonts.inter(
+                color: Colors.black54,
+                fontSize: 15,
+              ),
             ),
           ),
         ],
@@ -944,9 +905,26 @@ class _CategoriesTab extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
       children: [
-        const PremiumSectionHeader(
-          title: 'Category management',
-          subtitle: 'Create, edit, disable, and reorder main service categories.',
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Category management',
+              style: GoogleFonts.poppins(
+                fontSize: 20,
+                fontWeight: FontWeight.w700,
+                color: Colors.black87,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Create, edit, disable, and reorder main service categories.',
+              style: GoogleFonts.inter(
+                fontSize: 14,
+                color: Colors.black54,
+              ),
+            ),
+          ],
         ),
         const SizedBox(height: 12),
         Wrap(
@@ -998,9 +976,26 @@ class _SubcategoriesTab extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
       children: [
-        const PremiumSectionHeader(
-          title: 'Subcategory management',
-          subtitle: 'Assign pricing, icons, translations, and active status.',
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Subcategory management',
+              style: GoogleFonts.poppins(
+                fontSize: 20,
+                fontWeight: FontWeight.w700,
+                color: Colors.black87,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Assign pricing, icons, translations, and active status.',
+              style: GoogleFonts.inter(
+                fontSize: 14,
+                color: Colors.black54,
+              ),
+            ),
+          ],
         ),
         const SizedBox(height: 12),
         FilledButton.tonal(
@@ -1047,9 +1042,26 @@ class _ServicesTab extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
       children: [
-        const PremiumSectionHeader(
-          title: 'Service management',
-          subtitle: 'Edit descriptions, images, durations, skills, and SEO metadata.',
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Service management',
+              style: GoogleFonts.poppins(
+                fontSize: 20,
+                fontWeight: FontWeight.w700,
+                color: Colors.black87,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Edit descriptions, images, durations, skills, and SEO metadata.',
+              style: GoogleFonts.inter(
+                fontSize: 14,
+                color: Colors.black54,
+              ),
+            ),
+          ],
         ),
         const SizedBox(height: 12),
         FilledButton.tonal(
@@ -1111,9 +1123,26 @@ class _PricingTab extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
       children: [
-        const PremiumSectionHeader(
-          title: 'Pricing management',
-          subtitle: 'Maintain base, city, seasonal, promotional, and worker-level pricing.',
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Pricing management',
+              style: GoogleFonts.poppins(
+                fontSize: 20,
+                fontWeight: FontWeight.w700,
+                color: Colors.black87,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Maintain base, city, seasonal, promotional, and worker-level pricing.',
+              style: GoogleFonts.inter(
+                fontSize: 14,
+                color: Colors.black54,
+              ),
+            ),
+          ],
         ),
         const SizedBox(height: 12),
         ...snapshot.services.map(
@@ -1147,9 +1176,26 @@ class _ImportExportTab extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
       children: [
-        const PremiumSectionHeader(
-          title: 'Import and export',
-          subtitle: 'Use JSON import jobs to manage large catalog updates safely.',
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Import and export',
+              style: GoogleFonts.poppins(
+                fontSize: 20,
+                fontWeight: FontWeight.w700,
+                color: Colors.black87,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Use JSON import jobs to manage large catalog updates safely.',
+              style: GoogleFonts.inter(
+                fontSize: 14,
+                color: Colors.black54,
+              ),
+            ),
+          ],
         ),
         const SizedBox(height: 12),
         Row(
@@ -1170,8 +1216,13 @@ class _ImportExportTab extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 16),
-        const PremiumGlassCard(
-          child: Padding(
+        Container(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: const Color(0xFFE5E7EB)),
+          ),
+          child: const Padding(
             padding: EdgeInsets.all(16),
             child: Text(
               'Import accepts the hierarchical JSON structure used by the catalog seed and admin export flow. This lets the team manage 200+ services without code changes.',
@@ -1208,7 +1259,19 @@ class _CatalogCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
-      child: PremiumGlassCard(
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: const Color(0xFFE5E7EB)),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.01),
+              blurRadius: 4,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
         child: ListTile(
           contentPadding: const EdgeInsets.all(16),
           leading: Container(

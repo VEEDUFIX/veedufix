@@ -106,7 +106,8 @@ export const adminWorkersQuerySchema = z.object({
     limit: z.coerce.number().int().min(1).max(100).default(20),
     city: z.string().trim().min(1).optional(),
     categoryId: z.string().trim().min(1).optional(),
-    status: z.enum(["pending_documents", "under_review", "approved", "rejected", "suspended"]).optional()
+    status: z.enum(["pending_documents", "under_review", "approved", "rejected", "suspended"]).optional(),
+    search: z.string().trim().max(120).optional()
   }),
   params: z.object({}).optional()
 });

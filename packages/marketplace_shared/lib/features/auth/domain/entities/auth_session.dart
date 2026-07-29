@@ -18,6 +18,7 @@ class AuthUser {
     required this.email,
     required this.phone,
     required this.avatarUrl,
+    this.cityId,
   });
 
   final String id;
@@ -26,4 +27,5 @@ class AuthUser {
   final String? email;
   final String? phone;
   final String? avatarUrl;
+  final String? cityId;
 }

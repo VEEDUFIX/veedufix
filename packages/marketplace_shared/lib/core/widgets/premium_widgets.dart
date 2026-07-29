@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../ui/widgets/abzio_motion.dart';
 
 class PremiumSectionHeader extends StatelessWidget {
   const PremiumSectionHeader({
@@ -110,35 +111,28 @@ class PremiumStatCard extends StatelessWidget {
   }
 }
 
-class PremiumGlassCard extends StatelessWidget {
-  const PremiumGlassCard({
+class PremiumCard extends StatelessWidget {
+  const PremiumCard({
     super.key,
     required this.child,
+    this.onTap,
   });
 
   final Widget child;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return AbzioAnimatedCard(
+      onTap: onTap,
       decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(28),
-        gradient: LinearGradient(
-          colors: [
-            Theme.of(context).colorScheme.surface.withValues(alpha: 0.96),
-            Theme.of(context).colorScheme.surface.withValues(alpha: 0.82),
-          ],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        border: Border.all(
-          color: Theme.of(context).colorScheme.outlineVariant.withValues(alpha: 0.5),
-        ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.06),
-            blurRadius: 30,
-            offset: const Offset(0, 18),
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 24,
+            offset: const Offset(0, 10),
           ),
         ],
       ),
@@ -211,3 +205,38 @@ class PremiumEmptyState extends StatelessWidget {
   }
 }
 
+class PremiumGlassCard extends StatelessWidget {
+  const PremiumGlassCard({
+    super.key,
+    required this.child,
+    this.padding,
+    this.borderRadius,
+  });
+
+  final Widget child;
+  final EdgeInsetsGeometry? padding;
+  final double? borderRadius;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Container(
+      padding: padding,
+      decoration: BoxDecoration(
+        color: cs.surfaceContainerHighest.withValues(alpha: 0.45),
+        borderRadius: BorderRadius.circular(borderRadius ?? 24),
+        border: Border.all(
+          color: cs.outlineVariant.withValues(alpha: 0.25),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 16,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: child,
+    );
+  }
+}

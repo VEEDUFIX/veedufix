@@ -339,6 +339,8 @@ class CatalogService {
     this.requiredTools = const [],
     this.requiredDocuments = const [],
     this.pricingRules = const [],
+    this.inclusions = const [],
+    this.exclusions = const [],
   });
 
   final String id;
@@ -372,6 +374,8 @@ class CatalogService {
   final List<CatalogServiceRequirement> requiredTools;
   final List<CatalogServiceRequirement> requiredDocuments;
   final List<CatalogPriceRule> pricingRules;
+  final List<String> inclusions;
+  final List<String> exclusions;
 
   factory CatalogService.fromJson(Map<String, dynamic> json) {
     return CatalogService(
@@ -406,6 +410,8 @@ class CatalogService {
       requiredTools: _decodeList(json['requiredTools'], CatalogServiceRequirement.fromJson),
       requiredDocuments: _decodeList(json['requiredDocuments'], CatalogServiceRequirement.fromJson),
       pricingRules: _decodeList(json['pricingRules'], CatalogPriceRule.fromJson),
+      inclusions: (json['inclusions'] as List<dynamic>?)?.cast<String>() ?? const [],
+      exclusions: (json['exclusions'] as List<dynamic>?)?.cast<String>() ?? const [],
     );
   }
 
@@ -442,6 +448,8 @@ class CatalogService {
       'requiredTools': requiredTools.map((item) => item.toJson()).toList(growable: false),
       'requiredDocuments': requiredDocuments.map((item) => item.toJson()).toList(growable: false),
       'pricingRules': pricingRules.map((item) => item.toJson()).toList(growable: false),
+      'inclusions': inclusions,
+      'exclusions': exclusions,
     };
   }
 }

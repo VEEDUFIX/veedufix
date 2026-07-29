@@ -12,9 +12,15 @@ import '../features/worker/presentation/pages/job_execution_page.dart';
 import '../features/worker/presentation/pages/worker_dashboard_page.dart';
 import '../features/worker/presentation/pages/jobs_page.dart';
 import '../features/worker/presentation/pages/earnings_page.dart';
+import '../features/worker/presentation/pages/schedule_page.dart';
 import '../features/profile/presentation/pages/worker_availability_page.dart';
 import '../features/worker/presentation/providers/job_execution_provider.dart';
 import '../features/profile/presentation/pages/profile_page.dart';
+import '../features/profile/presentation/pages/settings_page.dart';
+import '../features/profile/presentation/pages/notifications_page.dart';
+import '../features/profile/presentation/pages/support_page.dart';
+import '../features/profile/presentation/pages/reviews_page.dart';
+import '../features/chat/presentation/pages/chat_page.dart';
 import '../features/shell/presentation/pages/app_shell_page.dart';
 
 final routerProvider = Provider<GoRouter>((ref) {
@@ -106,12 +112,39 @@ final routerProvider = Provider<GoRouter>((ref) {
           return const _MissingJobExecutionPage();
         },
       ),
+      GoRoute(
+        path: '/settings',
+        builder: (context, state) => const SettingsPage(),
+      ),
+      GoRoute(
+        path: '/notifications',
+        builder: (context, state) => const NotificationsPage(),
+      ),
+      GoRoute(
+        path: '/support',
+        builder: (context, state) => const SupportPage(),
+      ),
+      GoRoute(
+        path: '/reviews',
+        builder: (context, state) => const ReviewsPage(),
+      ),
+      GoRoute(
+        path: '/chat',
+        builder: (context, state) {
+          final bookingId = state.uri.queryParameters['bookingId'] ?? '';
+          return WorkerChatPage(bookingId: bookingId);
+        },
+      ),
       ShellRoute(
         builder: (context, state, child) => AppShellPage(child: child),
         routes: [
           GoRoute(
             path: '/worker',
             builder: (context, state) => const WorkerDashboardPage(),
+          ),
+          GoRoute(
+            path: '/schedule',
+            builder: (context, state) => const SchedulePage(),
           ),
           GoRoute(
             path: '/jobs',

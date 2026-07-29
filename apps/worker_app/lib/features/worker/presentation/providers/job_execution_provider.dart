@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math';
 
 import 'package:dio/dio.dart';
@@ -255,9 +256,13 @@ final jobExecutionProvider =
 });
 
 class JobExecutionNotifier extends StateNotifier<JobExecutionState> {
-  JobExecutionNotifier(this.ref) : super(const JobExecutionState());
+  JobExecutionNotifier(this.ref) : super(const JobExecutionState()) {
+    ref.onDispose(_cancelTracking);
+  }
 
   final Ref ref;
+  StreamSubscription<Position>? _positionStream;
+
   final ImagePicker _imagePicker = ImagePicker();
   final Dio _uploadDio = Dio(
     BaseOptions(
@@ -279,6 +284,46 @@ class JobExecutionNotifier extends StateNotifier<JobExecutionState> {
 
   void start(JobExecutionBooking booking) {
     state = JobExecutionState(booking: booking);
+    _startLiveTracking(booking.bookingId);
+  }
+
+  Future<void> _startLiveTracking(String bookingId) async {
+    final realtime = ref.read(realtimeServiceProvider);
+    await realtime.connectTracking(bookingId);
+
+    // Stop existing streams if any
+    _cancelTracking();
+
+    final hasPermission = await _ensureLocationPermission();
+    if (!hasPermission) return;
+
+    _positionStream = Geolocator.getPositionStream(
+      locationSettings: const LocationSettings(
+        accuracy: LocationAccuracy.high,
+        distanceFilter: 10, // Update every 10 meters
+      ),
+    ).listen((position) {
+      if (state.currentStep == 1) { // Only send when en-route (Step 1)
+        realtime.sendLocationUpdate(position.latitude, position.longitude);
+      }
+    });
+  }
+
+  void _cancelTracking() {
+    _positionStream?.cancel();
+    _positionStream = null;
+    ref.read(realtimeServiceProvider).disconnectTracking();
+  }
+
+  Future<bool> _ensureLocationPermission() async {
+    final serviceEnabled = await Geolocator.isLocationServiceEnabled();
+    if (!serviceEnabled) return false;
+
+    var permission = await Geolocator.checkPermission();
+    if (permission == LocationPermission.denied) {
+      permission = await Geolocator.requestPermission();
+    }
+    return permission == LocationPermission.whileInUse || permission == LocationPermission.always;
   }
 
   void clearStepError(JobExecutionStep step) {
@@ -355,6 +400,7 @@ class JobExecutionNotifier extends StateNotifier<JobExecutionState> {
         currentPosition: position,
         currentStep: 2,
       );
+      _cancelTracking(); // Stop live location once arrived
     } on JobExecutionStepError catch (error) {
       _setStepError(step, error);
     } catch (error) {

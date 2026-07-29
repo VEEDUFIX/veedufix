@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -18,7 +20,9 @@ class _WorkerDirectoryPageState extends ConsumerState<WorkerDirectoryPage> {
   late Future<WorkerDirectoryQueueResponse> _workersFuture;
   late Future<List<CatalogCategory>> _categoriesFuture;
 
+  final TextEditingController _searchController = TextEditingController();
   final TextEditingController _cityController = TextEditingController();
+  Timer? _searchDebounce;
   String? _selectedCategoryId;
   String _selectedStatus = 'all';
   int _page = 1;
@@ -34,6 +38,8 @@ class _WorkerDirectoryPageState extends ConsumerState<WorkerDirectoryPage> {
 
   @override
   void dispose() {
+    _searchDebounce?.cancel();
+    _searchController.dispose();
     _cityController.dispose();
     super.dispose();
   }
@@ -45,6 +51,7 @@ class _WorkerDirectoryPageState extends ConsumerState<WorkerDirectoryPage> {
       city: _cityController.text,
       categoryId: _selectedCategoryId,
       status: _selectedStatus,
+      search: _searchController.text,
     );
   }
 
@@ -65,6 +72,7 @@ class _WorkerDirectoryPageState extends ConsumerState<WorkerDirectoryPage> {
 
   Future<void> _resetFilters() async {
     setState(() {
+      _searchController.clear();
       _cityController.clear();
       _selectedCategoryId = null;
       _selectedStatus = 'all';
@@ -179,7 +187,7 @@ class _WorkerDirectoryPageState extends ConsumerState<WorkerDirectoryPage> {
                   child: ListView(
                     padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
                     children: [
-                    PremiumGlassCard(
+                    _SurfaceCard(
                       child: Padding(
                         padding: const EdgeInsets.all(20),
                         child: Column(
@@ -241,7 +249,7 @@ class _WorkerDirectoryPageState extends ConsumerState<WorkerDirectoryPage> {
                       ),
                     ),
                     const SizedBox(height: 16),
-                    PremiumGlassCard(
+                    _SurfaceCard(
                       child: Padding(
                         padding: const EdgeInsets.all(16),
                         child: Column(
@@ -255,6 +263,28 @@ class _WorkerDirectoryPageState extends ConsumerState<WorkerDirectoryPage> {
                                   ?.copyWith(
                                     fontWeight: FontWeight.w800,
                                   ),
+                            ),
+                            const SizedBox(height: 12),
+                            TextField(
+                              controller: _searchController,
+                              decoration: const InputDecoration(
+                                labelText: 'Search by name, email or phone',
+                                prefixIcon: Icon(Icons.search_rounded),
+                                hintText: 'e.g. Ravi Kumar or 9876543210',
+                              ),
+                              textInputAction: TextInputAction.search,
+                              onChanged: (value) {
+                                _searchDebounce?.cancel();
+                                _searchDebounce = Timer(
+                                  const Duration(milliseconds: 500),
+                                  () {
+                                    setState(() {
+                                      _page = 1;
+                                      _workersFuture = _loadWorkers();
+                                    });
+                                  },
+                                );
+                              },
                             ),
                             const SizedBox(height: 12),
                             TextField(
@@ -333,7 +363,7 @@ class _WorkerDirectoryPageState extends ConsumerState<WorkerDirectoryPage> {
                       ),
                     ),
                     const SizedBox(height: 16),
-                    PremiumGlassCard(
+                    _SurfaceCard(
                       child: Padding(
                         padding: const EdgeInsets.all(12),
                         child: Column(
@@ -368,48 +398,62 @@ class _WorkerDirectoryPageState extends ConsumerState<WorkerDirectoryPage> {
                                 ],
                               ),
                             ),
-                            SingleChildScrollView(
-                              scrollDirection: Axis.horizontal,
-                              child: DataTable(
-                                headingRowColor: WidgetStatePropertyAll(
-                                  Theme.of(context)
-                                      .colorScheme
-                                      .primary
-                                      .withValues(alpha: 0.06),
-                                ),
-                                dataRowMinHeight: 64,
-                                dataRowMaxHeight: 84,
-                                columns: const [
-                                  DataColumn(label: Text('Worker')),
-                                  DataColumn(label: Text('City')),
-                                  DataColumn(label: Text('Status')),
-                                  DataColumn(label: Text('Rating')),
-                                  DataColumn(label: Text('Completed')),
-                                  DataColumn(label: Text('No-shows')),
+                            Container(
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(16),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withValues(alpha: 0.04),
+                                    blurRadius: 16,
+                                    offset: const Offset(0, 4),
+                                  ),
                                 ],
-                                rows: queue.items.map((profile) {
-                                  return DataRow(
-                                    onSelectChanged: (_) =>
-                                        _openWorker(profile),
-                                    cells: [
-                                      DataCell(
-                                        _WorkerNameCell(
-                                          profile: profile,
+                              ),
+                              clipBehavior: Clip.antiAlias,
+                              child: LayoutBuilder(
+                                builder: (context, constraints) {
+                                  return SingleChildScrollView(
+                                    scrollDirection: Axis.horizontal,
+                                    child: SizedBox(
+                                      width: constraints.maxWidth > 800 ? constraints.maxWidth : 800,
+                                      child: DataTable(
+                                        headingRowColor: const WidgetStatePropertyAll(Color(0xFFF8FAFC)),
+                                        headingTextStyle: const TextStyle(
+                                          fontWeight: FontWeight.w700,
+                                          fontSize: 12,
+                                          color: Color(0xFF64748B),
+                                          letterSpacing: 0.8,
                                         ),
+                                        dataRowMinHeight: 72,
+                                        dataRowMaxHeight: 72,
+                                        dividerThickness: 1,
+                                        horizontalMargin: 24,
+                                        columns: const [
+                                          DataColumn(label: Text('WORKER')),
+                                          DataColumn(label: Text('CITY')),
+                                          DataColumn(label: Text('STATUS')),
+                                          DataColumn(label: Text('RATING')),
+                                          DataColumn(label: Text('COMPLETED')),
+                                          DataColumn(label: Text('NO-SHOWS')),
+                                        ],
+                                        rows: queue.items.map((profile) {
+                                          return DataRow(
+                                            onSelectChanged: (_) => _openWorker(profile),
+                                            cells: [
+                                              DataCell(_WorkerNameCell(profile: profile)),
+                                              DataCell(Text(profile.cityLabel)),
+                                              DataCell(_GlowingStatusBadge(status: profile.onboardingStatus)),
+                                              DataCell(Text(profile.ratingAvg.toStringAsFixed(1))),
+                                              DataCell(Text('${profile.jobsCompletedCount}')),
+                                              DataCell(Text('${profile.noShowCount}')),
+                                            ],
+                                          );
+                                        }).toList(growable: false),
                                       ),
-                                      DataCell(Text(profile.cityLabel)),
-                                      DataCell(
-                                        _StatusBadge(
-                                            status: profile.onboardingStatus),
-                                      ),
-                                      DataCell(Text(profile.ratingAvg
-                                          .toStringAsFixed(1))),
-                                      DataCell(Text(
-                                          '${profile.jobsCompletedCount}')),
-                                      DataCell(Text('${profile.noShowCount}')),
-                                    ],
+                                    ),
                                   );
-                                }).toList(growable: false),
+                                },
                               ),
                             ),
                             if (queue.totalPages > 1) ...[
@@ -538,34 +582,82 @@ class _WorkerNameCell extends StatelessWidget {
   }
 }
 
-class _StatusBadge extends StatelessWidget {
-  const _StatusBadge({required this.status});
+class _GlowingStatusBadge extends StatelessWidget {
+  const _GlowingStatusBadge({required this.status});
 
   final String status;
 
   @override
   Widget build(BuildContext context) {
     final normalized = status.toLowerCase();
-    final colors = switch (normalized) {
-      'approved' => (const Color(0xFF0F766E), const Color(0xFFCCFBF1)),
-      'suspended' => (const Color(0xFFB45309), const Color(0xFFFDE68A)),
-      'rejected' => (const Color(0xFFB91C1C), const Color(0xFFFECACA)),
-      _ => (const Color(0xFF334155), const Color(0xFFE2E8F0)),
+    final (color, bgColor) = switch (normalized) {
+      'approved' || 'success' || 'processed' => (const Color(0xFF10B981), const Color(0xFFD1FAE5)),
+      'suspended' || 'pending' || 'under_review' => (const Color(0xFFF59E0B), const Color(0xFFFEF3C7)),
+      'rejected' || 'failed' => (const Color(0xFFEF4444), const Color(0xFFFEE2E2)),
+      'disputed' => (const Color(0xFF8B5CF6), const Color(0xFFEDE9FE)),
+      _ => (const Color(0xFF64748B), const Color(0xFFF1F5F9)),
     };
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color: colors.$2,
+        color: bgColor,
         borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
       ),
-      child: Text(
-        normalized.replaceAll('_', ' '),
-        style: TextStyle(
-          color: colors.$1,
-          fontWeight: FontWeight.w700,
-        ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 6,
+            height: 6,
+            decoration: BoxDecoration(
+              color: color,
+              shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(
+                  color: color.withValues(alpha: 0.6),
+                  blurRadius: 4,
+                  spreadRadius: 1,
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 6),
+          Text(
+            normalized.replaceAll('_', ' ').toUpperCase(),
+            style: TextStyle(
+              color: color,
+              fontWeight: FontWeight.w800,
+              fontSize: 11,
+              letterSpacing: 0.4,
+            ),
+          ),
+        ],
       ),
+    );
+  }
+}
+
+class _SurfaceCard extends StatelessWidget {
+  const _SurfaceCard({required this.child});
+  final Widget child;
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFE5E7EB)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.01),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: child,
     );
   }
 }

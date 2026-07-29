@@ -69,4 +69,14 @@ class ApiClient {
 
   final SecureStore _secureStore;
   final Dio dio;
+
+  Future<Map<String, dynamic>> get(String path, {Map<String, dynamic>? queryParameters, Options? options}) async {
+    final res = await dio.get<Map<String, dynamic>>(path, queryParameters: queryParameters, options: options);
+    return res.data ?? <String, dynamic>{};
+  }
+
+  Future<Map<String, dynamic>> post(String path, {dynamic data, Map<String, dynamic>? queryParameters, Options? options}) async {
+    final res = await dio.post<Map<String, dynamic>>(path, data: data, queryParameters: queryParameters, options: options);
+    return res.data ?? <String, dynamic>{};
+  }
 }

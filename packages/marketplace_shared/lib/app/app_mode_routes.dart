@@ -61,6 +61,15 @@ Set<String> allowedRoutesForMode(AppMode mode) {
   return switch (mode) {
     AppMode.customer => const {
         '/app',
+        '/service',
+        '/professional',
+        '/checkout',
+        '/tracking',
+        '/chat',
+        '/search',
+        '/notifications',
+        '/referral',
+        '/support',
         '/bookings',
         '/arrival-otp',
         '/completion-otp',

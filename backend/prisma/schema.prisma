@@ -102,6 +102,7 @@ model User {
   emailVerifiedAt  DateTime?
   phoneVerifiedAt   DateTime?
   isActive         Boolean  @default(true)
+  referralCode     String?  @unique
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
   cityId           String?
@@ -118,6 +119,8 @@ model User {
   walletTransactions WalletTransaction[]
   supportTickets   SupportTicket[]
   documents        Document[]
+  referralsMade    Referral[] @relation("Referrer")
+  referredBy       Referral?  @relation("ReferredUser")
 }
 
 model WorkerProfile {
@@ -256,6 +259,8 @@ model Service {
   rating                Decimal               @default(0.0) @db.Decimal(3, 2)
   reviewCount           Int                   @default(0)
   cancellationPolicy    String?
+  inclusions            String[]
+  exclusions            String[]
   seoTitle              String?
   seoDescription        String?
   seoKeywords           String?
@@ -359,6 +364,7 @@ model Booking {
   disputes        Dispute[]
   dispatchOffers  DispatchOffer[]
   refunds         Refund[]
+  chatRoom        ChatRoom?
 
   @@index([customerId, status])
   @@index([workerId, status])
@@ -887,4 +893,55 @@ model BookingTimelineEvent {
   title       String
   description String?
   createdAt   DateTime @default(now())
+}
+
+model AdminAuditLog {
+  id          String   @id @default(cuid())
+  adminId     String
+  action      String
+  targetType  String
+  targetId    String
+  note        String?
+  metadata    Json?
+  createdAt   DateTime @default(now())
+
+  @@index([adminId, createdAt])
+  @@index([targetType, targetId, createdAt])
+  @@index([action, createdAt])
+}
+
+model ChatRoom {
+  id        String    @id @default(cuid())
+  bookingId String    @unique
+  booking   Booking   @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  messages  Message[]
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+}
+
+model Message {
+  id          String   @id @default(cuid())
+  chatRoomId  String
+  chatRoom    ChatRoom @relation(fields: [chatRoomId], references: [id], onDelete: Cascade)
+  senderId    String
+  senderRole  UserRole
+  content     String
+  isRead      Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  @@index([chatRoomId, createdAt])
+}
+
+model Referral {
+  id              String   @id @default(cuid())
+  referrerId      String
+  referrer        User     @relation("Referrer", fields: [referrerId], references: [id], onDelete: Cascade)
+  referredUserId  String   @unique
+  referredUser    User     @relation("ReferredUser", fields: [referredUserId], references: [id], onDelete: Cascade)
+  status          String   @default("pending") // pending, completed
+  rewardAmount    Decimal  @default(0.0) @db.Decimal(12, 2)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([referrerId, status])
 }

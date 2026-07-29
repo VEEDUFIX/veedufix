@@ -12,7 +12,7 @@ class AppShellPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final location = GoRouterState.of(context).matchedLocation;
-    final destinations = const ['/worker', '/jobs', '/earnings', '/profile'];
+    final destinations = const ['/worker', '/schedule', '/jobs', '/earnings', '/profile'];
 
     final matchedIndex = destinations.indexWhere((path) => path == location);
     final index = matchedIndex < 0 ? 0 : matchedIndex;
@@ -24,23 +24,38 @@ class AppShellPage extends StatelessWidget {
         onDestinationSelected: (selected) {
           context.go(destinations[selected]);
         },
-        destinations: const [
-          NavigationDestination(
-            icon: Icon(Icons.work_outline_rounded),
-            selectedIcon: Icon(Icons.work_rounded),
+        destinations: [
+          const NavigationDestination(
+            icon: Badge(
+              label: Text('2'),
+              child: Icon(Icons.work_outline_rounded),
+            ),
+            selectedIcon: Badge(
+              label: Text('2'),
+              child: Icon(Icons.work_rounded),
+            ),
             label: 'Dashboard',
           ),
-          NavigationDestination(
-            icon: Icon(Icons.assignment_outlined),
-            selectedIcon: Icon(Icons.assignment_rounded),
+          const NavigationDestination(
+            icon: Icon(Icons.calendar_today_outlined),
+            selectedIcon: Icon(Icons.calendar_month_rounded),
+            label: 'Schedule',
+          ),
+          const NavigationDestination(
+            icon: Badge(
+              child: Icon(Icons.assignment_outlined),
+            ),
+            selectedIcon: Badge(
+              child: Icon(Icons.assignment_rounded),
+            ),
             label: 'Jobs',
           ),
-          NavigationDestination(
+          const NavigationDestination(
             icon: Icon(Icons.payments_outlined),
             selectedIcon: Icon(Icons.payments_rounded),
             label: 'Earnings',
           ),
-          NavigationDestination(
+          const NavigationDestination(
             icon: Icon(Icons.person_outline_rounded),
             selectedIcon: Icon(Icons.person_rounded),
             label: 'Profile',

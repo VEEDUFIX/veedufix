@@ -1,4 +1,5 @@
 import { Request, Response } from "express";
+import { writeAuditLog } from "../../lib/audit.js";
 import {
   BookingNotFoundError,
   DisputeAccessError,
@@ -106,13 +107,22 @@ export async function resolveDisputeHandler(request: Request, response: Response
   }
 
   try {
+    const disputeId = String(request.params.disputeId);
+    const adminId = authRequest.auth.userId;
     const result = await disputeService.resolveDispute(
-      String(request.params.disputeId),
-      authRequest.auth.userId,
+      disputeId,
+      adminId,
       request.body.resolution,
       request.body.note
     );
-
+    void writeAuditLog({
+      adminId,
+      action: "dispute.resolved",
+      targetType: "dispute",
+      targetId: disputeId,
+      note: request.body.note,
+      metadata: { resolution: request.body.resolution }
+    });
     response.status(200).json(result);
   } catch (error) {
     if (!handleDisputeError(response, error)) {

@@ -1,6 +1,7 @@
 import { type NextFunction, type Response } from "express";
 import { type AuthenticatedRequest } from "../../middleware/auth.js";
-import { getAllPayouts, retryPayout } from "./payout.service.js";
+import { getAllPayouts, retryPayout, bulkRetryFailedPayouts, exportPayoutsCsv } from "./payout.service.js";
+import { writeAuditLog } from "../../lib/audit.js";
 
 function sendError(response: Response, error: unknown): void {
   if (error instanceof Error) {
@@ -40,8 +41,41 @@ export async function retryPayoutHandler(
   _next: NextFunction
 ) {
   try {
+    const adminId = request.auth!.userId;
     const result = await retryPayout(String(request.params.payoutId));
+    void writeAuditLog({ adminId, action: "payout.retried", targetType: "payout", targetId: String(request.params.payoutId) });
     response.status(200).json({ payout: result });
+  } catch (error) {
+    sendError(response, error);
+  }
+}
+
+export async function bulkRetryPayoutsHandler(
+  request: AuthenticatedRequest,
+  response: Response,
+  _next: NextFunction
+) {
+  try {
+    const adminId = request.auth!.userId;
+    const result = await bulkRetryFailedPayouts();
+    void writeAuditLog({ adminId, action: "payout.bulk_retried", targetType: "payout", targetId: "bulk", metadata: { ...result } });
+    response.status(200).json(result);
+  } catch (error) {
+    sendError(response, error);
+  }
+}
+
+export async function exportPayoutsCsvHandler(
+  request: AuthenticatedRequest,
+  response: Response,
+  _next: NextFunction
+) {
+  try {
+    const status = typeof request.query.status === "string" ? request.query.status as any : undefined;
+    const csv = await exportPayoutsCsv({ status });
+    response.setHeader("Content-Type", "text/csv");
+    response.setHeader("Content-Disposition", `attachment; filename="payouts-${Date.now()}.csv"`);
+    response.status(200).send(csv);
   } catch (error) {
     sendError(response, error);
   }

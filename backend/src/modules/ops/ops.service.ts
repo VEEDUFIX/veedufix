@@ -18,6 +18,10 @@ export type OpsSummaryCounts = {
   failedPayoutsCount: number;
   failedRefundsCount: number;
   pendingWorkerReviewsCount: number;
+  totalRevenue: number;
+  totalBookings: number;
+  completedBookings: number;
+  todaysNewWorkers: number;
 };
 
 export type OpsLiveJobChecklistItem = {
@@ -565,6 +569,10 @@ export async function getOpsOverview(): Promise<OpsOverview> {
   const [
     activeJobsCount,
     dispatchFailuresCount,
+    totalRevenueQuery,
+    totalBookings,
+    completedBookings,
+    todaysNewWorkers,
     openDisputesCount,
     failedPayoutsCount,
     failedRefundsCount,
@@ -580,6 +588,21 @@ export async function getOpsOverview(): Promise<OpsOverview> {
     prisma.booking.count({
       where: {
         status: BookingStatus.DISPATCH_FAILED
+      }
+    }),
+    prisma.booking.aggregate({
+      where: { status: BookingStatus.COMPLETED },
+      _sum: { totalAmount: true }
+    }),
+    prisma.booking.count(),
+    prisma.booking.count({
+      where: { status: BookingStatus.COMPLETED }
+    }),
+    prisma.workerProfile.count({
+      where: {
+        createdAt: {
+          gte: new Date(new Date().setHours(0, 0, 0, 0))
+        }
       }
     }),
     prisma.dispute.count({
@@ -599,6 +622,7 @@ export async function getOpsOverview(): Promise<OpsOverview> {
     }),
     prisma.workerProfile.count({
       where: {
+        verificationStatus: "PENDING",
         onboardingStatus: "under_review"
       }
     }),
@@ -670,7 +694,11 @@ export async function getOpsOverview(): Promise<OpsOverview> {
       openDisputesCount,
       failedPayoutsCount,
       failedRefundsCount,
-      pendingWorkerReviewsCount
+      pendingWorkerReviewsCount,
+      totalRevenue: toNumber(totalRevenueQuery?._sum?.totalAmount),
+      totalBookings: totalBookings,
+      completedBookings: completedBookings,
+      todaysNewWorkers: todaysNewWorkers,
     },
     liveJobs: liveBookings.map(mapLiveJob),
     alerts: alertPage.items

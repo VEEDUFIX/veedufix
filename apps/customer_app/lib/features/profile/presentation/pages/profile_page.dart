@@ -42,7 +42,7 @@ class ProfilePage extends ConsumerWidget {
             ],
           ),
           const SizedBox(height: 18),
-          PremiumGlassCard(
+          PremiumCard(
             child: Padding(
               padding: const EdgeInsets.all(18),
               child: Row(
@@ -106,10 +106,38 @@ class ProfilePage extends ConsumerWidget {
             subtitle: 'Home, work, and alternate locations',
             onTap: () => context.push('/addresses'),
           ),
+          _ProfileTile(
+            icon: Icons.notifications_outlined,
+            title: 'Notifications',
+            subtitle: 'Booking alerts and promotional offers',
+            onTap: () => context.push('/notifications'),
+          ),
+          _ProfileTile(
+            icon: Icons.account_balance_wallet_outlined,
+            title: 'My Wallet',
+            subtitle: 'View your credits, debits, and balance',
+            onTap: () => context.push('/wallet'),
+          ),
+          _ProfileTile(
+            icon: Icons.card_giftcard_rounded,
+            title: 'Wallet & Referrals',
+            subtitle: 'Credits, rewards, and referral code',
+            onTap: () => context.push('/referral'),
+          ),
           const _ProfileTile(icon: Icons.payment_rounded, title: 'Payments', subtitle: 'Cards, UPI, and payment history'),
           const _ProfileTile(icon: Icons.bookmark_outline_rounded, title: 'Saved services', subtitle: 'Repeat your most used bookings'),
-          const _ProfileTile(icon: Icons.support_agent_rounded, title: 'Help & support', subtitle: 'Raise a query or track a request'),
-          const _ProfileTile(icon: Icons.privacy_tip_outlined, title: 'Privacy', subtitle: 'Permissions, security, and account safety'),
+          _ProfileTile(
+            icon: Icons.support_agent_rounded,
+            title: 'Help & support',
+            subtitle: 'Raise a query or track a request',
+            onTap: () => context.push('/support'),
+          ),
+          _ProfileTile(
+            icon: Icons.settings_rounded, 
+            title: 'Settings', 
+            subtitle: 'App preferences, notifications, and privacy',
+            onTap: () => context.push('/settings'),
+          ),
           const SizedBox(height: 18),
           const PremiumSectionHeader(
             title: 'Preferences',
@@ -145,7 +173,7 @@ class _CompletionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return PremiumGlassCard(
+    return PremiumCard(
       child: Padding(
         padding: const EdgeInsets.all(18),
         child: Row(
@@ -207,25 +235,28 @@ class _ProfileTile extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
-      child: PremiumGlassCard(
-        child: ListTile(
-          contentPadding: const EdgeInsets.all(16),
-          leading: Container(
-            height: 48,
-            width: 48,
-            decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.75),
-              borderRadius: BorderRadius.circular(16),
+      child: TapScale(
+        onTap: onTap ?? () {},
+        child: PremiumCard(
+          child: ListTile(
+            contentPadding: const EdgeInsets.all(16),
+            leading: Container(
+              height: 48,
+              width: 48,
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.75),
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Icon(icon, color: Theme.of(context).colorScheme.primary),
             ),
-            child: Icon(icon, color: Theme.of(context).colorScheme.primary),
+            title: Text(
+              title,
+              style: const TextStyle(fontWeight: FontWeight.w800),
+            ),
+            subtitle: Text(subtitle),
+            trailing: const Icon(Icons.chevron_right_rounded),
+            onTap: onTap,
           ),
-          title: Text(
-            title,
-            style: const TextStyle(fontWeight: FontWeight.w800),
-          ),
-          subtitle: Text(subtitle),
-          trailing: const Icon(Icons.chevron_right_rounded),
-          onTap: onTap,
         ),
       ),
     );
@@ -245,7 +276,7 @@ class _PreferenceRow extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
-      child: PremiumGlassCard(
+      child: PremiumCard(
         child: ListTile(
           contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
           title: Text(

@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-const Color kAdminCanvas = Color(0xFFF9F5EC);
-const Color kAdminCanvasAlt = Color(0xFFFFFCF8);
-const Color kAdminInk = Color(0xFF13110F);
-const Color kAdminMuted = Color(0xFF6B6256);
-const Color kAdminBorder = Color(0xFFE5D8C6);
+const Color kAdminCanvas = Colors.transparent;
+const Color kAdminCanvasAlt = Colors.transparent;
+const Color kAdminInk = Colors.black87;
+const Color kAdminMuted = Colors.black54;
+const Color kAdminBorder = Color(0xFFE5E7EB);
 
 class AdminPageShell extends StatelessWidget {
   const AdminPageShell({
@@ -22,26 +22,21 @@ class AdminPageShell extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: kAdminCanvas,
+      backgroundColor: Colors.transparent,
       appBar: AppBar(
-        backgroundColor: kAdminCanvas,
+        backgroundColor: Colors.transparent,
         surfaceTintColor: Colors.transparent,
         title: Text(
           title,
-          style: GoogleFonts.poppins(fontWeight: FontWeight.w800),
-        ),
-        actions: actions,
-      ),
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            colors: [kAdminCanvas, kAdminCanvasAlt],
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
+          style: GoogleFonts.poppins(
+            fontWeight: FontWeight.w800,
+            color: Colors.black87,
           ),
         ),
-        child: child,
+        actions: actions,
+        iconTheme: const IconThemeData(color: Colors.black87),
       ),
+      body: child,
     );
   }
 }
@@ -53,14 +48,19 @@ class AdminSurfacePanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      elevation: 0,
-      color: Colors.white,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(18),
-        side: const BorderSide(color: kAdminBorder),
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: kAdminBorder),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.01),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
-      shadowColor: Colors.black.withValues(alpha: 0.06),
       child: child,
     );
   }

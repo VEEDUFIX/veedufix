@@ -244,6 +244,7 @@ class WorkerDirectoryApi {
     String? city,
     String? categoryId,
     String? status,
+    String? search,
   }) async {
     final response = await _dio.get<Map<String, dynamic>>(
       '/admin/workers',
@@ -255,6 +256,7 @@ class WorkerDirectoryApi {
           'categoryId': categoryId.trim(),
         if (status != null && status.trim().isNotEmpty && status != 'all')
           'status': status.trim(),
+        if (search != null && search.trim().isNotEmpty) 'search': search.trim(),
       },
     );
 

@@ -182,6 +182,50 @@ class FinanceApi {
   Future<void> retryRefund(String refundId) async {
     await _dio.post('/admin/refunds/$refundId/retry', data: const {});
   }
+
+  Future<Map<String, int>> bulkRetryPayouts() async {
+    final response = await _dio.post<Map<String, dynamic>>(
+      '/admin/payouts/bulk-retry',
+      data: const {},
+    );
+    final data = response.data ?? const <String, dynamic>{};
+    return {
+      'attempted': (data['attempted'] as num?)?.toInt() ?? 0,
+      'succeeded': (data['succeeded'] as num?)?.toInt() ?? 0,
+      'failed': (data['failed'] as num?)?.toInt() ?? 0,
+    };
+  }
+
+  Future<Map<String, int>> bulkRetryRefunds() async {
+    final response = await _dio.post<Map<String, dynamic>>(
+      '/admin/refunds/bulk-retry',
+      data: const {},
+    );
+    final data = response.data ?? const <String, dynamic>{};
+    return {
+      'attempted': (data['attempted'] as num?)?.toInt() ?? 0,
+      'succeeded': (data['succeeded'] as num?)?.toInt() ?? 0,
+      'failed': (data['failed'] as num?)?.toInt() ?? 0,
+    };
+  }
+
+  /// Returns the full URL to download a CSV of payouts.
+  /// The admin panel opens this URL in a new tab via url_launcher.
+  String payoutsCsvUrl({String? status}) {
+    final base = _dio.options.baseUrl.replaceAll(RegExp(r'/$'), '');
+    final query = status != null && status.isNotEmpty && status != 'all'
+        ? '?status=$status'
+        : '';
+    return '$base/api/admin/payouts/export/csv$query';
+  }
+
+  String refundsCsvUrl({String? status}) {
+    final base = _dio.options.baseUrl.replaceAll(RegExp(r'/$'), '');
+    final query = status != null && status.isNotEmpty && status != 'all'
+        ? '?status=$status'
+        : '';
+    return '$base/api/admin/refunds/export/csv$query';
+  }
 }
 
 String? _resolveWorkerName(Map<String, dynamic> worker) {

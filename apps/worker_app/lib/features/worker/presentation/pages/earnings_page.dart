@@ -6,6 +6,8 @@ import 'package:intl/intl.dart';
 import 'package:marketplace_shared/marketplace_shared.dart';
 
 import '../providers/earnings_provider.dart';
+import '../../../../core/widgets/liquid_refresh.dart';
+import '../../../../core/widgets/metallic_card.dart';
 
 class EarningsPage extends ConsumerWidget {
   const EarningsPage({super.key});
@@ -15,7 +17,7 @@ class EarningsPage extends ConsumerWidget {
     final earningsAsync = ref.watch(workerEarningsPageProvider);
 
     return Scaffold(
-      body: RefreshIndicator(
+      body: LiquidRefresh(
         onRefresh: () async {
           ref.invalidate(workerEarningsPageProvider);
           await ref.read(workerEarningsPageProvider.future);
@@ -155,6 +157,31 @@ class EarningsPage extends ConsumerWidget {
                 ),
               ),
               const SizedBox(height: 18),
+              TapScale(
+                onTap: () async {
+                  try {
+                    await ref.read(apiClientProvider).dio.post('/wallet/payout', data: {'amount': 100});
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Payout requested successfully!')),
+                      );
+                    }
+                  } catch (e) {
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Failed to request payout')),
+                      );
+                    }
+                  }
+                },
+                child: const MetallicCard(
+                  title: 'Instant Cashout',
+                  subtitle: 'Powered by RazorpayX',
+                  icon: Icons.account_balance_wallet_rounded,
+                  baseColor: Color(0xFF14B8A6),
+                ),
+              ),
+              const SizedBox(height: 24),
               const PremiumSectionHeader(
                 title: 'Transaction history',
                 subtitle: 'Recent settlements and payment updates.',

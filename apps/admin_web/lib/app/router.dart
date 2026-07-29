@@ -16,6 +16,7 @@ import '../features/ops/presentation/pages/dispute_detail_page.dart';
 import '../features/ops/presentation/pages/disputes_queue_page.dart';
 import '../features/ops/presentation/pages/ops_live_jobs_page.dart';
 import '../features/ops/presentation/pages/ops_overview_page.dart';
+import '../features/ops/presentation/pages/god_mode_map_page.dart';
 import '../features/worker_directory/presentation/pages/worker_directory_detail_page.dart';
 import '../features/worker_directory/presentation/pages/worker_directory_page.dart';
 import '../features/worker_directory/data/worker_directory_api.dart';
@@ -116,6 +117,10 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/ops/alerts',
             builder: (context, state) => const OpsAlertsPage(),
+          ),
+          GoRoute(
+            path: '/ops/map',
+            builder: (context, state) => const GodModeMapPage(),
           ),
           GoRoute(
             path: '/ops/disputes',

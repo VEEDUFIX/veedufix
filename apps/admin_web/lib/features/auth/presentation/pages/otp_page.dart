@@ -36,7 +36,7 @@ class _OtpPageState extends ConsumerState<OtpPage> {
             name: args['name'] as String?,
           );
       if (!mounted) return;
-      context.go('/app');
+      context.go('/admin');
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(

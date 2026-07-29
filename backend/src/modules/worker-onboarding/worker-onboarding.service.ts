@@ -53,6 +53,7 @@ type WorkerDirectoryFilters = {
   city?: string;
   categoryId?: string;
   status?: string;
+  search?: string;
 };
 
 type WorkerSkillWithCategory = Prisma.WorkerSkillGetPayload<{
@@ -629,6 +630,18 @@ export async function getWorkerDirectory(filters: WorkerDirectoryFilters = {}) {
   const limit = filters.limit ?? 20;
   const skip = (page - 1) * limit;
 
+  const searchFilter: Prisma.WorkerProfileWhereInput | undefined =
+    filters.search && filters.search.trim()
+      ? {
+          OR: [
+            { fullName: { contains: filters.search.trim(), mode: "insensitive" } },
+            { user: { name: { contains: filters.search.trim(), mode: "insensitive" } } },
+            { user: { email: { contains: filters.search.trim(), mode: "insensitive" } } },
+            { user: { phone: { contains: filters.search.trim(), mode: "insensitive" } } }
+          ]
+        }
+      : undefined;
+
   const where: Prisma.WorkerProfileWhereInput = {
     ...(filters.city ? { city: filters.city } : {}),
     ...(filters.status ? { onboardingStatus: filters.status } : {}),
@@ -640,7 +653,8 @@ export async function getWorkerDirectory(filters: WorkerDirectoryFilters = {}) {
             }
           }
         }
-      : {})
+      : {}),
+    ...(searchFilter ?? {})
   };
 
   const [total, items] = await prisma.$transaction([

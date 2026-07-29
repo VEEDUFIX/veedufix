@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { prisma } from "../../lib/prisma.js";
 import { requireAuth, requireRole } from "../../middleware/auth.js";
 import { validate } from "../../middleware/validate.js";
 import {
@@ -51,8 +52,75 @@ export const adminCatalogRouter = Router();
 
 catalogRouter.get("/", validate(catalogListQuerySchema), listCategoriesHandler);
 catalogRouter.get("/home", homeCatalogHandler);
+
+// GET /api/catalog/coupons — Returns active public coupons
+catalogRouter.get('/coupons', async (_request, response) => {
+  const now = new Date();
+  const coupons = await prisma.coupon.findMany({
+    where: {
+      isActive: true,
+      OR: [
+        { endsAt: null },
+        { endsAt: { gt: now } },
+      ],
+    },
+    select: {
+      code: true,
+      description: true,
+      type: true,
+      value: true,
+      maxDiscount: true,
+      minOrderAmount: true,
+      endsAt: true,
+    },
+    orderBy: { createdAt: 'desc' },
+    take: 20,
+  });
+
+  const mappedCoupons = coupons.map((c: any) => ({
+    code: c.code,
+    title: c.code,
+    description: c.description,
+    discountType: c.type,
+    discountValue: c.value,
+    maxDiscountAmount: c.maxDiscount,
+    minOrderAmount: c.minOrderAmount,
+    expiresAt: c.endsAt,
+  }));
+
+  response.status(200).json({ coupons: mappedCoupons });
+});
+
 catalogRouter.get("/search", validate(catalogSearchQuerySchema), searchCatalogHandler);
 catalogRouter.get("/autocomplete", validate(catalogSearchQuerySchema), autocompleteCatalogHandler);
+
+catalogRouter.get("/professionals", async (_request, response) => {
+  const professionals = await prisma.workerProfile.findMany({
+    where: { 
+      isAvailable: true, 
+      verificationStatus: "VERIFIED" 
+    },
+    include: {
+      user: { select: { name: true } }
+    },
+    orderBy: { averageRating: "desc" },
+    take: 10
+  });
+
+  response.status(200).json({
+    professionals: professionals.map((p: any) => ({
+      name: p.displayName ?? p.user.name ?? "Professional",
+      role: "Professional",
+      experience: `${p.completedJobsCount} jobs`,
+      rating: Number(p.averageRating),
+      distance: "Nearby",
+      price: "Book for quote",
+      verified: p.verificationStatus === "VERIFIED",
+      accent: 0xFF10B981
+    }))
+  });
+});
+
 catalogRouter.get("/trending", trendingCatalogHandler);
 catalogRouter.get("/popular", popularCatalogHandler);
 catalogRouter.get("/recommended", recommendedCatalogHandler);

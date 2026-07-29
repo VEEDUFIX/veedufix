@@ -148,7 +148,7 @@ class _WorkerReviewQueuePageState extends ConsumerState<WorkerReviewQueuePage> {
                 child: ListView(
                   padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
                   children: [
-                    PremiumGlassCard(
+                    _SurfaceCard(
                       child: Padding(
                         padding: const EdgeInsets.all(20),
                         child: Column(
@@ -204,7 +204,7 @@ class _WorkerReviewQueuePageState extends ConsumerState<WorkerReviewQueuePage> {
                       ),
                     ),
                     const SizedBox(height: 16),
-                    PremiumGlassCard(
+                    _SurfaceCard(
                       child: Padding(
                         padding: const EdgeInsets.all(16),
                         child: Column(
@@ -271,7 +271,7 @@ class _WorkerReviewQueuePageState extends ConsumerState<WorkerReviewQueuePage> {
                     ),
                     const SizedBox(height: 16),
                     if (queue.items.isEmpty)
-                      const PremiumGlassCard(
+                      const _SurfaceCard(
                         child: Padding(
                           padding: EdgeInsets.all(22),
                           child: PremiumEmptyState(
@@ -285,7 +285,7 @@ class _WorkerReviewQueuePageState extends ConsumerState<WorkerReviewQueuePage> {
                       ...queue.items.map(
                         (profile) => Padding(
                           padding: const EdgeInsets.only(bottom: 12),
-                          child: PremiumGlassCard(
+                          child: _SurfaceCard(
                             child: InkWell(
                               borderRadius: BorderRadius.circular(28),
                               onTap: () => _openReview(profile),
@@ -409,7 +409,7 @@ class _WorkerReviewQueuePageState extends ConsumerState<WorkerReviewQueuePage> {
                       ),
                     if (queue.totalPages > 1) ...[
                       const SizedBox(height: 16),
-                      PremiumGlassCard(
+                      _SurfaceCard(
                         child: Padding(
                           padding: const EdgeInsets.all(16),
                           child: Row(
@@ -484,6 +484,29 @@ class _QueueTag extends StatelessWidget {
               color: accent,
             ),
       ),
+    );
+  }
+}
+
+class _SurfaceCard extends StatelessWidget {
+  const _SurfaceCard({required this.child});
+  final Widget child;
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFE5E7EB)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.01),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: child,
     );
   }
 }

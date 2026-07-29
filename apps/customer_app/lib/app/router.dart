@@ -13,6 +13,21 @@ import '../features/booking/presentation/pages/completion_otp_page.dart';
 import '../features/profile/presentation/pages/saved_addresses_page.dart';
 import '../features/profile/presentation/pages/profile_page.dart';
 import '../features/shell/presentation/pages/app_shell_page.dart';
+import '../features/catalog/presentation/pages/service_detail_page.dart';
+import '../features/catalog/presentation/pages/professional_profile_page.dart';
+import '../features/booking/presentation/pages/checkout_page.dart';
+import '../features/cart/presentation/pages/cart_page.dart';
+import '../features/tracking/presentation/pages/live_tracking_page.dart';
+import '../features/chat/presentation/pages/chat_page.dart';
+import '../features/search/presentation/pages/search_page.dart';
+import '../features/profile/presentation/pages/notifications_page.dart';
+import '../features/profile/presentation/pages/referral_page.dart';
+import '../features/profile/presentation/pages/support_page.dart';
+import '../features/favorites/presentation/pages/favorites_page.dart';
+import '../features/profile/presentation/pages/map_location_picker_page.dart';
+import '../features/offers/presentation/pages/offers_page.dart';
+import '../features/profile/presentation/pages/settings_page.dart';
+import '../features/wallet/presentation/pages/wallet_page.dart';
 
 final routerProvider = Provider<GoRouter>((ref) {
   final refresh = _RouterRefreshNotifier(ref);
@@ -83,6 +98,82 @@ final routerProvider = Provider<GoRouter>((ref) {
           final bookingId = state.uri.queryParameters['bookingId'] ?? '';
           return BookingRatingPage(bookingId: bookingId);
         },
+      ),
+      GoRoute(
+        path: '/service',
+        builder: (context, state) {
+          final serviceId = state.uri.queryParameters['id'] ?? '';
+          return ServiceDetailPage(serviceId: serviceId);
+        },
+      ),
+      GoRoute(
+        path: '/professional',
+        builder: (context, state) {
+          final proId = state.uri.queryParameters['id'] ?? '';
+          return ProfessionalProfilePage(professionalId: proId);
+        },
+      ),
+      GoRoute(
+        path: '/cart',
+        builder: (context, state) {
+          return const CartPage();
+        },
+      ),
+      GoRoute(
+        path: '/checkout',
+        builder: (context, state) {
+          return const CheckoutPage();
+        },
+      ),
+      GoRoute(
+        path: '/tracking',
+        builder: (context, state) {
+          final bookingId = state.uri.queryParameters['bookingId'] ?? '';
+          return LiveTrackingPage(bookingId: bookingId);
+        },
+      ),
+      GoRoute(
+        path: '/chat',
+        builder: (context, state) {
+          final bookingId = state.uri.queryParameters['bookingId'] ?? '';
+          return ChatPage(bookingId: bookingId);
+        },
+      ),
+      GoRoute(
+        path: '/search',
+        builder: (context, state) => const SearchPage(),
+      ),
+      GoRoute(
+        path: '/notifications',
+        builder: (context, state) => const NotificationsPage(),
+      ),
+      GoRoute(
+        path: '/offers',
+        builder: (context, state) => const OffersPage(),
+      ),
+      GoRoute(
+        path: '/referral',
+        builder: (context, state) => const ReferralPage(),
+      ),
+      GoRoute(
+        path: '/wallet',
+        builder: (context, state) => const WalletPage(),
+      ),
+      GoRoute(
+        path: '/support',
+        builder: (context, state) => const SupportPage(),
+      ),
+      GoRoute(
+        path: '/settings',
+        builder: (context, state) => const SettingsPage(),
+      ),
+      GoRoute(
+        path: '/favorites',
+        builder: (context, state) => const FavoritesPage(),
+      ),
+      GoRoute(
+        path: '/map-picker',
+        builder: (context, state) => const MapLocationPickerPage(),
       ),
       ShellRoute(
         builder: (context, state, child) => AppShellPage(child: child),

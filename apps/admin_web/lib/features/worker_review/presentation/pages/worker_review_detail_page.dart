@@ -207,7 +207,7 @@ class _WorkerReviewDetailPageState extends ConsumerState<WorkerReviewDetailPage>
       body: ListView(
         padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
         children: [
-          PremiumGlassCard(
+          _SurfaceCard(
             child: Padding(
               padding: const EdgeInsets.all(20),
               child: Column(
@@ -269,7 +269,7 @@ class _WorkerReviewDetailPageState extends ConsumerState<WorkerReviewDetailPage>
             subtitle: 'Identity and location details submitted by the worker.',
           ),
           const SizedBox(height: 12),
-          PremiumGlassCard(
+          _SurfaceCard(
             child: Padding(
               padding: const EdgeInsets.all(16),
               child: Column(
@@ -289,7 +289,7 @@ class _WorkerReviewDetailPageState extends ConsumerState<WorkerReviewDetailPage>
             subtitle: 'Masked Aadhaar and the uploaded document for manual review.',
           ),
           const SizedBox(height: 12),
-          PremiumGlassCard(
+          _SurfaceCard(
             child: Padding(
               padding: const EdgeInsets.all(16),
               child: Column(
@@ -338,7 +338,7 @@ class _WorkerReviewDetailPageState extends ConsumerState<WorkerReviewDetailPage>
           ),
           const SizedBox(height: 12),
           if (profile.skills.isEmpty)
-            const PremiumGlassCard(
+            const _SurfaceCard(
               child: Padding(
                 padding: EdgeInsets.all(16),
                 child: Text('No skills were submitted with this profile.'),
@@ -348,7 +348,7 @@ class _WorkerReviewDetailPageState extends ConsumerState<WorkerReviewDetailPage>
             ...profile.skills.map(
               (skill) => Padding(
                 padding: const EdgeInsets.only(bottom: 12),
-                child: PremiumGlassCard(
+                child: _SurfaceCard(
                   child: Padding(
                     padding: const EdgeInsets.all(16),
                     child: Column(
@@ -433,7 +433,7 @@ class _WorkerReviewDetailPageState extends ConsumerState<WorkerReviewDetailPage>
             subtitle: 'UPI is the primary payout route, with bank details as backup.',
           ),
           const SizedBox(height: 12),
-          PremiumGlassCard(
+          _SurfaceCard(
             child: Padding(
               padding: const EdgeInsets.all(16),
               child: Column(
@@ -446,7 +446,7 @@ class _WorkerReviewDetailPageState extends ConsumerState<WorkerReviewDetailPage>
             ),
           ),
           const SizedBox(height: 16),
-          PremiumGlassCard(
+          _SurfaceCard(
             child: Padding(
               padding: const EdgeInsets.all(16),
               child: Column(
@@ -564,6 +564,29 @@ class _StatusChip extends StatelessWidget {
               fontWeight: FontWeight.w800,
             ),
       ),
+    );
+  }
+}
+
+class _SurfaceCard extends StatelessWidget {
+  const _SurfaceCard({this.child});
+  final Widget? child;
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFE5E7EB)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.01),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: child,
     );
   }
 }

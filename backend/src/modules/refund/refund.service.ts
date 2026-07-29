@@ -383,3 +383,61 @@ export async function listRefunds(filters: RefundListFilters = {}): Promise<{
     status: filters.status ?? "failed"
   });
 }
+
+export async function bulkRetryFailedRefunds(): Promise<{ attempted: number; succeeded: number; failed: number }> {
+  const failedRefunds = await prisma.refund.findMany({
+    where: { status: "failed" },
+    orderBy: { createdAt: "asc" },
+    take: 50
+  });
+
+  let succeeded = 0;
+  let failed = 0;
+
+  for (const refund of failedRefunds) {
+    try {
+      await retryRefund(refund.id);
+      const result = await prisma.refund.findUnique({ where: { id: refund.id }, select: { status: true } });
+      if (result?.status === "processed") {
+        succeeded++;
+      } else {
+        failed++;
+      }
+    } catch {
+      failed++;
+    }
+  }
+
+  return { attempted: failedRefunds.length, succeeded, failed };
+}
+
+export async function exportRefundsCsv(filters: RefundListFilters = {}): Promise<string> {
+  const where: Prisma.RefundWhereInput = {
+    ...(filters.status ? { status: filters.status } : {})
+  };
+
+  const items = await prisma.refund.findMany({
+    where,
+    include: {
+      booking: {
+        include: {
+          customer: { select: { id: true, name: true, email: true, phone: true } },
+          worker: { include: { user: true } }
+        }
+      }
+    },
+    orderBy: [{ createdAt: "desc" }],
+    take: 5000
+  });
+
+  const header = ["ID", "Booking Code", "Customer Name", "Amount (Rs.)", "Reason", "Status", "Failure Reason", "Created At"];
+  const rows = items.map((r) => {
+    const amount = (Number(r.amount ?? 0) / 100).toFixed(2);
+    const reason = (r.reason ?? "").replace(/"/g, "'");
+    const failureReason = (r.failureReason ?? "").replace(/"/g, "'");
+    const customerName = (r.booking?.customer?.name ?? "Unknown").replace(/"/g, "'");
+    return [r.id, r.booking?.code ?? "", customerName, amount, `"${reason}"`, r.status, `"${failureReason}"`, r.createdAt.toISOString()].join(",");
+  });
+
+  return [header.join(","), ...rows].join("\n");
+}

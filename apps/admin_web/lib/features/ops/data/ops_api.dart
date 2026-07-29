@@ -8,6 +8,10 @@ class OpsSummaryCounts {
     required this.failedPayoutsCount,
     required this.failedRefundsCount,
     required this.pendingWorkerReviewsCount,
+    required this.totalRevenue,
+    required this.totalBookings,
+    required this.completedBookings,
+    required this.todaysNewWorkers,
   });
 
   final int activeJobsCount;
@@ -16,6 +20,10 @@ class OpsSummaryCounts {
   final int failedPayoutsCount;
   final int failedRefundsCount;
   final int pendingWorkerReviewsCount;
+  final double totalRevenue;
+  final int totalBookings;
+  final int completedBookings;
+  final int todaysNewWorkers;
 
   factory OpsSummaryCounts.fromJson(Map<String, dynamic> json) {
     return OpsSummaryCounts(
@@ -25,6 +33,10 @@ class OpsSummaryCounts {
       failedPayoutsCount: (json['failedPayoutsCount'] as num?)?.toInt() ?? 0,
       failedRefundsCount: (json['failedRefundsCount'] as num?)?.toInt() ?? 0,
       pendingWorkerReviewsCount: (json['pendingWorkerReviewsCount'] as num?)?.toInt() ?? 0,
+      totalRevenue: (json['totalRevenue'] as num?)?.toDouble() ?? 0.0,
+      totalBookings: (json['totalBookings'] as num?)?.toInt() ?? 0,
+      completedBookings: (json['completedBookings'] as num?)?.toInt() ?? 0,
+      todaysNewWorkers: (json['todaysNewWorkers'] as num?)?.toInt() ?? 0,
     );
   }
 }

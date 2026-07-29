@@ -3,7 +3,9 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:marketplace_shared/marketplace_shared.dart';
+import 'package:intl/intl.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
 import '../../../../core/realtime/realtime_socket_service.dart';
@@ -21,6 +23,7 @@ class _WorkerDashboardPageState extends ConsumerState<WorkerDashboardPage> {
   final List<_LiveUpdateItem> _liveUpdates = <_LiveUpdateItem>[];
   String? _activeUserId;
   bool _connected = false;
+  bool _isOnline = true;
 
   @override
   void initState() {
@@ -155,13 +158,17 @@ class _WorkerDashboardPageState extends ConsumerState<WorkerDashboardPage> {
     });
 
     final auth = ref.watch(authControllerProvider).valueOrNull;
+    final statsAsync = ref.watch(workerDashboardStatsProvider);
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Worker Dashboard'),
+        title: Text(
+          'Dashboard',
+          style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
+        ),
         actions: [
           IconButton(
-            onPressed: () {},
+            onPressed: () => context.push('/notifications'),
             icon: const Icon(Icons.notifications_none_rounded),
           ),
         ],
@@ -169,6 +176,12 @@ class _WorkerDashboardPageState extends ConsumerState<WorkerDashboardPage> {
       body: ListView(
         padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
         children: [
+          // ── Online/Offline Toggle ────────────────────────────────────
+          _OnlineToggle(
+            isOnline: _isOnline,
+            onChanged: (v) => setState(() => _isOnline = v),
+          ),
+          const SizedBox(height: 16),
           PremiumGlassCard(
             child: Padding(
               padding: const EdgeInsets.all(20),
@@ -213,33 +226,41 @@ class _WorkerDashboardPageState extends ConsumerState<WorkerDashboardPage> {
             ),
           ),
           const SizedBox(height: 16),
-          const Row(
-            children: [
-              Expanded(
-                child: PremiumStatCard(
-                  label: 'Today',
-                  value: '6 jobs',
-                  icon: Icons.work_history_rounded,
-                  accentColor: Color(0xFF0F766E),
+          statsAsync.when(
+            data: (stats) => Column(
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: PremiumStatCard(
+                        label: 'Today',
+                        value: '${stats.completedJobsCount} jobs',
+                        icon: Icons.work_history_rounded,
+                        accentColor: const Color(0xFF0F766E),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: PremiumStatCard(
+                        label: 'Rating',
+                        value: stats.averageRating.toStringAsFixed(1),
+                        icon: Icons.star_rounded,
+                        accentColor: const Color(0xFFF59E0B),
+                      ),
+                    ),
+                  ],
                 ),
-              ),
-              SizedBox(width: 12),
-              Expanded(
-                child: PremiumStatCard(
-                  label: 'Rating',
-                  value: '4.9',
-                  icon: Icons.star_rounded,
-                  accentColor: Color(0xFFF59E0B),
+                const SizedBox(height: 12),
+                PremiumStatCard(
+                  label: 'This month earnings',
+                  value: '₹${stats.monthlyEarnings.toStringAsFixed(0)}',
+                  icon: Icons.payments_rounded,
+                  accentColor: const Color(0xFF14B8A6),
                 ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          const PremiumStatCard(
-            label: 'This week earnings',
-            value: 'Rs. 8,420',
-            icon: Icons.payments_rounded,
-            accentColor: Color(0xFF14B8A6),
+              ],
+            ),
+            loading: () => const Center(child: CircularProgressIndicator()),
+            error: (e, s) => Center(child: Text('Error loading stats: $e')),
           ),
           const SizedBox(height: 20),
           const PremiumSectionHeader(
@@ -275,16 +296,64 @@ class _WorkerDashboardPageState extends ConsumerState<WorkerDashboardPage> {
             subtitle: 'Upcoming visits and active jobs in one view.',
           ),
           const SizedBox(height: 12),
-          const _JobCard(
-            title: 'Kitchen sink repair',
-            status: 'Accepted',
-            time: 'Today, 2:00 PM',
+          statsAsync.when(
+            data: (stats) {
+              if (stats.todayJobs.isEmpty) {
+                return const Text('No jobs scheduled today', style: TextStyle(color: Colors.grey));
+              }
+              return Column(
+                children: stats.todayJobs.map((job) {
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: _JobCard(
+                      title: job.serviceName,
+                      status: job.status,
+                      time: '${DateFormat('h:mm a').format(job.scheduledAt)} • ${job.addressLabel ?? 'No address'}',
+                    ),
+                  );
+                }).toList(),
+              );
+            },
+            loading: () => const Center(child: CircularProgressIndicator()),
+            error: (e, s) => Center(child: Text('Error: $e')),
+          ),
+          const SizedBox(height: 24),
+          // ── Quick Actions ────────────────────────────────────────────
+          const PremiumSectionHeader(
+            title: 'Quick actions',
+            subtitle: 'Common tasks at your fingertips.',
           ),
           const SizedBox(height: 12),
-          const _JobCard(
-            title: 'AC installation',
-            status: 'En route',
-            time: 'Today, 4:30 PM',
+          Row(
+            children: [
+              _QuickAction(
+                icon: Icons.calendar_month_rounded,
+                label: 'Schedule',
+                color: const Color(0xFF6366F1),
+                onTap: () => context.go('/schedule'),
+              ),
+              const SizedBox(width: 12),
+              _QuickAction(
+                icon: Icons.payments_rounded,
+                label: 'Earnings',
+                color: const Color(0xFF14B8A6),
+                onTap: () => context.go('/earnings'),
+              ),
+              const SizedBox(width: 12),
+              _QuickAction(
+                icon: Icons.star_rounded,
+                label: 'Reviews',
+                color: const Color(0xFFF59E0B),
+                onTap: () => context.push('/reviews'),
+              ),
+              const SizedBox(width: 12),
+              _QuickAction(
+                icon: Icons.support_agent_rounded,
+                label: 'Support',
+                color: const Color(0xFF3B82F6),
+                onTap: () => context.push('/support'),
+              ),
+            ],
           ),
         ],
       ),
@@ -392,12 +461,153 @@ class _JobCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return PremiumGlassCard(
-      child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-        title: Text(title, style: const TextStyle(fontWeight: FontWeight.w700)),
-        subtitle: Text(time),
-        trailing: Chip(label: Text(status)),
+    final cs = Theme.of(context).colorScheme;
+    final isEnRoute = status == 'En route';
+    final accent = isEnRoute ? const Color(0xFF14B8A6) : cs.primary;
+
+    return TapScale(
+      onTap: () {},
+      child: PremiumGlassCard(
+        child: ListTile(
+          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+          title: Text(title, style: const TextStyle(fontWeight: FontWeight.w700)),
+          subtitle: Text(time),
+          trailing: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            decoration: BoxDecoration(
+              color: accent.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Text(
+              status,
+              style: TextStyle(
+                color: accent,
+                fontWeight: FontWeight.w700,
+                fontSize: 12,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _OnlineToggle extends StatelessWidget {
+  const _OnlineToggle({required this.isOnline, required this.onChanged});
+  final bool isOnline;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
+    final accent = isOnline ? const Color(0xFF10B981) : cs.error;
+
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 300),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: accent.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: accent.withValues(alpha: 0.3)),
+        boxShadow: isOnline
+            ? [
+                BoxShadow(
+                  color: accent.withValues(alpha: 0.15),
+                  blurRadius: 16,
+                  offset: const Offset(0, 4),
+                ),
+              ]
+            : [],
+      ),
+      child: Row(
+        children: [
+          AnimatedContainer(
+            duration: const Duration(milliseconds: 300),
+            width: 12,
+            height: 12,
+            decoration: BoxDecoration(
+              color: accent,
+              shape: BoxShape.circle,
+              boxShadow: isOnline
+                  ? [
+                      BoxShadow(
+                        color: accent.withValues(alpha: 0.6),
+                        blurRadius: 8,
+                      ),
+                    ]
+                  : [],
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  isOnline ? 'You are Online' : 'You are Offline',
+                  style: tt.titleMedium?.copyWith(
+                    color: accent,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                Text(
+                  isOnline ? 'Accepting new job requests' : 'Not receiving any jobs',
+                  style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+                ),
+              ],
+            ),
+          ),
+          Switch.adaptive(
+            value: isOnline,
+            onChanged: onChanged,
+            activeTrackColor: accent,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _QuickAction extends StatelessWidget {
+  const _QuickAction({
+    required this.icon,
+    required this.label,
+    required this.color,
+    required this.onTap,
+  });
+  final IconData icon;
+  final String label;
+  final Color color;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: TapScale(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 16),
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.08),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: color.withValues(alpha: 0.15)),
+          ),
+          child: Column(
+            children: [
+              Icon(icon, color: color, size: 24),
+              const SizedBox(height: 6),
+              Text(
+                label,
+                style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                      color: color,
+                      fontWeight: FontWeight.w700,
+                    ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

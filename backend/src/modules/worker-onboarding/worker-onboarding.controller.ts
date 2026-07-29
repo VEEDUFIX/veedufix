@@ -1,5 +1,6 @@
 import { type NextFunction, type Response } from "express";
 import { type AuthenticatedRequest } from "../../middleware/auth.js";
+import { writeAuditLog } from "../../lib/audit.js";
 import {
   IncompleteProfileError,
   WorkerProfileNotFoundError,
@@ -145,7 +146,9 @@ export async function approveWorkerHandler(
 ) {
   try {
     const profileId = String(request.params.profileId);
-    const profile = await approveWorker(profileId, request.auth!.userId);
+    const adminId = request.auth!.userId;
+    const profile = await approveWorker(profileId, adminId);
+    void writeAuditLog({ adminId, action: "worker.approved", targetType: "worker_profile", targetId: profileId });
     response.status(200).json({ profile });
   } catch (error) {
     sendError(response, error);
@@ -159,8 +162,10 @@ export async function rejectWorkerHandler(
 ) {
   try {
     const profileId = String(request.params.profileId);
+    const adminId = request.auth!.userId;
     const body = request.body as { reason: string };
-    const profile = await rejectWorker(profileId, request.auth!.userId, body.reason);
+    const profile = await rejectWorker(profileId, adminId, body.reason);
+    void writeAuditLog({ adminId, action: "worker.rejected", targetType: "worker_profile", targetId: profileId, note: body.reason });
     response.status(200).json({ profile });
   } catch (error) {
     sendError(response, error);
@@ -174,8 +179,10 @@ export async function suspendWorkerHandler(
 ) {
   try {
     const profileId = String(request.params.profileId);
+    const adminId = request.auth!.userId;
     const body = request.body as { reason: string };
-    const profile = await suspendWorker(profileId, request.auth!.userId, body.reason);
+    const profile = await suspendWorker(profileId, adminId, body.reason);
+    void writeAuditLog({ adminId, action: "worker.suspended", targetType: "worker_profile", targetId: profileId, note: body.reason });
     response.status(200).json({ profile });
   } catch (error) {
     sendError(response, error);
@@ -189,8 +196,10 @@ export async function reinstateWorkerHandler(
 ) {
   try {
     const profileId = String(request.params.profileId);
+    const adminId = request.auth!.userId;
     const body = request.body as { note: string };
-    const profile = await reinstateWorker(profileId, request.auth!.userId, body.note);
+    const profile = await reinstateWorker(profileId, adminId, body.note);
+    void writeAuditLog({ adminId, action: "worker.reinstated", targetType: "worker_profile", targetId: profileId, note: body.note });
     response.status(200).json({ profile });
   } catch (error) {
     sendError(response, error);
@@ -208,7 +217,8 @@ export async function getWorkerDirectoryHandler(
       limit: request.query.limit ? Number(request.query.limit) : undefined,
       city: typeof request.query.city === "string" ? request.query.city : undefined,
       categoryId: typeof request.query.categoryId === "string" ? request.query.categoryId : undefined,
-      status: typeof request.query.status === "string" ? request.query.status : undefined
+      status: typeof request.query.status === "string" ? request.query.status : undefined,
+      search: typeof request.query.search === "string" ? request.query.search : undefined
     });
 
     response.status(200).json(result);

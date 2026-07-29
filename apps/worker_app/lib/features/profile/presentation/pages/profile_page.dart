@@ -109,6 +109,41 @@ class ProfilePage extends ConsumerWidget {
             ),
           ),
           const SizedBox(height: 18),
+          // ── Performance Stats ─────────────────────────────────────────
+          Row(
+            children: [
+              Expanded(
+                child: TapScale(
+                  onTap: () => context.push('/reviews'),
+                  child: const PremiumStatCard(
+                    label: 'Rating',
+                    value: '4.8',
+                    icon: Icons.star_rounded,
+                    accentColor: Color(0xFFF59E0B),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              const Expanded(
+                child: PremiumStatCard(
+                  label: 'Jobs Done',
+                  value: '142',
+                  icon: Icons.check_circle_rounded,
+                  accentColor: Color(0xFF10B981),
+                ),
+              ),
+              const SizedBox(width: 12),
+              const Expanded(
+                child: PremiumStatCard(
+                  label: 'Badges',
+                  value: '4',
+                  icon: Icons.military_tech_rounded,
+                  accentColor: Color(0xFF8B5CF6),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 18),
           const PremiumSectionHeader(
             title: 'Work profile',
             subtitle: 'Manage identity, availability, and service credentials.',
@@ -160,9 +195,28 @@ class ProfilePage extends ConsumerWidget {
             subtitle: 'Quick access to help, settings, and sign out.',
           ),
           const SizedBox(height: 12),
-          const _ActionTile(icon: Icons.support_agent_rounded, title: 'Support'),
-          const _ActionTile(icon: Icons.shield_rounded, title: 'Security'),
-          const _ActionTile(icon: Icons.logout_rounded, title: 'Logout'),
+          _ActionTile(
+            icon: Icons.support_agent_rounded, 
+            title: 'Support',
+            onTap: () => context.push('/support'),
+          ),
+          _ActionTile(
+            icon: Icons.star_rounded,
+            title: 'Reviews & Ratings',
+            onTap: () => context.push('/reviews'),
+          ),
+          _ActionTile(
+            icon: Icons.settings_rounded, 
+            title: 'Settings',
+            onTap: () => context.push('/settings'),
+          ),
+          _ActionTile(
+            icon: Icons.logout_rounded, 
+            title: 'Logout',
+            onTap: () {
+              // TODO: Wire to auth controller
+            },
+          ),
         ],
       ),
     );
@@ -260,18 +314,22 @@ class _ActionTile extends StatelessWidget {
   const _ActionTile({
     required this.icon,
     required this.title,
+    this.onTap,
   });
 
   final IconData icon;
   final String title;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
-      child: PremiumGlassCard(
-        child: ListTile(
-          contentPadding: const EdgeInsets.all(16),
+      child: TapScale(
+        onTap: onTap ?? () {},
+        child: PremiumGlassCard(
+          child: ListTile(
+            contentPadding: const EdgeInsets.all(16),
           leading: Container(
             height: 46,
             width: 46,
@@ -286,7 +344,9 @@ class _ActionTile extends StatelessWidget {
             style: const TextStyle(fontWeight: FontWeight.w800),
           ),
           trailing: const Icon(Icons.chevron_right_rounded),
+          onTap: onTap,
         ),
+      ),
       ),
     );
   }

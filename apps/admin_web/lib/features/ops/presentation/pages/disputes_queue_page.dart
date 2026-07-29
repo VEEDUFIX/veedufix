@@ -35,9 +35,9 @@ class _DisputesQueuePageState extends ConsumerState<DisputesQueuePage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF9F5EC),
+      backgroundColor: Colors.transparent,
       appBar: AppBar(
-        backgroundColor: const Color(0xFFF9F5EC),
+        backgroundColor: Colors.transparent,
         surfaceTintColor: Colors.transparent,
         title: Text(
           'Disputes queue',
@@ -73,13 +73,7 @@ class _DisputesQueuePageState extends ConsumerState<DisputesQueuePage> {
                   .toList(growable: false);
 
           return Container(
-            decoration: const BoxDecoration(
-              gradient: LinearGradient(
-                colors: [Color(0xFFF9F5EC), Color(0xFFFFFCF8)],
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-              ),
-            ),
+            color: Colors.transparent,
             child: RefreshIndicator(
               onRefresh: _reload,
               child: ListView(
@@ -97,14 +91,14 @@ class _DisputesQueuePageState extends ConsumerState<DisputesQueuePage> {
                               fontSize: 28,
                               fontWeight: FontWeight.w900,
                               letterSpacing: -0.4,
-                              color: const Color(0xFF13110F),
+                              color: Colors.black87,
                             ),
                           ),
                           const SizedBox(height: 8),
                           Text(
                             'Review customer complaints, evidence, and refund decisions in one queue.',
                             style: GoogleFonts.inter(
-                              color: const Color(0xFF6B6256),
+                              color: Colors.black54,
                               height: 1.45,
                             ),
                           ),
@@ -170,33 +164,87 @@ class _DisputesQueuePageState extends ConsumerState<DisputesQueuePage> {
                       ),
                     )
                   else
-                    ...filteredItems.map(
-                      (item) => Padding(
-                        padding: const EdgeInsets.only(bottom: 12),
-                        child: _SurfacePanel(
-                          child: ListTile(
-                            contentPadding: const EdgeInsets.all(16),
-                            leading: _StatusMark(status: item.status),
-                            title: Text(
-                              item.bookingCode,
-                              style: GoogleFonts.poppins(
-                                  fontWeight: FontWeight.w800),
-                            ),
-                            subtitle: Text(
-                              [
-                                'Customer: ${item.customerName}',
-                                'Worker: ${item.workerName ?? 'Not returned by API'}',
-                                'Reason: ${_truncate(item.reason)}',
-                                'Raised: ${MaterialLocalizations.of(context).formatMediumDate(item.createdAt)}',
-                              ].join('\n'),
-                            ),
-                            isThreeLine: true,
-                            trailing: const Icon(Icons.chevron_right_rounded),
-                            onTap: () => context.go('/ops/disputes/${item.id}'),
-                          ),
+                  Container(
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(16),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.04),
+                          blurRadius: 16,
+                          offset: const Offset(0, 4),
                         ),
-                      ),
+                      ],
                     ),
+                    clipBehavior: Clip.antiAlias,
+                    child: LayoutBuilder(
+                      builder: (context, constraints) {
+                        return SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          child: SizedBox(
+                            width: constraints.maxWidth > 800 ? constraints.maxWidth : 800,
+                            child: DataTable(
+                              headingRowColor: const WidgetStatePropertyAll(Color(0xFFF8FAFC)),
+                              headingTextStyle: GoogleFonts.inter(
+                                fontWeight: FontWeight.w700,
+                                fontSize: 12,
+                                color: const Color(0xFF64748B),
+                                letterSpacing: 0.8,
+                              ),
+                              dataRowMinHeight: 72,
+                              dataRowMaxHeight: 72,
+                              dividerThickness: 1,
+                              horizontalMargin: 24,
+                              columns: const [
+                                DataColumn(label: Text('REFERENCE')),
+                                DataColumn(label: Text('CUSTOMER')),
+                                DataColumn(label: Text('WORKER')),
+                                DataColumn(label: Text('STATUS')),
+                                DataColumn(label: Text('RAISED ON')),
+                                DataColumn(label: Text('ACTION')),
+                              ],
+                              rows: filteredItems.map((item) {
+                                return DataRow(
+                                  onSelectChanged: (_) => context.go('/ops/disputes/${item.id}'),
+                                  cells: [
+                                    DataCell(Text(
+                                      item.bookingCode,
+                                      style: const TextStyle(fontWeight: FontWeight.w600),
+                                    )),
+                                    DataCell(Row(
+                                      children: [
+                                        CircleAvatar(
+                                          radius: 14,
+                                          backgroundColor: Theme.of(context).colorScheme.primary.withValues(alpha: 0.12),
+                                          child: Icon(Icons.person_rounded, size: 16, color: Theme.of(context).colorScheme.primary),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Text(item.customerName),
+                                      ],
+                                    )),
+                                    DataCell(Row(
+                                      children: [
+                                        const CircleAvatar(
+                                          radius: 14,
+                                          backgroundColor: Color(0xFFF3F4F6),
+                                          child: Icon(Icons.handyman_rounded, size: 16, color: Color(0xFF64748B)),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Text(item.workerName ?? 'Unknown'),
+                                      ],
+                                    )),
+                                    DataCell(_GlowingStatusBadge(status: item.status)),
+                                    DataCell(Text(MaterialLocalizations.of(context).formatMediumDate(item.createdAt))),
+                                    const DataCell(Icon(Icons.chevron_right_rounded, color: Color(0xFF94A3B8))),
+                                  ],
+                                );
+                              }).toList(growable: false),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -206,15 +254,6 @@ class _DisputesQueuePageState extends ConsumerState<DisputesQueuePage> {
     );
   }
 }
-
-String _truncate(String value, {int maxLength = 110}) {
-  final normalized = value.trim().replaceAll(RegExp(r'\s+'), ' ');
-  if (normalized.length <= maxLength) {
-    return normalized;
-  }
-  return '${normalized.substring(0, maxLength - 1)}…';
-}
-
 class _MiniStat extends StatelessWidget {
   const _MiniStat({required this.label, required this.value});
 
@@ -249,24 +288,59 @@ class _MiniStat extends StatelessWidget {
   }
 }
 
-class _StatusMark extends StatelessWidget {
-  const _StatusMark({required this.status});
+class _GlowingStatusBadge extends StatelessWidget {
+  const _GlowingStatusBadge({required this.status});
 
   final String status;
 
   @override
   Widget build(BuildContext context) {
-    final color = status == 'under_review'
-        ? const Color(0xFFF59E0B)
-        : const Color(0xFF2563EB);
+    final normalized = status.toLowerCase();
+    final (color, bgColor) = switch (normalized) {
+      'approved' || 'success' || 'processed' => (const Color(0xFF10B981), const Color(0xFFD1FAE5)),
+      'suspended' || 'pending' || 'under_review' => (const Color(0xFFF59E0B), const Color(0xFFFEF3C7)),
+      'rejected' || 'failed' => (const Color(0xFFEF4444), const Color(0xFFFEE2E2)),
+      'disputed' => (const Color(0xFF8B5CF6), const Color(0xFFEDE9FE)),
+      _ => (const Color(0xFF64748B), const Color(0xFFF1F5F9)),
+    };
+
     return Container(
-      height: 44,
-      width: 44,
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(14),
+        color: bgColor,
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
       ),
-      child: Icon(Icons.gavel_rounded, color: color),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 6,
+            height: 6,
+            decoration: BoxDecoration(
+              color: color,
+              shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(
+                  color: color.withValues(alpha: 0.6),
+                  blurRadius: 4,
+                  spreadRadius: 1,
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 6),
+          Text(
+            normalized.replaceAll('_', ' ').toUpperCase(),
+            style: TextStyle(
+              color: color,
+              fontWeight: FontWeight.w800,
+              fontSize: 11,
+              letterSpacing: 0.4,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -316,14 +390,19 @@ class _SurfacePanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      elevation: 0,
-      color: Colors.white,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(18),
-        side: const BorderSide(color: Color(0xFFE5D8C6)),
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFE5E7EB)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.01),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
-      shadowColor: Colors.black.withValues(alpha: 0.06),
       child: child,
     );
   }
