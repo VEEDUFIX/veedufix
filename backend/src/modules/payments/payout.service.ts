@@ -1,5 +1,5 @@
-import { logger } from "../../lib/logger.js";
+import { releaseWorkerPayout as releaseRecordedPayout } from "../payout/payout.service.js";
 
 export async function releaseWorkerPayout(bookingId: string): Promise<void> {
-  logger.info({ bookingId }, "Worker payout release requested");
+  await releaseRecordedPayout(bookingId);
 }

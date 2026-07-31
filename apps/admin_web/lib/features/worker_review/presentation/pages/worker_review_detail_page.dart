@@ -221,7 +221,7 @@ class _WorkerReviewDetailPageState extends ConsumerState<WorkerReviewDetailPage>
                         width: 72,
                         decoration: BoxDecoration(
                           color: accent.withValues(alpha: 0.12),
-                          borderRadius: BorderRadius.circular(22),
+                          borderRadius: BorderRadius.circular(AbzioTheme.cardRadius),
                         ),
                         child: Icon(Icons.badge_rounded, color: accent, size: 32),
                       ),
@@ -345,10 +345,14 @@ class _WorkerReviewDetailPageState extends ConsumerState<WorkerReviewDetailPage>
               ),
             )
           else
-            ...profile.skills.map(
-              (skill) => Padding(
-                padding: const EdgeInsets.only(bottom: 12),
-                child: _SurfaceCard(
+            ListView.separated(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: profile.skills.length,
+              separatorBuilder: (_, __) => const SizedBox(height: 12),
+              itemBuilder: (context, index) {
+                final skill = profile.skills[index];
+                return _SurfaceCard(
                   child: Padding(
                     padding: const EdgeInsets.all(16),
                     child: Column(
@@ -424,8 +428,8 @@ class _WorkerReviewDetailPageState extends ConsumerState<WorkerReviewDetailPage>
                       ],
                     ),
                   ),
-                ),
-              ),
+                );
+              },
             ),
           const SizedBox(height: 16),
           const PremiumSectionHeader(
@@ -578,13 +582,7 @@ class _SurfaceCard extends StatelessWidget {
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: const Color(0xFFE5E7EB)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.01),
-            blurRadius: 4,
-            offset: const Offset(0, 2),
-          ),
-        ],
+        boxShadow: AbzioTheme.eliteShadow,
       ),
       child: child,
     );

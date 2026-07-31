@@ -8,9 +8,9 @@ class ProfilePage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final auth = ref.watch(authControllerProvider).valueOrNull;
-    final user = auth?.user;
+    final user = ref.watch(authControllerProvider.select((s) => s.valueOrNull?.user));
     final completion = user == null ? 0.72 : 0.88;
+    final unreadNotifications = ref.watch(notificationsUnreadCountProvider).valueOrNull ?? 0;
 
     return Scaffold(
       body: ListView(
@@ -32,10 +32,10 @@ class ProfilePage extends ConsumerWidget {
                 width: 48,
                 decoration: BoxDecoration(
                   color: Theme.of(context).colorScheme.surface,
-                  borderRadius: BorderRadius.circular(16),
+                  borderRadius: BorderRadius.circular(AbzioTheme.buttonRadius),
                 ),
-                child: IconButton(
-                  onPressed: () {},
+              child: IconButton(
+                  onPressed: () => context.push('/settings'),
                   icon: const Icon(Icons.settings_rounded),
                 ),
               ),
@@ -110,6 +110,7 @@ class ProfilePage extends ConsumerWidget {
             icon: Icons.notifications_outlined,
             title: 'Notifications',
             subtitle: 'Booking alerts and promotional offers',
+            badgeCount: unreadNotifications,
             onTap: () => context.push('/notifications'),
           ),
           _ProfileTile(
@@ -124,8 +125,18 @@ class ProfilePage extends ConsumerWidget {
             subtitle: 'Credits, rewards, and referral code',
             onTap: () => context.push('/referral'),
           ),
-          const _ProfileTile(icon: Icons.payment_rounded, title: 'Payments', subtitle: 'Cards, UPI, and payment history'),
-          const _ProfileTile(icon: Icons.bookmark_outline_rounded, title: 'Saved services', subtitle: 'Repeat your most used bookings'),
+          _ProfileTile(
+            icon: Icons.payment_rounded,
+            title: 'Payments',
+            subtitle: 'Cards, UPI, and payment history',
+            onTap: () => context.push('/wallet'),
+          ),
+          _ProfileTile(
+            icon: Icons.bookmark_outline_rounded,
+            title: 'Saved services',
+            subtitle: 'Repeat your most used bookings',
+            onTap: () => context.push('/favorites'),
+          ),
           _ProfileTile(
             icon: Icons.support_agent_rounded,
             title: 'Help & support',
@@ -183,7 +194,7 @@ class _CompletionCard extends StatelessWidget {
               width: 56,
               decoration: BoxDecoration(
                 color: Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.85),
-                borderRadius: BorderRadius.circular(18),
+                borderRadius: BorderRadius.circular(AbzioTheme.buttonRadius),
               ),
               child: Icon(
                 Icons.insights_rounded,
@@ -223,12 +234,14 @@ class _ProfileTile extends StatelessWidget {
     required this.icon,
     required this.title,
     required this.subtitle,
+    this.badgeCount = 0,
     this.onTap,
   });
 
   final IconData icon;
   final String title;
   final String subtitle;
+  final int badgeCount;
   final VoidCallback? onTap;
 
   @override
@@ -245,9 +258,36 @@ class _ProfileTile extends StatelessWidget {
               width: 48,
               decoration: BoxDecoration(
                 color: Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.75),
-                borderRadius: BorderRadius.circular(16),
+                borderRadius: BorderRadius.circular(AbzioTheme.buttonRadius),
               ),
-              child: Icon(icon, color: Theme.of(context).colorScheme.primary),
+              child: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  Center(child: Icon(icon, color: Theme.of(context).colorScheme.primary)),
+                  if (badgeCount > 0)
+                    Positioned(
+                      right: 4,
+                      top: 4,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                        decoration: BoxDecoration(
+                          color: Theme.of(context).colorScheme.error,
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                        constraints: const BoxConstraints(minWidth: 18),
+                        child: Text(
+                          badgeCount > 99 ? '99+' : '$badgeCount',
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
             ),
             title: Text(
               title,

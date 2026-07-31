@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../ui/widgets/abzio_motion.dart';
+import '../theme/abzio_theme.dart';
 
 class PremiumSectionHeader extends StatelessWidget {
   const PremiumSectionHeader({
@@ -127,14 +128,8 @@ class PremiumCard extends StatelessWidget {
       onTap: onTap,
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surface,
-        borderRadius: BorderRadius.circular(28),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 24,
-            offset: const Offset(0, 10),
-          ),
-        ],
+        borderRadius: BorderRadius.circular(AbzioTheme.cardRadius),
+        boxShadow: AbzioTheme.shadowFor(Theme.of(context).brightness),
       ),
       child: child,
     );
@@ -161,7 +156,7 @@ class PremiumEmptyState extends StatelessWidget {
   Widget build(BuildContext context) {
     return Center(
       child: Padding(
-        padding: const EdgeInsets.all(24),
+        padding: const EdgeInsets.all(AbzioTheme.cardPadding),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -170,7 +165,7 @@ class PremiumEmptyState extends StatelessWidget {
               width: 72,
               decoration: BoxDecoration(
                 color: Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.7),
-                borderRadius: BorderRadius.circular(24),
+                borderRadius: BorderRadius.circular(AbzioTheme.cardRadius),
               ),
               child: Icon(
                 icon,
@@ -178,7 +173,7 @@ class PremiumEmptyState extends StatelessWidget {
                 color: Theme.of(context).colorScheme.primary,
               ),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: AbzioTheme.spacing16),
             Text(
               title,
               textAlign: TextAlign.center,
@@ -186,7 +181,7 @@ class PremiumEmptyState extends StatelessWidget {
                     fontWeight: FontWeight.w800,
                   ),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: AbzioTheme.spacing8),
             Text(
               subtitle,
               textAlign: TextAlign.center,
@@ -195,8 +190,16 @@ class PremiumEmptyState extends StatelessWidget {
                   ),
             ),
             if (actionLabel != null && onAction != null) ...[
-              const SizedBox(height: 16),
-              FilledButton(onPressed: onAction, child: Text(actionLabel!)),
+              const SizedBox(height: AbzioTheme.spacing16),
+              FilledButton(
+                style: FilledButton.styleFrom(
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(AbzioTheme.buttonRadius),
+                  ),
+                ),
+                onPressed: onAction,
+                child: Text(actionLabel!),
+              ),
             ],
           ],
         ),

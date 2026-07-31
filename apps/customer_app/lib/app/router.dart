@@ -15,7 +15,7 @@ import '../features/profile/presentation/pages/profile_page.dart';
 import '../features/shell/presentation/pages/app_shell_page.dart';
 import '../features/catalog/presentation/pages/service_detail_page.dart';
 import '../features/catalog/presentation/pages/professional_profile_page.dart';
-import '../features/booking/presentation/pages/checkout_page.dart';
+import '../features/checkout/presentation/pages/checkout_page.dart';
 import '../features/cart/presentation/pages/cart_page.dart';
 import '../features/tracking/presentation/pages/live_tracking_page.dart';
 import '../features/chat/presentation/pages/chat_page.dart';
@@ -28,6 +28,8 @@ import '../features/profile/presentation/pages/map_location_picker_page.dart';
 import '../features/offers/presentation/pages/offers_page.dart';
 import '../features/profile/presentation/pages/settings_page.dart';
 import '../features/wallet/presentation/pages/wallet_page.dart';
+import '../features/booking/presentation/pages/booking_detail_page.dart';
+import '../features/booking/presentation/pages/booking_invoice_page.dart';
 
 final routerProvider = Provider<GoRouter>((ref) {
   final refresh = _RouterRefreshNotifier(ref);
@@ -93,6 +95,20 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (context, state) => const SavedAddressesPage(),
       ),
       GoRoute(
+        path: '/booking/:bookingId',
+        builder: (context, state) {
+          final bookingId = state.pathParameters['bookingId'] ?? '';
+          return BookingDetailPage(bookingId: bookingId);
+        },
+      ),
+      GoRoute(
+        path: '/invoice/:bookingId',
+        builder: (context, state) {
+          final bookingId = state.pathParameters['bookingId'] ?? '';
+          return BookingInvoicePage(bookingId: bookingId);
+        },
+      ),
+      GoRoute(
         path: '/booking-rating',
         builder: (context, state) {
           final bookingId = state.uri.queryParameters['bookingId'] ?? '';
@@ -122,7 +138,20 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/checkout',
         builder: (context, state) {
-          return const CheckoutPage();
+          final extra = state.extra;
+          if (extra is Map<String, dynamic>) {
+            final cityId = extra['cityId'] as String? ?? '';
+            final rawItems = extra['items'] as List<dynamic>? ?? [];
+            final items = rawItems
+                .whereType<CheckoutItem>()
+                .toList();
+            return CheckoutPage(cityId: cityId, items: items);
+          }
+          // Fallback: go back if no items provided
+          return const CheckoutPage(
+            cityId: '',
+            items: [],
+          );
         },
       ),
       GoRoute(

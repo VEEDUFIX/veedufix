@@ -37,6 +37,13 @@ import { chatRouter } from "./modules/chat/chat.routes.js";
 import { reviewsRouter } from "./modules/reviews/reviews.routes.js";
 import { walletRouter } from "./modules/wallet/wallet.routes.js";
 import { aiRouter } from "./modules/ai/ai.routes.js";
+import { supportRouter } from "./modules/support/support.routes.js";
+import { adminSearchRouter } from "./modules/admin/admin-search.routes.js";
+import { adminCustomersRouter, adminBookingsRouter } from "./modules/users/admin-users.routes.js";
+import { adminCouponsRouter } from "./modules/catalog/admin-coupons.routes.js";
+import { adminReportsRouter } from "./modules/analytics/admin-reports.routes.js";
+import { adminNotificationsRouter } from "./modules/admin/admin-notifications.routes.js";
+import { deviceTokenRouter } from "./modules/device-token/device-token.routes.js";
 
 export function createApp() {
   const app = express();
@@ -105,12 +112,20 @@ export function createApp() {
   app.use("/api/admin/payouts", payoutRouter);
   app.use("/api/admin/refunds", refundRouter);
   app.use("/api/admin/analytics", adminAnalyticsRouter);
+  app.use("/api/admin/customers", adminCustomersRouter);
+  app.use("/api/admin/bookings", adminBookingsRouter);
+  app.use("/api/admin/coupons", adminCouponsRouter);
+  app.use("/api/admin/reports", adminReportsRouter);
+  app.use("/api/admin", adminSearchRouter);
+  app.use("/api/admin/notifications", adminNotificationsRouter);
   app.use("/api/webhooks", webhooksRouter);
   app.use("/api/users", usersRouter);
   app.use("/api/chat", chatRouter);
   app.use("/api/reviews", reviewsRouter);
   app.use("/api/wallet", walletRouter);
   app.use("/api/ai", aiRouter);
+  app.use("/api", supportRouter);
+  app.use("/api/device-tokens", deviceTokenRouter);
 
   app.use(notFoundHandler);
   app.use(errorHandler);

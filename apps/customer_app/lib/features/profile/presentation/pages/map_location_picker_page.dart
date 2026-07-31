@@ -132,14 +132,8 @@ class _MapLocationPickerPageState extends State<MapLocationPickerPage>
               padding: const EdgeInsets.symmetric(horizontal: 16),
               decoration: BoxDecoration(
                 color: cs.surface,
-                borderRadius: BorderRadius.circular(20),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.08),
-                    blurRadius: 16,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
+                borderRadius: BorderRadius.circular(AbzioTheme.cardRadius),
+                boxShadow: AbzioTheme.eliteShadow,
               ),
               child: Row(
                 children: [
@@ -181,13 +175,7 @@ class _MapLocationPickerPageState extends State<MapLocationPickerPage>
                 decoration: BoxDecoration(
                   color: cs.surface,
                   shape: BoxShape.circle,
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.1),
-                      blurRadius: 12,
-                      offset: const Offset(0, 4),
-                    ),
-                  ],
+                  boxShadow: AbzioTheme.eliteShadow,
                 ),
                 child: Icon(Icons.my_location_rounded, color: cs.primary),
               ),
@@ -209,13 +197,7 @@ class _MapLocationPickerPageState extends State<MapLocationPickerPage>
               decoration: BoxDecoration(
                 color: cs.surface,
                 borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.08),
-                    blurRadius: 20,
-                    offset: const Offset(0, -6),
-                  ),
-                ],
+                boxShadow: AbzioTheme.eliteShadow,
               ),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -253,14 +235,8 @@ class _MapLocationPickerPageState extends State<MapLocationPickerPage>
                       height: 56,
                       decoration: BoxDecoration(
                         color: cs.primary,
-                        borderRadius: BorderRadius.circular(18),
-                        boxShadow: [
-                          BoxShadow(
-                            color: cs.primary.withValues(alpha: 0.35),
-                            blurRadius: 16,
-                            offset: const Offset(0, 8),
-                          ),
-                        ],
+                        borderRadius: BorderRadius.circular(AbzioTheme.buttonRadius),
+                        boxShadow: AbzioTheme.eliteShadow,
                       ),
                       child: Center(
                         child: Text(

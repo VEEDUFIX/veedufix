@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:marketplace_shared/marketplace_shared.dart';
 import 'package:intl/intl.dart';
 
@@ -55,7 +56,7 @@ class _SchedulePageState extends ConsumerState<SchedulePage> {
         ),
         actions: [
           IconButton(
-            onPressed: () {},
+            onPressed: () => context.push('/availability'),
             icon: Icon(Icons.add_rounded, color: cs.primary),
           ),
           const SizedBox(width: 12),
@@ -70,13 +71,7 @@ class _SchedulePageState extends ConsumerState<SchedulePage> {
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
               decoration: BoxDecoration(
                 color: cs.surface,
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.03),
-                    blurRadius: 10,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
+                boxShadow: AbzioTheme.eliteShadow,
               ),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -92,7 +87,7 @@ class _SchedulePageState extends ConsumerState<SchedulePage> {
                       height: 64,
                       decoration: BoxDecoration(
                         color: isSelected ? cs.primary : Colors.transparent,
-                        borderRadius: BorderRadius.circular(22),
+                        borderRadius: BorderRadius.circular(AbzioTheme.cardRadius),
                         border: Border.all(
                           color: isSelected ? Colors.transparent : cs.outlineVariant.withValues(alpha: 0.5),
                         ),
@@ -247,7 +242,7 @@ class _SchedulePageState extends ConsumerState<SchedulePage> {
                                   padding: const EdgeInsets.all(16),
                                   decoration: BoxDecoration(
                                     color: accent.withValues(alpha: 0.05),
-                                    borderRadius: BorderRadius.circular(20),
+                                    borderRadius: BorderRadius.circular(AbzioTheme.cardRadius),
                                     border: Border.all(color: accent.withValues(alpha: 0.2)),
                                   ),
                                   child: Column(

@@ -5,23 +5,75 @@ import { serializeWorkerProfile } from "../worker-onboarding/worker-onboarding.s
 
 export const usersRouter = Router();
 
+function serializeNotification(notification: {
+  id: string;
+  type: string;
+  title: string;
+  body: string;
+  isRead: boolean;
+  data: unknown;
+  createdAt: Date;
+}) {
+  return {
+    id: notification.id,
+    type: notification.type,
+    title: notification.title,
+    body: notification.body,
+    isRead: notification.isRead,
+    data: notification.data,
+    createdAt: notification.createdAt.toISOString()
+  };
+}
+
 // Notifications endpoint
 usersRouter.get("/notifications", requireAuth, async (request: AuthenticatedRequest, response) => {
-  const notifications = await prisma.notification.findMany({
-    where: { userId: request.auth!.userId },
-    orderBy: { createdAt: "desc" },
-    take: 50
+  const [notifications, unreadCount] = await Promise.all([
+    prisma.notification.findMany({
+      where: { userId: request.auth!.userId },
+      orderBy: { createdAt: "desc" },
+      take: 50
+    }),
+    prisma.notification.count({
+      where: { userId: request.auth!.userId, isRead: false }
+    })
+  ]);
+
+  response.status(200).json({
+    notifications: notifications.map(serializeNotification),
+    unreadCount
+  });
+});
+
+usersRouter.post("/notifications/mark-all-read", requireAuth, async (request: AuthenticatedRequest, response) => {
+  const result = await prisma.notification.updateMany({
+    where: { userId: request.auth!.userId, isRead: false },
+    data: { isRead: true }
   });
 
-  response.status(200).json({ notifications: notifications.map((n: any) => ({
-    id: n.id,
-    type: n.type,
-    title: n.title,
-    body: n.body,
-    isRead: n.isRead,
-    data: n.data,
-    createdAt: n.createdAt.toISOString()
-  })) });
+  response.status(200).json({ updated: result.count });
+});
+
+usersRouter.patch("/notifications/:notificationId/read", requireAuth, async (request: AuthenticatedRequest, response) => {
+  const notificationId = String(request.params.notificationId);
+
+  const notification = await prisma.notification.findFirst({
+    where: {
+      id: notificationId,
+      userId: request.auth!.userId
+    }
+  });
+
+  if (!notification) {
+    response.status(404).json({ message: "Notification not found" });
+    return;
+  }
+
+  const updated = await prisma.notification.update({
+    where: { id: notificationId },
+    data: { isRead: true }
+  });
+
+  response.status(200).json({ notification: serializeNotification(updated) });
 });
 
 // ─── Current user profile ────────────────────────────────────────────────────
@@ -46,6 +98,50 @@ usersRouter.get("/me", requireAuth, async (request: AuthenticatedRequest, respon
       workerProfile: user.workerProfile ? serializeWorkerProfile(user.workerProfile) : null
     }
   });
+});
+
+// ─── Customer: Download Invoice PDF ──────────────────────────────────────────
+usersRouter.get("/bookings/:bookingId/invoice/pdf", requireAuth, async (request: AuthenticatedRequest, response) => {
+  const { bookingId } = request.params as { bookingId: string };
+  const userId = request.auth!.userId;
+
+  const booking = await prisma.booking.findUnique({
+    where: { id: bookingId },
+    include: {
+      customer: true,
+      services: {
+        include: {
+          service: true,
+          serviceSubcategory: true
+        }
+      },
+      worker: { include: { user: true } },
+      payments: true
+    }
+  });
+
+  if (!booking) {
+    response.status(404).json({ message: "Booking not found" });
+    return;
+  }
+
+  // Ensure the user owns this booking
+  if (booking.customerId !== userId) {
+    response.status(403).json({ message: "Access denied" });
+    return;
+  }
+
+  try {
+    // We dynamically import to avoid loading pdfkit unless this route is hit
+    const { generateInvoicePdf } = await import("../bookings/pdf.service.js");
+    const pdfBuffer = await generateInvoicePdf(booking);
+
+    response.setHeader("Content-Type", "application/pdf");
+    response.setHeader("Content-Disposition", `attachment; filename=Invoice-${booking.code}.pdf`);
+    response.send(pdfBuffer);
+  } catch (error) {
+    response.status(500).json({ error: "Failed to generate PDF" });
+  }
 });
 
 // ─── Customer: list my bookings ───────────────────────────────────────────────
@@ -297,9 +393,71 @@ usersRouter.get("/me/worker/stats", requireAuth, async (request: AuthenticatedRe
   });
 });
 
+// ─── Single booking full detail ───────────────────────────────────────────────
+usersRouter.get("/bookings/:bookingId", requireAuth, async (request: AuthenticatedRequest, response) => {
+  const { bookingId } = request.params as { bookingId: string };
+  const userId = request.auth!.userId;
+
+  const booking = await prisma.booking.findUnique({
+    where: { id: bookingId as string },
+    include: {
+      services: {
+        include: {
+          service: { select: { name: true, iconUrl: true, slug: true } },
+          serviceSubcategory: { select: { name: true } },
+        },
+      },
+      worker: {
+        select: {
+          id: true,
+          fullName: true,
+          averageRating: true,
+          user: { select: { avatarUrl: true } },
+        },
+      },
+      address: {
+        select: { label: true, line1: true, city: { select: { name: true } } },
+      },
+    },
+  });
+
+  if (!booking) {
+    response.status(404).json({ message: "Booking not found" });
+    return;
+  }
+
+  if (booking.customerId !== userId) {
+    response.status(403).json({ message: "Forbidden" });
+    return;
+  }
+
+  response.status(200).json({
+    booking: {
+      id: booking.id,
+      code: booking.code,
+      status: booking.status,
+      scheduledAt: booking.scheduledAt.toISOString(),
+      totalAmount: Number(booking.totalAmount),
+      serviceName: booking.services[0]?.service?.name ?? booking.services[0]?.serviceSubcategory?.name ?? "Service",
+      serviceIcon: booking.services[0]?.service?.iconUrl ?? null,
+      addressLabel: booking.address
+        ? `${booking.address.label}, ${booking.address.line1}, ${booking.address.city?.name ?? ""}`
+        : null,
+      worker: booking.worker
+        ? {
+            id: booking.worker.id,
+            name: booking.worker.fullName ?? "Professional",
+            rating: Number(booking.worker.averageRating),
+            avatarUrl: booking.worker.user?.avatarUrl ?? null,
+          }
+        : null,
+    },
+  });
+});
+
 // ─── Booking summary (for chat header / tracking page) ────────────────────────
 usersRouter.get("/bookings/:bookingId/summary", requireAuth, async (request: AuthenticatedRequest, response) => {
-  const { bookingId } = request.params;
+  const { bookingId } = request.params as { bookingId: string };
   const userId = request.auth!.userId;
 
   const booking = await prisma.booking.findUnique({
@@ -356,7 +514,7 @@ usersRouter.get("/bookings/:bookingId/summary", requireAuth, async (request: Aut
 
 // ─── Public worker profile ────────────────────────────────────────────────────
 usersRouter.get("/workers/:workerId/profile", async (request, response) => {
-  const { workerId } = request.params;
+  const { workerId } = request.params as { workerId: string };
 
   const profile = await prisma.workerProfile.findUnique({
     where: { id: workerId },
@@ -411,4 +569,268 @@ usersRouter.get("/workers/:workerId/profile", async (request, response) => {
       }))
     }
   });
+});
+
+// ─── Worker wallet ────────────────────────────────────────────────────────────
+usersRouter.get("/worker/wallet", requireAuth, async (request: AuthenticatedRequest, response) => {
+  const userId = request.auth!.userId;
+
+  const workerProfile = await prisma.workerProfile.findUnique({
+    where: { userId },
+    select: { id: true }
+  });
+
+  if (!workerProfile) {
+    response.status(404).json({ message: "Worker profile not found" });
+    return;
+  }
+
+  const transactions = await prisma.walletTransaction.findMany({
+    where: { workerId: workerProfile.id },
+    orderBy: { createdAt: "desc" },
+    take: 50
+  });
+
+  const totalEarnings = transactions
+    .filter((t: any) => t.type === "CREDIT" && Number(t.amount) > 0)
+    .reduce((sum: number, t: any) => sum + Number(t.amount), 0);
+
+  const pendingPayout = transactions
+    .filter((t: any) => t.type === "PAYOUT_PENDING")
+    .reduce((sum: number, t: any) => sum + Number(t.amount), 0);
+
+  const lastTx = transactions[0];
+  const balance = lastTx ? Number(lastTx.balanceAfter) : 0;
+
+  response.status(200).json({
+    balance,
+    totalEarnings,
+    pendingPayout,
+    transactions: transactions.map((t: any) => ({
+      id: t.id,
+      type: t.type,
+      amount: Number(t.amount),
+      balanceAfter: Number(t.balanceAfter),
+      createdAt: t.createdAt.toISOString(),
+      note: t.metadata?.note ?? null
+    }))
+  });
+});
+
+// ─── Worker: request payout ───────────────────────────────────────────────────
+usersRouter.post("/worker/wallet/payout", requireAuth, async (request: AuthenticatedRequest, response) => {
+  const userId = request.auth!.userId;
+  const { amount, upiId } = request.body as { amount: number; upiId: string };
+
+  if (!amount || typeof amount !== "number" || amount <= 0) {
+    response.status(400).json({ message: "amount must be a positive number" });
+    return;
+  }
+  if (!upiId || typeof upiId !== "string" || upiId.trim().length < 3) {
+    response.status(400).json({ message: "upiId is required" });
+    return;
+  }
+
+  // Fetch worker profile + current balance
+  const workerProfile = await prisma.workerProfile.findUnique({
+    where: { userId },
+    select: { id: true }
+  });
+
+  if (!workerProfile) {
+    response.status(404).json({ message: "Worker profile not found" });
+    return;
+  }
+
+  // Compute current balance from latest transaction
+  const lastTx = await prisma.walletTransaction.findFirst({
+    where: { workerId: workerProfile.id },
+    orderBy: { createdAt: "desc" },
+    select: { balanceAfter: true }
+  });
+
+  const currentBalance = lastTx ? Number(lastTx.balanceAfter) : 0;
+
+  if (amount > currentBalance) {
+    response.status(400).json({ message: "Insufficient wallet balance" });
+    return;
+  }
+
+  const newBalance = currentBalance - amount;
+
+  // Create a PAYOUT_PENDING transaction
+  const tx = await prisma.walletTransaction.create({
+    data: {
+      userId,
+      workerId: workerProfile.id,
+      type: "PAYOUT_PENDING",
+      amount: -amount,
+      balanceAfter: newBalance,
+      referenceType: "PAYOUT_REQUEST",
+      metadata: {
+        upiId: upiId.trim(),
+        requestedAt: new Date().toISOString(),
+        note: `UPI payout of ₹${amount} to ${upiId.trim()}`
+      }
+    }
+  });
+
+  response.status(201).json({
+    success: true,
+    transactionId: tx.id,
+    amountRequested: amount,
+    upiId: upiId.trim(),
+    newBalance
+  });
+});
+
+// ─── Worker: update own profile ───────────────────────────────────────────────
+usersRouter.patch("/me/worker/profile", requireAuth, async (request: AuthenticatedRequest, response) => {
+  const userId = request.auth!.userId;
+  const { fullName, displayName, bio, experienceYears } = request.body as {
+    fullName?: string;
+    displayName?: string;
+    bio?: string;
+    experienceYears?: number;
+  };
+
+  const workerProfile = await prisma.workerProfile.findUnique({
+    where: { userId },
+    select: { id: true }
+  });
+
+  if (!workerProfile) {
+    response.status(404).json({ message: "Worker profile not found" });
+    return;
+  }
+
+  const updated = await prisma.workerProfile.update({
+    where: { id: workerProfile.id },
+    data: {
+      ...(fullName !== undefined ? { fullName } : {}),
+      ...(displayName !== undefined ? { displayName } : {}),
+      ...(bio !== undefined ? { bio } : {}),
+      ...(typeof experienceYears === "number" ? { experienceYears } : {}),
+    },
+    select: {
+      id: true, fullName: true, displayName: true, bio: true,
+      experienceYears: true, averageRating: true, completedJobsCount: true
+    }
+  });
+
+  response.status(200).json({ success: true, profile: updated });
+});
+
+// ─── Worker: get own profile for editing ─────────────────────────────────────
+usersRouter.get("/me/worker/profile", requireAuth, async (request: AuthenticatedRequest, response) => {
+  const userId = request.auth!.userId;
+
+  const workerProfile = await prisma.workerProfile.findUnique({
+    where: { userId },
+    select: {
+      id: true, fullName: true, displayName: true, bio: true,
+      experienceYears: true, verificationStatus: true,
+      averageRating: true, completedJobsCount: true,
+      user: { select: { avatarUrl: true } }
+    }
+  });
+
+  if (!workerProfile) {
+    response.status(404).json({ message: "Worker profile not found" });
+    return;
+  }
+
+  response.status(200).json({
+    id: workerProfile.id,
+    fullName: workerProfile.fullName,
+    displayName: workerProfile.displayName,
+    bio: workerProfile.bio,
+    experienceYears: workerProfile.experienceYears,
+    verificationStatus: workerProfile.verificationStatus,
+    averageRating: Number(workerProfile.averageRating),
+    completedJobsCount: workerProfile.completedJobsCount,
+    avatarUrl: workerProfile.user.avatarUrl ?? null
+  });
+});
+
+// ─── Worker: get documents ─────────────────────────────────────────────────────
+usersRouter.get("/me/worker/documents", requireAuth, async (request: AuthenticatedRequest, response) => {
+  const userId = request.auth!.userId;
+  const workerProfile = await prisma.workerProfile.findUnique({
+    where: { userId },
+    select: { id: true, documents: { select: { id: true, type: true, url: true, verifiedAt: true, rejectedAt: true } } }
+  });
+
+  if (!workerProfile) {
+    response.status(404).json({ message: "Worker profile not found" });
+    return;
+  }
+
+  response.status(200).json({ documents: workerProfile.documents });
+});
+
+// ─── Worker: upload a new document ───────────────────────────────────────────
+usersRouter.post("/me/worker/documents", requireAuth, async (request: AuthenticatedRequest, response) => {
+  const userId = request.auth!.userId;
+  const { type, url } = request.body as { type?: string; url?: string };
+  if (!type || !url) {
+    response.status(400).json({ message: "type and url are required" });
+    return;
+  }
+
+  const workerProfile = await prisma.workerProfile.findUnique({
+    where: { userId },
+    select: { id: true }
+  });
+
+  if (!workerProfile) {
+    response.status(404).json({ message: "Worker profile not found" });
+    return;
+  }
+
+  const newDoc = await prisma.workerDocument.create({
+    data: {
+      workerId: workerProfile.id,
+      type,
+      url,
+    }
+  });
+
+  response.status(201).json({ document: newDoc });
+});
+
+// ─── Worker: decline a job offer ─────────────────────────────────────────────
+usersRouter.post("/me/worker/jobs/:offerId/decline", requireAuth, async (request: AuthenticatedRequest, response) => {
+  const userId = request.auth!.userId;
+  const { offerId } = request.params as { offerId: string };
+  const { reason } = request.body as { reason?: string };
+
+  const workerProfile = await prisma.workerProfile.findUnique({
+    where: { userId },
+    select: { id: true }
+  });
+
+  if (!workerProfile) {
+    response.status(404).json({ message: "Worker profile not found" });
+    return;
+  }
+
+  const offer = await prisma.dispatchOffer.findFirst({
+    where: { id: offerId, workerId: workerProfile.id, status: "pending" }
+  });
+
+  if (!offer) {
+    response.status(404).json({ message: "Offer not found or already actioned" });
+    return;
+  }
+
+  await prisma.dispatchOffer.update({
+    where: { id: offerId },
+    data: {
+      status: "declined",
+      respondedAt: new Date()
+    }
+  });
+
+  response.status(200).json({ success: true });
 });

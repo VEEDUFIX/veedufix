@@ -249,10 +249,14 @@ class _OpsAlertsPageState extends ConsumerState<OpsAlertsPage> {
                       ),
                     )
                   else
-                    ...alerts.map(
-                      (alert) => Padding(
-                        padding: const EdgeInsets.only(bottom: 12),
-                        child: _SurfacePanel(
+                    ListView.separated(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      itemCount: alerts.length,
+                      separatorBuilder: (_, __) => const SizedBox(height: 12),
+                      itemBuilder: (context, index) {
+                        final alert = alerts[index];
+                        return _SurfacePanel(
                           child: Padding(
                             padding: const EdgeInsets.all(16),
                             child: Column(
@@ -333,8 +337,8 @@ class _OpsAlertsPageState extends ConsumerState<OpsAlertsPage> {
                               ],
                             ),
                           ),
-                        ),
-                      ),
+                        );
+                      },
                     ),
                 ],
               ),
@@ -372,7 +376,7 @@ class _AlertIcon extends StatelessWidget {
       width: 52,
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(AbzioTheme.buttonRadius),
       ),
       child: Icon(icon, color: color),
     );
@@ -484,13 +488,7 @@ class _SurfacePanel extends StatelessWidget {
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: const Color(0xFFE5E7EB)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.01),
-            blurRadius: 4,
-            offset: const Offset(0, 2),
-          ),
-        ],
+        boxShadow: AbzioTheme.eliteShadow,
       ),
       child: child,
     );

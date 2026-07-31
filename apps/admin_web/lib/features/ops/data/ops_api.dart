@@ -4,7 +4,10 @@ class OpsSummaryCounts {
   const OpsSummaryCounts({
     required this.activeJobsCount,
     required this.dispatchFailuresCount,
+    required this.cancelledBookingsCount,
+    required this.activeWorkersCount,
     required this.openDisputesCount,
+    required this.openSupportTicketsCount,
     required this.failedPayoutsCount,
     required this.failedRefundsCount,
     required this.pendingWorkerReviewsCount,
@@ -16,7 +19,10 @@ class OpsSummaryCounts {
 
   final int activeJobsCount;
   final int dispatchFailuresCount;
+  final int cancelledBookingsCount;
+  final int activeWorkersCount;
   final int openDisputesCount;
+  final int openSupportTicketsCount;
   final int failedPayoutsCount;
   final int failedRefundsCount;
   final int pendingWorkerReviewsCount;
@@ -29,7 +35,10 @@ class OpsSummaryCounts {
     return OpsSummaryCounts(
       activeJobsCount: (json['activeJobsCount'] as num?)?.toInt() ?? 0,
       dispatchFailuresCount: (json['dispatchFailuresCount'] as num?)?.toInt() ?? 0,
+      cancelledBookingsCount: (json['cancelledBookingsCount'] as num?)?.toInt() ?? 0,
+      activeWorkersCount: (json['activeWorkersCount'] as num?)?.toInt() ?? 0,
       openDisputesCount: (json['openDisputesCount'] as num?)?.toInt() ?? 0,
+      openSupportTicketsCount: (json['openSupportTicketsCount'] as num?)?.toInt() ?? 0,
       failedPayoutsCount: (json['failedPayoutsCount'] as num?)?.toInt() ?? 0,
       failedRefundsCount: (json['failedRefundsCount'] as num?)?.toInt() ?? 0,
       pendingWorkerReviewsCount: (json['pendingWorkerReviewsCount'] as num?)?.toInt() ?? 0,

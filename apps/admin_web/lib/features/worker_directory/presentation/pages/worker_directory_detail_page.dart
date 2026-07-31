@@ -249,7 +249,7 @@ class _WorkerDirectoryDetailPageState
                               width: 72,
                               decoration: BoxDecoration(
                                 color: accent.withValues(alpha: 0.12),
-                                borderRadius: BorderRadius.circular(22),
+                                borderRadius: BorderRadius.circular(AbzioTheme.cardRadius),
                               ),
                               child: Icon(Icons.badge_rounded,
                                   color: accent, size: 32),
@@ -533,7 +533,7 @@ class _RatingTile extends StatelessWidget {
     return Container(
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: 0.72),
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(AbzioTheme.buttonRadius),
         border: Border.all(color: const Color(0xFFE9DED0)),
       ),
       padding: const EdgeInsets.all(14),
@@ -596,7 +596,7 @@ class _StatusEventTile extends StatelessWidget {
     return Container(
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: 0.72),
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(AbzioTheme.buttonRadius),
         border: Border.all(color: const Color(0xFFE9DED0)),
       ),
       padding: const EdgeInsets.all(14),
@@ -673,13 +673,7 @@ class _SurfaceCard extends StatelessWidget {
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: const Color(0xFFE5E7EB)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.01),
-            blurRadius: 4,
-            offset: const Offset(0, 2),
-          ),
-        ],
+        boxShadow: AbzioTheme.eliteShadow,
       ),
       child: child,
     );

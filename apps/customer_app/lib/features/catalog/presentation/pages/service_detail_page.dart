@@ -122,13 +122,7 @@ class ServiceDetailPage extends ConsumerWidget {
                   decoration: BoxDecoration(
                     color: colorScheme.surface,
                     shape: BoxShape.circle,
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.08),
-                        blurRadius: 12,
-                        offset: const Offset(0, 4),
-                      ),
-                    ],
+                    boxShadow: AbzioTheme.eliteShadow,
                   ),
                   child: const Icon(Icons.arrow_back_ios_new_rounded, size: 18),
                 ),
@@ -145,13 +139,7 @@ class ServiceDetailPage extends ConsumerWidget {
                     decoration: BoxDecoration(
                       color: colorScheme.surface,
                       shape: BoxShape.circle,
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.08),
-                          blurRadius: 12,
-                          offset: const Offset(0, 4),
-                        ),
-                      ],
+                      boxShadow: AbzioTheme.eliteShadow,
                     ),
                     child: Icon(
                       ref.watch(isFavoriteProvider(serviceId))
@@ -255,7 +243,7 @@ class ServiceDetailPage extends ConsumerWidget {
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
                     color: colorScheme.errorContainer.withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(16),
+                    borderRadius: BorderRadius.circular(AbzioTheme.buttonRadius),
                     border: Border.all(
                       color: colorScheme.error.withValues(alpha: 0.2),
                     ),
@@ -322,7 +310,7 @@ class _InfoChip extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
         color: cs.primary.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(24),
+        borderRadius: BorderRadius.circular(AbzioTheme.cardRadius),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -388,13 +376,7 @@ class _BookingBottomBar extends ConsumerWidget {
       padding: EdgeInsets.fromLTRB(24, 16, 24, MediaQuery.paddingOf(context).bottom + 16),
       decoration: BoxDecoration(
         color: cs.surface,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.06),
-            blurRadius: 24,
-            offset: const Offset(0, -10),
-          ),
-        ],
+        boxShadow: AbzioTheme.eliteShadow,
       ),
       child: Row(
         children: [
@@ -432,7 +414,7 @@ class _BookingBottomBar extends ConsumerWidget {
               padding: const EdgeInsets.symmetric(horizontal: 24),
               decoration: BoxDecoration(
                 color: cs.primary,
-                borderRadius: BorderRadius.circular(20),
+                borderRadius: BorderRadius.circular(AbzioTheme.cardRadius),
                 boxShadow: [
                   BoxShadow(
                     color: cs.primary.withValues(alpha: 0.3),

@@ -24,6 +24,13 @@ import '../features/worker_review/data/worker_review_api.dart';
 import '../features/worker_review/presentation/pages/worker_review_detail_page.dart';
 import '../features/worker_review/presentation/pages/worker_review_queue_page.dart';
 import '../features/profile/presentation/pages/profile_page.dart';
+import '../features/admin/presentation/pages/customer_management_page.dart';
+import '../features/admin/presentation/pages/booking_management_page.dart';
+import '../features/admin/presentation/pages/coupon_manager_page.dart';
+import '../features/admin/presentation/pages/reports_page.dart';
+import '../features/admin/presentation/pages/push_sender_page.dart';
+import '../features/admin/presentation/pages/global_search_page.dart';
+import '../features/admin/presentation/pages/support_tickets_page.dart';
 import '../features/shell/presentation/pages/app_shell_page.dart';
 
 final routerProvider = Provider<GoRouter>((ref) {
@@ -162,6 +169,46 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/profile',
             builder: (context, state) => const ProfilePage(),
+          ),
+          GoRoute(
+            path: '/customers',
+            builder: (context, state) {
+              final search = state.uri.queryParameters['search'] ?? '';
+              return CustomerManagementPage(initialSearch: search);
+            },
+          ),
+          GoRoute(
+            path: '/admin-bookings',
+            builder: (context, state) {
+              final search = state.uri.queryParameters['search'] ?? '';
+              return BookingManagementPage(initialSearch: search);
+            },
+          ),
+          GoRoute(
+            path: '/coupons',
+            builder: (context, state) => const CouponManagerPage(),
+          ),
+          GoRoute(
+            path: '/reports',
+            builder: (context, state) => const ReportsPage(),
+          ),
+          GoRoute(
+            path: '/push',
+            builder: (context, state) => const PushSenderPage(),
+          ),
+          GoRoute(
+            path: '/search',
+            builder: (context, state) {
+              final query = state.uri.queryParameters['q'] ?? '';
+              return AdminGlobalSearchPage(initialQuery: query);
+            },
+          ),
+          GoRoute(
+            path: '/support-tickets',
+            builder: (context, state) {
+              final search = state.uri.queryParameters['search'] ?? '';
+              return SupportTicketsPage(initialSearch: search);
+            },
           ),
         ],
       ),

@@ -8,11 +8,38 @@ export async function sendPushNotification(
     return { successCount: 0, failureCount: 0 };
   }
 
-  // The workspace does not currently expose a Firebase service-account setup.
-  // Keep this as a safe no-op fallback so notification delivery never blocks the main flow.
-  void title;
-  void body;
-  void data;
+  try {
+    const { default: admin } = await import("firebase-admin") as any;
 
-  return { successCount: 0, failureCount: tokens.length };
+    if (!admin.apps || admin.apps.length === 0) {
+      const serviceAccountEnv = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
+      if (serviceAccountEnv) {
+        admin.initializeApp({ credential: admin.credential.cert(JSON.parse(serviceAccountEnv)) });
+      } else {
+        admin.initializeApp({ credential: admin.credential.applicationDefault() });
+      }
+    }
+
+    const message = {
+      tokens,
+      notification: {
+        title,
+        body
+      },
+      data:
+        data != null
+          ? Object.fromEntries(
+              Object.entries(data).map(([key, value]) => [key, String(value)])
+            )
+          : undefined
+    };
+
+    const result = await admin.messaging().sendEachForMulticast(message);
+    return {
+      successCount: result.successCount,
+      failureCount: result.failureCount
+    };
+  } catch {
+    return { successCount: 0, failureCount: tokens.length };
+  }
 }

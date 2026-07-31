@@ -41,6 +41,7 @@ dependencies:
   web_socket_channel: ^3.0.3
   custom_refresh_indicator: ^4.0.1
   sensors_plus: ^7.1.0
+  flutter_animate: ^4.5.2
 
 dev_dependencies:
   flutter_test:

@@ -42,13 +42,7 @@ class _AppShellPageState extends ConsumerState<AppShellPage> {
             decoration: BoxDecoration(
               color: Colors.white.withValues(alpha: 0.9),
               border: const Border(right: BorderSide(color: Color(0xFFE5E7EB))),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.02),
-                  blurRadius: 10,
-                  offset: const Offset(2, 0),
-                ),
-              ],
+              boxShadow: AbzioTheme.eliteShadow,
             ),
             child: ClipRRect(
               child: BackdropFilter(
@@ -170,20 +164,22 @@ class _AppShellPageState extends ConsumerState<AppShellPage> {
                             padding: const EdgeInsets.symmetric(horizontal: 16),
                             decoration: BoxDecoration(
                               color: const Color(0xFFF3F4F6),
-                              borderRadius: BorderRadius.circular(20),
+                              borderRadius: BorderRadius.circular(AbzioTheme.cardRadius),
                               border: Border.all(color: const Color(0xFFE5E7EB)),
                             ),
-                            child: Row(
-                              children: [
-                                const Icon(Icons.search_rounded, size: 18, color: Colors.black45),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: TextField(
-                                    decoration: InputDecoration(
-                                      hintText: 'Search jobs, workers, etc. (Ctrl+K)',
-                                      hintStyle: GoogleFonts.inter(fontSize: 13, color: Colors.black45),
-                                      border: InputBorder.none,
-                                      isDense: true,
+                              child: Row(
+                                children: [
+                                  const Icon(Icons.search_rounded, size: 18, color: Colors.black45),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: TextField(
+                                      readOnly: true,
+                                      onTap: () => _openQuickLauncher(context),
+                                      decoration: InputDecoration(
+                                        hintText: 'Search jobs, workers, etc. (Ctrl+K)',
+                                        hintStyle: GoogleFonts.inter(fontSize: 13, color: Colors.black45),
+                                        border: InputBorder.none,
+                                        isDense: true,
                                     ),
                                     style: GoogleFonts.inter(fontSize: 14),
                                   ),
@@ -195,7 +191,7 @@ class _AppShellPageState extends ConsumerState<AppShellPage> {
                           // Actions
                           IconButton(
                             icon: const Icon(Icons.notifications_none_rounded, color: Colors.black54),
-                            onPressed: () {},
+                            onPressed: () => context.go('/ops/alerts'),
                           ),
                           const SizedBox(width: 16),
                           Container(width: 1, height: 24, color: const Color(0xFFE5E7EB)),
@@ -238,6 +234,53 @@ class _AppShellPageState extends ConsumerState<AppShellPage> {
           ),
         ],
       ),
+    );
+  }
+
+  void _openQuickLauncher(BuildContext context) {
+    final actions = [
+      _QuickAction('Global Search', '/search', Icons.search_rounded),
+      _QuickAction('Dashboard', '/admin', Icons.space_dashboard_rounded),
+      _QuickAction('Alerts', '/ops/alerts', Icons.warning_rounded),
+      _QuickAction('Support Tickets', '/support-tickets', Icons.support_agent_rounded),
+      _QuickAction('Worker Review', '/worker-review', Icons.how_to_reg_rounded),
+      _QuickAction('Workers', '/workers', Icons.people_rounded),
+      _QuickAction('Catalog', '/catalog', Icons.category_rounded),
+      _QuickAction('Finance', '/finance', Icons.account_balance_rounded),
+    ];
+
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('Quick launcher'),
+          content: SizedBox(
+            width: 420,
+            child: ListView.separated(
+              shrinkWrap: true,
+              itemCount: actions.length,
+              separatorBuilder: (_, __) => const Divider(height: 1),
+              itemBuilder: (context, index) {
+                final action = actions[index];
+                return ListTile(
+                  leading: Icon(action.icon),
+                  title: Text(action.label),
+                  onTap: () {
+                    Navigator.of(dialogContext).pop();
+                    context.go(action.route);
+                  },
+                );
+              },
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('Close'),
+            ),
+          ],
+        );
+      },
     );
   }
 
@@ -329,4 +372,11 @@ class _AppShellPageState extends ConsumerState<AppShellPage> {
       ),
     );
   }
+}
+
+class _QuickAction {
+  const _QuickAction(this.label, this.route, this.icon);
+  final String label;
+  final String route;
+  final IconData icon;
 }

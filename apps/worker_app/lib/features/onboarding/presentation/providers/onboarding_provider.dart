@@ -364,59 +364,60 @@ class WorkerOnboardingApi {
     required String type,
   }) async {
     final fileName = file.name.isNotEmpty ? file.name : 'document.jpg';
-
-    final signatureResponse = await _dio.post<Map<String, dynamic>>(
-      '/uploads/signature',
-      data: {
-        'bookingId': 'onboarding-$userId',
-        'type': 'before',
-      },
-    );
-
-    final payload = signatureResponse.data ?? <String, dynamic>{};
-    final uploadUrl = payload['uploadUrl'] as String? ?? '';
-    final folder = payload['folder'] as String? ?? '';
-    final apiKey = payload['apiKey'] as String? ?? '';
-    final timestamp = payload['timestamp'];
-    final signature = payload['signature'] as String? ?? '';
-
-    if (uploadUrl.isEmpty || apiKey.isEmpty || folder.isEmpty || signature.isEmpty) {
-      throw StateError('Cloudinary signature response was incomplete.');
-    }
-
-    try {
-      return await _uploadDirectToCloudinary(
-        uploadUrl: uploadUrl,
-        apiKey: apiKey,
-        folder: folder,
-        timestamp: timestamp,
-        signature: signature,
-        file: file,
-        fileName: fileName,
+    return _retryTransient<String>(() async {
+      final signatureResponse = await _dio.post<Map<String, dynamic>>(
+        '/uploads/signature',
+        data: {
+          'bookingId': 'onboarding-$userId',
+          'type': 'before',
+        },
       );
-    } catch (_) {
-      final fallback = await _dio.post<Map<String, dynamic>>(
-        '/media/workers/document',
-        data: FormData.fromMap({
-          'type': type,
-          'file': await MultipartFile.fromFile(file.path, filename: fileName),
-        }),
-        options: Options(
-          contentType: Headers.multipartFormDataContentType,
-          responseType: ResponseType.json,
-        ),
-      );
-      final fallbackData = fallback.data ?? <String, dynamic>{};
-      final document = fallbackData['document'];
-      if (document is Map<String, dynamic>) {
-        final url = document['url'] as String?;
-        if (url != null && url.isNotEmpty) {
-          return url;
-        }
+
+      final payload = signatureResponse.data ?? <String, dynamic>{};
+      final uploadUrl = payload['uploadUrl'] as String? ?? '';
+      final folder = payload['folder'] as String? ?? '';
+      final apiKey = payload['apiKey'] as String? ?? '';
+      final timestamp = payload['timestamp'];
+      final signature = payload['signature'] as String? ?? '';
+
+      if (uploadUrl.isEmpty || apiKey.isEmpty || folder.isEmpty || signature.isEmpty) {
+        throw StateError('Cloudinary signature response was incomplete.');
       }
 
-      throw StateError('Cloudinary upload failed.');
-    }
+      try {
+        return await _uploadDirectToCloudinary(
+          uploadUrl: uploadUrl,
+          apiKey: apiKey,
+          folder: folder,
+          timestamp: timestamp,
+          signature: signature,
+          file: file,
+          fileName: fileName,
+        );
+      } catch (_) {
+        final fallback = await _dio.post<Map<String, dynamic>>(
+          '/media/workers/document',
+          data: FormData.fromMap({
+            'type': type,
+            'file': await MultipartFile.fromFile(file.path, filename: fileName),
+          }),
+          options: Options(
+            contentType: Headers.multipartFormDataContentType,
+            responseType: ResponseType.json,
+          ),
+        );
+        final fallbackData = fallback.data ?? <String, dynamic>{};
+        final document = fallbackData['document'];
+        if (document is Map<String, dynamic>) {
+          final url = document['url'] as String?;
+          if (url != null && url.isNotEmpty) {
+            return url;
+          }
+        }
+
+        throw StateError('Cloudinary upload failed.');
+      }
+    });
   }
 
   Future<String> _uploadDirectToCloudinary({
@@ -929,6 +930,26 @@ class WorkerOnboardingController extends StateNotifier<WorkerOnboardingState> {
     }
     return error.toString();
   }
+}
+
+Future<T> _retryTransient<T>(
+  Future<T> Function() action, {
+  int attempts = 3,
+  Duration delay = const Duration(milliseconds: 500),
+}) async {
+  Object? lastError;
+  for (var attempt = 1; attempt <= attempts; attempt++) {
+    try {
+      return await action();
+    } catch (error) {
+      lastError = error;
+      if (attempt == attempts) {
+        rethrow;
+      }
+      await Future.delayed(Duration(milliseconds: delay.inMilliseconds * attempt));
+    }
+  }
+  throw lastError ?? StateError('Retry failed.');
 }
 
 List<WorkerOnboardingSkillItem> _decodeSkills(dynamic data) {

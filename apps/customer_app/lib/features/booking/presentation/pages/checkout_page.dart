@@ -238,13 +238,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
               decoration: BoxDecoration(
                 color: cs.surface,
                 shape: BoxShape.circle,
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.08),
-                    blurRadius: 12,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
+                boxShadow: AbzioTheme.eliteShadow,
               ),
               child: const Icon(Icons.arrow_back_ios_new_rounded, size: 18),
             ),
@@ -331,13 +325,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
                   padding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
                   decoration: BoxDecoration(
                     color: cs.surface,
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.06),
-                        blurRadius: 24,
-                        offset: const Offset(0, -10),
-                      ),
-                    ],
+                    boxShadow: AbzioTheme.eliteShadow,
                   ),
                   child: SafeArea(
                     child: TapScale(
@@ -361,14 +349,8 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
                         padding: const EdgeInsets.symmetric(vertical: 18),
                         decoration: BoxDecoration(
                           color: cs.primary,
-                          borderRadius: BorderRadius.circular(18),
-                          boxShadow: [
-                            BoxShadow(
-                              color: cs.primary.withValues(alpha: 0.4),
-                              blurRadius: 20,
-                              offset: const Offset(0, 8),
-                            ),
-                          ],
+                          borderRadius: BorderRadius.circular(AbzioTheme.buttonRadius),
+                          boxShadow: AbzioTheme.eliteShadow,
                         ),
                         child: Text(
                           _step < 2 
@@ -501,7 +483,7 @@ class _StepAddress extends ConsumerWidget {
                       child: Container(
                         padding: const EdgeInsets.all(18),
                         decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(20),
+                          borderRadius: BorderRadius.circular(AbzioTheme.cardRadius),
                           border: isSelected ? Border.all(color: cs.primary, width: 2) : Border.all(color: Colors.transparent, width: 2),
                         ),
                         child: Column(
@@ -562,7 +544,7 @@ class _StepAddress extends ConsumerWidget {
             padding: const EdgeInsets.all(18),
             decoration: BoxDecoration(
               color: cs.surfaceContainerHighest.withValues(alpha: 0.3),
-              borderRadius: BorderRadius.circular(20),
+              borderRadius: BorderRadius.circular(AbzioTheme.cardRadius),
             ),
             child: Row(
               children: [
@@ -580,7 +562,7 @@ class _StepAddress extends ConsumerWidget {
             padding: const EdgeInsets.all(18),
             decoration: BoxDecoration(
               border: Border.all(color: cs.outlineVariant, style: BorderStyle.solid),
-              borderRadius: BorderRadius.circular(20),
+              borderRadius: BorderRadius.circular(AbzioTheme.cardRadius),
             ),
             child: Row(
               children: [
@@ -639,16 +621,8 @@ class _StepDateTime extends StatelessWidget {
                   width: 76,
                   decoration: BoxDecoration(
                     color: selected ? cs.primary : cs.surface,
-                    borderRadius: BorderRadius.circular(18),
-                    boxShadow: [
-                      BoxShadow(
-                        color: selected
-                            ? cs.primary.withValues(alpha: 0.3)
-                            : Colors.black.withValues(alpha: 0.05),
-                        blurRadius: 12,
-                        offset: const Offset(0, 4),
-                      ),
-                    ],
+                    borderRadius: BorderRadius.circular(AbzioTheme.buttonRadius),
+                    boxShadow: AbzioTheme.eliteShadow,
                   ),
                   child: Center(
                     child: Text(
@@ -811,7 +785,7 @@ class _StepSummary extends StatelessWidget {
             decoration: BoxDecoration(
               color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
               border: Border.all(color: Theme.of(context).colorScheme.outlineVariant, style: BorderStyle.solid),
-              borderRadius: BorderRadius.circular(20),
+              borderRadius: BorderRadius.circular(AbzioTheme.cardRadius),
             ),
             child: Row(
               children: [

@@ -9,6 +9,7 @@ import 'package:intl/intl.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
 import '../../../../core/realtime/realtime_socket_service.dart';
+import '../providers/worker_availability_provider.dart';
 
 class WorkerDashboardPage extends ConsumerStatefulWidget {
   const WorkerDashboardPage({super.key});
@@ -23,7 +24,6 @@ class _WorkerDashboardPageState extends ConsumerState<WorkerDashboardPage> {
   final List<_LiveUpdateItem> _liveUpdates = <_LiveUpdateItem>[];
   String? _activeUserId;
   bool _connected = false;
-  bool _isOnline = true;
 
   @override
   void initState() {
@@ -157,8 +157,9 @@ class _WorkerDashboardPageState extends ConsumerState<WorkerDashboardPage> {
       }
     });
 
-    final auth = ref.watch(authControllerProvider).valueOrNull;
+    final isSignedIn = ref.watch(authControllerProvider.select((s) => s.valueOrNull?.user.id)) != null;
     final statsAsync = ref.watch(workerDashboardStatsProvider);
+    final unreadNotifications = ref.watch(notificationsUnreadCountProvider).valueOrNull ?? 0;
 
     return Scaffold(
       appBar: AppBar(
@@ -169,7 +170,34 @@ class _WorkerDashboardPageState extends ConsumerState<WorkerDashboardPage> {
         actions: [
           IconButton(
             onPressed: () => context.push('/notifications'),
-            icon: const Icon(Icons.notifications_none_rounded),
+            icon: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                const Icon(Icons.notifications_none_rounded),
+                if (unreadNotifications > 0)
+                  Positioned(
+                    right: -2,
+                    top: -2,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                      decoration: BoxDecoration(
+                        color: Theme.of(context).colorScheme.error,
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                      constraints: const BoxConstraints(minWidth: 16),
+                      child: Text(
+                        unreadNotifications > 99 ? '99+' : '$unreadNotifications',
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 9,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
           ),
         ],
       ),
@@ -177,10 +205,7 @@ class _WorkerDashboardPageState extends ConsumerState<WorkerDashboardPage> {
         padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
         children: [
           // ── Online/Offline Toggle ────────────────────────────────────
-          _OnlineToggle(
-            isOnline: _isOnline,
-            onChanged: (v) => setState(() => _isOnline = v),
-          ),
+          const _AvailabilityToggleCard(),
           const SizedBox(height: 16),
           PremiumGlassCard(
             child: Padding(
@@ -273,7 +298,7 @@ class _WorkerDashboardPageState extends ConsumerState<WorkerDashboardPage> {
               child: Padding(
                 padding: const EdgeInsets.all(18),
                 child: Text(
-                  auth == null
+                  isSignedIn
                       ? 'Sign in to receive live updates.'
                       : 'No live events yet. New notifications and booking changes will appear here.',
                   style: Theme.of(context).textTheme.bodyMedium,
@@ -309,6 +334,7 @@ class _WorkerDashboardPageState extends ConsumerState<WorkerDashboardPage> {
                       title: job.serviceName,
                       status: job.status,
                       time: '${DateFormat('h:mm a').format(job.scheduledAt)} • ${job.addressLabel ?? 'No address'}',
+                      onTap: () => context.go('/jobs'),
                     ),
                   );
                 }).toList(),
@@ -338,6 +364,13 @@ class _WorkerDashboardPageState extends ConsumerState<WorkerDashboardPage> {
                 label: 'Earnings',
                 color: const Color(0xFF14B8A6),
                 onTap: () => context.go('/earnings'),
+              ),
+              const SizedBox(width: 12),
+              _QuickAction(
+                icon: Icons.account_balance_wallet_rounded,
+                label: 'Wallet',
+                color: const Color(0xFF10B981),
+                onTap: () => context.push('/wallet'),
               ),
               const SizedBox(width: 12),
               _QuickAction(
@@ -453,11 +486,13 @@ class _JobCard extends StatelessWidget {
     required this.title,
     required this.status,
     required this.time,
+    this.onTap,
   });
 
   final String title;
   final String status;
   final String time;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -466,7 +501,7 @@ class _JobCard extends StatelessWidget {
     final accent = isEnRoute ? const Color(0xFF14B8A6) : cs.primary;
 
     return TapScale(
-      onTap: () {},
+      onTap: onTap ?? () {},
       child: PremiumGlassCard(
         child: ListTile(
           contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
@@ -476,7 +511,7 @@ class _JobCard extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             decoration: BoxDecoration(
               color: accent.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(20),
+              borderRadius: BorderRadius.circular(AbzioTheme.cardRadius),
             ),
             child: Text(
               status,
@@ -493,9 +528,27 @@ class _JobCard extends StatelessWidget {
   }
 }
 
+class _AvailabilityToggleCard extends ConsumerWidget {
+  const _AvailabilityToggleCard();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final toggleState = ref.watch(availabilityToggleProvider);
+    final isOnline = toggleState.valueOrNull ?? true;
+    final isLoading = toggleState.isLoading;
+
+    return _OnlineToggle(
+      isOnline: isOnline,
+      isLoading: isLoading,
+      onChanged: (v) => ref.read(availabilityToggleProvider.notifier).toggle(v),
+    );
+  }
+}
+
 class _OnlineToggle extends StatelessWidget {
-  const _OnlineToggle({required this.isOnline, required this.onChanged});
+  const _OnlineToggle({required this.isOnline, required this.onChanged, this.isLoading = false});
   final bool isOnline;
+  final bool isLoading;
   final ValueChanged<bool> onChanged;
 
   @override
@@ -509,7 +562,7 @@ class _OnlineToggle extends StatelessWidget {
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: accent.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(AbzioTheme.cardRadius),
         border: Border.all(color: accent.withValues(alpha: 0.3)),
         boxShadow: isOnline
             ? [
@@ -591,7 +644,7 @@ class _QuickAction extends StatelessWidget {
           padding: const EdgeInsets.symmetric(vertical: 16),
           decoration: BoxDecoration(
             color: color.withValues(alpha: 0.08),
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(AbzioTheme.buttonRadius),
             border: Border.all(color: color.withValues(alpha: 0.15)),
           ),
           child: Column(

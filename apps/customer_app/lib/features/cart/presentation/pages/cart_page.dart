@@ -61,7 +61,7 @@ class CartPage extends ConsumerWidget {
                   padding: const EdgeInsets.all(20),
                   decoration: BoxDecoration(
                     color: cs.surfaceContainerHighest.withValues(alpha: 0.3),
-                    borderRadius: BorderRadius.circular(24),
+                    borderRadius: BorderRadius.circular(AbzioTheme.cardRadius),
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -121,7 +121,7 @@ class CartPage extends ConsumerWidget {
                   height: 60,
                   decoration: BoxDecoration(
                     color: cs.primary,
-                    borderRadius: BorderRadius.circular(20),
+                    borderRadius: BorderRadius.circular(AbzioTheme.cardRadius),
                     boxShadow: [
                       BoxShadow(
                         color: cs.primary.withValues(alpha: 0.3),
@@ -156,7 +156,7 @@ class _CartItemTile extends ConsumerWidget {
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: cs.surface,
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(AbzioTheme.cardRadius),
         border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.5)),
       ),
       child: Row(
@@ -166,7 +166,7 @@ class _CartItemTile extends ConsumerWidget {
             height: 60,
             decoration: BoxDecoration(
               color: cs.primaryContainer.withValues(alpha: 0.3),
-              borderRadius: BorderRadius.circular(16),
+              borderRadius: BorderRadius.circular(AbzioTheme.buttonRadius),
             ),
             child: Icon(Icons.design_services_rounded, color: cs.primary), // Fallback icon
           ),

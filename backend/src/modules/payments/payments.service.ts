@@ -7,6 +7,8 @@ import { logger } from "../../lib/logger.js";
 import { publishTrackingEvent } from "../../lib/realtime.js";
 import { dispatchBookingAfterPayment } from "../matching/matching.service.js";
 import { raiseOpsAlert } from "../ops/ops.service.js";
+import { getTokensForUser } from "../device-token/device-token.service.js";
+import { sendMulticastPush } from "../../lib/fcm.js";
 
 type BookingItemInput = {
   serviceId: string;
@@ -833,6 +835,26 @@ export async function verifyPayment(
     },
     "Razorpay payment verified"
   );
+
+  // Send booking confirmation push to customer
+  try {
+    const tokens = await getTokensForUser(input.userId);
+    if (tokens.length > 0) {
+      await sendMulticastPush({
+        tokens,
+        title: "Booking Confirmed!",
+        body: `Your booking #${payment.booking.code} has been confirmed. A professional will be assigned shortly.`,
+        data: {
+          type: "BOOKING_CONFIRMED",
+          bookingId: payment.bookingId,
+          bookingCode: payment.booking.code,
+          route: `/booking/${payment.bookingId}`
+        }
+      });
+    }
+  } catch (err) {
+    logger.warn({ err }, "Failed to send booking confirmed push");
+  }
 
   return {
     bookingId: payment.bookingId,

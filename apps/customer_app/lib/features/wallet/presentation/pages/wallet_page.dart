@@ -101,7 +101,7 @@ class _BalanceHeroCard extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(24),
+        borderRadius: BorderRadius.circular(AbzioTheme.cardRadius),
         gradient: const LinearGradient(
           colors: [
             Color(0xFF8B5CF6), // Purple
@@ -110,13 +110,7 @@ class _BalanceHeroCard extends StatelessWidget {
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
-        boxShadow: [
-          BoxShadow(
-            color: const Color(0xFF8B5CF6).withValues(alpha: 0.3),
-            blurRadius: 20,
-            offset: const Offset(0, 10),
-          ),
-        ],
+        boxShadow: AbzioTheme.eliteShadow,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

@@ -59,13 +59,7 @@ class _AiAssistantSheetState extends ConsumerState<_AiAssistantSheet> with Ticke
       decoration: BoxDecoration(
         color: cs.surface,
         borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
-        boxShadow: [
-          BoxShadow(
-            color: cs.primary.withValues(alpha: 0.15),
-            blurRadius: 40,
-            spreadRadius: 10,
-          ),
-        ],
+        boxShadow: AbzioTheme.eliteShadow,
       ),
       child: Column(
         children: [
@@ -144,7 +138,7 @@ class _AiAssistantSheetState extends ConsumerState<_AiAssistantSheet> with Ticke
                           filled: true,
                           fillColor: cs.surface,
                           border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(24),
+                            borderRadius: BorderRadius.circular(AbzioTheme.cardRadius),
                             borderSide: BorderSide.none,
                           ),
                           contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
@@ -249,7 +243,7 @@ class _ChatBubble extends StatelessWidget {
             ),
             decoration: BoxDecoration(
               color: isUser ? cs.primary : cs.surfaceContainerHighest,
-              borderRadius: BorderRadius.circular(24).copyWith(
+              borderRadius: BorderRadius.circular(AbzioTheme.cardRadius).copyWith(
                 bottomRight: Radius.circular(isUser ? 4 : 24),
                 bottomLeft: Radius.circular(!isUser ? 4 : 24),
               ),

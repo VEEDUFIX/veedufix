@@ -860,13 +860,7 @@ class _SearchBar extends StatelessWidget {
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: const Color(0xFFE5E7EB)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.01),
-            blurRadius: 4,
-            offset: const Offset(0, 2),
-          ),
-        ],
+        boxShadow: AbzioTheme.eliteShadow,
       ),
       child: Row(
         children: [
@@ -1264,13 +1258,7 @@ class _CatalogCard extends StatelessWidget {
           color: Colors.white,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(color: const Color(0xFFE5E7EB)),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.01),
-              blurRadius: 4,
-              offset: const Offset(0, 2),
-            ),
-          ],
+          boxShadow: AbzioTheme.eliteShadow,
         ),
         child: ListTile(
           contentPadding: const EdgeInsets.all(16),
@@ -1279,7 +1267,7 @@ class _CatalogCard extends StatelessWidget {
             width: 48,
             decoration: BoxDecoration(
               color: accent.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(16),
+              borderRadius: BorderRadius.circular(AbzioTheme.buttonRadius),
             ),
             child: Icon(Icons.grid_view_rounded, color: accent),
           ),

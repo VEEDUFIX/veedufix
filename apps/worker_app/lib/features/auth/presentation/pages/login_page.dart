@@ -74,7 +74,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                 padding: const EdgeInsets.all(20),
                 decoration: BoxDecoration(
                   color: Colors.white.withValues(alpha: 0.08),
-                  borderRadius: BorderRadius.circular(28),
+                  borderRadius: BorderRadius.circular(AbzioTheme.cardRadius),
                   border: Border.all(
                     color: Colors.white.withValues(alpha: 0.12),
                   ),

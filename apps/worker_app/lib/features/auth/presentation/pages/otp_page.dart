@@ -151,20 +151,20 @@ class _OtpPageState extends ConsumerState<OtpPage> {
                         filled: true,
                         fillColor: cs.surfaceContainerHighest.withValues(alpha: 0.3),
                         border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(16),
+                          borderRadius: BorderRadius.circular(AbzioTheme.buttonRadius),
                           borderSide: BorderSide(
                             color: cs.outlineVariant.withValues(alpha: 0.5),
                           ),
                         ),
                         focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(16),
+                          borderRadius: BorderRadius.circular(AbzioTheme.buttonRadius),
                           borderSide: BorderSide(
                             color: cs.primary,
                             width: 2,
                           ),
                         ),
                         enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(16),
+                          borderRadius: BorderRadius.circular(AbzioTheme.buttonRadius),
                           borderSide: BorderSide(
                             color: cs.outlineVariant.withValues(alpha: 0.5),
                           ),

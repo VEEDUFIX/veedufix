@@ -12,8 +12,7 @@ class HomePage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final auth = ref.watch(authControllerProvider).valueOrNull;
-    final userName = auth?.user.name ?? 'Abdul';
+    final userName = ref.watch(authControllerProvider.select((s) => s.valueOrNull?.user.name)) ?? 'Abdul';
     final firstName = userName.trim().split(RegExp(r'\s+')).first;
     final colorScheme = Theme.of(context).colorScheme;
 
@@ -177,23 +176,27 @@ class HomePage extends ConsumerWidget {
             ),
             const SizedBox(height: 12),
             if (professionalsAsync.isLoading)
-              ...List.generate(
-                2,
-                (_) => const Padding(
-                  padding: EdgeInsets.only(bottom: 12),
-                  child: ShimmerPlaceholder(
-                    width: double.infinity,
-                    height: 80,
-                    borderRadius: 24,
-                  ),
+              ListView.separated(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                itemCount: 2,
+                separatorBuilder: (_, __) => const SizedBox(height: 12),
+                itemBuilder: (_, __) => const ShimmerPlaceholder(
+                  width: double.infinity,
+                  height: 80,
+                  borderRadius: 24,
                 ),
               )
             else
-              ...(professionalsAsync.valueOrNull ?? const <HomeProfessional>[]).map(
-                (professional) => Padding(
-                  padding: const EdgeInsets.only(bottom: 12),
-                  child: _TopRatedCard(professional: professional),
-                ),
+              ListView.separated(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                itemCount: (professionalsAsync.valueOrNull ?? const <HomeProfessional>[]).length,
+                separatorBuilder: (_, __) => const SizedBox(height: 12),
+                itemBuilder: (context, index) {
+                  final professional = professionalsAsync.valueOrNull![index];
+                  return _TopRatedCard(professional: professional);
+                },
               ),
             const SizedBox(height: 8),
             const _SectionLabel(
@@ -281,14 +284,8 @@ class _HomeHeader extends StatelessWidget {
           width: 52,
           decoration: BoxDecoration(
             color: colorScheme.surface,
-            borderRadius: BorderRadius.circular(18),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.06),
-                blurRadius: 24,
-                offset: const Offset(0, 12),
-              ),
-            ],
+            borderRadius: BorderRadius.circular(AbzioTheme.buttonRadius),
+            boxShadow: AbzioTheme.eliteShadow,
           ),
           child: IconButton(
             onPressed: () => context.push('/notifications'),
@@ -315,14 +312,8 @@ class _LocationChip extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
         color: colorScheme.surface,
-        borderRadius: BorderRadius.circular(18),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 20,
-            offset: const Offset(0, 10),
-          ),
-        ],
+        borderRadius: BorderRadius.circular(AbzioTheme.buttonRadius),
+        boxShadow: AbzioTheme.eliteShadow,
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -362,14 +353,8 @@ class _SearchBar extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       decoration: BoxDecoration(
         color: colorScheme.surface,
-        borderRadius: BorderRadius.circular(22),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.06),
-            blurRadius: 26,
-            offset: const Offset(0, 12),
-          ),
-        ],
+        borderRadius: BorderRadius.circular(AbzioTheme.cardRadius),
+        boxShadow: AbzioTheme.eliteShadow,
       ),
       child: Row(
         children: [
@@ -387,13 +372,13 @@ class _SearchBar extends StatelessWidget {
           const SizedBox(width: 8),
           InkWell(
             onTap: onVoiceTap,
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(AbzioTheme.buttonRadius),
             child: Container(
               height: 40,
               width: 40,
               decoration: BoxDecoration(
                 color: colorScheme.primaryContainer.withValues(alpha: 0.8),
-                borderRadius: BorderRadius.circular(16),
+                borderRadius: BorderRadius.circular(AbzioTheme.buttonRadius),
               ),
               child: Icon(Icons.mic_none_rounded, color: colorScheme.primary),
             ),
@@ -459,14 +444,8 @@ class _CategoryChip extends StatelessWidget {
               width: 72,
               decoration: BoxDecoration(
                 color: colorScheme.surface,
-                borderRadius: BorderRadius.circular(28),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.06),
-                    blurRadius: 24,
-                    offset: const Offset(0, 12),
-                  ),
-                ],
+                borderRadius: BorderRadius.circular(AbzioTheme.cardRadius),
+                boxShadow: AbzioTheme.eliteShadow,
               ),
               child: Center(
                 child: Container(
@@ -474,7 +453,7 @@ class _CategoryChip extends StatelessWidget {
                   width: 52,
                   decoration: BoxDecoration(
                     color: _accent.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(20),
+                    borderRadius: BorderRadius.circular(AbzioTheme.cardRadius),
                   ),
                   child: Icon(_icon, color: _accent),
                 ),
@@ -558,7 +537,7 @@ class _ServiceCard extends StatelessWidget {
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                   ),
-                  borderRadius: BorderRadius.circular(20),
+                  borderRadius: BorderRadius.circular(AbzioTheme.cardRadius),
                 ),
                 child: Icon(_icon, size: 38, color: _accent),
               ),
@@ -639,7 +618,7 @@ class _ProfessionalCard extends StatelessWidget {
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                   ),
-                  borderRadius: BorderRadius.circular(22),
+                  borderRadius: BorderRadius.circular(AbzioTheme.cardRadius),
                 ),
                 child: Center(
                   child: CircleAvatar(
@@ -836,7 +815,7 @@ class _FeaturedBanner extends StatelessWidget {
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
           ),
-          borderRadius: BorderRadius.circular(28),
+          borderRadius: BorderRadius.circular(AbzioTheme.cardRadius),
         ),
         padding: const EdgeInsets.all(20),
         child: Row(

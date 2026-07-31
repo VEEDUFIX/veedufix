@@ -83,13 +83,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
               decoration: BoxDecoration(
                 color: cs.surface,
                 shape: BoxShape.circle,
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.08),
-                    blurRadius: 12,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
+                boxShadow: AbzioTheme.eliteShadow,
               ),
               child: const Icon(Icons.arrow_back_ios_new_rounded, size: 18),
             ),
@@ -210,13 +204,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
             padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
             decoration: BoxDecoration(
               color: cs.surface,
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.05),
-                  blurRadius: 20,
-                  offset: const Offset(0, -8),
-                ),
-              ],
+              boxShadow: AbzioTheme.eliteShadow,
             ),
             child: SafeArea(
               top: false,
@@ -227,7 +215,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                       padding: const EdgeInsets.symmetric(horizontal: 18),
                       decoration: BoxDecoration(
                         color: cs.surfaceContainerHighest,
-                        borderRadius: BorderRadius.circular(24),
+                        borderRadius: BorderRadius.circular(AbzioTheme.cardRadius),
                       ),
                       child: TextField(
                         controller: _controller,
@@ -344,13 +332,7 @@ class _BubbleTile extends StatelessWidget {
                       bottomLeft: Radius.circular(isMe ? 18 : 4),
                       bottomRight: Radius.circular(isMe ? 4 : 18),
                     ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.05),
-                        blurRadius: 8,
-                        offset: const Offset(0, 2),
-                      ),
-                    ],
+                    boxShadow: AbzioTheme.eliteShadow,
                   ),
                   child: Text(
                     message.text,
@@ -392,7 +374,7 @@ class _QuickReply extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
           decoration: BoxDecoration(
             border: Border.all(color: cs.primary.withValues(alpha: 0.5)),
-            borderRadius: BorderRadius.circular(20),
+            borderRadius: BorderRadius.circular(AbzioTheme.cardRadius),
           ),
           child: Text(
             label,

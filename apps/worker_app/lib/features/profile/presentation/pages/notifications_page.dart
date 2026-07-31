@@ -21,9 +21,7 @@ class NotificationsPage extends ConsumerWidget {
           title: const Text('Notifications'),
           actions: [
             TextButton(
-              onPressed: () {
-                // Not supported by API yet
-              },
+              onPressed: () => _markAllNotificationsRead(context, ref),
               child: const Text('Mark all read'),
             ),
           ],
@@ -45,22 +43,22 @@ class NotificationsPage extends ConsumerWidget {
                 _NotificationList(
                   notifications: notifications,
                   onRefresh: () async => ref.refresh(notificationsProvider.future),
-                  onDismiss: () => ref.invalidate(notificationsProvider),
+                  onDismiss: (notificationId) => _markNotificationRead(ref, notificationId),
                 ),
                 _NotificationList(
                   notifications: notifications.where((n) => n.type == 'BOOKING' || n.type == 'JOB').toList(),
                   onRefresh: () async => ref.refresh(notificationsProvider.future),
-                  onDismiss: () => ref.invalidate(notificationsProvider),
+                  onDismiss: (notificationId) => _markNotificationRead(ref, notificationId),
                 ),
                 _NotificationList(
                   notifications: notifications.where((n) => n.type == 'PAYMENT' || n.type == 'EARNINGS').toList(),
                   onRefresh: () async => ref.refresh(notificationsProvider.future),
-                  onDismiss: () => ref.invalidate(notificationsProvider),
+                  onDismiss: (notificationId) => _markNotificationRead(ref, notificationId),
                 ),
                 _NotificationList(
                   notifications: notifications.where((n) => n.type == 'SYSTEM' || n.type == 'INFO').toList(),
                   onRefresh: () async => ref.refresh(notificationsProvider.future),
-                  onDismiss: () => ref.invalidate(notificationsProvider),
+                  onDismiss: (notificationId) => _markNotificationRead(ref, notificationId),
                 ),
               ],
             );
@@ -89,7 +87,7 @@ class NotificationsPage extends ConsumerWidget {
 class _NotificationList extends StatelessWidget {
   final List<AppNotification> notifications;
   final Future<void> Function() onRefresh;
-  final VoidCallback onDismiss;
+  final Future<void> Function(String notificationId) onDismiss;
 
   const _NotificationList({
     required this.notifications,
@@ -122,15 +120,39 @@ class _NotificationList extends StatelessWidget {
               child: const Icon(Icons.delete, color: Colors.white),
             ),
             direction: DismissDirection.endToStart,
-            onDismissed: (_) {
-              // Usually calls API here, but optimistic UI as requested
-              onDismiss();
+            onDismissed: (_) async {
+              await onDismiss(item.id);
             },
             child: _NotificationCard(item: item),
           );
         },
       ),
     );
+  }
+}
+
+Future<void> _markAllNotificationsRead(BuildContext context, WidgetRef ref) async {
+  try {
+    await ref.read(apiClientProvider).post('/notifications/mark-all-read');
+    ref.invalidate(notificationsProvider);
+    ref.invalidate(notificationsUnreadCountProvider);
+  } catch (_) {
+    if (!context.mounted) {
+      return;
+    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Could not mark notifications as read.')),
+    );
+  }
+}
+
+Future<void> _markNotificationRead(WidgetRef ref, String notificationId) async {
+  try {
+    await ref.read(apiClientProvider).patch('/notifications/$notificationId/read');
+    ref.invalidate(notificationsProvider);
+    ref.invalidate(notificationsUnreadCountProvider);
+  } catch (_) {
+    // Best-effort only; the list still refreshes on pull-to-refresh.
   }
 }
 

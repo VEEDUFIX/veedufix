@@ -90,6 +90,24 @@ class WorkerEarningsPageData {
   final List<WorkerEarningsTransaction> transactions;
 }
 
+class WorkerEarningsTransactionPage {
+  const WorkerEarningsTransactionPage({
+    required this.items,
+    required this.page,
+    required this.limit,
+    required this.total,
+    required this.totalPages,
+  });
+
+  final List<WorkerEarningsTransaction> items;
+  final int page;
+  final int limit;
+  final int total;
+  final int totalPages;
+
+  bool get hasMore => page < totalPages;
+}
+
 class WorkerEarningsApi {
   WorkerEarningsApi(this._dio);
 
@@ -100,7 +118,7 @@ class WorkerEarningsApi {
     return WorkerEarningsSummary.fromJson(response.data ?? <String, dynamic>{});
   }
 
-  Future<List<WorkerEarningsTransaction>> fetchTransactions({
+  Future<WorkerEarningsTransactionPage> fetchTransactions({
     int page = 1,
     int limit = 6,
     String? status,
@@ -121,13 +139,25 @@ class WorkerEarningsApi {
     final data = response.data ?? <String, dynamic>{};
     final items = data['items'];
     if (items is! List) {
-      return const <WorkerEarningsTransaction>[];
+      return const WorkerEarningsTransactionPage(
+        items: <WorkerEarningsTransaction>[],
+        page: 1,
+        limit: 6,
+        total: 0,
+        totalPages: 1,
+      );
     }
 
-    return items
-        .whereType<Map<String, dynamic>>()
-        .map(WorkerEarningsTransaction.fromJson)
-        .toList(growable: false);
+    return WorkerEarningsTransactionPage(
+      items: items
+          .whereType<Map<String, dynamic>>()
+          .map(WorkerEarningsTransaction.fromJson)
+          .toList(growable: false),
+      page: (data['page'] as num?)?.toInt() ?? page,
+      limit: (data['limit'] as num?)?.toInt() ?? limit,
+      total: (data['total'] as num?)?.toInt() ?? 0,
+      totalPages: (data['totalPages'] as num?)?.toInt() ?? 1,
+    );
   }
 
   String _formatDate(DateTime value) {
@@ -146,10 +176,10 @@ final workerEarningsApiProvider = Provider<WorkerEarningsApi>((ref) {
 final workerEarningsPageProvider = FutureProvider.autoDispose<WorkerEarningsPageData>((ref) async {
   final api = ref.watch(workerEarningsApiProvider);
   final summary = await api.fetchSummary();
-  final transactions = await api.fetchTransactions();
+  final transactionsPage = await api.fetchTransactions();
 
   return WorkerEarningsPageData(
     summary: summary,
-    transactions: transactions,
+    transactions: transactionsPage.items,
   );
 });

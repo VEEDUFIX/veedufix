@@ -66,14 +66,8 @@ class _BookingsPageState extends ConsumerState<BookingsPage> with SingleTickerPr
                         width: 48,
                         decoration: BoxDecoration(
                           color: colorScheme.surface,
-                          borderRadius: BorderRadius.circular(16),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withValues(alpha: 0.05),
-                              blurRadius: 18,
-                              offset: const Offset(0, 10),
-                            ),
-                          ],
+                          borderRadius: BorderRadius.circular(AbzioTheme.buttonRadius),
+                          boxShadow: AbzioTheme.eliteShadow,
                         ),
                         child: IconButton(
                           onPressed: () {},
@@ -179,37 +173,37 @@ class _SkeletonCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return PremiumGlassCard(
+    return const PremiumGlassCard(
       child: Padding(
-        padding: const EdgeInsets.all(18),
+        padding: EdgeInsets.all(18),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               children: [
-                const ShimmerPlaceholder(width: 48, height: 48, borderRadius: 12),
-                const SizedBox(width: 14),
+                ShimmerPlaceholder(width: 48, height: 48, borderRadius: 12),
+                SizedBox(width: 14),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const ShimmerPlaceholder(width: 120, height: 16, borderRadius: 4),
-                      const SizedBox(height: 8),
-                      const ShimmerPlaceholder(width: 80, height: 12, borderRadius: 4),
+                      ShimmerPlaceholder(width: 120, height: 16, borderRadius: 4),
+                      SizedBox(height: 8),
+                      ShimmerPlaceholder(width: 80, height: 12, borderRadius: 4),
                     ],
                   ),
                 ),
-                const ShimmerPlaceholder(width: 60, height: 24, borderRadius: 12),
+                ShimmerPlaceholder(width: 60, height: 24, borderRadius: 12),
               ],
             ),
-            const SizedBox(height: 16),
-            const ShimmerPlaceholder(width: double.infinity, height: 1, borderRadius: 0),
-            const SizedBox(height: 16),
+            SizedBox(height: 16),
+            ShimmerPlaceholder(width: double.infinity, height: 1, borderRadius: 0),
+            SizedBox(height: 16),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const ShimmerPlaceholder(width: 100, height: 14, borderRadius: 4),
-                const ShimmerPlaceholder(width: 60, height: 14, borderRadius: 4),
+                ShimmerPlaceholder(width: 100, height: 14, borderRadius: 4),
+                ShimmerPlaceholder(width: 60, height: 14, borderRadius: 4),
               ],
             ),
           ],
@@ -253,16 +247,8 @@ class _BookingCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     final statusColor = _getStatusColor(booking.status);
-    final isCompleted = statusType == 'completed';
-
     return TapScale(
-      onTap: () {
-        if (isCompleted) {
-          context.push('/booking-rating?bookingId=${booking.id}');
-        } else {
-          context.push('/tracking?bookingId=${booking.id}');
-        }
-      },
+      onTap: () => context.push('/booking/${booking.id}'),
       child: PremiumGlassCard(
         child: Padding(
           padding: const EdgeInsets.all(18),
@@ -277,7 +263,7 @@ class _BookingCard extends StatelessWidget {
                     width: 52,
                     decoration: BoxDecoration(
                       color: statusColor.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(16),
+                      borderRadius: BorderRadius.circular(AbzioTheme.buttonRadius),
                     ),
                     child: Icon(Icons.home_repair_service_rounded, color: statusColor),
                   ),
@@ -360,15 +346,11 @@ class _BookingCard extends StatelessWidget {
                   ),
                   child: Row(
                     children: [
-                      CircleAvatar(
+                      MarketplaceNetworkAvatar(
+                        imageUrl: booking.worker!.avatarUrl,
                         radius: 16,
                         backgroundColor: colorScheme.primaryContainer,
-                        backgroundImage: booking.worker!.avatarUrl != null
-                            ? NetworkImage(booking.worker!.avatarUrl!)
-                            : null,
-                        child: booking.worker!.avatarUrl == null
-                            ? Icon(Icons.person_rounded, size: 18, color: colorScheme.primary)
-                            : null,
+                        fallback: Icon(Icons.person_rounded, size: 18, color: colorScheme.primary),
                       ),
                       const SizedBox(width: 10),
                       Expanded(

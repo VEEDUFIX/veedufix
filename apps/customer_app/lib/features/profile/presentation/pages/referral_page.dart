@@ -36,8 +36,8 @@ class ReferralPage extends ConsumerWidget {
       ),
       body: walletAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (err, _) => Center(
-          child: const PremiumEmptyState(
+        error: (err, _) => const Center(
+          child: PremiumEmptyState(
             icon: Icons.wallet_rounded,
             title: 'Could not load wallet',
             subtitle: 'Pull down to refresh.',
@@ -57,7 +57,7 @@ class ReferralPage extends ConsumerWidget {
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                   ),
-                  borderRadius: BorderRadius.circular(24),
+                  borderRadius: BorderRadius.circular(AbzioTheme.cardRadius),
                   boxShadow: [BoxShadow(color: cs.primary.withValues(alpha: 0.3), blurRadius: 24, offset: const Offset(0, 10))],
                 ),
                 child: Column(
@@ -100,7 +100,7 @@ class ReferralPage extends ConsumerWidget {
                         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
                         decoration: BoxDecoration(
                           color: cs.primaryContainer.withValues(alpha: 0.4),
-                          borderRadius: BorderRadius.circular(16),
+                          borderRadius: BorderRadius.circular(AbzioTheme.buttonRadius),
                           border: Border.all(color: cs.primary.withValues(alpha: 0.3)),
                         ),
                         child: Row(

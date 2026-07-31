@@ -83,3 +83,31 @@ export async function getPublicAvailabilityHandler(
     sendError(response, error);
   }
 }
+
+export async function toggleAvailabilityHandler(
+  request: AuthenticatedRequest,
+  response: Response,
+  _next: NextFunction
+): Promise<void> {
+  if (!requireWorker(request, response)) {
+    return;
+  }
+
+  try {
+    const { isAvailable } = request.body as { isAvailable: boolean };
+    if (typeof isAvailable !== "boolean") {
+      response.status(400).json({ message: "isAvailable must be a boolean" });
+      return;
+    }
+    const workerId = await getWorkerProfileIdByUserId(request.auth!.userId);
+    await import("../../lib/prisma.js").then(({ prisma }) =>
+      prisma.workerProfile.update({
+        where: { id: workerId },
+        data: { isAvailable },
+      })
+    );
+    response.status(200).json({ isAvailable });
+  } catch (error) {
+    sendError(response, error);
+  }
+}

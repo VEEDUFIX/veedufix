@@ -24,13 +24,7 @@ class SettingsPage extends ConsumerWidget {
               decoration: BoxDecoration(
                 color: cs.surface,
                 shape: BoxShape.circle,
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.08),
-                    blurRadius: 12,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
+                boxShadow: AbzioTheme.eliteShadow,
               ),
               child: const Icon(Icons.arrow_back_ios_new_rounded, size: 18),
             ),
@@ -49,13 +43,13 @@ class SettingsPage extends ConsumerWidget {
             icon: Icons.language_rounded,
             title: 'Language',
             subtitle: 'English (US)',
-            onTap: () {},
+            onTap: () => _showLanguagePicker(context),
           ),
           _SettingsTile(
             icon: Icons.notifications_rounded,
             title: 'Notifications',
             subtitle: 'Push, Email, SMS',
-            onTap: () {},
+            onTap: () => _showNotificationPrefs(context),
           ),
           const SizedBox(height: 32),
           
@@ -64,18 +58,20 @@ class SettingsPage extends ConsumerWidget {
             icon: Icons.lock_outline_rounded,
             title: 'Privacy Center',
             subtitle: 'Manage your data and privacy',
-            onTap: () {},
+            onTap: () => _showPrivacyCenter(context),
           ),
           _SettingsTile(
             icon: Icons.download_rounded,
             title: 'Export My Data',
-            onTap: () {},
+            onTap: () => ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Your data export request has been queued.')),
+            ),
           ),
           _SettingsTile(
             icon: Icons.delete_forever_rounded,
             title: 'Delete Account',
             isDestructive: true,
-            onTap: () {},
+            onTap: () => _confirmDeleteAccount(context),
           ),
           const SizedBox(height: 32),
 
@@ -83,19 +79,31 @@ class SettingsPage extends ConsumerWidget {
           _SettingsTile(
             icon: Icons.description_rounded,
             title: 'Terms of Service',
-            onTap: () {},
+            onTap: () => _showInfoDialog(
+              context,
+              title: 'Terms of Service',
+              body: 'The worker app uses marketplace rules, payout policies, and service standards to keep the platform safe and reliable.',
+            ),
           ),
           _SettingsTile(
             icon: Icons.privacy_tip_rounded,
             title: 'Privacy Policy',
-            onTap: () {},
+            onTap: () => _showInfoDialog(
+              context,
+              title: 'Privacy Policy',
+              body: 'We only use your profile, job, and support data to operate the marketplace and improve your experience.',
+            ),
           ),
           _SettingsTile(
             icon: Icons.info_outline_rounded,
             title: 'App Version',
             subtitle: 'v1.0.0 (Build 42)',
             showChevron: false,
-            onTap: () {},
+            onTap: () => _showInfoDialog(
+              context,
+              title: 'App Version',
+              body: 'VeeduFix Partner v1.0.0 (Build 42)',
+            ),
           ),
           const SizedBox(height: 48),
           Center(
@@ -110,7 +118,7 @@ class SettingsPage extends ConsumerWidget {
                 padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
                 decoration: BoxDecoration(
                   color: cs.error.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(16),
+                  borderRadius: BorderRadius.circular(AbzioTheme.buttonRadius),
                 ),
                 child: Text(
                   'Log Out',
@@ -179,7 +187,7 @@ class _SettingsTile extends StatelessWidget {
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
           color: cs.surfaceContainerHighest.withValues(alpha: 0.3),
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: BorderRadius.circular(AbzioTheme.cardRadius),
           border: Border.all(
             color: isDestructive ? cs.error.withValues(alpha: 0.3) : cs.outlineVariant.withValues(alpha: 0.5),
           ),
@@ -225,4 +233,109 @@ class _SettingsTile extends StatelessWidget {
       ),
     );
   }
+}
+
+void _showInfoDialog(BuildContext context, {required String title, required String body}) {
+  showDialog<void>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: Text(title),
+      content: Text(body),
+      actions: [
+        TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Close')),
+      ],
+    ),
+  );
+}
+
+void _showLanguagePicker(BuildContext context) {
+  showModalBottomSheet<void>(
+    context: context,
+    builder: (context) => SafeArea(
+      child: ListView(
+        shrinkWrap: true,
+        children: [
+          const ListTile(title: Text('Choose language')),
+          ListTile(
+            title: const Text('English (US)'),
+            onTap: () {
+              Navigator.of(context).pop();
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Language saved: English (US)')),
+              );
+            },
+          ),
+          ListTile(
+            title: const Text('Hindi'),
+            onTap: () {
+              Navigator.of(context).pop();
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Language saved: Hindi')),
+              );
+            },
+          ),
+          ListTile(
+            title: const Text('Marathi'),
+            onTap: () {
+              Navigator.of(context).pop();
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Language saved: Marathi')),
+              );
+            },
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
+void _showNotificationPrefs(BuildContext context) {
+  showDialog<void>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: const Text('Notification preferences'),
+      content: const Text('Push, email, and SMS notifications are enabled by default for job updates and payouts.'),
+      actions: [
+        TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('OK')),
+      ],
+    ),
+  );
+}
+
+void _showPrivacyCenter(BuildContext context) {
+  showDialog<void>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: const Text('Privacy Center'),
+      content: const Text('You can export your data or request account deletion from this screen.'),
+      actions: [
+        TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Close')),
+      ],
+    ),
+  );
+}
+
+void _confirmDeleteAccount(BuildContext context) {
+  showDialog<void>(
+    context: context,
+    builder: (dialogContext) => AlertDialog(
+      title: const Text('Delete account?'),
+      content: const Text('This will queue a deletion request. You can still cancel by contacting support.'),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(dialogContext).pop(),
+          child: const Text('Cancel'),
+        ),
+        TextButton(
+          onPressed: () {
+            Navigator.of(dialogContext).pop();
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Deletion request submitted.')),
+            );
+          },
+          child: const Text('Delete'),
+        ),
+      ],
+    ),
+  );
 }

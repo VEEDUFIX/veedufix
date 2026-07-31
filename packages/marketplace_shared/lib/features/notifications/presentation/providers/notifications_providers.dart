@@ -17,3 +17,13 @@ final notificationsProvider = FutureProvider.autoDispose<List<AppNotification>>(
     return const [];
   }
 });
+
+final notificationsUnreadCountProvider = FutureProvider.autoDispose<int>((ref) async {
+  try {
+    final apiClient = ref.watch(apiClientProvider);
+    final response = await apiClient.get('/notifications');
+    return (response['unreadCount'] as num?)?.toInt() ?? 0;
+  } catch (_) {
+    return 0;
+  }
+});

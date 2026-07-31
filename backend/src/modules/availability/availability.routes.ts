@@ -9,7 +9,8 @@ import {
 import {
   getMyAvailabilityHandler,
   getPublicAvailabilityHandler,
-  setWeeklyAvailabilityHandler
+  setWeeklyAvailabilityHandler,
+  toggleAvailabilityHandler
 } from "./availability.controller.js";
 
 export const availabilityRouter = Router();
@@ -23,3 +24,4 @@ availabilityRouter.get(
 availabilityRouter.use(requireAuth, requireRole("WORKER"));
 availabilityRouter.post("/worker/availability", validate(setWeeklyAvailabilitySchema), setWeeklyAvailabilityHandler);
 availabilityRouter.get("/worker/availability", validate(listAvailabilitySchema), getMyAvailabilityHandler);
+availabilityRouter.patch("/worker/availability", toggleAvailabilityHandler);

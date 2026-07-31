@@ -143,32 +143,15 @@ class _CompletionOtpPageState extends ConsumerState<CompletionOtpPage> {
                             separatorBuilder: (_, __) => const SizedBox(width: 10),
                             itemBuilder: (context, index) {
                               final url = afterPhotos[index];
-                              return ClipRRect(
-                                borderRadius: BorderRadius.circular(18),
-                                child: AspectRatio(
-                                  aspectRatio: 1,
-                                  child: Image.network(
-                                    url,
-                                    fit: BoxFit.cover,
-                                    loadingBuilder: (context, child, loadingProgress) {
-                                      if (loadingProgress == null) {
-                                        return child;
-                                      }
-                                      return Container(
-                                        color: Theme.of(context).colorScheme.surfaceContainerHighest,
-                                        child: const Center(
-                                          child: CircularProgressIndicator(strokeWidth: 2),
-                                        ),
-                                      );
-                                    },
-                                    errorBuilder: (context, error, stackTrace) {
-                                      return Container(
-                                        color: Theme.of(context).colorScheme.surfaceContainerHighest,
-                                        child: const Icon(Icons.broken_image_rounded),
-                                      );
-                                    },
-                                  ),
-                                ),
+                              return MarketplaceNetworkImage(
+                                imageUrl: url,
+                                width: 112,
+                                height: 112,
+                                fit: BoxFit.cover,
+                                borderRadius: AbzioTheme.buttonRadius,
+                                cloudinaryWidth: 220,
+                                cloudinaryHeight: 220,
+                                backgroundColor: Theme.of(context).colorScheme.surfaceContainerHighest,
                               );
                             },
                           ),
@@ -179,7 +162,7 @@ class _CompletionOtpPageState extends ConsumerState<CompletionOtpPage> {
                         padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 20),
                         decoration: BoxDecoration(
                           color: Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.34),
-                          borderRadius: BorderRadius.circular(28),
+                          borderRadius: BorderRadius.circular(AbzioTheme.cardRadius),
                         ),
                         child: Column(
                           children: [
@@ -293,24 +276,20 @@ class _Avatar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final avatar = CircleAvatar(
-      radius: 28,
-      backgroundColor: Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.8),
-      foregroundImage: imageUrl == null || imageUrl!.isEmpty ? null : NetworkImage(imageUrl!),
-      child: imageUrl == null || imageUrl!.isEmpty
-          ? Text(
-              fallbackLabel,
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w900,
-                  ),
-            )
-          : null,
-    );
-
     return SizedBox(
       height: 56,
       width: 56,
-      child: avatar,
+      child: MarketplaceNetworkAvatar(
+        imageUrl: imageUrl,
+        radius: 28,
+        backgroundColor: Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.8),
+        fallback: Text(
+          fallbackLabel,
+          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w900,
+              ),
+        ),
+      ),
     );
   }
 }

@@ -21,7 +21,10 @@ import '../features/profile/presentation/pages/notifications_page.dart';
 import '../features/profile/presentation/pages/support_page.dart';
 import '../features/profile/presentation/pages/reviews_page.dart';
 import '../features/chat/presentation/pages/chat_page.dart';
+import '../features/worker/presentation/pages/worker_wallet_page.dart';
 import '../features/shell/presentation/pages/app_shell_page.dart';
+import '../features/profile/presentation/pages/worker_profile_edit_page.dart';
+import '../features/profile/presentation/pages/document_upload_page.dart';
 
 final routerProvider = Provider<GoRouter>((ref) {
   final refresh = _RouterRefreshNotifier(ref);
@@ -129,6 +132,10 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (context, state) => const ReviewsPage(),
       ),
       GoRoute(
+        path: '/wallet',
+        builder: (context, state) => const WorkerWalletPage(),
+      ),
+      GoRoute(
         path: '/chat',
         builder: (context, state) {
           final bookingId = state.uri.queryParameters['bookingId'] ?? '';
@@ -157,6 +164,14 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/profile',
             builder: (context, state) => const ProfilePage(),
+          ),
+          GoRoute(
+            path: '/profile/edit',
+            builder: (context, state) => const WorkerProfileEditPage(),
+          ),
+          GoRoute(
+            path: '/documents/upload',
+            builder: (context, state) => const DocumentUploadPage(),
           ),
         ],
       ),

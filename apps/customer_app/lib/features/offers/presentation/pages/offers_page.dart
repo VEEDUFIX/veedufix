@@ -70,7 +70,7 @@ class _CouponCard extends StatelessWidget {
       child: Container(
         decoration: BoxDecoration(
           color: cs.surfaceContainerHighest.withValues(alpha: 0.3),
-          borderRadius: BorderRadius.circular(24),
+          borderRadius: BorderRadius.circular(AbzioTheme.cardRadius),
           border: Border.all(color: accent.withValues(alpha: 0.2)),
         ),
         child: Column(
@@ -85,7 +85,7 @@ class _CouponCard extends StatelessWidget {
                     width: 48,
                     decoration: BoxDecoration(
                       color: accent.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(16),
+                      borderRadius: BorderRadius.circular(AbzioTheme.buttonRadius),
                     ),
                     child: Icon(Icons.local_offer_rounded, color: accent),
                   ),
@@ -216,14 +216,8 @@ class _ScratchCardPromo extends StatelessWidget {
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
-        borderRadius: BorderRadius.circular(24),
-        boxShadow: [
-          BoxShadow(
-            color: cs.primary.withValues(alpha: 0.3),
-            blurRadius: 20,
-            offset: const Offset(0, 8),
-          ),
-        ],
+        borderRadius: BorderRadius.circular(AbzioTheme.cardRadius),
+        boxShadow: AbzioTheme.eliteShadow,
       ),
       child: Row(
         children: [
@@ -255,7 +249,7 @@ class _ScratchCardPromo extends StatelessWidget {
             width: 80,
             decoration: BoxDecoration(
               color: Colors.white.withValues(alpha: 0.15),
-              borderRadius: BorderRadius.circular(16),
+              borderRadius: BorderRadius.circular(AbzioTheme.buttonRadius),
               border: Border.all(color: Colors.white.withValues(alpha: 0.2)),
             ),
             child: const Center(

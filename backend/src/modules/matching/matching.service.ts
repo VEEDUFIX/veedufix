@@ -3,6 +3,8 @@ import cron from "node-cron";
 import { prisma } from "../../lib/prisma.js";
 import { logger } from "../../lib/logger.js";
 import { publishNotificationEvent, publishTrackingEvent } from "../../lib/realtime.js";
+import { getTokensForUser } from "../device-token/device-token.service.js";
+import { sendMulticastPush } from "../../lib/fcm.js";
 
 export const MAX_CONCURRENT_JOBS = 1;
 const OFFER_WINDOW_MS = 90_000;
@@ -226,7 +228,7 @@ async function createDispatchOffer(
   rank: number,
   expiresAt: Date
 ) {
-  return prisma.dispatchOffer.create({
+  const offer = await prisma.dispatchOffer.create({
     data: {
       bookingId: booking.id,
       workerId: candidate.workerProfileId,
@@ -236,6 +238,33 @@ async function createDispatchOffer(
       expiresAt
     }
   });
+
+  // Send push notification to worker
+  try {
+    const workerProfile = await prisma.workerProfile.findUnique({
+      where: { id: candidate.workerProfileId },
+      select: { userId: true }
+    });
+    if (workerProfile?.userId) {
+      const tokens = await getTokensForUser(workerProfile.userId);
+      if (tokens.length > 0) {
+        await sendMulticastPush({
+          tokens,
+          title: "New Job Assigned!",
+          body: `You have a new booking #${booking.code}. Tap to view details.`,
+          data: {
+            type: "JOB_ASSIGNED",
+            bookingId: booking.id,
+            route: "/jobs"
+          }
+        });
+      }
+    }
+  } catch (err) {
+    logger.warn({ err }, "Failed to send job assigned push");
+  }
+
+  return offer;
 }
 
 async function updateDispatchOfferResponse(

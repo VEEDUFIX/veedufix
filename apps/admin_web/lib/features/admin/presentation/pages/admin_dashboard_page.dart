@@ -44,100 +44,162 @@ class _AdminDashboardPageState extends ConsumerState<AdminDashboardPage> {
 
   @override
   Widget build(BuildContext context) {
+    final isCompact = MediaQuery.of(context).size.width < 900;
     return Scaffold(
       backgroundColor: Colors.transparent, // Inherits from AppShell
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(32),
+        padding: EdgeInsets.all(isCompact ? 20 : 32),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // Header
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Admin Dashboard',
-                      style: GoogleFonts.poppins(
-                        fontSize: 32,
-                        fontWeight: FontWeight.w800,
-                        color: Colors.black87,
-                        letterSpacing: -0.5,
+            isCompact
+                ? Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Admin Dashboard',
+                        style: GoogleFonts.poppins(
+                          fontSize: 30,
+                          fontWeight: FontWeight.w800,
+                          color: Colors.black87,
+                          letterSpacing: -0.5,
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Monitor revenue, support, worker approvals, and marketplace health.',
-                      style: GoogleFonts.inter(
-                        color: Colors.black54,
-                        fontSize: 16,
+                      const SizedBox(height: 8),
+                      Text(
+                        'Monitor revenue, support, worker approvals, and marketplace health.',
+                        style: GoogleFonts.inter(
+                          color: Colors.black54,
+                          fontSize: 15,
+                        ),
                       ),
-                    ),
-                  ],
-                ),
-                FilledButton.icon(
-                  onPressed: () {},
-                  icon: const Icon(Icons.tune_rounded, size: 18),
-                  label: const Text('Customize'),
-                  style: FilledButton.styleFrom(
-                    backgroundColor: const Color(0xFF0F766E),
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      const SizedBox(height: 16),
+                      FilledButton.icon(
+                        onPressed: () => _openDashboardActions(context),
+                        icon: const Icon(Icons.tune_rounded, size: 18),
+                        label: const Text('Customize'),
+                        style: FilledButton.styleFrom(
+                          backgroundColor: const Color(0xFF0F766E),
+                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                        ),
+                      ),
+                    ],
+                  )
+                : Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Admin Dashboard',
+                            style: GoogleFonts.poppins(
+                              fontSize: 32,
+                              fontWeight: FontWeight.w800,
+                              color: Colors.black87,
+                              letterSpacing: -0.5,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            'Monitor revenue, support, worker approvals, and marketplace health.',
+                            style: GoogleFonts.inter(
+                              color: Colors.black54,
+                              fontSize: 16,
+                            ),
+                          ),
+                        ],
+                      ),
+                      FilledButton.icon(
+                        onPressed: () => _openDashboardActions(context),
+                        icon: const Icon(Icons.tune_rounded, size: 18),
+                        label: const Text('Customize'),
+                        style: FilledButton.styleFrom(
+                          backgroundColor: const Color(0xFF0F766E),
+                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                        ),
+                      ),
+                    ],
                   ),
-                ),
-              ],
-            ),
             const SizedBox(height: 32),
 
             // Top Metrics
             if (_isLoading)
               const Center(child: CircularProgressIndicator())
             else if (_snapshot != null)
-              LayoutBuilder(
-                builder: (context, constraints) {
-                  final summary = _snapshot!.summary;
-                  final isSmall = constraints.maxWidth < 800;
-                  
-                  final cards = [
-                    _MetricCard(
+              Wrap(
+                spacing: 24,
+                runSpacing: 24,
+                children: [
+                  _metricBox(context, isCompact,
+                    child: _MetricCard(
                       title: 'Revenue',
-                      value: 'Rs. ${summary.totalRevenue.toStringAsFixed(0)}',
+                      value: 'Rs. ${_snapshot!.summary.totalRevenue.toStringAsFixed(0)}',
                       icon: Icons.payments_rounded,
                       color: const Color(0xFF0F766E),
                       trend: '+12.5% vs last week',
                       trendUp: true,
                     ),
-                    if (isSmall) const SizedBox(height: 24) else const SizedBox(width: 24),
-                    _MetricCard(
+                  ),
+                  _metricBox(context, isCompact,
+                    child: _MetricCard(
                       title: 'Bookings',
-                      value: '${summary.totalBookings}',
+                      value: '${_snapshot!.summary.totalBookings}',
                       icon: Icons.event_available_rounded,
                       color: const Color(0xFF2563EB),
                       trend: '+5.2% vs last week',
                       trendUp: true,
                     ),
-                    if (isSmall) const SizedBox(height: 24) else const SizedBox(width: 24),
-                    _MetricCard(
-                      title: 'Worker Approvals',
-                      value: '${summary.pendingWorkerReviewsCount}',
-                      icon: Icons.verified_user_rounded,
+                  ),
+                  _metricBox(context, isCompact,
+                    child: _MetricCard(
+                      title: 'Cancellations',
+                      value: '${_snapshot!.summary.cancelledBookingsCount}',
+                      icon: Icons.event_busy_rounded,
+                      color: const Color(0xFFEF4444),
+                      subtitle: 'Cancelled or refunded',
+                      trend: 'Watch refunds closely',
+                      trendUp: false,
+                    ),
+                  ),
+                  _metricBox(context, isCompact,
+                    child: _MetricCard(
+                      title: 'Workers',
+                      value: '${_snapshot!.summary.activeWorkersCount}',
+                      icon: Icons.badge_rounded,
+                      color: const Color(0xFF8B5CF6),
+                      subtitle: 'Verified and approved',
+                      trend: 'Active workforce',
+                      trendUp: true,
+                    ),
+                  ),
+                  _metricBox(context, isCompact,
+                    child: _MetricCard(
+                      title: 'Support Load',
+                      value: '${_snapshot!.summary.openSupportTicketsCount}',
+                      icon: Icons.support_agent_rounded,
                       color: const Color(0xFFF59E0B),
+                      subtitle: 'Open tickets',
+                      trend: 'Needs attention',
+                      trendUp: false,
+                    ),
+                  ),
+                  _metricBox(context, isCompact,
+                    child: _MetricCard(
+                      title: 'Worker Approvals',
+                      value: '${_snapshot!.summary.pendingWorkerReviewsCount}',
+                      icon: Icons.verified_user_rounded,
+                      color: const Color(0xFF0F766E),
                       subtitle: 'Pending review',
                       trend: '-2 since yesterday',
                       trendUp: false,
                     ),
-                  ];
-                  
-                  if (isSmall) {
-                    return Column(children: cards);
-                  }
-                  return Row(
-                    children: cards.map((c) => c is SizedBox ? c : Expanded(child: c)).toList(),
-                  );
-                },
+                  ),
+                ],
               ),
             const SizedBox(height: 32),
 
@@ -252,6 +314,36 @@ class _AdminDashboardPageState extends ConsumerState<AdminDashboardPage> {
             ),
             const SizedBox(height: 40),
 
+            const _SectionTitle(title: 'Customers & Bookings'),
+            Wrap(
+              spacing: 24,
+              runSpacing: 24,
+              children: [
+                _ActionCard(
+                  title: 'Customer Management',
+                  subtitle: 'Search, view and ban customers',
+                  icon: Icons.people_rounded,
+                  color: const Color(0xFF3B82F6),
+                  onTap: () => context.go('/customers'),
+                ),
+                _ActionCard(
+                  title: 'All Bookings',
+                  subtitle: 'Filter, track and review bookings',
+                  icon: Icons.receipt_long_rounded,
+                  color: const Color(0xFF14B8A6),
+                  onTap: () => context.go('/admin-bookings'),
+                ),
+                _ActionCard(
+                  title: 'Coupons',
+                  subtitle: 'Create and manage discount codes',
+                  icon: Icons.discount_rounded,
+                  color: const Color(0xFF8B5CF6),
+                  onTap: () => context.go('/coupons'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 40),
+
             const _SectionTitle(title: 'Finance & Analytics'),
             Wrap(
               spacing: 24,
@@ -263,6 +355,20 @@ class _AdminDashboardPageState extends ConsumerState<AdminDashboardPage> {
                   icon: Icons.account_balance_wallet_rounded,
                   color: const Color(0xFF0F766E),
                   onTap: () => context.go('/finance'),
+                ),
+                _ActionCard(
+                  title: 'Reports & Exports',
+                  subtitle: 'Download CSV reports for bookings, earnings, payouts',
+                  icon: Icons.download_rounded,
+                  color: const Color(0xFF64748B),
+                  onTap: () => context.go('/reports'),
+                ),
+                _ActionCard(
+                  title: 'Push Notifications',
+                  subtitle: 'Broadcast alerts to customers and workers',
+                  icon: Icons.campaign_rounded,
+                  color: const Color(0xFFF43F5E),
+                  onTap: () => context.go('/push'),
                 ),
                 _ActionCard(
                   title: 'Analytics',
@@ -298,7 +404,7 @@ class _AdminDashboardPageState extends ConsumerState<AdminDashboardPage> {
                     if (isSmall) const SizedBox(height: 24) else const SizedBox(width: 24),
                     _SnapshotCard(
                       label: 'Open support tickets',
-                      value: '${_snapshot!.summary.openDisputesCount} active',
+                      value: '${_snapshot!.summary.openSupportTicketsCount} active',
                     ),
                     if (isSmall) const SizedBox(height: 24) else const SizedBox(width: 24),
                     _SnapshotCard(
@@ -323,6 +429,66 @@ class _AdminDashboardPageState extends ConsumerState<AdminDashboardPage> {
       ),
     );
   }
+
+  void _openDashboardActions(BuildContext context) {
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (sheetContext) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                'Quick actions',
+                style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
+              ),
+              const SizedBox(height: 16),
+              _QuickActionTile(
+                icon: Icons.support_agent_rounded,
+                label: 'Open support tickets',
+                onTap: () {
+                  Navigator.of(sheetContext).pop();
+                  context.go('/support-tickets');
+                },
+              ),
+              _QuickActionTile(
+                icon: Icons.warning_rounded,
+                label: 'View alerts',
+                onTap: () {
+                  Navigator.of(sheetContext).pop();
+                  context.go('/ops/alerts');
+                },
+              ),
+              _QuickActionTile(
+                icon: Icons.how_to_reg_rounded,
+                label: 'Worker review queue',
+                onTap: () {
+                  Navigator.of(sheetContext).pop();
+                  context.go('/worker-review');
+                },
+              ),
+              _QuickActionTile(
+                icon: Icons.account_balance_rounded,
+                label: 'Finance overview',
+                onTap: () {
+                  Navigator.of(sheetContext).pop();
+                  context.go('/finance');
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+Widget _metricBox(BuildContext context, bool isCompact, {required Widget child}) {
+  final width = isCompact ? MediaQuery.of(context).size.width - 40 : 320.0;
+  return SizedBox(width: width, child: child);
 }
 
 class _GlassCard extends StatelessWidget {
@@ -332,22 +498,16 @@ class _GlassCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ClipRRect(
-      borderRadius: BorderRadius.circular(24),
+      borderRadius: BorderRadius.circular(AbzioTheme.cardRadius),
       child: BackdropFilter(
         filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
         child: Container(
           padding: const EdgeInsets.all(24),
           decoration: BoxDecoration(
             color: Colors.white.withValues(alpha: 0.6),
-            borderRadius: BorderRadius.circular(24),
+            borderRadius: BorderRadius.circular(AbzioTheme.cardRadius),
             border: Border.all(color: Colors.white.withValues(alpha: 0.8), width: 1.5),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.05),
-                blurRadius: 16,
-                offset: const Offset(0, 8),
-              ),
-            ],
+            boxShadow: AbzioTheme.eliteShadow,
           ),
           child: child,
         ),
@@ -726,21 +886,15 @@ class _ActionCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(16),
+      borderRadius: BorderRadius.circular(AbzioTheme.buttonRadius),
       child: Container(
         width: 280,
         padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(AbzioTheme.buttonRadius),
           border: Border.all(color: const Color(0xFFE5E7EB)),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.02),
-              blurRadius: 8,
-              offset: const Offset(0, 2),
-            ),
-          ],
+          boxShadow: AbzioTheme.eliteShadow,
         ),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -810,6 +964,33 @@ class _SnapshotCard extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _QuickActionTile extends StatelessWidget {
+  const _QuickActionTile({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: ListTile(
+        tileColor: Colors.black.withValues(alpha: 0.03),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        leading: Icon(icon, color: const Color(0xFF0F766E)),
+        title: Text(label),
+        trailing: const Icon(Icons.chevron_right_rounded),
+        onTap: onTap,
       ),
     );
   }

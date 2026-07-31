@@ -101,7 +101,7 @@ class FavoritesPage extends ConsumerWidget {
                         padding: const EdgeInsets.only(right: 24),
                         decoration: BoxDecoration(
                           color: Colors.redAccent.withValues(alpha: 0.15),
-                          borderRadius: BorderRadius.circular(20),
+                          borderRadius: BorderRadius.circular(AbzioTheme.cardRadius),
                         ),
                         child: Icon(Icons.delete_outline_rounded, color: Colors.redAccent.shade200),
                       ),
@@ -111,15 +111,9 @@ class FavoritesPage extends ConsumerWidget {
                           padding: const EdgeInsets.all(16),
                           decoration: BoxDecoration(
                             color: cs.surface,
-                            borderRadius: BorderRadius.circular(20),
+                            borderRadius: BorderRadius.circular(AbzioTheme.cardRadius),
                             border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.5)),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withValues(alpha: 0.04),
-                                blurRadius: 12,
-                                offset: const Offset(0, 4),
-                              ),
-                            ],
+                            boxShadow: AbzioTheme.eliteShadow,
                           ),
                           child: Row(
                             children: [
@@ -128,7 +122,7 @@ class FavoritesPage extends ConsumerWidget {
                                 height: 56,
                                 decoration: BoxDecoration(
                                   color: cs.primaryContainer.withValues(alpha: 0.3),
-                                  borderRadius: BorderRadius.circular(16),
+                                  borderRadius: BorderRadius.circular(AbzioTheme.buttonRadius),
                                 ),
                                 child: Icon(Icons.design_services_rounded, color: cs.primary),
                               ),

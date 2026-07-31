@@ -1,20 +1,108 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:marketplace_shared/marketplace_shared.dart';
 
-class SupportPage extends StatefulWidget {
+final workerSupportTicketsProvider = FutureProvider.autoDispose<List<WorkerSupportTicket>>((ref) async {
+  final api = ref.watch(apiClientProvider);
+  final data = await api.get('/support/tickets/me');
+  final tickets = (data['tickets'] as List<dynamic>? ?? const [])
+      .whereType<Map<String, dynamic>>()
+      .map(WorkerSupportTicket.fromJson)
+      .toList(growable: false);
+  return tickets;
+});
+
+class WorkerSupportTicket {
+  const WorkerSupportTicket({
+    required this.id,
+    required this.subject,
+    required this.message,
+    required this.status,
+    required this.createdAt,
+  });
+
+  final String id;
+  final String subject;
+  final String message;
+  final String status;
+  final DateTime createdAt;
+
+  factory WorkerSupportTicket.fromJson(Map<String, dynamic> json) {
+    return WorkerSupportTicket(
+      id: json['id'] as String? ?? '',
+      subject: json['subject'] as String? ?? 'Support ticket',
+      message: json['message'] as String? ?? '',
+      status: json['status'] as String? ?? 'OPEN',
+      createdAt: DateTime.tryParse(json['createdAt'] as String? ?? '') ?? DateTime.now(),
+    );
+  }
+}
+
+class SupportPage extends ConsumerStatefulWidget {
   const SupportPage({super.key});
 
   @override
-  State<SupportPage> createState() => _SupportPageState();
+  ConsumerState<SupportPage> createState() => _SupportPageState();
 }
 
-class _SupportPageState extends State<SupportPage> {
-  String? _selectedCategory;
+class _SupportPageState extends ConsumerState<SupportPage> {
+  final _subjectCtrl = TextEditingController();
+  final _messageCtrl = TextEditingController();
+  String _selectedCategory = 'payment';
+  bool _isSubmitting = false;
+
+  @override
+  void dispose() {
+    _subjectCtrl.dispose();
+    _messageCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submitTicket() async {
+    final subject = _subjectCtrl.text.trim();
+    final message = _messageCtrl.text.trim();
+    if (subject.isEmpty || message.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please add a subject and description.')),
+      );
+      return;
+    }
+
+    setState(() => _isSubmitting = true);
+    try {
+      final api = ref.read(apiClientProvider);
+      await api.post(
+        '/support/tickets',
+        data: {
+          'subject': subject,
+          'message': message,
+          'category': _selectedCategory,
+        },
+      );
+      _subjectCtrl.clear();
+      _messageCtrl.clear();
+      ref.invalidate(workerSupportTicketsProvider);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Support ticket submitted.')),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to submit ticket: $error')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isSubmitting = false);
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final tt = Theme.of(context).textTheme;
+    final ticketsAsync = ref.watch(workerSupportTicketsProvider);
 
     return Scaffold(
       appBar: AppBar(
@@ -24,70 +112,58 @@ class _SupportPageState extends State<SupportPage> {
           onPressed: () => context.pop(),
         ),
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            _buildEmergencyContactCard(context),
-            const SizedBox(height: 24),
-            Text('Frequently Asked Questions', style: tt.titleLarge),
-            const SizedBox(height: 16),
-            _buildFaqList(),
-            const SizedBox(height: 32),
-            Text('Raise a Ticket', style: tt.titleLarge),
-            const SizedBox(height: 16),
-            _buildTicketForm(context),
-            const SizedBox(height: 32),
-            Text('Other ways to contact us', style: tt.titleMedium),
-            const SizedBox(height: 16),
-            _buildContactOptions(context),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildEmergencyContactCard(BuildContext context) {
-    final tt = Theme.of(context).textTheme;
-
-    return Container(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            Colors.red.shade400,
-            Colors.red.shade700,
-          ],
-        ),
-        borderRadius: BorderRadius.circular(16),
-      ),
-      padding: const EdgeInsets.all(20),
-      child: Row(
-        children: [
-          const Icon(Icons.phone_in_talk, color: Colors.white, size: 40),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Emergency Contact',
-                  style: tt.titleMedium?.copyWith(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'Tap here to call support instantly for active job emergencies.',
-                  style: tt.bodyMedium?.copyWith(
-                    color: Colors.white.withValues(alpha: 0.9),
-                  ),
-                ),
-              ],
-            ),
+      body: RefreshIndicator(
+        onRefresh: () async => ref.refresh(workerSupportTicketsProvider.future),
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _EmergencyContactCard(
+                onTap: () => _showEmergencyDialog(context),
+              ),
+              const SizedBox(height: 24),
+              Text('Frequently Asked Questions', style: tt.titleLarge),
+              const SizedBox(height: 16),
+              _buildFaqList(),
+              const SizedBox(height: 32),
+              Text('Raise a Ticket', style: tt.titleLarge),
+              const SizedBox(height: 16),
+              _buildTicketForm(context),
+              const SizedBox(height: 32),
+              Text('My Tickets', style: tt.titleLarge),
+              const SizedBox(height: 16),
+              ticketsAsync.when(
+                loading: () => const Center(child: CircularProgressIndicator()),
+                error: (error, stack) => Text('Unable to load your tickets: $error'),
+                data: (tickets) {
+                  if (tickets.isEmpty) {
+                    return const PremiumEmptyState(
+                      icon: Icons.support_agent_rounded,
+                      title: 'No support tickets yet',
+                      subtitle: 'Submitted issues will show up here with status updates.',
+                    );
+                  }
+                  return Column(
+                    children: tickets
+                        .map(
+                          (ticket) => Padding(
+                            padding: const EdgeInsets.only(bottom: 12),
+                            child: _TicketCard(ticket: ticket),
+                          ),
+                        )
+                        .toList(),
+                  );
+                },
+              ),
+              const SizedBox(height: 32),
+              Text('Other ways to contact us', style: tt.titleMedium),
+              const SizedBox(height: 16),
+              _buildContactOptions(context),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
@@ -132,6 +208,8 @@ class _SupportPageState extends State<SupportPage> {
   }
 
   Widget _buildTicketForm(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+
     return Column(
       children: [
         DropdownButtonFormField<String>(
@@ -148,25 +226,39 @@ class _SupportPageState extends State<SupportPage> {
           ],
           onChanged: (val) {
             setState(() {
-              _selectedCategory = val;
+              _selectedCategory = val ?? 'other';
             });
           },
         ),
         const SizedBox(height: 16),
-        const TextField(
+        TextField(
+          controller: _subjectCtrl,
+          decoration: InputDecoration(
+            labelText: 'Subject',
+            hintText: 'Short summary of the issue',
+            border: const OutlineInputBorder(),
+            filled: true,
+            fillColor: cs.surfaceContainerHighest.withValues(alpha: 0.15),
+          ),
+        ),
+        const SizedBox(height: 16),
+        TextField(
+          controller: _messageCtrl,
           maxLines: 4,
           decoration: InputDecoration(
             labelText: 'Description',
             hintText: 'Describe your issue in detail...',
-            border: OutlineInputBorder(),
+            border: const OutlineInputBorder(),
+            filled: true,
+            fillColor: cs.surfaceContainerHighest.withValues(alpha: 0.15),
           ),
         ),
         const SizedBox(height: 16),
         SizedBox(
           width: double.infinity,
           child: PrimaryActionButton(
-            onPressed: () {},
-            label: 'Submit Ticket', // Assumed parameter from marketplace_shared
+            onPressed: _isSubmitting ? null : _submitTicket,
+            label: _isSubmitting ? 'Submitting...' : 'Submit Ticket',
           ),
         ),
       ],
@@ -183,18 +275,166 @@ class _SupportPageState extends State<SupportPage> {
           icon: Icons.email,
           label: 'Email',
           color: cs.primary,
+          onTap: () => _showContactSnack(context, 'support@veedufix.com'),
         ),
-        const _ContactOption(
+        _ContactOption(
           icon: Icons.phone,
           label: 'Phone',
           color: Colors.green,
+          onTap: () => _showContactSnack(context, '+91 1800 123 8899'),
         ),
-        const _ContactOption(
+        _ContactOption(
           icon: Icons.chat,
           label: 'WhatsApp',
-          color: Color(0xFF25D366),
+          color: const Color(0xFF25D366),
+          onTap: () => _showContactSnack(context, 'WhatsApp support is handled by the ops team.'),
         ),
       ],
+    );
+  }
+
+  void _showEmergencyDialog(BuildContext context) {
+    showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Emergency support'),
+        content: const Text(
+          'For active job emergencies, use this page to submit a ticket and contact the customer directly in chat if possible. '
+          'If safety is at risk, contact local emergency services first.',
+        ),
+        actions: [
+          TextButton(onPressed: () => context.pop(), child: const Text('OK')),
+        ],
+      ),
+    );
+  }
+
+  void _showContactSnack(BuildContext context, String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message)),
+    );
+  }
+}
+
+class _EmergencyContactCard extends StatelessWidget {
+  const _EmergencyContactCard({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final tt = Theme.of(context).textTheme;
+
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(AbzioTheme.buttonRadius),
+      child: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [
+              Colors.red.shade400,
+              Colors.red.shade700,
+            ],
+          ),
+          borderRadius: BorderRadius.circular(AbzioTheme.buttonRadius),
+        ),
+        padding: const EdgeInsets.all(20),
+        child: Row(
+          children: [
+            const Icon(Icons.phone_in_talk, color: Colors.white, size: 40),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Emergency Contact',
+                    style: tt.titleMedium?.copyWith(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Tap here for urgent job-related help or safety issues.',
+                    style: tt.bodyMedium?.copyWith(
+                      color: Colors.white.withValues(alpha: 0.9),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _TicketCard extends StatelessWidget {
+  const _TicketCard({required this.ticket});
+
+  final WorkerSupportTicket ticket;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
+    final color = switch (ticket.status) {
+      'RESOLVED' => const Color(0xFF10B981),
+      'IN_PROGRESS' => const Color(0xFFF59E0B),
+      'CLOSED' => cs.onSurfaceVariant,
+      _ => const Color(0xFF2563EB),
+    };
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(AbzioTheme.cardRadius),
+        color: cs.surfaceContainerHighest.withValues(alpha: 0.25),
+        border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.5)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  ticket.subject,
+                  style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: Text(
+                  ticket.status.replaceAll('_', ' '),
+                  style: tt.labelSmall?.copyWith(
+                    color: color,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            ticket.message,
+            style: tt.bodyMedium?.copyWith(color: cs.onSurfaceVariant),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            DateTime.now().difference(ticket.createdAt).inDays == 0
+                ? 'Submitted today'
+                : 'Submitted on ${ticket.createdAt.toLocal()}',
+            style: tt.labelSmall?.copyWith(color: cs.onSurfaceVariant),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -203,27 +443,33 @@ class _ContactOption extends StatelessWidget {
   final IconData icon;
   final String label;
   final Color color;
+  final VoidCallback onTap;
 
   const _ContactOption({
     required this.icon,
     required this.label,
     required this.color,
+    required this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
     final tt = Theme.of(context).textTheme;
-    
-    return Column(
-      children: [
-        CircleAvatar(
-          radius: 24,
-          backgroundColor: color.withValues(alpha: 0.1),
-          child: Icon(icon, color: color),
-        ),
-        const SizedBox(height: 8),
-        Text(label, style: tt.bodySmall),
-      ],
+
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(16),
+      child: Column(
+        children: [
+          CircleAvatar(
+            radius: 24,
+            backgroundColor: color.withValues(alpha: 0.1),
+            child: Icon(icon, color: color),
+          ),
+          const SizedBox(height: 8),
+          Text(label, style: tt.bodySmall),
+        ],
+      ),
     );
   }
 }

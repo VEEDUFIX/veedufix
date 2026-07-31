@@ -264,7 +264,7 @@ class _TimeSlotEditor extends StatelessWidget {
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.6),
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(AbzioTheme.buttonRadius),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

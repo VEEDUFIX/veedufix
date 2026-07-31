@@ -456,20 +456,15 @@ class _PhotoStrip extends StatelessWidget {
       runSpacing: 10,
       children: urls
           .map(
-            (url) => ClipRRect(
-              borderRadius: BorderRadius.circular(18),
-              child: Image.network(
-                url,
-                width: 120,
-                height: 120,
-                fit: BoxFit.cover,
-                errorBuilder: (context, error, stackTrace) => Container(
-                  width: 120,
-                  height: 120,
-                  color: Theme.of(context).colorScheme.surfaceContainerHighest,
-                  child: const Icon(Icons.broken_image_rounded),
-                ),
-              ),
+            (url) => MarketplaceNetworkImage(
+              imageUrl: url,
+              width: 120,
+              height: 120,
+              fit: BoxFit.cover,
+              borderRadius: AbzioTheme.buttonRadius,
+              cloudinaryWidth: 240,
+              cloudinaryHeight: 240,
+              backgroundColor: Theme.of(context).colorScheme.surfaceContainerHighest,
             ),
           )
           .toList(growable: false),
@@ -560,13 +555,7 @@ class _SurfacePanel extends StatelessWidget {
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: const Color(0xFFE5E7EB)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.01),
-            blurRadius: 4,
-            offset: const Offset(0, 2),
-          ),
-        ],
+        boxShadow: AbzioTheme.eliteShadow,
       ),
       child: child,
     );

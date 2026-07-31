@@ -4,6 +4,7 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:marketplace_shared/marketplace_shared.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../providers/tracking_providers.dart';
 
 class LiveTrackingPage extends ConsumerStatefulWidget {
@@ -39,7 +40,7 @@ class _LiveTrackingPageState extends ConsumerState<LiveTrackingPage>
 
   Future<void> _initLocation() async {
     try {
-      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      final bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
       if (!serviceEnabled) return;
       LocationPermission permission = await Geolocator.checkPermission();
       if (permission == LocationPermission.denied) {
@@ -132,13 +133,7 @@ class _LiveTrackingPageState extends ConsumerState<LiveTrackingPage>
                   decoration: BoxDecoration(
                     color: cs.surface,
                     shape: BoxShape.circle,
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.1),
-                        blurRadius: 16,
-                        offset: const Offset(0, 4),
-                      ),
-                    ],
+                    boxShadow: AbzioTheme.eliteShadow,
                   ),
                   child: const Icon(Icons.arrow_back_ios_new_rounded, size: 18),
                 ),
@@ -156,13 +151,7 @@ class _LiveTrackingPageState extends ConsumerState<LiveTrackingPage>
                 color: cs.surface,
                 borderRadius:
                     const BorderRadius.vertical(top: Radius.circular(32)),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.1),
-                    blurRadius: 30,
-                    offset: const Offset(0, -10),
-                  ),
-                ],
+                boxShadow: AbzioTheme.eliteShadow,
               ),
               child: SafeArea(
                 top: false,
@@ -196,7 +185,7 @@ class _LiveTrackingPageState extends ConsumerState<LiveTrackingPage>
                               horizontal: 20, vertical: 10),
                           decoration: BoxDecoration(
                             color: cs.primary.withValues(alpha: 0.12),
-                            borderRadius: BorderRadius.circular(24),
+                            borderRadius: BorderRadius.circular(AbzioTheme.cardRadius),
                           ),
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
@@ -263,7 +252,7 @@ class _LiveTrackingPageState extends ConsumerState<LiveTrackingPage>
                           ),
                           // Call button
                           TapScale(
-                            onTap: () {},
+                            onTap: () => _callSupport(context),
                             child: Container(
                               padding: const EdgeInsets.all(12),
                               decoration: BoxDecoration(
@@ -299,7 +288,7 @@ class _LiveTrackingPageState extends ConsumerState<LiveTrackingPage>
                         children: [
                           Expanded(
                             child: TapScale(
-                              onTap: () {},
+                              onTap: () => context.push('/booking/${widget.bookingId}'),
                               child: Container(
                                 padding:
                                     const EdgeInsets.symmetric(vertical: 14),
@@ -307,7 +296,7 @@ class _LiveTrackingPageState extends ConsumerState<LiveTrackingPage>
                                   color: cs.errorContainer
                                       .withValues(alpha: 0.3),
                                   borderRadius:
-                                      BorderRadius.circular(16),
+                                      BorderRadius.circular(AbzioTheme.buttonRadius),
                                 ),
                                 child: Row(
                                   mainAxisAlignment: MainAxisAlignment.center,
@@ -327,21 +316,14 @@ class _LiveTrackingPageState extends ConsumerState<LiveTrackingPage>
                           const SizedBox(width: 12),
                           Expanded(
                             child: TapScale(
-                              onTap: () {},
+                              onTap: () => context.push('/booking/${widget.bookingId}'),
                               child: Container(
                                 padding:
                                     const EdgeInsets.symmetric(vertical: 14),
                                 decoration: BoxDecoration(
                                   color: cs.primary,
-                                  borderRadius: BorderRadius.circular(16),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: cs.primary
-                                          .withValues(alpha: 0.35),
-                                      blurRadius: 14,
-                                      offset: const Offset(0, 6),
-                                    ),
-                                  ],
+                                  borderRadius: BorderRadius.circular(AbzioTheme.buttonRadius),
+                                  boxShadow: AbzioTheme.eliteShadow,
                                 ),
                                 child: Text(
                                   'View Booking',
@@ -364,6 +346,15 @@ class _LiveTrackingPageState extends ConsumerState<LiveTrackingPage>
           ),
         ],
       ),
+    );
+  }
+}
+
+Future<void> _callSupport(BuildContext context) async {
+  final uri = Uri(scheme: 'tel', path: '+918001234567');
+  if (!await launchUrl(uri, mode: LaunchMode.externalApplication) && context.mounted) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Call support at +91 80012 34567')),
     );
   }
 }

@@ -140,7 +140,7 @@ class _ArrivalOtpPageState extends ConsumerState<ArrivalOtpPage> {
                         padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 20),
                         decoration: BoxDecoration(
                           color: Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.34),
-                          borderRadius: BorderRadius.circular(28),
+                          borderRadius: BorderRadius.circular(AbzioTheme.cardRadius),
                         ),
                         child: Column(
                           children: [
@@ -249,25 +249,20 @@ class _Avatar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    final avatar = CircleAvatar(
-      radius: 28,
-      backgroundColor: colorScheme.primaryContainer.withValues(alpha: 0.8),
-      foregroundImage: imageUrl == null || imageUrl!.isEmpty ? null : NetworkImage(imageUrl!),
-      child: imageUrl == null || imageUrl!.isEmpty
-          ? Text(
-              fallbackLabel,
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w900,
-                  ),
-            )
-          : null,
-    );
-
     return SizedBox(
       height: 56,
       width: 56,
-      child: avatar,
+      child: MarketplaceNetworkAvatar(
+        imageUrl: imageUrl,
+        radius: 28,
+        backgroundColor: Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.8),
+        fallback: Text(
+          fallbackLabel,
+          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w900,
+              ),
+        ),
+      ),
     );
   }
 }

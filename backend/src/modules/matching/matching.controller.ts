@@ -44,7 +44,8 @@ export async function dispatchBookingHandler(request: Request, response: Respons
   try {
     const result = await assignJobWithFallback(String(request.params.bookingId));
 
-    // TODO: call this from the booking payment-confirmation flow right after the booking becomes ACCEPTED.
+    // Payment verification and webhooks already trigger automatic dispatch.
+    // This route remains as a manual/admin fallback for dispatch retries.
     response.status(result.status === "failed" ? 409 : 202).json(result);
   } catch (error) {
     if (!handleMatchingError(response, error)) {

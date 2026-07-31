@@ -1,7 +1,9 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:marketplace_shared/marketplace_shared.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
@@ -20,12 +22,23 @@ class _AppBootstrapState extends ConsumerState<AppBootstrap> {
   final GlobalKey<ScaffoldMessengerState> _messengerKey = GlobalKey<ScaffoldMessengerState>();
   WebSocketChannel? _notificationChannel;
   StreamSubscription? _notificationSubscription;
+  StreamSubscription<String>? _tokenRefreshSubscription;
   String? _activeUserId;
 
   @override
   void dispose() {
+    _tokenRefreshSubscription?.cancel();
+    _tokenRefreshSubscription = null;
     _disposeNotificationSocket();
     super.dispose();
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _tokenRefreshSubscription = FirebaseMessaging.instance.onTokenRefresh.listen((_) {
+      unawaited(_registerDeviceToken());
+    });
   }
 
   void _disposeNotificationSocket() {
@@ -79,6 +92,33 @@ class _AppBootstrapState extends ConsumerState<AppBootstrap> {
         _disposeNotificationSocket();
       },
     );
+
+    unawaited(_registerDeviceToken());
+  }
+
+  Future<void> _registerDeviceToken() async {
+    final session = ref.read(authControllerProvider).valueOrNull;
+    if (session == null) {
+      return;
+    }
+
+    final token = await FirebaseMessaging.instance.getToken();
+    if (token == null || token.isEmpty) {
+      return;
+    }
+
+    final platform = kIsWeb ? 'web' : defaultTargetPlatform.name;
+    try {
+      await ref.read(apiClientProvider).post(
+            '/device-tokens',
+            data: {
+              'token': token,
+              'platform': platform,
+            },
+          );
+    } catch (_) {
+      // Best-effort only.
+    }
   }
 
   @override

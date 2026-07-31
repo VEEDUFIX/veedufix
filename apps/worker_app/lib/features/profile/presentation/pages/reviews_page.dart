@@ -63,14 +63,20 @@ class ReviewsPage extends ConsumerWidget {
                             subtitle: 'Complete jobs to earn reviews',
                           )
                         else
-                          ...profile.reviews.map((r) => Padding(
-                            padding: const EdgeInsets.only(bottom: 16.0),
-                            child: _buildReviewItem(
-                              cs: cs,
-                              tt: tt,
-                              review: r,
-                            ),
-                          )),
+                          ListView.separated(
+                            shrinkWrap: true,
+                            physics: const NeverScrollableScrollPhysics(),
+                            itemCount: profile.reviews.length,
+                            separatorBuilder: (_, __) => const SizedBox(height: 16),
+                            itemBuilder: (context, index) {
+                              final review = profile.reviews[index];
+                              return _buildReviewItem(
+                                cs: cs,
+                                tt: tt,
+                                review: review,
+                              );
+                            },
+                          ),
                       ],
                     ),
                   ),
@@ -106,11 +112,11 @@ class ReviewsPage extends ConsumerWidget {
     
     int count5 = 0, count4 = 0, count3 = 0, count2 = 0, count1 = 0;
     for (var r in reviews) {
-      if (r.rating >= 4.5) count5++;
-      else if (r.rating >= 3.5) count4++;
-      else if (r.rating >= 2.5) count3++;
-      else if (r.rating >= 1.5) count2++;
-      else count1++;
+      if (r.rating >= 4.5) { count5++; }
+      else if (r.rating >= 3.5) { count4++; }
+      else if (r.rating >= 2.5) { count3++; }
+      else if (r.rating >= 1.5) { count2++; }
+      else { count1++; }
     }
 
     double pct(int count) => total == 0 ? 0 : count / total;
@@ -221,7 +227,7 @@ class ReviewsPage extends ConsumerWidget {
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(AbzioTheme.buttonRadius),
         border: Border.all(color: color.withValues(alpha: 0.2)),
       ),
       child: Row(
@@ -250,7 +256,7 @@ class ReviewsPage extends ConsumerWidget {
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: cs.surfaceContainerHighest.withValues(alpha: 0.3),
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(AbzioTheme.buttonRadius),
         border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.5)),
       ),
       child: Column(
@@ -258,12 +264,11 @@ class ReviewsPage extends ConsumerWidget {
         children: [
           Row(
             children: [
-              CircleAvatar(
+              MarketplaceNetworkAvatar(
+                imageUrl: review.customerAvatarUrl,
+                radius: 18,
                 backgroundColor: cs.primary.withValues(alpha: 0.1),
-                backgroundImage: review.customerAvatarUrl != null ? NetworkImage(review.customerAvatarUrl!) : null,
-                child: review.customerAvatarUrl == null 
-                  ? Text(initials, style: tt.titleMedium?.copyWith(color: cs.primary, fontWeight: FontWeight.bold))
-                  : null,
+                fallback: Text(initials, style: tt.titleMedium?.copyWith(color: cs.primary, fontWeight: FontWeight.bold)),
               ),
               const SizedBox(width: 12),
               Expanded(

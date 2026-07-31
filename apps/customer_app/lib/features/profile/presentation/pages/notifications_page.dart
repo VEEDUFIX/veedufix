@@ -32,19 +32,25 @@ class NotificationsPage extends ConsumerWidget {
           ),
         ),
         title: Text('Notifications', style: tt.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
+        actions: [
+          TextButton(
+            onPressed: () => _markAllNotificationsRead(context, ref),
+            child: const Text('Mark all read'),
+          ),
+        ],
       ),
       body: notifAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (err, _) => Center(
-          child: const PremiumEmptyState(
+        error: (err, _) => const Center(
+          child: PremiumEmptyState(
             icon: Icons.notifications_off_rounded,
             title: 'Could not load notifications',
             subtitle: 'Pull down to try again.',
           ),
         ),
         data: (notifications) => notifications.isEmpty
-            ? Center(
-                child: const PremiumEmptyState(
+            ? const Center(
+                child: PremiumEmptyState(
                   icon: Icons.notifications_none_rounded,
                   title: 'All caught up!',
                   subtitle: 'You have no notifications right now.',
@@ -59,7 +65,7 @@ class NotificationsPage extends ConsumerWidget {
                   itemBuilder: (context, i) {
                     final notif = notifications[i];
                     return TapScale(
-                      onTap: () {},
+                      onTap: () => _markNotificationRead(context, ref, notif.id),
                       child: PremiumCard(
                         child: Padding(
                           padding: const EdgeInsets.all(16),
@@ -139,5 +145,41 @@ class NotificationsPage extends ConsumerWidget {
     if (diff.inHours < 24) return '${diff.inHours}h ago';
     if (diff.inDays < 7) return '${diff.inDays}d ago';
     return '${dt.day}/${dt.month}/${dt.year}';
+  }
+}
+
+Future<void> _markAllNotificationsRead(BuildContext context, WidgetRef ref) async {
+  try {
+    await ref.read(apiClientProvider).post('/notifications/mark-all-read');
+    ref.invalidate(notificationsProvider);
+    ref.invalidate(notificationsUnreadCountProvider);
+    if (!context.mounted) {
+      return;
+    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('All notifications marked as read.')),
+    );
+  } catch (error) {
+    if (!context.mounted) {
+      return;
+    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Could not update notifications: $error')),
+    );
+  }
+}
+
+Future<void> _markNotificationRead(BuildContext context, WidgetRef ref, String notificationId) async {
+  try {
+    await ref.read(apiClientProvider).patch('/notifications/$notificationId/read');
+    ref.invalidate(notificationsProvider);
+    ref.invalidate(notificationsUnreadCountProvider);
+  } catch (_) {
+    if (!context.mounted) {
+      return;
+    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Could not update notification.')),
+    );
   }
 }

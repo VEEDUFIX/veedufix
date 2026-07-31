@@ -94,13 +94,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
               decoration: BoxDecoration(
                 color: cs.surface,
                 shape: BoxShape.circle,
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.08),
-                    blurRadius: 12,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
+                boxShadow: AbzioTheme.eliteShadow,
               ),
               child: const Icon(Icons.arrow_back_ios_new_rounded, size: 18),
             ),
@@ -112,7 +106,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
           margin: const EdgeInsets.only(right: 16),
           decoration: BoxDecoration(
             color: cs.surfaceContainerHighest,
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(AbzioTheme.buttonRadius),
           ),
           child: TextField(
             controller: _controller,
@@ -219,7 +213,7 @@ class _SearchHome extends StatelessWidget {
                             horizontal: 14, vertical: 8),
                         decoration: BoxDecoration(
                           color: cs.surfaceContainerHighest,
-                          borderRadius: BorderRadius.circular(20),
+                          borderRadius: BorderRadius.circular(AbzioTheme.cardRadius),
                         ),
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
@@ -266,7 +260,7 @@ class _SearchHome extends StatelessWidget {
                         width: 48,
                         decoration: BoxDecoration(
                           color: item.accent.withValues(alpha: 0.12),
-                          borderRadius: BorderRadius.circular(16),
+                          borderRadius: BorderRadius.circular(AbzioTheme.buttonRadius),
                         ),
                         child: Icon(item.icon, color: item.accent),
                       ),
@@ -336,7 +330,7 @@ class _SearchResults extends StatelessWidget {
                     width: 52,
                     decoration: BoxDecoration(
                       color: accent.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(16),
+                      borderRadius: BorderRadius.circular(AbzioTheme.buttonRadius),
                     ),
                     child: const Icon(Icons.design_services_rounded, color: accent),
                   ),

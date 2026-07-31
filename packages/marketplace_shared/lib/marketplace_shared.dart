@@ -6,9 +6,12 @@ export 'core/config/firebase_bootstrap.dart';
 export 'core/network/api_client.dart';
 export 'core/network/realtime_service.dart';
 export 'core/notifications/firebase_messaging_service.dart';
+export 'core/notifications/fcm_service.dart';
 export 'core/storage/secure_store.dart';
 export 'core/widgets/gradient_hero.dart';
+export 'core/theme/abzio_theme.dart';
 export 'core/widgets/premium_widgets.dart';
+export 'core/widgets/network_image_widgets.dart';
 export 'core/widgets/primary_action_button.dart';
 export 'ui/widgets/abzio_motion.dart';
 export 'ui/widgets/shimmer_widget.dart';
@@ -41,3 +44,5 @@ export 'features/catalog/data/models/coupon_model.dart';
 export 'features/catalog/presentation/providers/coupons_provider.dart';
 export 'features/catalog/presentation/providers/home_professionals_provider.dart';
 export 'features/ai/presentation/providers/ai_assistant_provider.dart';
+
+export 'core/utils/image_utils.dart';

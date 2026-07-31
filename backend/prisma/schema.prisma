@@ -112,15 +112,32 @@ model User {
   bookings         Booking[] @relation("CustomerBookings")
   reviewsWritten   Review[]  @relation("ReviewerReviews")
   notifications    Notification[]
+  deviceTokens     DeviceToken[]
   refreshTokens    RefreshToken[]
   workerProfile    WorkerProfile?
   authSessions     AuthSession[]
   catalogImportJobs CatalogImportJob[]
   walletTransactions WalletTransaction[]
   supportTickets   SupportTicket[]
+  supportTicketsAssigned SupportTicket[] @relation("SupportTicketAssignee")
+  supportTicketReplies SupportTicketReply[]
   documents        Document[]
   referralsMade    Referral[] @relation("Referrer")
   referredBy       Referral?  @relation("ReferredUser")
+}
+
+model DeviceToken {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token      String   @unique
+  platform   String?
+  deviceId   String?
+  lastSeenAt DateTime @default(now())
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([userId, lastSeenAt])
 }
 
 model WorkerProfile {
@@ -585,11 +602,30 @@ model SupportTicket {
   id          String   @id @default(cuid())
   userId      String
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  assignedToUserId String?
+  assignedTo  User?    @relation("SupportTicketAssignee", fields: [assignedToUserId], references: [id], onDelete: SetNull)
   subject     String
   message     String
   status      String   @default("OPEN")
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+  replies     SupportTicketReply[]
+
+  @@index([status, createdAt])
+  @@index([assignedToUserId, createdAt])
+}
+
+model SupportTicketReply {
+  id            String   @id @default(cuid())
+  ticketId      String
+  ticket        SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  authorUserId  String
+  author        User     @relation(fields: [authorUserId], references: [id], onDelete: Cascade)
+  message       String
+  isInternal    Boolean  @default(false)
+  createdAt     DateTime @default(now())
+
+  @@index([ticketId, createdAt])
 }
 
 model Document {

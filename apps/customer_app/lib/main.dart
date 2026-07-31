@@ -12,9 +12,22 @@ void _handleNotificationTap(RemoteMessage message, GoRouter router) {
   final bookingId = data['bookingId'] as String?;
 
   switch (type) {
+    case 'BOOKING_CONFIRMED':
+    case 'BOOKING_DETAIL':
+      if (bookingId != null) router.push('/booking/$bookingId');
+      break;
     case 'BOOKING':
     case 'JOB_UPDATE':
+    case 'WORKER_ASSIGNED':
+    case 'WORKER_EN_ROUTE':
+    case 'WORKER_ARRIVED':
       if (bookingId != null) router.push('/tracking?bookingId=$bookingId');
+      break;
+    case 'BOOKING_COMPLETED':
+      if (bookingId != null) router.push('/invoice/$bookingId');
+      break;
+    case 'REVIEW_REQUEST':
+      if (bookingId != null) router.push('/booking-rating?bookingId=$bookingId');
       break;
     case 'PAYMENT':
     case 'WALLET':
@@ -28,16 +41,24 @@ void _handleNotificationTap(RemoteMessage message, GoRouter router) {
       if (bookingId != null) router.push('/chat?bookingId=$bookingId');
       break;
     default:
-      router.push('/notifications');
+      // Use generic route if provided in payload
+      final route = data['route'] as String?;
+      router.push(route ?? '/notifications');
   }
 }
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  final container = ProviderContainer();
+
+  // Defer Firebase and Messaging init so they do not block the first frame
+  Future.microtask(() async {
+
+  FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
   await initializeFirebaseIfConfigured(AppEnvironment.fromDartDefines());
   await FirebaseMessagingService.create().initialize();
 
-  final container = ProviderContainer();
 
   // Handle notification tap when app is in background/terminated
   FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
@@ -48,6 +69,8 @@ Future<void> main() async {
   FirebaseMessaging.instance.getInitialMessage().then((message) {
     if (message != null) _handleNotificationTap(message, container.read(routerProvider));
   });
+
+    });
 
   runApp(UncontrolledProviderScope(
     container: container,

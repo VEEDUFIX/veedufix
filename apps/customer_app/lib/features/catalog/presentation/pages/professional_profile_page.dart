@@ -112,16 +112,14 @@ class _ProfileBody extends StatelessWidget {
                     children: [
                       Hero(
                         tag: 'pro-$professionalId',
-                        child: CircleAvatar(
+                        child: MarketplaceNetworkAvatar(
+                          imageUrl: profile.avatarUrl,
                           radius: 42,
                           backgroundColor: accent.withValues(alpha: 0.15),
-                          backgroundImage: profile.avatarUrl != null ? NetworkImage(profile.avatarUrl!) : null,
-                          child: profile.avatarUrl == null
-                              ? Text(
-                                  profile.displayName.substring(0, 1).toUpperCase(),
-                                  style: tt.displaySmall?.copyWith(color: accent, fontWeight: FontWeight.w900),
-                                )
-                              : null,
+                          fallback: Text(
+                            profile.displayName.substring(0, 1).toUpperCase(),
+                            style: tt.displaySmall?.copyWith(color: accent, fontWeight: FontWeight.w900),
+                          ),
                         ),
                       ),
                       const SizedBox(width: 20),
@@ -195,7 +193,7 @@ class _ProfileBody extends StatelessWidget {
                         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                         decoration: BoxDecoration(
                           color: cs.primary.withValues(alpha: 0.08),
-                          borderRadius: BorderRadius.circular(24),
+                          borderRadius: BorderRadius.circular(AbzioTheme.cardRadius),
                         ),
                         child: Text(
                           s.categoryName,
@@ -219,18 +217,16 @@ class _ProfileBody extends StatelessWidget {
                         itemBuilder: (context, i) {
                           final photo = profile.portfolioPhotos[i];
                           return ClipRRect(
-                            borderRadius: BorderRadius.circular(16),
-                            child: Image.network(
-                              photo.url,
+                            borderRadius: BorderRadius.circular(AbzioTheme.buttonRadius),
+                            child: MarketplaceNetworkImage(
+                              imageUrl: photo.url,
                               width: 110,
                               height: 110,
                               fit: BoxFit.cover,
-                              errorBuilder: (_, __, ___) => Container(
-                                width: 110,
-                                height: 110,
-                                color: cs.surfaceContainerHighest,
-                                child: Icon(Icons.image_rounded, color: cs.onSurfaceVariant),
-                              ),
+                              borderRadius: AbzioTheme.buttonRadius,
+                              cloudinaryWidth: 220,
+                              cloudinaryHeight: 220,
+                              backgroundColor: cs.surfaceContainerHighest,
                             ),
                           );
                         },
@@ -243,7 +239,15 @@ class _ProfileBody extends StatelessWidget {
                   if (profile.reviews.isNotEmpty) ...[
                     Text('Customer Reviews', style: tt.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
                     const SizedBox(height: 16),
-                    ...profile.reviews.map((r) => _ReviewCard(review: r)),
+                    ListView.separated(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      itemCount: profile.reviews.length,
+                      separatorBuilder: (_, __) => const SizedBox(height: 12),
+                      itemBuilder: (context, index) {
+                        return _ReviewCard(review: profile.reviews[index]);
+                      },
+                    ),
                   ],
                   const SizedBox(height: 120),
                 ],
@@ -268,7 +272,7 @@ class _ProfileBody extends StatelessWidget {
                     padding: const EdgeInsets.symmetric(vertical: 16),
                     decoration: BoxDecoration(
                       border: Border.all(color: cs.primary),
-                      borderRadius: BorderRadius.circular(18),
+                      borderRadius: BorderRadius.circular(AbzioTheme.buttonRadius),
                     ),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
@@ -289,7 +293,7 @@ class _ProfileBody extends StatelessWidget {
                     padding: const EdgeInsets.symmetric(vertical: 16),
                     decoration: BoxDecoration(
                       color: cs.primary,
-                      borderRadius: BorderRadius.circular(18),
+                      borderRadius: BorderRadius.circular(AbzioTheme.buttonRadius),
                       boxShadow: [BoxShadow(color: cs.primary.withValues(alpha: 0.4), blurRadius: 20, offset: const Offset(0, 8))],
                     ),
                     child: Text(
@@ -325,7 +329,7 @@ class _StatBadge extends StatelessWidget {
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
           color: cs.surface,
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: BorderRadius.circular(AbzioTheme.cardRadius),
           boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 16, offset: const Offset(0, 6))],
         ),
         child: Column(
@@ -353,23 +357,21 @@ class _ReviewCard extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(bottom: 14),
       child: PremiumCard(
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  CircleAvatar(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                  MarketplaceNetworkAvatar(
+                    imageUrl: review.customerAvatarUrl,
                     radius: 18,
                     backgroundColor: cs.primaryContainer,
-                    backgroundImage: review.customerAvatarUrl != null ? NetworkImage(review.customerAvatarUrl!) : null,
-                    child: review.customerAvatarUrl == null
-                        ? Text(
-                            review.customerName.substring(0, 1).toUpperCase(),
-                            style: tt.labelLarge?.copyWith(color: cs.primary, fontWeight: FontWeight.w800),
-                          )
-                        : null,
+                    fallback: Text(
+                      review.customerName.substring(0, 1).toUpperCase(),
+                      style: tt.labelLarge?.copyWith(color: cs.primary, fontWeight: FontWeight.w800),
+                    ),
                   ),
                   const SizedBox(width: 10),
                   Expanded(

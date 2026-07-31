@@ -79,4 +79,14 @@ class ApiClient {
     final res = await dio.post<Map<String, dynamic>>(path, data: data, queryParameters: queryParameters, options: options);
     return res.data ?? <String, dynamic>{};
   }
+
+  Future<Map<String, dynamic>> patch(String path, {dynamic data, Map<String, dynamic>? queryParameters, Options? options}) async {
+    final res = await dio.patch<Map<String, dynamic>>(path, data: data, queryParameters: queryParameters, options: options);
+    return res.data ?? <String, dynamic>{};
+  }
+
+  Future<Map<String, dynamic>> delete(String path, {dynamic data, Map<String, dynamic>? queryParameters, Options? options}) async {
+    final res = await dio.delete<Map<String, dynamic>>(path, data: data, queryParameters: queryParameters, options: options);
+    return res.data ?? <String, dynamic>{};
+  }
 }

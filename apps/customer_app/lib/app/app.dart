@@ -1,7 +1,9 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:marketplace_shared/marketplace_shared.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
@@ -21,6 +23,7 @@ class _AppBootstrapState extends ConsumerState<AppBootstrap> {
   WebSocketChannel? _notificationChannel;
   StreamSubscription? _notificationSubscription;
   StreamSubscription<Map<String, dynamic>>? _notificationTapSubscription;
+  StreamSubscription<String>? _tokenRefreshSubscription;
   String? _activeUserId;
   Map<String, dynamic>? _pendingNotificationTap;
 
@@ -35,12 +38,17 @@ class _AppBootstrapState extends ConsumerState<AppBootstrap> {
       _pendingNotificationTap = payload;
       _tryHandlePendingNotificationTap();
     });
+    _tokenRefreshSubscription = FirebaseMessaging.instance.onTokenRefresh.listen((_) {
+      unawaited(_registerDeviceToken());
+    });
   }
 
   @override
   void dispose() {
     _notificationTapSubscription?.cancel();
     _notificationTapSubscription = null;
+    _tokenRefreshSubscription?.cancel();
+    _tokenRefreshSubscription = null;
     _disposeNotificationSocket();
     super.dispose();
   }
@@ -96,6 +104,33 @@ class _AppBootstrapState extends ConsumerState<AppBootstrap> {
         _disposeNotificationSocket();
       },
     );
+
+    unawaited(_registerDeviceToken());
+  }
+
+  Future<void> _registerDeviceToken() async {
+    final session = ref.read(authControllerProvider).valueOrNull;
+    if (session == null) {
+      return;
+    }
+
+    final token = await FirebaseMessaging.instance.getToken();
+    if (token == null || token.isEmpty) {
+      return;
+    }
+
+    final platform = kIsWeb ? 'web' : defaultTargetPlatform.name;
+    try {
+      await ref.read(apiClientProvider).post(
+            '/device-tokens',
+            data: {
+              'token': token,
+              'platform': platform,
+            },
+          );
+    } catch (_) {
+      // Token registration is best-effort and should never block the app.
+    }
   }
 
   void _routeNotificationPayload(Map<String, dynamic> payload) {

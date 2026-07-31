@@ -159,7 +159,7 @@ class _JobCard extends ConsumerWidget {
                   width: 56,
                   decoration: BoxDecoration(
                     color: accent.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(18),
+                    borderRadius: BorderRadius.circular(AbzioTheme.buttonRadius),
                   ),
                   child: Icon(Icons.person_rounded, color: accent),
                 ),
@@ -246,7 +246,10 @@ class _JobCard extends ConsumerWidget {
                     child: OutlinedButton(
                       onPressed: () async {
                         try {
-                          await ref.read(apiClientProvider).post('/bookings/${job.bookingId}/reject-job');
+                          if (job.offerId == null) {
+                            throw Exception('Missing offer ID');
+                          }
+                          await ref.read(apiClientProvider).post('/users/me/worker/jobs/${job.offerId}/decline');
                           ref.invalidate(workerJobsProvider('incoming'));
                           if (context.mounted) {
                             ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Job declined')));
@@ -344,7 +347,7 @@ class _InfoChip extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surface,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(AbzioTheme.buttonRadius),
       ),
       child: Row(
         children: [

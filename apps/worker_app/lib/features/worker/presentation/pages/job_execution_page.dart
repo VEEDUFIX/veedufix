@@ -8,6 +8,7 @@ import 'package:go_router/go_router.dart';
 import 'package:marketplace_shared/marketplace_shared.dart';
 
 import '../providers/job_execution_provider.dart';
+import '../providers/worker_availability_provider.dart';
 
 class JobExecutionPage extends ConsumerStatefulWidget {
   const JobExecutionPage({
@@ -30,6 +31,8 @@ class _JobExecutionPageState extends ConsumerState<JobExecutionPage> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(jobExecutionProvider.notifier).start(widget.booking);
+      // Start broadcasting GPS location for live tracking
+      ref.read(locationBroadcasterProvider.notifier).start(widget.booking.bookingId);
     });
   }
 
@@ -37,6 +40,8 @@ class _JobExecutionPageState extends ConsumerState<JobExecutionPage> {
   void dispose() {
     _arrivalOtpController.dispose();
     _completionOtpController.dispose();
+    // Stop location broadcasting when job page closes
+    ref.read(locationBroadcasterProvider.notifier).stop();
     super.dispose();
   }
 
@@ -84,7 +89,7 @@ class _JobExecutionPageState extends ConsumerState<JobExecutionPage> {
                           width: 52,
                           decoration: BoxDecoration(
                             color: booking.accentColor.withValues(alpha: 0.14),
-                            borderRadius: BorderRadius.circular(18),
+                            borderRadius: BorderRadius.circular(AbzioTheme.buttonRadius),
                           ),
                           child: Icon(
                             Icons.assignment_rounded,
@@ -395,7 +400,7 @@ class _JobExecutionPageState extends ConsumerState<JobExecutionPage> {
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
               color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.4),
-              borderRadius: BorderRadius.circular(16),
+              borderRadius: BorderRadius.circular(AbzioTheme.buttonRadius),
             ),
             child: Text(
               'Finish the checklist before uploading after photos.',
@@ -481,7 +486,7 @@ class _JobExecutionPageState extends ConsumerState<JobExecutionPage> {
               child: Container(
                 decoration: BoxDecoration(
                   color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.65),
-                  borderRadius: BorderRadius.circular(18),
+                  borderRadius: BorderRadius.circular(AbzioTheme.buttonRadius),
                   border: Border.all(
                     color: item.completed
                         ? const Color(0xFF10B981).withValues(alpha: 0.2)
@@ -564,7 +569,7 @@ class _JobExecutionPageState extends ConsumerState<JobExecutionPage> {
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
               color: Theme.of(context).colorScheme.errorContainer.withValues(alpha: 0.35),
-              borderRadius: BorderRadius.circular(18),
+              borderRadius: BorderRadius.circular(AbzioTheme.buttonRadius),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -645,7 +650,7 @@ class _JobExecutionPageState extends ConsumerState<JobExecutionPage> {
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
               color: const Color(0xFF10B981).withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(20),
+              borderRadius: BorderRadius.circular(AbzioTheme.cardRadius),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -795,7 +800,7 @@ class _StepCard extends StatelessWidget {
     return AnimatedContainer(
       duration: const Duration(milliseconds: 220),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(28),
+        borderRadius: BorderRadius.circular(AbzioTheme.cardRadius),
         border: Border.all(
           color: isCompleted
               ? const Color(0xFF10B981).withValues(alpha: 0.2)
@@ -883,7 +888,7 @@ class _ErrorBanner extends StatelessWidget {
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.errorContainer.withValues(alpha: 0.36),
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(AbzioTheme.buttonRadius),
       ),
       child: Text(
         error.message,
@@ -911,7 +916,7 @@ class _PhotoDraftTile extends StatelessWidget {
     return Container(
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.68),
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(AbzioTheme.cardRadius),
         border: Border.all(
           color: draft.hasFailed
               ? Theme.of(context).colorScheme.error.withValues(alpha: 0.2)

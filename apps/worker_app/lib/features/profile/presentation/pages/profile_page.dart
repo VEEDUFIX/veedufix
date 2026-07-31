@@ -3,13 +3,102 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:marketplace_shared/marketplace_shared.dart';
 
+final workerAccountProfileProvider = FutureProvider.autoDispose<Map<String, dynamic>>((ref) async {
+  final api = ref.watch(apiClientProvider);
+  return api.get('/users/me');
+});
+
 class ProfilePage extends ConsumerWidget {
   const ProfilePage({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final auth = ref.watch(authControllerProvider).valueOrNull;
-    final user = auth?.user;
+    final session = ref.watch(authControllerProvider).valueOrNull;
+    final accountAsync = ref.watch(workerAccountProfileProvider);
+
+    return accountAsync.when(
+      loading: () => const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      ),
+      error: (error, stack) => Scaffold(
+        appBar: AppBar(title: const Text('Profile')),
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.error_outline_rounded, size: 48),
+                const SizedBox(height: 12),
+                Text(
+                  'Failed to load profile',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  error.toString(),
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                ),
+                const SizedBox(height: 16),
+                FilledButton(
+                  onPressed: () => ref.refresh(workerAccountProfileProvider),
+                  child: const Text('Try again'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+      data: (account) {
+        final userMap = (account['user'] as Map<String, dynamic>?) ?? <String, dynamic>{};
+        final workerProfile = (userMap['workerProfile'] as Map<String, dynamic>?) ?? <String, dynamic>{};
+
+        return _ProfileContent(
+          sessionUser: session?.user,
+          userMap: userMap,
+          workerProfile: workerProfile,
+        );
+      },
+    );
+  }
+}
+
+class _ProfileContent extends ConsumerWidget {
+  const _ProfileContent({
+    required this.sessionUser,
+    required this.userMap,
+    required this.workerProfile,
+  });
+
+  final AuthUser? sessionUser;
+  final Map<String, dynamic> userMap;
+  final Map<String, dynamic> workerProfile;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final userName = _nonEmpty(workerProfile['displayName']) ??
+        _nonEmpty(workerProfile['fullName']) ??
+        _nonEmpty(userMap['name']) ??
+        sessionUser?.name ??
+        'Guest worker';
+    final avatarUrl = _nonEmpty(userMap['avatarUrl']) ?? sessionUser?.avatarUrl;
+    final verificationStatus = _nonEmpty(workerProfile['verificationStatus']) ?? 'PENDING';
+    final averageRating = _doubleValue(workerProfile['averageRating']);
+    final completedJobsCount = _intValue(workerProfile['completedJobsCount']);
+    final experienceYears = _intValue(workerProfile['experienceYears']);
+    final isAvailable = workerProfile['isAvailable'] as bool? ?? false;
+    final bio = _nonEmpty(workerProfile['bio']);
+    final skills = _skillNames(workerProfile['skills']);
+    final progress = _profileProgress(
+      name: userName,
+      bio: bio,
+      skills: skills,
+      verificationStatus: verificationStatus,
+    );
+    final bankDetails = _bankSummary(workerProfile);
 
     return Scaffold(
       body: ListView(
@@ -31,10 +120,23 @@ class ProfilePage extends ConsumerWidget {
                 width: 48,
                 decoration: BoxDecoration(
                   color: Theme.of(context).colorScheme.surface,
-                  borderRadius: BorderRadius.circular(16),
+                  borderRadius: BorderRadius.circular(AbzioTheme.buttonRadius),
                 ),
                 child: IconButton(
-                  onPressed: () {},
+                  onPressed: () => context.push('/profile/edit'),
+                  icon: const Icon(Icons.edit_rounded),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Container(
+                height: 48,
+                width: 48,
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.surface,
+                  borderRadius: BorderRadius.circular(AbzioTheme.buttonRadius),
+                ),
+                child: IconButton(
+                  onPressed: () => context.push('/settings'),
                   icon: const Icon(Icons.settings_rounded),
                 ),
               ),
@@ -49,13 +151,27 @@ class ProfilePage extends ConsumerWidget {
                   CircleAvatar(
                     radius: 32,
                     backgroundColor: Theme.of(context).colorScheme.primaryContainer,
-                    child: Text(
-                      _initial(user?.name),
-                      style: TextStyle(
-                        fontWeight: FontWeight.w900,
-                        color: Theme.of(context).colorScheme.primary,
-                      ),
-                    ),
+                    child: avatarUrl == null
+                        ? Text(
+                            _initial(userName),
+                            style: TextStyle(
+                              fontWeight: FontWeight.w900,
+                              color: Theme.of(context).colorScheme.primary,
+                            ),
+                          )
+                        : ClipOval(
+                            child: MarketplaceNetworkAvatar(
+                              imageUrl: avatarUrl,
+                              radius: 32,
+                              fallback: Text(
+                                _initial(userName),
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w900,
+                                  color: Theme.of(context).colorScheme.primary,
+                                ),
+                              ),
+                            ),
+                          ),
                   ),
                   const SizedBox(width: 14),
                   Expanded(
@@ -66,7 +182,7 @@ class ProfilePage extends ConsumerWidget {
                           children: [
                             Expanded(
                               child: Text(
-                                user?.name ?? 'Guest worker',
+                                userName,
                                 style: Theme.of(context).textTheme.titleLarge?.copyWith(
                                       fontWeight: FontWeight.w900,
                                     ),
@@ -75,14 +191,18 @@ class ProfilePage extends ConsumerWidget {
                             Container(
                               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                               decoration: BoxDecoration(
-                                color: const Color(0xFF10B981).withValues(alpha: 0.12),
+                                color: verificationStatus == 'VERIFIED'
+                                    ? const Color(0xFF10B981).withValues(alpha: 0.12)
+                                    : Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
                                 borderRadius: BorderRadius.circular(999),
                               ),
                               child: Text(
-                                'Verified',
+                                _friendlyVerificationLabel(verificationStatus),
                                 style: Theme.of(context).textTheme.labelSmall?.copyWith(
                                       fontWeight: FontWeight.w800,
-                                      color: const Color(0xFF10B981),
+                                      color: verificationStatus == 'VERIFIED'
+                                          ? const Color(0xFF10B981)
+                                          : Theme.of(context).colorScheme.onSurfaceVariant,
                                     ),
                               ),
                             ),
@@ -90,14 +210,14 @@ class ProfilePage extends ConsumerWidget {
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          user?.role ?? 'WORKER',
+                          sessionUser?.role ?? 'WORKER',
                           style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                                 color: Theme.of(context).colorScheme.onSurfaceVariant,
                               ),
                         ),
                         const SizedBox(height: 10),
                         LinearProgressIndicator(
-                          value: 0.9,
+                          value: progress,
                           minHeight: 8,
                           borderRadius: BorderRadius.circular(99),
                         ),
@@ -109,36 +229,35 @@ class ProfilePage extends ConsumerWidget {
             ),
           ),
           const SizedBox(height: 18),
-          // ── Performance Stats ─────────────────────────────────────────
           Row(
             children: [
               Expanded(
                 child: TapScale(
                   onTap: () => context.push('/reviews'),
-                  child: const PremiumStatCard(
+                  child: PremiumStatCard(
                     label: 'Rating',
-                    value: '4.8',
+                    value: averageRating.toStringAsFixed(1),
                     icon: Icons.star_rounded,
-                    accentColor: Color(0xFFF59E0B),
+                    accentColor: const Color(0xFFF59E0B),
                   ),
                 ),
               ),
               const SizedBox(width: 12),
-              const Expanded(
+              Expanded(
                 child: PremiumStatCard(
                   label: 'Jobs Done',
-                  value: '142',
+                  value: completedJobsCount.toString(),
                   icon: Icons.check_circle_rounded,
-                  accentColor: Color(0xFF10B981),
+                  accentColor: const Color(0xFF10B981),
                 ),
               ),
               const SizedBox(width: 12),
-              const Expanded(
+              Expanded(
                 child: PremiumStatCard(
-                  label: 'Badges',
-                  value: '4',
+                  label: 'Experience',
+                  value: '${experienceYears}y',
                   icon: Icons.military_tech_rounded,
-                  accentColor: Color(0xFF8B5CF6),
+                  accentColor: const Color(0xFF8B5CF6),
                 ),
               ),
             ],
@@ -149,29 +268,30 @@ class ProfilePage extends ConsumerWidget {
             subtitle: 'Manage identity, availability, and service credentials.',
           ),
           const SizedBox(height: 12),
-          const _SectionCard(
+          _SectionCard(
             title: 'KYC status',
-            subtitle: 'PAN verified, Aadhaar submitted, and background check approved.',
+            subtitle: _friendlyVerificationLabel(verificationStatus),
             icon: Icons.verified_user_rounded,
-            accent: Color(0xFF10B981),
+            accent: const Color(0xFF10B981),
+            onTap: () => context.push('/documents/upload'),
           ),
-          const _SectionCard(
+          _SectionCard(
             title: 'Experience & skills',
-            subtitle: '8 years experience · AC repair, electrical, plumbing, appliance setup.',
+            subtitle: _experienceSummary(experienceYears, bio, skills),
             icon: Icons.build_circle_rounded,
-            accent: Color(0xFFC2A15E),
+            accent: const Color(0xFFC2A15E),
           ),
-          const _SectionCard(
+          _SectionCard(
             title: 'Portfolio',
             subtitle: 'Upload your best completed jobs and before/after work images.',
             icon: Icons.collections_rounded,
-            accent: Color(0xFF38BDF8),
+            accent: const Color(0xFF38BDF8),
           ),
-          const _SectionCard(
+          _SectionCard(
             title: 'Bank details',
-            subtitle: 'HDFC Bank · UPI payout enabled · weekly settlements active.',
+            subtitle: bankDetails,
             icon: Icons.account_balance_rounded,
-            accent: Color(0xFFF59E0B),
+            accent: const Color(0xFFF59E0B),
           ),
           const SizedBox(height: 18),
           const PremiumSectionHeader(
@@ -181,14 +301,16 @@ class ProfilePage extends ConsumerWidget {
           const SizedBox(height: 12),
           _SectionCard(
             title: 'Weekly availability',
-            subtitle: 'Set the hours you want to accept customer bookings.',
+            subtitle: isAvailable
+                ? 'You are currently visible to customers.'
+                : 'Turn on availability to receive customer bookings.',
             icon: Icons.schedule_rounded,
             accent: const Color(0xFF14B8A6),
             onTap: () => context.push('/availability'),
           ),
-          const _CompactLine(label: 'Working hours', value: '8:00 AM - 8:00 PM'),
-          const _CompactLine(label: 'Online mode', value: 'Enabled'),
-          const _CompactLine(label: 'Documents', value: '6 verified files'),
+          _CompactLine(label: 'Verification', value: _friendlyVerificationLabel(verificationStatus)),
+          _CompactLine(label: 'Availability', value: isAvailable ? 'Enabled' : 'Paused'),
+          _CompactLine(label: 'Skills', value: skills.isEmpty ? 'None yet' : skills.length.toString()),
           const SizedBox(height: 18),
           const PremiumSectionHeader(
             title: 'Support',
@@ -196,7 +318,7 @@ class ProfilePage extends ConsumerWidget {
           ),
           const SizedBox(height: 12),
           _ActionTile(
-            icon: Icons.support_agent_rounded, 
+            icon: Icons.support_agent_rounded,
             title: 'Support',
             onTap: () => context.push('/support'),
           ),
@@ -206,15 +328,18 @@ class ProfilePage extends ConsumerWidget {
             onTap: () => context.push('/reviews'),
           ),
           _ActionTile(
-            icon: Icons.settings_rounded, 
+            icon: Icons.settings_rounded,
             title: 'Settings',
             onTap: () => context.push('/settings'),
           ),
           _ActionTile(
-            icon: Icons.logout_rounded, 
+            icon: Icons.logout_rounded,
             title: 'Logout',
-            onTap: () {
-              // TODO: Wire to auth controller
+            onTap: () async {
+              await ref.read(authControllerProvider.notifier).signOut();
+              if (context.mounted) {
+                context.go('/login');
+              }
             },
           ),
         ],
@@ -227,6 +352,65 @@ class ProfilePage extends ConsumerWidget {
       return 'W';
     }
     return name[0].toUpperCase();
+  }
+
+  static double _profileProgress({
+    required String name,
+    required String? bio,
+    required List<String> skills,
+    required String verificationStatus,
+  }) {
+    var progress = 0.0;
+    if (name.trim().isNotEmpty) progress += 0.25;
+    if (bio != null && bio.trim().isNotEmpty) progress += 0.25;
+    if (skills.isNotEmpty) progress += 0.25;
+    if (verificationStatus == 'VERIFIED') progress += 0.25;
+    return progress.clamp(0.0, 1.0);
+  }
+
+  static String _experienceSummary(int years, String? bio, List<String> skills) {
+    final skillText = skills.isEmpty ? 'Add your specialties in edit profile.' : skills.take(3).join(', ');
+    if (bio != null && bio.trim().isNotEmpty) {
+      return '${years} years experience · $skillText';
+    }
+    return '${years} years experience · $skillText';
+  }
+
+  static String _friendlyVerificationLabel(String status) {
+    switch (status.toUpperCase()) {
+      case 'VERIFIED':
+        return 'Verified';
+      case 'REJECTED':
+        return 'Rejected';
+      case 'SUSPENDED':
+        return 'Suspended';
+      case 'PENDING':
+      default:
+        return 'Pending review';
+    }
+  }
+
+  static String _bankSummary(Map<String, dynamic> profile) {
+    final parts = <String>[];
+    final bankAccount = _nonEmpty(profile['bankAccountNumber']);
+    final bankIfsc = _nonEmpty(profile['bankIfsc']);
+    final upiId = _nonEmpty(profile['upiId']);
+
+    if (bankAccount != null) {
+      parts.add('Account $bankAccount');
+    }
+    if (bankIfsc != null) {
+      parts.add('IFSC $bankIfsc');
+    }
+    if (upiId != null) {
+      parts.add('UPI $upiId');
+    }
+
+    if (parts.isEmpty) {
+      return 'Add bank or UPI details for payouts.';
+    }
+
+    return parts.join(' · ');
   }
 }
 
@@ -257,7 +441,7 @@ class _SectionCard extends StatelessWidget {
             width: 48,
             decoration: BoxDecoration(
               color: accent.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(16),
+              borderRadius: BorderRadius.circular(AbzioTheme.buttonRadius),
             ),
             child: Icon(icon, color: accent),
           ),
@@ -330,24 +514,67 @@ class _ActionTile extends StatelessWidget {
         child: PremiumGlassCard(
           child: ListTile(
             contentPadding: const EdgeInsets.all(16),
-          leading: Container(
-            height: 46,
-            width: 46,
-            decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.75),
-              borderRadius: BorderRadius.circular(16),
+            leading: Container(
+              height: 46,
+              width: 46,
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.75),
+                borderRadius: BorderRadius.circular(AbzioTheme.buttonRadius),
+              ),
+              child: Icon(icon, color: Theme.of(context).colorScheme.primary),
             ),
-            child: Icon(icon, color: Theme.of(context).colorScheme.primary),
+            title: Text(
+              title,
+              style: const TextStyle(fontWeight: FontWeight.w800),
+            ),
+            trailing: const Icon(Icons.chevron_right_rounded),
+            onTap: onTap,
           ),
-          title: Text(
-            title,
-            style: const TextStyle(fontWeight: FontWeight.w800),
-          ),
-          trailing: const Icon(Icons.chevron_right_rounded),
-          onTap: onTap,
         ),
-      ),
       ),
     );
   }
+}
+
+String? _nonEmpty(dynamic value) {
+  if (value is String && value.trim().isNotEmpty) {
+    return value.trim();
+  }
+  return null;
+}
+
+int _intValue(dynamic value) {
+  if (value is int) return value;
+  if (value is num) return value.toInt();
+  return 0;
+}
+
+double _doubleValue(dynamic value) {
+  if (value is num) return value.toDouble();
+  return 0.0;
+}
+
+List<String> _skillNames(dynamic rawSkills) {
+  if (rawSkills is! List) {
+    return const [];
+  }
+
+  return rawSkills
+      .whereType<Map>()
+      .map((skill) {
+        final category = skill['category'];
+        if (category is Map) {
+          final name = category['name'];
+          if (name is String && name.trim().isNotEmpty) {
+            return name.trim();
+          }
+        }
+        final fallback = skill['categoryName'];
+        if (fallback is String && fallback.trim().isNotEmpty) {
+          return fallback.trim();
+        }
+        return null;
+      })
+      .whereType<String>()
+      .toList(growable: false);
 }

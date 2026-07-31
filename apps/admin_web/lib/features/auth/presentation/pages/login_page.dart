@@ -107,18 +107,12 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                     child: Container(
                       decoration: BoxDecoration(
                         color: Colors.white,
-                        borderRadius: BorderRadius.circular(24),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.04),
-                            blurRadius: 24,
-                            offset: const Offset(0, 12),
-                          ),
-                        ],
+                        borderRadius: BorderRadius.circular(AbzioTheme.cardRadius),
+                        boxShadow: AbzioTheme.eliteShadow,
                         border: Border.all(color: Colors.white.withValues(alpha: 0.2)),
                       ),
                       child: ClipRRect(
-                        borderRadius: BorderRadius.circular(24),
+                        borderRadius: BorderRadius.circular(AbzioTheme.cardRadius),
                         child: BackdropFilter(
                           filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
                           child: Padding(

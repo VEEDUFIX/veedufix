@@ -42,6 +42,7 @@ dependencies:
   google_sign_in_platform_interface: ^2.5.0
   fl_chart: ^1.2.0
   google_maps_flutter: ^2.18.0
+  flutter_animate: ^4.5.2
 
 dev_dependencies:
   flutter_test:

@@ -14,26 +14,140 @@ class DisputesQueuePage extends ConsumerStatefulWidget {
 }
 
 class _DisputesQueuePageState extends ConsumerState<DisputesQueuePage> {
+  static const int _pageSize = 20;
+
   late final DisputesApi _api;
-  late Future<DisputeQueueResponse> _queueFuture;
+  final ScrollController _scrollController = ScrollController();
+
+  final List<DisputeQueueItem> _items = <DisputeQueueItem>[];
   String _statusFilter = 'all';
+  String? _loadError;
+  bool _loadingInitial = true;
+  bool _loadingMore = false;
+  bool _hasMore = true;
+  int _page = 0;
+  int _total = 0;
 
   @override
   void initState() {
     super.initState();
     _api = DisputesApi(ref.read(apiClientProvider).dio);
-    _queueFuture = _api.fetchQueue(pageSize: 100);
+    _scrollController.addListener(_handleScroll);
+    _reload();
+  }
+
+  @override
+  void dispose() {
+    _scrollController.removeListener(_handleScroll);
+    _scrollController.dispose();
+    super.dispose();
   }
 
   Future<void> _reload() async {
     setState(() {
-      _queueFuture = _api.fetchQueue(pageSize: 100);
+      _loadingInitial = true;
+      _loadingMore = false;
+      _loadError = null;
+      _items.clear();
+      _page = 0;
+      _total = 0;
+      _hasMore = true;
     });
-    await _queueFuture;
+
+    try {
+      final data = await _api.fetchQueue(
+        status: _statusFilter == 'all' ? null : _statusFilter,
+        page: 1,
+        pageSize: _pageSize,
+      );
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _items
+          ..clear()
+          ..addAll(data.items);
+        _page = data.page;
+        _total = data.total;
+        _hasMore = _items.length < _total;
+        _loadingInitial = false;
+      });
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _loadError = error.toString();
+        _loadingInitial = false;
+      });
+    }
+  }
+
+  Future<void> _loadMore() async {
+    if (_loadingInitial || _loadingMore || !_hasMore) {
+      return;
+    }
+
+    setState(() => _loadingMore = true);
+
+    try {
+      final data = await _api.fetchQueue(
+        status: _statusFilter == 'all' ? null : _statusFilter,
+        page: _page + 1,
+        pageSize: _pageSize,
+      );
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _items.addAll(data.items);
+        _page = data.page;
+        _total = data.total;
+        _hasMore = _items.length < _total;
+        _loadingMore = false;
+      });
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+
+      setState(() => _loadingMore = false);
+    }
+  }
+
+  void _handleScroll() {
+    if (!_scrollController.hasClients) {
+      return;
+    }
+    if (_scrollController.position.extentAfter < 700) {
+      _loadMore();
+    }
+  }
+
+  Future<void> _openDispute(String id) async {
+    context.go('/ops/disputes/$id');
   }
 
   @override
   Widget build(BuildContext context) {
+    if (_loadingInitial && _items.isEmpty) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
+
+    if (_loadError != null && _items.isEmpty) {
+      return Scaffold(
+        body: _ErrorState(
+          error: _loadError!,
+          onRetry: _reload,
+        ),
+      );
+    }
+
+    final filteredItems = _items;
+
     return Scaffold(
       backgroundColor: Colors.transparent,
       appBar: AppBar(
@@ -50,210 +164,240 @@ class _DisputesQueuePageState extends ConsumerState<DisputesQueuePage> {
           ),
         ],
       ),
-      body: FutureBuilder<DisputeQueueResponse>(
-        future: _queueFuture,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting &&
-              !snapshot.hasData) {
-            return const Center(child: CircularProgressIndicator());
-          }
-
-          if (snapshot.hasError) {
-            return _ErrorState(
-              error: snapshot.error.toString(),
-              onRetry: _reload,
-            );
-          }
-
-          final items = snapshot.data?.items ?? const <DisputeQueueItem>[];
-          final filteredItems = _statusFilter == 'all'
-              ? items
-              : items
-                  .where((item) => item.status == _statusFilter)
-                  .toList(growable: false);
-
-          return Container(
-            color: Colors.transparent,
-            child: RefreshIndicator(
-              onRefresh: _reload,
-              child: ListView(
-                padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
-                children: [
-                  _SurfacePanel(
-                    child: Padding(
-                      padding: const EdgeInsets.all(20),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+      body: Container(
+        color: Colors.transparent,
+        child: RefreshIndicator(
+          onRefresh: _reload,
+          child: ListView(
+            controller: _scrollController,
+            padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+            children: [
+              _SurfacePanel(
+                child: Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Open disputes and under-review cases.',
+                        style: GoogleFonts.poppins(
+                          fontSize: 28,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: -0.4,
+                          color: Colors.black87,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Review customer complaints, evidence, and refund decisions in one queue.',
+                        style: GoogleFonts.inter(
+                          color: Colors.black54,
+                          height: 1.45,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      Wrap(
+                        spacing: 12,
+                        runSpacing: 12,
                         children: [
-                          Text(
-                            'Open disputes and under-review cases.',
-                            style: GoogleFonts.poppins(
-                              fontSize: 28,
-                              fontWeight: FontWeight.w900,
-                              letterSpacing: -0.4,
-                              color: Colors.black87,
-                            ),
+                          _MiniStat(label: 'Total', value: '$_total'),
+                          _MiniStat(
+                            label: 'Open',
+                            value: '${filteredItems.where((item) => item.status == 'open').length}',
                           ),
-                          const SizedBox(height: 8),
-                          Text(
-                            'Review customer complaints, evidence, and refund decisions in one queue.',
-                            style: GoogleFonts.inter(
-                              color: Colors.black54,
-                              height: 1.45,
-                            ),
-                          ),
-                          const SizedBox(height: 16),
-                          Wrap(
-                            spacing: 12,
-                            runSpacing: 12,
-                            children: [
-                              _MiniStat(
-                                  label: 'Total', value: '${items.length}'),
-                              _MiniStat(
-                                  label: 'Open',
-                                  value:
-                                      '${items.where((item) => item.status == 'open').length}'),
-                              _MiniStat(
-                                  label: 'Under review',
-                                  value:
-                                      '${items.where((item) => item.status == 'under_review').length}'),
-                            ],
-                          ),
-                          const SizedBox(height: 16),
-                          SizedBox(
-                            width: 280,
-                            child: DropdownButtonFormField<String>(
-                              initialValue: _statusFilter,
-                              decoration: const InputDecoration(
-                                labelText: 'Filter by status',
-                              ),
-                              items: const [
-                                DropdownMenuItem(
-                                    value: 'all', child: Text('All')),
-                                DropdownMenuItem(
-                                    value: 'open', child: Text('Open')),
-                                DropdownMenuItem(
-                                    value: 'under_review',
-                                    child: Text('Under review')),
-                              ],
-                              onChanged: (value) {
-                                if (value == null) {
-                                  return;
-                                }
-                                setState(() {
-                                  _statusFilter = value;
-                                });
-                              },
-                            ),
+                          _MiniStat(
+                            label: 'Under review',
+                            value: '${filteredItems.where((item) => item.status == 'under_review').length}',
                           ),
                         ],
                       ),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  if (filteredItems.isEmpty)
-                    const _SurfacePanel(
-                      child: Padding(
-                        padding: EdgeInsets.all(22),
-                        child: PremiumEmptyState(
-                          icon: Icons.gavel_rounded,
-                          title: 'No disputes match this filter',
-                          subtitle:
-                              'Open or under-review disputes will appear here when customers raise them.',
+                      const SizedBox(height: 16),
+                      SizedBox(
+                        width: 280,
+                        child: DropdownButtonFormField<String>(
+                          initialValue: _statusFilter,
+                          decoration: const InputDecoration(
+                            labelText: 'Filter by status',
+                          ),
+                          items: const [
+                            DropdownMenuItem(value: 'all', child: Text('All')),
+                            DropdownMenuItem(value: 'open', child: Text('Open')),
+                            DropdownMenuItem(
+                              value: 'under_review',
+                              child: Text('Under review'),
+                            ),
+                          ],
+                          onChanged: (value) {
+                            if (value == null) {
+                              return;
+                            }
+                            setState(() {
+                              _statusFilter = value;
+                            });
+                            _reload();
+                          },
                         ),
                       ),
-                    )
-                  else
-                  Container(
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(16),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.04),
-                          blurRadius: 16,
-                          offset: const Offset(0, 4),
-                        ),
-                      ],
-                    ),
-                    clipBehavior: Clip.antiAlias,
-                    child: LayoutBuilder(
-                      builder: (context, constraints) {
-                        return SingleChildScrollView(
-                          scrollDirection: Axis.horizontal,
-                          child: SizedBox(
-                            width: constraints.maxWidth > 800 ? constraints.maxWidth : 800,
-                            child: DataTable(
-                              headingRowColor: const WidgetStatePropertyAll(Color(0xFFF8FAFC)),
-                              headingTextStyle: GoogleFonts.inter(
-                                fontWeight: FontWeight.w700,
-                                fontSize: 12,
-                                color: const Color(0xFF64748B),
-                                letterSpacing: 0.8,
-                              ),
-                              dataRowMinHeight: 72,
-                              dataRowMaxHeight: 72,
-                              dividerThickness: 1,
-                              horizontalMargin: 24,
-                              columns: const [
-                                DataColumn(label: Text('REFERENCE')),
-                                DataColumn(label: Text('CUSTOMER')),
-                                DataColumn(label: Text('WORKER')),
-                                DataColumn(label: Text('STATUS')),
-                                DataColumn(label: Text('RAISED ON')),
-                                DataColumn(label: Text('ACTION')),
-                              ],
-                              rows: filteredItems.map((item) {
-                                return DataRow(
-                                  onSelectChanged: (_) => context.go('/ops/disputes/${item.id}'),
-                                  cells: [
-                                    DataCell(Text(
-                                      item.bookingCode,
-                                      style: const TextStyle(fontWeight: FontWeight.w600),
-                                    )),
-                                    DataCell(Row(
-                                      children: [
-                                        CircleAvatar(
-                                          radius: 14,
-                                          backgroundColor: Theme.of(context).colorScheme.primary.withValues(alpha: 0.12),
-                                          child: Icon(Icons.person_rounded, size: 16, color: Theme.of(context).colorScheme.primary),
-                                        ),
-                                        const SizedBox(width: 8),
-                                        Text(item.customerName),
-                                      ],
-                                    )),
-                                    DataCell(Row(
-                                      children: [
-                                        const CircleAvatar(
-                                          radius: 14,
-                                          backgroundColor: Color(0xFFF3F4F6),
-                                          child: Icon(Icons.handyman_rounded, size: 16, color: Color(0xFF64748B)),
-                                        ),
-                                        const SizedBox(width: 8),
-                                        Text(item.workerName ?? 'Unknown'),
-                                      ],
-                                    )),
-                                    DataCell(_GlowingStatusBadge(status: item.status)),
-                                    DataCell(Text(MaterialLocalizations.of(context).formatMediumDate(item.createdAt))),
-                                    const DataCell(Icon(Icons.chevron_right_rounded, color: Color(0xFF94A3B8))),
-                                  ],
-                                );
-                              }).toList(growable: false),
-                            ),
-                          ),
-                        );
-                      },
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              if (filteredItems.isEmpty)
+                const _SurfacePanel(
+                  child: Padding(
+                    padding: EdgeInsets.all(22),
+                    child: PremiumEmptyState(
+                      icon: Icons.gavel_rounded,
+                      title: 'No disputes match this filter',
+                      subtitle:
+                          'Open or under-review disputes will appear here when customers raise them.',
                     ),
                   ),
-                ],
+                )
+              else
+                Container(
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(AbzioTheme.buttonRadius),
+                    boxShadow: AbzioTheme.eliteShadow,
+                  ),
+                  clipBehavior: Clip.antiAlias,
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      return SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: SizedBox(
+                          width: constraints.maxWidth > 800 ? constraints.maxWidth : 800,
+                          child: DataTable(
+                            headingRowColor: const WidgetStatePropertyAll(Color(0xFFF8FAFC)),
+                            headingTextStyle: GoogleFonts.inter(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 12,
+                              color: const Color(0xFF64748B),
+                              letterSpacing: 0.8,
+                            ),
+                            dataRowMinHeight: 72,
+                            dataRowMaxHeight: 72,
+                            dividerThickness: 1,
+                            horizontalMargin: 24,
+                            columns: const [
+                              DataColumn(label: Text('REFERENCE')),
+                              DataColumn(label: Text('CUSTOMER')),
+                              DataColumn(label: Text('WORKER')),
+                              DataColumn(label: Text('STATUS')),
+                              DataColumn(label: Text('RAISED ON')),
+                              DataColumn(label: Text('ACTION')),
+                            ],
+                            rows: filteredItems.map((item) {
+                              return DataRow(
+                                onSelectChanged: (_) => _openDispute(item.id),
+                                cells: [
+                                  DataCell(Text(
+                                    item.bookingCode,
+                                    style: const TextStyle(fontWeight: FontWeight.w600),
+                                  )),
+                                  DataCell(Row(
+                                    children: [
+                                      CircleAvatar(
+                                        radius: 14,
+                                        backgroundColor: Theme.of(context)
+                                            .colorScheme
+                                            .primary
+                                            .withValues(alpha: 0.12),
+                                        child: Icon(
+                                          Icons.person_rounded,
+                                          size: 16,
+                                          color: Theme.of(context).colorScheme.primary,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Text(item.customerName),
+                                    ],
+                                  )),
+                                  DataCell(Row(
+                                    children: [
+                                      const CircleAvatar(
+                                        radius: 14,
+                                        backgroundColor: Color(0xFFF3F4F6),
+                                        child: Icon(
+                                          Icons.handyman_rounded,
+                                          size: 16,
+                                          color: Color(0xFF64748B),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Text(item.workerName ?? 'Unknown'),
+                                    ],
+                                  )),
+                                  DataCell(_GlowingStatusBadge(status: item.status)),
+                                  DataCell(Text(MaterialLocalizations.of(context).formatMediumDate(item.createdAt))),
+                                  const DataCell(
+                                    Icon(Icons.chevron_right_rounded, color: Color(0xFF94A3B8)),
+                                  ),
+                                ],
+                              );
+                            }).toList(growable: false),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              const SizedBox(height: 12),
+              _SurfacePanel(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  child: Row(
+                    children: [
+                      Text(
+                        'Showing ${filteredItems.length} of $_total',
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                              color: Theme.of(context).colorScheme.onSurfaceVariant,
+                            ),
+                      ),
+                      const Spacer(),
+                      if (_loadingMore)
+                        const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      else if (_hasMore)
+                        Text(
+                          'Scroll to load more',
+                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                color: Theme.of(context).colorScheme.onSurfaceVariant,
+                              ),
+                        )
+                      else
+                        Text(
+                          'End of results',
+                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                color: Theme.of(context).colorScheme.onSurfaceVariant,
+                              ),
+                        ),
+                    ],
+                  ),
+                ),
               ),
-            ),
-          );
-        },
+              if (_loadError != null && _items.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Text(
+                  'Last refresh failed: $_loadError',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: Theme.of(context).colorScheme.error,
+                      ),
+                ),
+              ],
+            ],
+          ),
+        ),
       ),
     );
   }
 }
+
 class _MiniStat extends StatelessWidget {
   const _MiniStat({required this.label, required this.value});
 
@@ -279,8 +423,9 @@ class _MiniStat extends StatelessWidget {
           children: [
             TextSpan(text: '$label: '),
             TextSpan(
-                text: value,
-                style: const TextStyle(fontWeight: FontWeight.w900)),
+              text: value,
+              style: const TextStyle(fontWeight: FontWeight.w900),
+            ),
           ],
         ),
       ),
@@ -320,13 +465,7 @@ class _GlowingStatusBadge extends StatelessWidget {
             decoration: BoxDecoration(
               color: color,
               shape: BoxShape.circle,
-              boxShadow: [
-                BoxShadow(
-                  color: color.withValues(alpha: 0.6),
-                  blurRadius: 4,
-                  spreadRadius: 1,
-                ),
-              ],
+              boxShadow: AbzioTheme.eliteShadow,
             ),
           ),
           const SizedBox(width: 6),
@@ -395,15 +534,10 @@ class _SurfacePanel extends StatelessWidget {
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: const Color(0xFFE5E7EB)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.01),
-            blurRadius: 4,
-            offset: const Offset(0, 2),
-          ),
-        ],
+        boxShadow: AbzioTheme.eliteShadow,
       ),
       child: child,
     );
   }
 }
+

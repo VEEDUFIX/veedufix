@@ -128,19 +128,14 @@ class _DisputeDetailPageState extends ConsumerState<DisputeDetailPage> {
       builder: (dialogContext) {
         return Dialog(
           child: InteractiveViewer(
-            child: Image.network(
-              url,
+            child: MarketplaceNetworkImage(
+              imageUrl: url,
+              width: 400,
+              height: 240,
               fit: BoxFit.contain,
-              errorBuilder: (context, error, stackTrace) => SizedBox(
-                width: 400,
-                height: 240,
-                child: Center(
-                  child: Text(
-                    'Unable to preview image',
-                    style: Theme.of(context).textTheme.bodyMedium,
-                  ),
-                ),
-              ),
+              borderRadius: 0,
+              optimizeCloudinary: false,
+              backgroundColor: Theme.of(context).colorScheme.surfaceContainerHighest,
             ),
           ),
         );
@@ -546,20 +541,15 @@ class _PhotoGallery extends StatelessWidget {
         (url) {
           return GestureDetector(
             onTap: () => onTap(url),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(18),
-              child: Image.network(
-                url,
-                width: 132,
-                height: 132,
-                fit: BoxFit.cover,
-                errorBuilder: (context, error, stackTrace) => Container(
-                  width: 132,
-                  height: 132,
-                  color: Theme.of(context).colorScheme.surfaceContainerHighest,
-                  child: const Icon(Icons.broken_image_rounded),
-                ),
-              ),
+            child: MarketplaceNetworkImage(
+              imageUrl: url,
+              width: 132,
+              height: 132,
+              fit: BoxFit.cover,
+              borderRadius: AbzioTheme.buttonRadius,
+              cloudinaryWidth: 240,
+              cloudinaryHeight: 240,
+              backgroundColor: Theme.of(context).colorScheme.surfaceContainerHighest,
             ),
           );
         },
@@ -685,13 +675,7 @@ class _SurfacePanel extends StatelessWidget {
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: const Color(0xFFE5E7EB)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.01),
-            blurRadius: 4,
-            offset: const Offset(0, 2),
-          ),
-        ],
+        boxShadow: AbzioTheme.eliteShadow,
       ),
       child: child,
     );

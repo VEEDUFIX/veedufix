@@ -214,7 +214,7 @@ class _OnboardingStatusShell extends StatelessWidget {
                       width: 72,
                       decoration: BoxDecoration(
                         color: accent.withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(22),
+                        borderRadius: BorderRadius.circular(AbzioTheme.cardRadius),
                       ),
                       child: Icon(icon, size: 34, color: accent),
                     ),

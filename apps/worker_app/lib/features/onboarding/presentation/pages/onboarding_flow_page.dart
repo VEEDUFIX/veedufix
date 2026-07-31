@@ -355,7 +355,7 @@ class _OnboardingFlowPageState extends ConsumerState<OnboardingFlowPage> {
                                   width: 56,
                                   decoration: BoxDecoration(
                                     color: Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.72),
-                                    borderRadius: BorderRadius.circular(18),
+                                    borderRadius: BorderRadius.circular(AbzioTheme.buttonRadius),
                                   ),
                                   child: Icon(
                                     Icons.badge_rounded,
@@ -780,7 +780,7 @@ class _OnboardingFlowPageState extends ConsumerState<OnboardingFlowPage> {
                           width: 48,
                           decoration: BoxDecoration(
                             color: Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.7),
-                            borderRadius: BorderRadius.circular(16),
+                            borderRadius: BorderRadius.circular(AbzioTheme.buttonRadius),
                           ),
                           child: Icon(_iconForCategory(category), color: Theme.of(context).colorScheme.primary),
                         ),

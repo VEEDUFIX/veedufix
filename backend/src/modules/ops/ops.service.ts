@@ -14,7 +14,10 @@ const ALERT_KIND_BY_TYPE = {
 export type OpsSummaryCounts = {
   activeJobsCount: number;
   dispatchFailuresCount: number;
+  cancelledBookingsCount: number;
+  activeWorkersCount: number;
   openDisputesCount: number;
+  openSupportTicketsCount: number;
   failedPayoutsCount: number;
   failedRefundsCount: number;
   pendingWorkerReviewsCount: number;
@@ -569,11 +572,14 @@ export async function getOpsOverview(): Promise<OpsOverview> {
   const [
     activeJobsCount,
     dispatchFailuresCount,
+    cancelledBookingsCount,
+    activeWorkersCount,
     totalRevenueQuery,
     totalBookings,
     completedBookings,
     todaysNewWorkers,
     openDisputesCount,
+    openSupportTicketsCount,
     failedPayoutsCount,
     failedRefundsCount,
     pendingWorkerReviewsCount,
@@ -588,6 +594,17 @@ export async function getOpsOverview(): Promise<OpsOverview> {
     prisma.booking.count({
       where: {
         status: BookingStatus.DISPATCH_FAILED
+      }
+    }),
+    prisma.booking.count({
+      where: {
+        status: { in: [BookingStatus.CANCELLED, BookingStatus.CANCELLED_MANUAL, BookingStatus.CANCELLED_NO_SHOW, BookingStatus.REFUNDED] }
+      }
+    }),
+    prisma.workerProfile.count({
+      where: {
+        onboardingStatus: "approved",
+        verificationStatus: "VERIFIED"
       }
     }),
     prisma.booking.aggregate({
@@ -608,6 +625,11 @@ export async function getOpsOverview(): Promise<OpsOverview> {
     prisma.dispute.count({
       where: {
         status: { in: ["open", "under_review"] }
+      }
+    }),
+    prisma.supportTicket.count({
+      where: {
+        status: { in: ["OPEN", "IN_PROGRESS"] }
       }
     }),
     prisma.payout.count({
@@ -691,7 +713,10 @@ export async function getOpsOverview(): Promise<OpsOverview> {
     summary: {
       activeJobsCount,
       dispatchFailuresCount,
+      cancelledBookingsCount,
+      activeWorkersCount,
       openDisputesCount,
+      openSupportTicketsCount,
       failedPayoutsCount,
       failedRefundsCount,
       pendingWorkerReviewsCount,

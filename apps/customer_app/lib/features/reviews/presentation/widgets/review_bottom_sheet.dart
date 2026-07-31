@@ -57,18 +57,38 @@ class _ReviewBottomSheetState extends ConsumerState<ReviewBottomSheet> {
     }
 
     setState(() => _isSubmitting = true);
-    
-    // In a real app, you would call your API here
-    // await ref.read(apiClientProvider).dio.post('/reviews', data: { ... });
-    
-    await Future.delayed(const Duration(milliseconds: 1500)); // Simulate network
 
-    if (mounted) {
-      setState(() => _isSubmitting = false);
+    try {
+      final api = ref.read(apiClientProvider);
+      await api.post(
+        '/reviews',
+        data: {
+          'bookingId': widget.bookingId,
+          'rating': _rating,
+          if (_commentController.text.trim().isNotEmpty) 'comment': _commentController.text.trim(),
+        },
+      );
+
+      if (!mounted) {
+        return;
+      }
+
       context.pop(true);
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Thank you for your feedback!')),
       );
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to submit review: $error')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isSubmitting = false);
+      }
     }
   }
 
@@ -123,7 +143,11 @@ class _ReviewBottomSheetState extends ConsumerState<ReviewBottomSheet> {
                   child: AnimatedContainer(
                     duration: const Duration(milliseconds: 200),
                     curve: Curves.easeOutBack,
-                    transform: Matrix4.diagonal3Values(isSelected ? 1.1 : 1.0, isSelected ? 1.1 : 1.0, 1.0),
+                    transform: Matrix4.diagonal3Values(
+                      isSelected ? 1.1 : 1.0,
+                      isSelected ? 1.1 : 1.0,
+                      1.0,
+                    ),
                     child: Icon(
                       isSelected ? Icons.star_rounded : Icons.star_border_rounded,
                       size: 40,
