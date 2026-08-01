@@ -22,6 +22,7 @@ class AdminPageShell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
     return Scaffold(
       backgroundColor: Colors.transparent,
       appBar: AppBar(
@@ -31,11 +32,11 @@ class AdminPageShell extends StatelessWidget {
           title,
           style: GoogleFonts.poppins(
             fontWeight: FontWeight.w800,
-            color: Colors.black87,
+            color: cs.onSurface,
           ),
         ),
         actions: actions,
-        iconTheme: const IconThemeData(color: Colors.black87),
+        iconTheme: IconThemeData(color: cs.onSurface),
       ),
       body: child,
     );
@@ -49,12 +50,13 @@ class AdminSurfacePanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: kAdminBorder),
-        boxShadow: AbzioTheme.eliteShadow,
+        color: cs.surface.withValues(alpha: 0.92),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.35)),
+        boxShadow: AbzioTheme.shadowFor(Theme.of(context).brightness),
       ),
       child: child,
     );
@@ -73,6 +75,7 @@ class AdminSectionHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -81,14 +84,14 @@ class AdminSectionHeader extends StatelessWidget {
           style: GoogleFonts.poppins(
             fontSize: 18,
             fontWeight: FontWeight.w800,
-            color: kAdminInk,
+            color: cs.onSurface,
           ),
         ),
         const SizedBox(height: 4),
         Text(
           subtitle,
           style: GoogleFonts.inter(
-            color: kAdminMuted,
+            color: cs.onSurfaceVariant,
             height: 1.45,
           ),
         ),

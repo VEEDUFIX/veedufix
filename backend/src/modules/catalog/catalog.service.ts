@@ -10,6 +10,8 @@ type LocaleInput = {
 
 type PublicCatalogFilter = LocaleInput & {
   q?: string;
+  categorySlug?: string;
+  subcategorySlug?: string;
   page?: number;
   pageSize?: number;
   includeInactive?: boolean;
@@ -145,6 +147,11 @@ function uniqueCode(prefix: string, name: string): string {
   const base = slugify(name).replace(/-/g, "").slice(0, 18).toUpperCase();
   const suffix = Math.random().toString(36).slice(2, 6).toUpperCase();
   return `${prefix}-${base || "SERVICE"}-${suffix}`;
+}
+
+function normalizeSacCode(value?: string | null): string {
+  const trimmed = value?.trim();
+  return trimmed && trimmed.length > 0 ? trimmed : "PENDING";
 }
 
 async function resolveSkillId(name: string, slug?: string) {
@@ -344,8 +351,26 @@ async function resolveSubcategoryBySlug(slug: string) {
 }
 
 async function searchCatalog(input: PublicCatalogFilter) {
-  const where = {
+  const where: Prisma.ServiceWhereInput = {
     isActive: input.includeInactive ? undefined : true,
+    ...(input.categorySlug
+      ? {
+          category: {
+            is: {
+              slug: input.categorySlug
+            }
+          }
+        }
+      : {}),
+    ...(input.subcategorySlug
+      ? {
+          subcategory: {
+            is: {
+              slug: input.subcategorySlug
+            }
+          }
+        }
+      : {}),
     OR: input.q
       ? [
           { name: { contains: input.q, mode: "insensitive" as const } },
@@ -626,6 +651,27 @@ async function reorderCategories(ids: string[]) {
   });
 }
 
+async function reorderSubcategories(categoryId: string, ids: string[]) {
+  await prisma.$transaction(
+    ids.map((subcategoryId, index) =>
+      prisma.serviceSubcategory.updateMany({
+        where: { id: subcategoryId, categoryId },
+        data: { sortOrder: index }
+      })
+    )
+  );
+
+  return prisma.serviceSubcategory.findMany({
+    where: { categoryId },
+    orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+    include: {
+      translations: true,
+      category: true,
+      catalogServices: true
+    }
+  });
+}
+
 async function createSubcategory(data: {
   categoryId: string;
   name: string;
@@ -718,6 +764,23 @@ async function updateSubcategory(id: string, data: Record<string, unknown>) {
   });
 }
 
+async function reorderServices(subcategoryId: string, ids: string[]) {
+  await prisma.$transaction(
+    ids.map((serviceId, index) =>
+      prisma.service.updateMany({
+        where: { id: serviceId, subcategoryId },
+        data: { sortOrder: index }
+      })
+    )
+  );
+
+  return prisma.service.findMany({
+    where: { subcategoryId },
+    orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+    include: serviceInclude()
+  });
+}
+
 async function createService(data: {
   categoryId: string;
   subcategoryId: string;
@@ -727,6 +790,8 @@ async function createService(data: {
   description?: string;
   shortDescription?: string;
   startingPrice: number;
+  gstRate?: number;
+  sacCode?: string;
   estimatedDurationMins: number;
   warrantyDays?: number;
   gstApplicable?: boolean;
@@ -763,6 +828,8 @@ async function createService(data: {
       description: data.description,
       shortDescription: data.shortDescription,
       startingPrice: new Prisma.Decimal(data.startingPrice),
+      gstRate: new Prisma.Decimal(data.gstRate ?? 18),
+      sacCode: normalizeSacCode(data.sacCode),
       estimatedDurationMins: data.estimatedDurationMins,
       warrantyDays: data.warrantyDays ?? 0,
       gstApplicable: data.gstApplicable ?? true,
@@ -862,6 +929,8 @@ async function updateService(id: string, data: Record<string, unknown>) {
       description: typeof data.description === "string" ? data.description : undefined,
       shortDescription: typeof data.shortDescription === "string" ? data.shortDescription : undefined,
       startingPrice: typeof data.startingPrice === "number" ? new Prisma.Decimal(data.startingPrice) : undefined,
+      gstRate: typeof data.gstRate === "number" ? new Prisma.Decimal(data.gstRate) : undefined,
+      sacCode: typeof data.sacCode === "string" ? normalizeSacCode(data.sacCode) : undefined,
       estimatedDurationMins: typeof data.estimatedDurationMins === "number" ? data.estimatedDurationMins : undefined,
       warrantyDays: typeof data.warrantyDays === "number" ? data.warrantyDays : undefined,
       gstApplicable: typeof data.gstApplicable === "boolean" ? data.gstApplicable : undefined,
@@ -1112,6 +1181,8 @@ async function createOrUpdateServiceFromImport(categoryId: string, subcategoryId
     description: service.description ? String(service.description) : undefined,
     shortDescription: service.shortDescription ? String(service.shortDescription) : undefined,
     startingPrice: new Prisma.Decimal(typeof service.startingPrice === "number" ? service.startingPrice : 0),
+    gstRate: new Prisma.Decimal(typeof service.gstRate === "number" ? service.gstRate : 18),
+    sacCode: normalizeSacCode(typeof service.sacCode === "string" ? service.sacCode : undefined),
     estimatedDurationMins: typeof service.estimatedDurationMins === "number" ? service.estimatedDurationMins : 30,
     warrantyDays: typeof service.warrantyDays === "number" ? service.warrantyDays : 0,
     gstApplicable: typeof service.gstApplicable === "boolean" ? service.gstApplicable : true,
@@ -1147,8 +1218,10 @@ export const catalogService = {
   createCategory,
   updateCategory,
   reorderCategories,
+  reorderSubcategories,
   createSubcategory,
   updateSubcategory,
+  reorderServices,
   createService,
   updateService,
   addServiceImages,

@@ -9,6 +9,7 @@ export 'core/notifications/firebase_messaging_service.dart';
 export 'core/notifications/fcm_service.dart';
 export 'core/storage/secure_store.dart';
 export 'core/widgets/gradient_hero.dart';
+export 'core/widgets/app_backdrop.dart';
 export 'core/theme/abzio_theme.dart';
 export 'core/widgets/premium_widgets.dart';
 export 'core/widgets/network_image_widgets.dart';

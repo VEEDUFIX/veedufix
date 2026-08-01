@@ -51,23 +51,35 @@ class WorkerOnboardingProfile {
   const WorkerOnboardingProfile({
     required this.onboardingStatus,
     required this.fullName,
+    required this.gender,
     required this.dateOfBirth,
     required this.addressLine1,
+    required this.alternatePhone,
     required this.city,
     required this.pincode,
     required this.aadhaarNumber,
     required this.hasAadhaarDoc,
+    required this.hasAvailability,
     required this.upiId,
     required this.bankAccountNumber,
     required this.bankIfsc,
+    required this.toolsOwned,
+    required this.emergencyContactName,
+    required this.emergencyContactPhone,
+    required this.agreementAcceptedAt,
+    required this.dataConsentAcceptedAt,
+    required this.phone,
+    required this.email,
     required this.rejectionReason,
     required this.skills,
   });
 
   final String onboardingStatus;
   final String? fullName;
+  final String? gender;
   final DateTime? dateOfBirth;
   final String? addressLine1;
+  final String? alternatePhone;
   final String? city;
   final String? pincode;
   final String? aadhaarNumber;
@@ -75,18 +87,37 @@ class WorkerOnboardingProfile {
   /// The raw URL is never sent to the client; use the authenticated
   /// document-access endpoint if the document itself needs to be viewed.
   final bool hasAadhaarDoc;
+  final bool hasAvailability;
   final String? upiId;
   final String? bankAccountNumber;
   final String? bankIfsc;
+  final List<String> toolsOwned;
+  final String? emergencyContactName;
+  final String? emergencyContactPhone;
+  final DateTime? agreementAcceptedAt;
+  final DateTime? dataConsentAcceptedAt;
+  final String? phone;
+  final String? email;
   final String? rejectionReason;
   final List<WorkerOnboardingSkillItem> skills;
 
   factory WorkerOnboardingProfile.fromJson(Map<String, dynamic> json) {
+    List<String> decodeToolsOwned(dynamic value) {
+      if (value is! List) {
+        return const [];
+      }
+      return value.whereType<String>().map((item) => item.trim()).where((item) => item.isNotEmpty).toList(growable: false);
+    }
+
+    final user = json['user'] is Map<String, dynamic> ? json['user'] as Map<String, dynamic> : const <String, dynamic>{};
+
     return WorkerOnboardingProfile(
       onboardingStatus: json['onboardingStatus'] as String? ?? 'pending_documents',
       fullName: json['fullName'] as String?,
+      gender: json['gender'] as String?,
       dateOfBirth: DateTime.tryParse(json['dateOfBirth'] as String? ?? ''),
       addressLine1: json['addressLine1'] as String?,
+      alternatePhone: json['alternatePhone'] as String?,
       city: json['city'] as String?,
       pincode: json['pincode'] as String?,
       aadhaarNumber: json['aadhaarNumber'] as String?,
@@ -94,9 +125,17 @@ class WorkerOnboardingProfile {
       // old aadhaarDocUrl field for responses from an older backend.
       hasAadhaarDoc: json['hasAadhaarDoc'] as bool? ??
           (json['aadhaarDocUrl'] as String?)?.isNotEmpty == true,
+      hasAvailability: json['hasAvailability'] as bool? ?? false,
       upiId: json['upiId'] as String?,
       bankAccountNumber: json['bankAccountNumber'] as String?,
       bankIfsc: json['bankIfsc'] as String?,
+      toolsOwned: decodeToolsOwned(json['toolsOwned']),
+      emergencyContactName: json['emergencyContactName'] as String?,
+      emergencyContactPhone: json['emergencyContactPhone'] as String?,
+      agreementAcceptedAt: DateTime.tryParse(json['agreementAcceptedAt'] as String? ?? ''),
+      dataConsentAcceptedAt: DateTime.tryParse(json['dataConsentAcceptedAt'] as String? ?? ''),
+      phone: user['phone'] as String?,
+      email: user['email'] as String?,
       rejectionReason: json['rejectionReason'] as String?,
       skills: _decodeSkills(json['skills']),
     );
@@ -119,15 +158,23 @@ class WorkerOnboardingProfile {
 class WorkerOnboardingDraft {
   const WorkerOnboardingDraft({
     this.fullName = '',
+    this.gender,
     this.dateOfBirth,
     this.addressLine1 = '',
+    this.alternatePhone = '',
     this.city = '',
     this.pincode = '',
     this.aadhaarNumber = '',
     this.upiId = '',
     this.bankAccountNumber = '',
     this.bankIfsc = '',
+    this.toolsOwned = const <String>[],
+    this.emergencyContactName = '',
+    this.emergencyContactPhone = '',
+    this.agreementAccepted = false,
+    this.dataConsentAccepted = false,
     this.selectedCategoryIds = const <String>{},
+    this.selectedServiceIds = const <String>{},
     this.certificationFiles = const <String, XFile>{},
     this.certificationUrls = const <String, bool>{},
     this.aadhaarDocumentFile,
@@ -135,15 +182,23 @@ class WorkerOnboardingDraft {
   });
 
   final String fullName;
+  final String? gender;
   final DateTime? dateOfBirth;
   final String addressLine1;
+  final String alternatePhone;
   final String city;
   final String pincode;
   final String aadhaarNumber;
   final String upiId;
   final String bankAccountNumber;
   final String bankIfsc;
+  final List<String> toolsOwned;
+  final String emergencyContactName;
+  final String emergencyContactPhone;
+  final bool agreementAccepted;
+  final bool dataConsentAccepted;
   final Set<String> selectedCategoryIds;
+  final Set<String> selectedServiceIds;
   final Map<String, XFile> certificationFiles;
   /// Maps categoryId → true for skills that have a certification document on
   /// the server. The raw URL is never sent to the client; use the
@@ -154,15 +209,23 @@ class WorkerOnboardingDraft {
 
   WorkerOnboardingDraft copyWith({
     String? fullName,
+    Object? gender = _unset,
     Object? dateOfBirth = _unset,
     String? addressLine1,
+    String? alternatePhone,
     String? city,
     String? pincode,
     String? aadhaarNumber,
     String? upiId,
     String? bankAccountNumber,
     String? bankIfsc,
+    List<String>? toolsOwned,
+    String? emergencyContactName,
+    String? emergencyContactPhone,
+    bool? agreementAccepted,
+    bool? dataConsentAccepted,
     Set<String>? selectedCategoryIds,
+    Set<String>? selectedServiceIds,
     Map<String, XFile>? certificationFiles,
     Map<String, bool>? certificationUrls,
     Object? aadhaarDocumentFile = _unset,
@@ -170,15 +233,23 @@ class WorkerOnboardingDraft {
   }) {
     return WorkerOnboardingDraft(
       fullName: fullName ?? this.fullName,
+      gender: identical(gender, _unset) ? this.gender : gender as String?,
       dateOfBirth: identical(dateOfBirth, _unset) ? this.dateOfBirth : dateOfBirth as DateTime?,
       addressLine1: addressLine1 ?? this.addressLine1,
+      alternatePhone: alternatePhone ?? this.alternatePhone,
       city: city ?? this.city,
       pincode: pincode ?? this.pincode,
       aadhaarNumber: aadhaarNumber ?? this.aadhaarNumber,
       upiId: upiId ?? this.upiId,
       bankAccountNumber: bankAccountNumber ?? this.bankAccountNumber,
       bankIfsc: bankIfsc ?? this.bankIfsc,
+      toolsOwned: toolsOwned ?? this.toolsOwned,
+      emergencyContactName: emergencyContactName ?? this.emergencyContactName,
+      emergencyContactPhone: emergencyContactPhone ?? this.emergencyContactPhone,
+      agreementAccepted: agreementAccepted ?? this.agreementAccepted,
+      dataConsentAccepted: dataConsentAccepted ?? this.dataConsentAccepted,
       selectedCategoryIds: selectedCategoryIds ?? this.selectedCategoryIds,
+      selectedServiceIds: selectedServiceIds ?? this.selectedServiceIds,
       certificationFiles: certificationFiles ?? this.certificationFiles,
       certificationUrls: certificationUrls ?? this.certificationUrls,
       aadhaarDocumentFile: identical(aadhaarDocumentFile, _unset)
@@ -283,29 +354,44 @@ class WorkerOnboardingApi {
   }
 
   Future<WorkerOnboardingProfile> updateProfile({
-    required String fullName,
-    required DateTime? dateOfBirth,
-    required String addressLine1,
-    required String city,
-    required String pincode,
-    required String upiId,
-    required String bankAccountNumber,
-    required String bankIfsc,
-    required String aadhaarNumber,
+    String? fullName,
+    String? gender,
+    DateTime? dateOfBirth,
+    String? addressLine1,
+    String? alternatePhone,
+    String? city,
+    String? pincode,
+    String? upiId,
+    String? bankAccountNumber,
+    String? bankIfsc,
+    String? aadhaarNumber,
+    List<String>? toolsOwned,
+    String? emergencyContactName,
+    String? emergencyContactPhone,
+    bool? agreementAccepted,
+    bool? dataConsentAccepted,
   }) async {
+    final body = <String, dynamic>{};
+    if (fullName != null) body['fullName'] = fullName;
+    if (gender != null) body['gender'] = gender;
+    if (dateOfBirth != null) body['dateOfBirth'] = dateOfBirth.toIso8601String();
+    if (addressLine1 != null) body['addressLine1'] = addressLine1;
+    if (alternatePhone != null) body['alternatePhone'] = alternatePhone;
+    if (city != null) body['city'] = city;
+    if (pincode != null) body['pincode'] = pincode;
+    if (upiId != null) body['upiId'] = upiId;
+    if (bankAccountNumber != null) body['bankAccountNumber'] = bankAccountNumber;
+    if (bankIfsc != null) body['bankIfsc'] = bankIfsc;
+    if (aadhaarNumber != null) body['aadhaarNumber'] = aadhaarNumber;
+    if (toolsOwned != null) body['toolsOwned'] = toolsOwned;
+    if (emergencyContactName != null) body['emergencyContactName'] = emergencyContactName;
+    if (emergencyContactPhone != null) body['emergencyContactPhone'] = emergencyContactPhone;
+    if (agreementAccepted != null) body['agreementAccepted'] = agreementAccepted;
+    if (dataConsentAccepted != null) body['dataConsentAccepted'] = dataConsentAccepted;
+
     final response = await _dio.post<Map<String, dynamic>>(
       '/worker/onboarding/profile',
-      data: {
-        'fullName': fullName,
-        'dateOfBirth': dateOfBirth?.toIso8601String(),
-        'addressLine1': addressLine1,
-        'city': city,
-        'pincode': pincode,
-        'upiId': upiId,
-        'bankAccountNumber': bankAccountNumber,
-        'bankIfsc': bankIfsc,
-        'aadhaarNumber': aadhaarNumber,
-      },
+      data: body,
     );
     return _parseProfileResponse(response.data);
   }
@@ -336,6 +422,16 @@ class WorkerOnboardingApi {
     return _parseProfileResponse(response.data);
   }
 
+  Future<WorkerOnboardingProfile> addService(String serviceId) async {
+    final response = await _dio.post<Map<String, dynamic>>(
+      '/worker/onboarding/services',
+      data: {
+        'serviceId': serviceId,
+      },
+    );
+    return _parseProfileResponse(response.data);
+  }
+
   Future<WorkerOnboardingProfile> submitForReview() async {
     final response = await _dio.post<Map<String, dynamic>>(
       '/worker/onboarding/submit',
@@ -352,10 +448,18 @@ class WorkerOnboardingApi {
       return const <CatalogCategory>[];
     }
 
-    return categories
-        .whereType<Map<String, dynamic>>()
-        .map(CatalogCategory.fromJson)
-        .toList(growable: false);
+    final summaryCategories = categories.whereType<Map<String, dynamic>>().map(CatalogCategory.fromJson).toList(growable: false);
+    final detailed = <CatalogCategory>[];
+    for (final category in summaryCategories) {
+      final detailResponse = await _dio.get<Map<String, dynamic>>('/catalog/categories/${category.slug}');
+      final categoryJson = detailResponse.data?['category'];
+      if (categoryJson is Map<String, dynamic>) {
+        detailed.add(CatalogCategory.fromJson(categoryJson));
+      } else {
+        detailed.add(category);
+      }
+    }
+    return detailed;
   }
 
   Future<String> uploadDocumentAsset({
@@ -545,13 +649,14 @@ class WorkerOnboardingController extends StateNotifier<WorkerOnboardingState> {
       profile: profile,
       draft: _draftFromProfile(profile).copyWith(
         selectedCategoryIds: state.draft.selectedCategoryIds,
+        selectedServiceIds: state.draft.selectedServiceIds,
         certificationFiles: state.draft.certificationFiles,
       ),
     );
   }
 
   void setStep(int step) {
-    state = state.copyWith(currentStep: step.clamp(0, 4));
+    state = state.copyWith(currentStep: step.clamp(0, 7));
   }
 
   void nextStep() {
@@ -571,16 +676,20 @@ class WorkerOnboardingController extends StateNotifier<WorkerOnboardingState> {
 
   void updatePersonalDetails({
     String? fullName,
+    String? gender,
     DateTime? dateOfBirth,
     String? addressLine1,
+    String? alternatePhone,
     String? city,
     String? pincode,
   }) {
     state = state.copyWith(
       draft: state.draft.copyWith(
         fullName: fullName,
+        gender: gender,
         dateOfBirth: dateOfBirth,
         addressLine1: addressLine1,
+        alternatePhone: alternatePhone,
         city: city,
         pincode: pincode,
       ),
@@ -597,6 +706,14 @@ class WorkerOnboardingController extends StateNotifier<WorkerOnboardingState> {
         aadhaarNumber: aadhaarNumber,
         aadhaarDocumentFile: aadhaarDocumentFile,
         savedAadhaarMask: savedAadhaarMask,
+      ),
+    );
+  }
+
+  void updateSkillsDetails({List<String>? toolsOwned}) {
+    state = state.copyWith(
+      draft: state.draft.copyWith(
+        toolsOwned: toolsOwned,
       ),
     );
   }
@@ -621,16 +738,77 @@ class WorkerOnboardingController extends StateNotifier<WorkerOnboardingState> {
     );
   }
 
+  void updateComplianceDetails({
+    bool? agreementAccepted,
+    bool? dataConsentAccepted,
+  }) {
+    state = state.copyWith(
+      draft: state.draft.copyWith(
+        agreementAccepted: agreementAccepted,
+        dataConsentAccepted: dataConsentAccepted,
+      ),
+    );
+  }
+
+  void updateEmergencyContact({
+    String? emergencyContactName,
+    String? emergencyContactPhone,
+  }) {
+    state = state.copyWith(
+      draft: state.draft.copyWith(
+        emergencyContactName: emergencyContactName,
+        emergencyContactPhone: emergencyContactPhone,
+      ),
+    );
+  }
+
   void toggleCategory(String categoryId, bool selected) {
     final nextSelection = Set<String>.from(state.draft.selectedCategoryIds);
+    final nextServices = Set<String>.from(state.draft.selectedServiceIds);
+    final category = _findCategory(categoryId);
+    final serviceIds = _serviceIdsForCategory(category);
     if (selected) {
       nextSelection.add(categoryId);
+      nextServices.addAll(serviceIds);
     } else {
       nextSelection.remove(categoryId);
+      for (final serviceId in serviceIds) {
+        nextServices.remove(serviceId);
+      }
     }
 
     state = state.copyWith(
-      draft: state.draft.copyWith(selectedCategoryIds: nextSelection),
+      draft: state.draft.copyWith(
+        selectedCategoryIds: nextSelection,
+        selectedServiceIds: nextServices,
+      ),
+    );
+  }
+
+  void toggleService(String serviceId, bool selected) {
+    final nextCategories = Set<String>.from(state.draft.selectedCategoryIds);
+    final nextServices = Set<String>.from(state.draft.selectedServiceIds);
+    final service = _findService(serviceId);
+    if (service == null) {
+      return;
+    }
+
+    if (selected) {
+      nextServices.add(serviceId);
+      nextCategories.add(service.categoryId);
+    } else {
+      nextServices.remove(serviceId);
+      final remainingForCategory = nextServices.any((id) => _findService(id)?.categoryId == service.categoryId);
+      if (!remainingForCategory) {
+        nextCategories.remove(service.categoryId);
+      }
+    }
+
+    state = state.copyWith(
+      draft: state.draft.copyWith(
+        selectedCategoryIds: nextCategories,
+        selectedServiceIds: nextServices,
+      ),
     );
   }
 
@@ -651,21 +829,29 @@ class WorkerOnboardingController extends StateNotifier<WorkerOnboardingState> {
   Future<void> savePersonalDetails() async {
     state = state.copyWith(isSavingProfile: true, errorMessage: null);
     try {
+      final alternatePhone = state.draft.alternatePhone.trim();
+      final upiId = state.draft.upiId.trim();
+      final bankAccountNumber = state.draft.bankAccountNumber.trim();
+      final bankIfsc = state.draft.bankIfsc.trim();
+      final aadhaarNumber = state.draft.aadhaarNumber.trim();
       final profile = await _api.updateProfile(
         fullName: state.draft.fullName.trim(),
+        gender: state.draft.gender,
         dateOfBirth: state.draft.dateOfBirth,
         addressLine1: state.draft.addressLine1.trim(),
+        alternatePhone: alternatePhone.isEmpty ? null : alternatePhone,
         city: state.draft.city.trim(),
         pincode: state.draft.pincode.trim(),
-        upiId: state.draft.upiId.trim(),
-        bankAccountNumber: state.draft.bankAccountNumber.trim(),
-        bankIfsc: state.draft.bankIfsc.trim(),
-        aadhaarNumber: state.draft.aadhaarNumber.trim(),
+        upiId: upiId.isEmpty ? null : upiId,
+        bankAccountNumber: bankAccountNumber.isEmpty ? null : bankAccountNumber,
+        bankIfsc: bankIfsc.isEmpty ? null : bankIfsc,
+        aadhaarNumber: aadhaarNumber.isEmpty ? null : aadhaarNumber,
       );
       state = state.copyWith(
         profile: profile,
         draft: _draftFromProfile(profile).copyWith(
           selectedCategoryIds: state.draft.selectedCategoryIds,
+          selectedServiceIds: state.draft.selectedServiceIds,
           certificationFiles: state.draft.certificationFiles,
         ),
       );
@@ -694,6 +880,7 @@ class WorkerOnboardingController extends StateNotifier<WorkerOnboardingState> {
         profile: profile,
         draft: _draftFromProfile(profile).copyWith(
           selectedCategoryIds: state.draft.selectedCategoryIds,
+          selectedServiceIds: state.draft.selectedServiceIds,
           certificationFiles: state.draft.certificationFiles,
           aadhaarDocumentFile: null,
         ),
@@ -709,10 +896,26 @@ class WorkerOnboardingController extends StateNotifier<WorkerOnboardingState> {
   Future<void> saveSkills() async {
     state = state.copyWith(isSavingSkills: true, errorMessage: null);
     try {
+      await _api.updateProfile(
+        toolsOwned: state.draft.toolsOwned,
+      );
+
       var profile = state.profile;
       final userId = ref.read(authControllerProvider).valueOrNull?.user.id ?? 'worker';
 
-      for (final categoryId in state.draft.selectedCategoryIds) {
+      for (final serviceId in state.draft.selectedServiceIds) {
+        profile = await _api.addService(serviceId);
+      }
+
+      final selectedServiceCategoryIds = <String>{
+        for (final serviceId in state.draft.selectedServiceIds)
+          if (_findService(serviceId) != null) _findService(serviceId)!.categoryId,
+      };
+
+      for (final categoryId in {
+        ...state.draft.selectedCategoryIds,
+        ...selectedServiceCategoryIds,
+      }) {
         profile = await _api.addSkill(categoryId);
         final certificate = state.draft.certificationFiles[categoryId];
         if (certificate != null) {
@@ -749,6 +952,38 @@ class WorkerOnboardingController extends StateNotifier<WorkerOnboardingState> {
     await savePersonalDetails();
   }
 
+  Future<void> saveComplianceDetails() async {
+    state = state.copyWith(isSavingProfile: true, errorMessage: null);
+    try {
+      final profile = await _api.updateProfile(
+        agreementAccepted: state.draft.agreementAccepted,
+        dataConsentAccepted: state.draft.dataConsentAccepted,
+      );
+      state = state.copyWith(profile: profile);
+    } catch (error) {
+      state = state.copyWith(errorMessage: _readErrorMessage(error));
+      rethrow;
+    } finally {
+      state = state.copyWith(isSavingProfile: false);
+    }
+  }
+
+  Future<void> saveEmergencyContact() async {
+    state = state.copyWith(isSavingProfile: true, errorMessage: null);
+    try {
+      final profile = await _api.updateProfile(
+        emergencyContactName: state.draft.emergencyContactName.trim(),
+        emergencyContactPhone: state.draft.emergencyContactPhone.trim(),
+      );
+      state = state.copyWith(profile: profile);
+    } catch (error) {
+      state = state.copyWith(errorMessage: _readErrorMessage(error));
+      rethrow;
+    } finally {
+      state = state.copyWith(isSavingProfile: false);
+    }
+  }
+
   Future<WorkerOnboardingProfile?> submitForReview() async {
     state = state.copyWith(isSubmitting: true, errorMessage: null, submitError: null, missingFields: const <String>[]);
     try {
@@ -757,6 +992,7 @@ class WorkerOnboardingController extends StateNotifier<WorkerOnboardingState> {
         profile: profile,
         draft: _draftFromProfile(profile).copyWith(
           selectedCategoryIds: state.draft.selectedCategoryIds,
+          selectedServiceIds: state.draft.selectedServiceIds,
           certificationFiles: state.draft.certificationFiles,
         ),
       );
@@ -811,18 +1047,62 @@ class WorkerOnboardingController extends StateNotifier<WorkerOnboardingState> {
     setCertificationFile(categoryId, picked);
   }
 
+  CatalogCategory? _findCategory(String categoryId) {
+    for (final category in state.categories) {
+      if (category.id == categoryId) {
+        return category;
+      }
+    }
+    return null;
+  }
+
+  CatalogService? _findService(String serviceId) {
+    for (final category in state.categories) {
+      for (final subcategory in category.subcategories) {
+        for (final service in subcategory.services) {
+          if (service.id == serviceId) {
+            return service;
+          }
+        }
+      }
+    }
+    return null;
+  }
+
+  List<String> _serviceIdsForCategory(CatalogCategory? category) {
+    if (category == null) {
+      return const <String>[];
+    }
+
+    final result = <String>[];
+    for (final subcategory in category.subcategories) {
+      for (final service in subcategory.services) {
+        result.add(service.id);
+      }
+    }
+    return result;
+  }
+
   WorkerOnboardingDraft _draftFromProfile(WorkerOnboardingProfile profile) {
     return WorkerOnboardingDraft(
       fullName: profile.fullName ?? '',
+      gender: profile.gender,
       dateOfBirth: profile.dateOfBirth,
       addressLine1: profile.addressLine1 ?? '',
+      alternatePhone: profile.alternatePhone ?? '',
       city: profile.city ?? '',
       pincode: profile.pincode ?? '',
       aadhaarNumber: '',
       upiId: profile.upiId ?? '',
       bankAccountNumber: profile.bankAccountNumber ?? '',
       bankIfsc: profile.bankIfsc ?? '',
+      toolsOwned: profile.toolsOwned,
+      emergencyContactName: profile.emergencyContactName ?? '',
+      emergencyContactPhone: profile.emergencyContactPhone ?? '',
+      agreementAccepted: profile.agreementAcceptedAt != null,
+      dataConsentAccepted: profile.dataConsentAcceptedAt != null,
       selectedCategoryIds: profile.selectedCategoryIds,
+      selectedServiceIds: state.draft.selectedServiceIds,
       aadhaarDocumentFile: state.draft.aadhaarDocumentFile,
       savedAadhaarMask: profile.maskedAadhaar(),
       certificationFiles: state.draft.certificationFiles,
@@ -846,7 +1126,7 @@ class WorkerOnboardingController extends StateNotifier<WorkerOnboardingState> {
 
   int _resolveInitialStep(WorkerOnboardingProfile profile, {required bool editMode, int? step}) {
     if (step != null) {
-      return step.clamp(0, 4);
+      return step.clamp(0, 7);
     }
 
     if (editMode) {
@@ -873,11 +1153,26 @@ class WorkerOnboardingController extends StateNotifier<WorkerOnboardingState> {
       return 2;
     }
 
-    if (profile.upiId == null || profile.upiId!.isEmpty) {
+    final hasUpi = profile.upiId != null && profile.upiId!.trim().isNotEmpty;
+    final hasBankFallback = (profile.bankAccountNumber != null && profile.bankAccountNumber!.trim().isNotEmpty) &&
+        (profile.bankIfsc != null && profile.bankIfsc!.trim().isNotEmpty);
+    if (!hasUpi && !hasBankFallback) {
       return 3;
     }
 
-    return 4;
+    if (!profile.hasAvailability) {
+      return 4;
+    }
+
+    if (profile.agreementAcceptedAt == null || profile.dataConsentAcceptedAt == null) {
+      return 5;
+    }
+
+    if (profile.emergencyContactName == null || profile.emergencyContactPhone == null) {
+      return 6;
+    }
+
+    return 7;
   }
 
   int _stepForField(String field) {
@@ -897,6 +1192,14 @@ class WorkerOnboardingController extends StateNotifier<WorkerOnboardingState> {
       case 'bankAccountNumber':
       case 'bankIfsc':
         return 3;
+      case 'availability':
+        return 4;
+      case 'agreementAcceptedAt':
+      case 'dataConsentAcceptedAt':
+        return 5;
+      case 'emergencyContactName':
+      case 'emergencyContactPhone':
+        return 6;
       default:
         return 0;
     }

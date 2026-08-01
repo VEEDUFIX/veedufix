@@ -153,7 +153,7 @@ class _AdminGlobalSearchPageState extends ConsumerState<AdminGlobalSearchPage> {
           ),
           const SizedBox(height: 16),
           if (_query.trim().isEmpty)
-            _SearchHintCard(
+            const _SearchHintCard(
               title: 'Search across the admin panel',
               subtitle: 'Try a booking code, customer phone, worker name, or ticket subject.',
             )

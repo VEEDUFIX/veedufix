@@ -5,10 +5,13 @@ import { env } from "../../config/env.js";
 import { prisma } from "../../lib/prisma.js";
 import { logger } from "../../lib/logger.js";
 import { publishTrackingEvent } from "../../lib/realtime.js";
+import { recordBookingTimelineEvent } from "../../lib/booking-timeline.js";
 import { dispatchBookingAfterPayment } from "../matching/matching.service.js";
 import { raiseOpsAlert } from "../ops/ops.service.js";
 import { getTokensForUser } from "../device-token/device-token.service.js";
 import { sendMulticastPush } from "../../lib/fcm.js";
+import { allocateProportionalShares, reverseInclusiveTax, roundMoney, toPaise } from "../../lib/gst.js";
+import { generateInvoiceForBooking } from "../invoice/invoice.service.js";
 
 type BookingItemInput = {
   serviceId: string;
@@ -67,6 +70,9 @@ type ServicePricingRecord = {
   name: string;
   isActive: boolean;
   startingPrice: Prisma.Decimal;
+  gstRate: Prisma.Decimal;
+  sacCode: string | null;
+  gstApplicable: boolean;
   subcategory: {
     id: string;
     name: string;
@@ -81,6 +87,8 @@ type ResolvedBookingItem = {
   quantity: number;
   unitPrice: Prisma.Decimal;
   totalPrice: Prisma.Decimal;
+  gstRate: Prisma.Decimal;
+  sacCode: string;
   variantSelections?: Record<string, unknown>;
 };
 
@@ -121,19 +129,6 @@ function isRuleActive(rule: { startsAt: Date | null; endsAt: Date | null }, at: 
   }
 
   return true;
-}
-
-function roundMoney(value: Prisma.Decimal): Prisma.Decimal {
-  return value.toDecimalPlaces(2);
-}
-
-function toPaise(amount: Prisma.Decimal | number | string): number {
-  const decimal = amount instanceof Prisma.Decimal ? amount : new Prisma.Decimal(amount);
-  return decimal.mul(100).toDecimalPlaces(0).toNumber();
-}
-
-function toRupees(amountPaise: number): Prisma.Decimal {
-  return new Prisma.Decimal(amountPaise).div(100);
 }
 
 function servicePriceRuleComparator(a: ServicePricingRule, b: ServicePricingRule): number {
@@ -311,6 +306,8 @@ async function resolveBookingItems(input: {
       quantity,
       unitPrice: roundMoney(unitPrice),
       totalPrice,
+      gstRate: service.gstApplicable ? roundMoney(service.gstRate) : new Prisma.Decimal(0),
+      sacCode: service.sacCode?.trim() || "PENDING",
       ...(item.variantSelections ? { variantSelections: item.variantSelections } : {})
     };
   });
@@ -530,6 +527,26 @@ export async function createPaymentOrder(
     subtotalAmount
   });
 
+  const discountShares = allocateProportionalShares(
+    discountAmount,
+    items.map((item) => item.totalPrice)
+  );
+  const bookedItems = items.map((item, index) => {
+    const discountShare = discountShares[index] ?? new Prisma.Decimal(0);
+    const netTotal = roundMoney(item.totalPrice.sub(discountShare));
+    const { gstAmount } = reverseInclusiveTax(netTotal, item.gstRate);
+
+    return {
+      ...item,
+      discountShare,
+      netTotal,
+      gstAmount
+    };
+  });
+
+  const totalGstAmount = roundMoney(
+    bookedItems.reduce((total, item) => total.add(item.gstAmount), new Prisma.Decimal(0))
+  );
   const totalAmount = roundMoney(subtotalAmount.sub(discountAmount));
   const totalAmountPaise = toPaise(totalAmount);
 
@@ -553,19 +570,22 @@ export async function createPaymentOrder(
         customerNotes: couponCode ? `${bookingSummary} | Coupon: ${couponCode}` : bookingSummary,
         subtotalAmount,
         discountAmount,
-        taxAmount: new Prisma.Decimal(0),
+        taxAmount: totalGstAmount,
         totalAmount
       }
     });
 
     await tx.bookingService.createMany({
-      data: items.map((item) => ({
+      data: bookedItems.map((item) => ({
         bookingId: createdBooking.id,
         serviceSubcategoryId: item.serviceSubcategoryId,
         serviceId: item.serviceId,
         quantity: item.quantity,
         unitPrice: item.unitPrice,
-        totalPrice: item.totalPrice
+        totalPrice: item.totalPrice,
+        gstRate: item.gstRate,
+        gstAmount: item.gstAmount,
+        sacCode: item.sacCode
       }))
     });
 
@@ -587,7 +607,9 @@ export async function createPaymentOrder(
             serviceId: item.serviceId,
             quantity: item.quantity,
             unitPricePaise: toPaise(item.unitPrice),
-            totalPricePaise: toPaise(item.totalPrice)
+            totalPricePaise: toPaise(item.totalPrice),
+            gstRate: item.gstRate.toString(),
+            sacCode: item.sacCode
           }))
         }
       }
@@ -640,6 +662,12 @@ export async function createPaymentOrder(
       status: "PAYMENT_PENDING",
       message: "Payment order created",
       actorRole: "CUSTOMER"
+    });
+    void recordBookingTimelineEvent({
+      bookingId: booking.id,
+      status: BookingStatus.PENDING,
+      title: "Booking placed",
+      description: "Your booking request was created and payment is pending."
     });
 
     return {
@@ -772,6 +800,7 @@ export async function verifyPayment(
   }
 
   if (payment.status === PaymentStatus.CAPTURED) {
+    await generateInvoiceForBooking(payment.bookingId);
     return {
       bookingId: payment.bookingId,
       bookingCode: payment.booking.code,
@@ -806,6 +835,8 @@ export async function verifyPayment(
     }
   });
 
+  await generateInvoiceForBooking(payment.bookingId);
+
   void dispatchBookingAfterPayment(payment.bookingId).catch((error) => {
     logger.error(
       {
@@ -824,6 +855,12 @@ export async function verifyPayment(
     message: "Payment verified successfully",
     actorRole: "CUSTOMER",
     paymentId: input.razorpayPaymentId
+  });
+  void recordBookingTimelineEvent({
+    bookingId: payment.bookingId,
+    status: BookingStatus.ACCEPTED,
+    title: "Payment captured",
+    description: "Payment was verified successfully and the booking moved forward."
   });
 
   logger.info(

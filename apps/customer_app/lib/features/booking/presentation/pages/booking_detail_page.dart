@@ -4,6 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:marketplace_shared/marketplace_shared.dart';
+
+import '../../../profile/data/saved_addresses_api.dart';
 class BookingDetailPage extends ConsumerWidget {
   const BookingDetailPage({super.key, required this.bookingId});
   final String bookingId;
@@ -81,7 +83,7 @@ class BookingDetailPage extends ConsumerWidget {
       };
 }
 
-class _BookingDetailBody extends StatelessWidget {
+class _BookingDetailBody extends ConsumerWidget {
   const _BookingDetailBody({required this.booking});
   final BookingDetail booking;
 
@@ -118,7 +120,7 @@ class _BookingDetailBody extends StatelessWidget {
       };
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final cs = Theme.of(context).colorScheme;
     final tt = Theme.of(context).textTheme;
     final isActive = ['PENDING', 'ACCEPTED', 'WORKER_ASSIGNED', 'EN_ROUTE', 'ARRIVED', 'IN_PROGRESS']
@@ -127,7 +129,10 @@ class _BookingDetailBody extends StatelessWidget {
     final canRebook = booking.serviceSlug != null && !isActive;
 
     return RefreshIndicator(
-      onRefresh: () async {},
+      onRefresh: () async {
+        ref.invalidate(bookingDetailPageProvider(booking.id));
+        await ref.read(bookingDetailPageProvider(booking.id).future);
+      },
       child: ListView(
         padding: const EdgeInsets.fromLTRB(20, 8, 20, 40),
         children: [
@@ -169,6 +174,29 @@ class _BookingDetailBody extends StatelessWidget {
           const SizedBox(height: 16),
 
           // ─── Active job CTA buttons ────────────────────────────────────────
+          if (booking.status == 'PENDING') ...[
+            TapScale(
+              onTap: () => _showEditBookingSheet(context, ref, booking),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                decoration: BoxDecoration(
+                  color: cs.surfaceContainerHighest.withValues(alpha: 0.5),
+                  borderRadius: BorderRadius.circular(AbzioTheme.buttonRadius),
+                  border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.3)),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.edit_calendar_rounded, size: 18, color: cs.primary),
+                    const SizedBox(width: 8),
+                    Text('Edit address & time', style: tt.labelLarge?.copyWith(fontWeight: FontWeight.w700, color: cs.primary)),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 10),
+          ],
+
           if (isActive) ...[
             if (booking.status == 'EN_ROUTE' || booking.status == 'ARRIVED' || booking.status == 'IN_PROGRESS')
               Consumer(
@@ -374,28 +402,61 @@ class _BookingDetailBody extends StatelessWidget {
                 children: [
                   const _SectionLabel(label: 'Booking Timeline'),
                   const SizedBox(height: 16),
-                  _TimelineStep(
-                    label: 'Booking placed',
-                    time: DateFormat('d MMM, h:mm a').format(booking.scheduledAt),
-                    isCompleted: true,
-                    isFirst: true,
+                  Row(
+                    children: [
+                      _TimelineBadge(
+                        icon: Icons.update_rounded,
+                        label: '${booking.timeline.isNotEmpty ? booking.timeline.length : 4} updates',
+                      ),
+                      const SizedBox(width: 8),
+                      _TimelineBadge(
+                        icon: Icons.schedule_rounded,
+                        label: DateFormat('d MMM, h:mm a').format(
+                          booking.timeline.isNotEmpty ? booking.timeline.last.createdAt : booking.scheduledAt,
+                        ),
+                      ),
+                    ],
                   ),
-                  _TimelineStep(
-                    label: 'Worker assigned',
-                    time: booking.worker != null ? booking.worker!.name : '',
-                    isCompleted: booking.worker != null,
-                  ),
-                  _TimelineStep(
-                    label: 'Work in progress',
-                    time: '',
-                    isCompleted: ['IN_PROGRESS', 'ARRIVED', 'COMPLETED'].contains(booking.status),
-                  ),
-                  _TimelineStep(
-                    label: 'Completed',
-                    time: '',
-                    isCompleted: booking.status == 'COMPLETED',
-                    isLast: true,
-                  ),
+                  const SizedBox(height: 16),
+                  if (booking.timeline.isNotEmpty) ...[
+                    for (var index = 0; index < booking.timeline.length; index++)
+                      _TimelineStep(
+                        status: booking.timeline[index].status,
+                        label: booking.timeline[index].title,
+                        time: DateFormat('d MMM, h:mm a').format(booking.timeline[index].createdAt),
+                        description: booking.timeline[index].description,
+                        isCompleted: true,
+                        isFirst: index == 0,
+                        isLast: index == booking.timeline.length - 1,
+                      ),
+                  ] else ...[
+                    _TimelineStep(
+                      status: 'PENDING',
+                      label: 'Booking placed',
+                      time: DateFormat('d MMM, h:mm a').format(booking.scheduledAt),
+                      isCompleted: true,
+                      isFirst: true,
+                    ),
+                    _TimelineStep(
+                      status: booking.worker != null ? 'WORKER_ASSIGNED' : 'PENDING',
+                      label: 'Worker assigned',
+                      time: booking.worker != null ? booking.worker!.name : '',
+                      isCompleted: booking.worker != null,
+                    ),
+                    _TimelineStep(
+                      status: 'IN_PROGRESS',
+                      label: 'Work in progress',
+                      time: '',
+                      isCompleted: ['IN_PROGRESS', 'ARRIVED', 'COMPLETED'].contains(booking.status),
+                    ),
+                    _TimelineStep(
+                      status: booking.status,
+                      label: 'Completed',
+                      time: '',
+                      isCompleted: booking.status == 'COMPLETED',
+                      isLast: true,
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -576,6 +637,9 @@ Future<void> _confirmCancelBooking(
 
     final reason = controller.text.trim();
     if (reason.length < 3) {
+      if (!context.mounted) {
+        return;
+      }
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please provide a short cancellation reason.')),
       );
@@ -607,6 +671,234 @@ Future<void> _confirmCancelBooking(
 }
 
 // ─── Supporting widgets ───────────────────────────────────────────────────────
+
+Future<void> _showEditBookingSheet(
+  BuildContext context,
+  WidgetRef ref,
+  BookingDetail booking,
+) async {
+  await showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: Colors.transparent,
+    builder: (_) => _BookingEditSheet(booking: booking),
+  );
+}
+
+class _BookingEditSheet extends ConsumerStatefulWidget {
+  const _BookingEditSheet({required this.booking});
+
+  final BookingDetail booking;
+
+  @override
+  ConsumerState<_BookingEditSheet> createState() => _BookingEditSheetState();
+}
+
+class _BookingEditSheetState extends ConsumerState<_BookingEditSheet> {
+  late final SavedAddressesApi _addressesApi;
+  List<SavedAddressItem> _addresses = const [];
+  String? _selectedAddressId;
+  DateTime _selectedDateTime = DateTime.now();
+  bool _loading = true;
+  bool _saving = false;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _addressesApi = SavedAddressesApi(ref.read(apiClientProvider).dio);
+    _selectedDateTime = widget.booking.scheduledAt;
+    _loadAddresses();
+  }
+
+  Future<void> _loadAddresses() async {
+    try {
+      final addresses = await _addressesApi.listAddresses();
+      if (!mounted) return;
+      setState(() {
+        _addresses = addresses;
+        _selectedAddressId = addresses.isNotEmpty ? addresses.first.id : null;
+        _loading = false;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _error = error.toString();
+      });
+    }
+  }
+
+  Future<void> _pickDate() async {
+    final date = await showDatePicker(
+      context: context,
+      initialDate: _selectedDateTime,
+      firstDate: DateTime.now().subtract(const Duration(days: 1)),
+      lastDate: DateTime.now().add(const Duration(days: 365)),
+    );
+    if (date == null) return;
+    setState(() {
+      _selectedDateTime = DateTime(
+        date.year,
+        date.month,
+        date.day,
+        _selectedDateTime.hour,
+        _selectedDateTime.minute,
+      );
+    });
+  }
+
+  Future<void> _pickTime() async {
+    final time = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay.fromDateTime(_selectedDateTime),
+    );
+    if (time == null) return;
+    setState(() {
+      _selectedDateTime = DateTime(
+        _selectedDateTime.year,
+        _selectedDateTime.month,
+        _selectedDateTime.day,
+        time.hour,
+        time.minute,
+      );
+    });
+  }
+
+  Future<void> _save() async {
+    if (_selectedAddressId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please choose an address.')),
+      );
+      return;
+    }
+
+    setState(() => _saving = true);
+    try {
+      await ref.read(apiClientProvider).patch(
+        '/bookings/${widget.booking.id}',
+        data: {
+          'addressId': _selectedAddressId,
+          'scheduledAt': _selectedDateTime.toIso8601String(),
+        },
+      );
+      ref.invalidate(bookingDetailPageProvider(widget.booking.id));
+      if (!mounted) return;
+      Navigator.of(context).pop();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Booking updated.')),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not update booking: $error')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _saving = false);
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
+
+    return Padding(
+      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+        decoration: BoxDecoration(
+          color: cs.surface,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+        ),
+        child: SafeArea(
+          top: false,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 42,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: cs.outlineVariant,
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 18),
+              Text('Edit booking', style: tt.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
+              const SizedBox(height: 4),
+              Text(
+                'Update the address or reschedule before dispatch starts.',
+                style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+              ),
+              const SizedBox(height: 18),
+              if (_loading)
+                const Center(child: Padding(padding: EdgeInsets.all(16), child: CircularProgressIndicator()))
+              else if (_error != null)
+                Text(_error!, style: tt.bodyMedium?.copyWith(color: cs.error))
+              else ...[
+                Text('Saved address', style: tt.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
+                const SizedBox(height: 8),
+                RadioGroup<String>(
+                  groupValue: _selectedAddressId,
+                  onChanged: (value) => setState(() => _selectedAddressId = value),
+                  child: Column(
+                    children: [
+                      ..._addresses.map((address) {
+                        return RadioListTile<String>(
+                          value: address.id,
+                          title: Text(address.label, style: tt.bodyMedium?.copyWith(fontWeight: FontWeight.w700)),
+                          subtitle: Text(address.displayAddress),
+                        );
+                      }),
+                      const SizedBox(height: 8),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: _pickDate,
+                        icon: const Icon(Icons.calendar_month_rounded),
+                        label: Text(DateFormat('d MMM y').format(_selectedDateTime)),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: _pickTime,
+                        icon: const Icon(Icons.schedule_rounded),
+                        label: Text(DateFormat('h:mm a').format(_selectedDateTime)),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 18),
+                FilledButton(
+                  onPressed: _saving ? null : _save,
+                  child: _saving
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Text('Save changes'),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
 
 class _SectionLabel extends StatelessWidget {
   const _SectionLabel({required this.label});
@@ -646,24 +938,49 @@ class _PayRow extends StatelessWidget {
 
 class _TimelineStep extends StatelessWidget {
   const _TimelineStep({
+    required this.status,
     required this.label,
     required this.time,
     required this.isCompleted,
+    this.description,
     this.isFirst = false,
     this.isLast = false,
   });
 
+  final String status;
   final String label;
   final String time;
+  final String? description;
   final bool isCompleted;
   final bool isFirst;
   final bool isLast;
+
+  Color _statusColor(ColorScheme cs) => switch (status) {
+        'COMPLETED' => const Color(0xFF10B981),
+        'REFUNDED' || 'CANCELLED' || 'CANCELLED_MANUAL' || 'CANCELLED_NO_SHOW' => const Color(0xFFEF4444),
+        'ARRIVED' || 'IN_PROGRESS' => const Color(0xFF6366F1),
+        'WORKER_ASSIGNED' => const Color(0xFF0F766E),
+        'PAYMENT_CAPTURED' => const Color(0xFF14B8A6),
+        'DISPATCH_FAILED' => const Color(0xFFF59E0B),
+        _ => cs.primary,
+      };
+
+  IconData _statusIcon() => switch (status) {
+        'COMPLETED' => Icons.task_alt_rounded,
+        'REFUNDED' || 'CANCELLED' || 'CANCELLED_MANUAL' || 'CANCELLED_NO_SHOW' => Icons.cancel_rounded,
+        'ARRIVED' => Icons.location_on_rounded,
+        'IN_PROGRESS' => Icons.handyman_rounded,
+        'WORKER_ASSIGNED' => Icons.verified_rounded,
+        'PAYMENT_CAPTURED' => Icons.payments_rounded,
+        'DISPATCH_FAILED' => Icons.report_problem_rounded,
+        _ => Icons.schedule_rounded,
+      };
 
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final tt = Theme.of(context).textTheme;
-    const green = Color(0xFF10B981);
+    final accent = _statusColor(cs);
 
     return IntrinsicHeight(
       child: Row(
@@ -674,15 +991,15 @@ class _TimelineStep extends StatelessWidget {
               Container(
                 width: 20, height: 20,
                 decoration: BoxDecoration(
-                  color: isCompleted ? green : cs.surfaceContainerHighest,
+                  color: isCompleted ? accent : cs.surfaceContainerHighest,
                   shape: BoxShape.circle,
                   border: Border.all(
-                    color: isCompleted ? green : cs.outlineVariant,
+                    color: isCompleted ? accent : cs.outlineVariant,
                     width: 2,
                   ),
                 ),
                 child: isCompleted
-                    ? const Icon(Icons.check_rounded, size: 12, color: Colors.white)
+                    ? Icon(_statusIcon(), size: 12, color: Colors.white)
                     : null,
               ),
               if (!isLast)
@@ -690,7 +1007,7 @@ class _TimelineStep extends StatelessWidget {
                   child: Container(
                     width: 2,
                     margin: const EdgeInsets.symmetric(vertical: 4),
-                    color: isCompleted ? green.withValues(alpha: 0.4) : cs.outlineVariant.withValues(alpha: 0.4),
+                    color: isCompleted ? accent.withValues(alpha: 0.35) : cs.outlineVariant.withValues(alpha: 0.4),
                   ),
                 ),
             ],
@@ -704,15 +1021,51 @@ class _TimelineStep extends StatelessWidget {
                 Text(label,
                     style: tt.bodyMedium?.copyWith(
                       fontWeight: FontWeight.w600,
-                      color: isCompleted ? cs.onSurface : cs.onSurfaceVariant,
+                      color: isCompleted ? accent : cs.onSurfaceVariant,
                     )),
                 if (time.isNotEmpty) ...[
                   const SizedBox(height: 2),
                   Text(time, style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
                 ],
+                if (description != null && description!.isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  Text(description!, style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant, height: 1.35)),
+                ],
               ],
             ),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+class _TimelineBadge extends StatelessWidget {
+  const _TimelineBadge({
+    required this.icon,
+    required this.label,
+  });
+
+  final IconData icon;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: cs.surfaceContainerHighest.withValues(alpha: 0.4),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.25)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: cs.primary),
+          const SizedBox(width: 6),
+          Text(label, style: tt.labelMedium?.copyWith(fontWeight: FontWeight.w700)),
         ],
       ),
     );
@@ -734,6 +1087,7 @@ class BookingDetail {
     this.serviceSlug,
     this.addressLabel,
     this.worker,
+    this.timeline = const [],
   });
 
   final String id;
@@ -746,6 +1100,7 @@ class BookingDetail {
   final String? serviceSlug;
   final String? addressLabel;
   final BookingWorker? worker;
+  final List<BookingTimelineEvent> timeline;
 
   factory BookingDetail.fromJson(Map<String, dynamic> json) => BookingDetail(
         id: json['id'] as String? ?? '',
@@ -760,6 +1115,33 @@ class BookingDetail {
         worker: json['worker'] != null
             ? BookingWorker.fromJson(json['worker'] as Map<String, dynamic>)
             : null,
+        timeline: (json['timeline'] as List<dynamic>? ?? [])
+            .map((item) => BookingTimelineEvent.fromJson(item as Map<String, dynamic>))
+            .toList(),
+      );
+}
+
+class BookingTimelineEvent {
+  const BookingTimelineEvent({
+    required this.id,
+    required this.status,
+    required this.title,
+    required this.createdAt,
+    this.description,
+  });
+
+  final String id;
+  final String status;
+  final String title;
+  final String? description;
+  final DateTime createdAt;
+
+  factory BookingTimelineEvent.fromJson(Map<String, dynamic> json) => BookingTimelineEvent(
+        id: json['id'] as String? ?? '',
+        status: json['status'] as String? ?? 'PENDING',
+        title: json['title'] as String? ?? 'Update',
+        description: json['description'] as String?,
+        createdAt: DateTime.tryParse(json['createdAt'] as String? ?? '') ?? DateTime.now(),
       );
 }
 

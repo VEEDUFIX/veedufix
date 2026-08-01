@@ -3,6 +3,7 @@ import { BookingStatus } from "@prisma/client";
 import { prisma } from "../../lib/prisma.js";
 import { logger } from "../../lib/logger.js";
 import { publishNotificationEvent } from "../../lib/realtime.js";
+import { recordBookingTimelineEvent } from "../../lib/booking-timeline.js";
 import { assignJobWithFallback } from "../matching/matching.service.js";
 import { suspendWorker } from "../worker-onboarding/worker-onboarding.service.js";
 
@@ -44,14 +45,20 @@ async function processNoShowBooking(booking: NoShowBooking): Promise<void> {
   }
 
   const updatedWorker = await prisma.$transaction(async (tx) => {
-    await tx.booking.update({
-      where: { id: booking.id },
-      data: {
-        status: BookingStatus.CANCELLED_NO_SHOW
-      }
-    });
+      await tx.booking.update({
+        where: { id: booking.id },
+        data: {
+          status: BookingStatus.CANCELLED_NO_SHOW
+        }
+      });
+      await recordBookingTimelineEvent({
+        bookingId: booking.id,
+        status: BookingStatus.CANCELLED_NO_SHOW,
+        title: "No-show cancellation",
+        description: "The booking was automatically cancelled because the worker did not show up."
+      });
 
-    await tx.jobExecution.update({
+      await tx.jobExecution.update({
       where: { bookingId: booking.id },
       data: {
         status: "cancelled"
@@ -164,4 +171,3 @@ export function startNoShowChecker(): void {
     logger.error({ error }, "Initial no-show checker run failed");
   });
 }
-

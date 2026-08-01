@@ -1,10 +1,13 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:math';
+import 'dart:ui' as ui;
 
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:marketplace_shared/marketplace_shared.dart';
 
@@ -353,7 +356,7 @@ class JobExecutionNotifier extends StateNotifier<JobExecutionState> {
       return;
     }
 
-    final picked = await _imagePicker.pickMultiImage(imageQuality: 85);
+    final picked = await _imagePicker.pickMultiImage();
     if (picked.isEmpty) {
       return;
     }
@@ -368,12 +371,41 @@ class JobExecutionNotifier extends StateNotifier<JobExecutionState> {
           (file) => JobExecutionPhotoDraft(
             id: '${type.name}-${DateTime.now().microsecondsSinceEpoch}-${file.name}',
             file: file,
+            uploading: true,
           ),
         )
         .toList(growable: false);
 
     state = _replaceDrafts(type, [...currentPhotos, ...newDrafts]);
-    await _uploadPhotos(type, newDrafts.map((draft) => draft.id).toSet(), booking);
+    _setLoading(_photoStepFor(type), true);
+    _clearStepError(_photoStepFor(type));
+
+    try {
+      final compressedDrafts = <JobExecutionPhotoDraft>[];
+      for (final draft in newDrafts) {
+        final compressedFile = await _compressPhotoForUpload(draft.file);
+        compressedDrafts.add(
+          draft.copyWith(file: compressedFile, uploading: true, clearErrorMessage: true),
+        );
+        state = _replaceDrafts(
+          type,
+          [
+            ...currentPhotos,
+            ...compressedDrafts,
+            ...newDrafts.skip(compressedDrafts.length),
+          ],
+        );
+      }
+
+      await _uploadPhotos(
+        type,
+        newDrafts.map((draft) => draft.id).toSet(),
+        booking,
+        manageLoading: false,
+      );
+    } finally {
+      _setLoading(_photoStepFor(type), false);
+    }
   }
 
   Future<void> retryPhoto(JobExecutionPhotoType type, String draftId) async {
@@ -587,15 +619,20 @@ class JobExecutionNotifier extends StateNotifier<JobExecutionState> {
     JobExecutionPhotoType type,
     Set<String> draftIds,
     JobExecutionBooking booking,
+    {bool manageLoading = true}
   ) async {
     final step = _photoStepFor(type);
-    _setLoading(step, true);
-    _clearStepError(step);
+    if (manageLoading) {
+      _setLoading(step, true);
+      _clearStepError(step);
+    }
 
     final currentPhotos = type == JobExecutionPhotoType.before ? state.beforePhotos : state.afterPhotos;
     final selectedDrafts = currentPhotos.where((draft) => draftIds.contains(draft.id)).toList(growable: false);
     if (selectedDrafts.isEmpty) {
-      _setLoading(step, false);
+      if (manageLoading) {
+        _setLoading(step, false);
+      }
       return;
     }
 
@@ -697,7 +734,9 @@ class JobExecutionNotifier extends StateNotifier<JobExecutionState> {
         ),
       );
     } finally {
-      _setLoading(step, false);
+      if (manageLoading) {
+        _setLoading(step, false);
+      }
     }
   }
 
@@ -977,5 +1016,68 @@ class JobExecutionNotifier extends StateNotifier<JobExecutionState> {
     return type == JobExecutionPhotoType.before
         ? state.copyWith(beforePhotos: drafts)
         : state.copyWith(afterPhotos: drafts);
+  }
+
+  Future<XFile> _compressPhotoForUpload(XFile file) async {
+    try {
+      final dimensions = await _readImageDimensions(file.path);
+      final target = _fitWithinLongEdge(
+        width: dimensions.width,
+        height: dimensions.height,
+        maxSide: 1920,
+      );
+
+      final targetPath = _compressedTargetPath(file.name);
+      final compressed = await FlutterImageCompress.compressAndGetFile(
+        file.path,
+        targetPath,
+        minWidth: target.width,
+        minHeight: target.height,
+        quality: 80,
+        format: CompressFormat.jpeg,
+        keepExif: true,
+        autoCorrectionAngle: true,
+      );
+
+      return compressed ?? file;
+    } catch (_) {
+      return file;
+    }
+  }
+
+  Future<({int width, int height})> _readImageDimensions(String path) async {
+    final bytes = await File(path).readAsBytes();
+    final codec = await ui.instantiateImageCodec(bytes);
+    final frame = await codec.getNextFrame();
+    return (width: frame.image.width, height: frame.image.height);
+  }
+
+  ({int width, int height}) _fitWithinLongEdge({
+    required int width,
+    required int height,
+    required int maxSide,
+  }) {
+    if (width <= maxSide && height <= maxSide) {
+      return (width: width, height: height);
+    }
+
+    final scale = max(width / maxSide, height / maxSide);
+    return (
+      width: max(1, (width / scale).round()),
+      height: max(1, (height / scale).round()),
+    );
+  }
+
+  String _compressedTargetPath(String originalName) {
+    final stem = _fileStem(originalName);
+    return '${Directory.systemTemp.path}${Platform.pathSeparator}${stem}_compressed_${DateTime.now().microsecondsSinceEpoch}.jpg';
+  }
+
+  String _fileStem(String name) {
+    final lastDot = name.lastIndexOf('.');
+    if (lastDot <= 0) {
+      return name;
+    }
+    return name.substring(0, lastDot);
   }
 }

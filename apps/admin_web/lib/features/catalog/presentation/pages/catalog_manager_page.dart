@@ -16,6 +16,8 @@ class CatalogManagerPage extends ConsumerStatefulWidget {
 class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
   late final _CatalogAdminApi _api;
   late Future<_CatalogSnapshot> _snapshotFuture;
+  final TextEditingController _searchController = TextEditingController();
+  String _catalogQuery = '';
 
   @override
   void initState() {
@@ -33,6 +35,12 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
       _snapshotFuture = _loadSnapshot();
     });
     await _snapshotFuture;
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
   }
 
   Future<void> _showMessage(String message) async {
@@ -143,6 +151,332 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
       await _showMessage('Service disabled');
     } catch (error) {
       await _showMessage('Unable to disable service: $error');
+    }
+  }
+
+  Future<void> _reorderCategories(_CatalogSnapshot snapshot) async {
+    final ordered = snapshot.categories.toList(growable: true);
+    final confirmed = await showDialog<List<_AdminCategory>>(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              title: const Text('Reorder categories'),
+              content: SizedBox(
+                width: 560,
+                child: ListView.separated(
+                  shrinkWrap: true,
+                  itemCount: ordered.length,
+                  separatorBuilder: (_, __) => const SizedBox(height: 8),
+                  itemBuilder: (context, index) {
+                    final category = ordered[index];
+                    return ListTile(
+                      tileColor: const Color(0xFFF9FAFB),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      leading: CircleAvatar(
+                        backgroundColor: const Color(0xFFE5E7EB),
+                        child: Text('${index + 1}'),
+                      ),
+                      title: Text(category.name),
+                      subtitle: Text(category.slug),
+                      trailing: Wrap(
+                        spacing: 4,
+                        children: [
+                          IconButton(
+                            onPressed: index == 0
+                                ? null
+                                : () => setState(() {
+                                    final item = ordered.removeAt(index);
+                                    ordered.insert(index - 1, item);
+                                  }),
+                            icon: const Icon(Icons.arrow_upward_rounded),
+                          ),
+                          IconButton(
+                            onPressed: index == ordered.length - 1
+                                ? null
+                                : () => setState(() {
+                                    final item = ordered.removeAt(index);
+                                    ordered.insert(index + 1, item);
+                                  }),
+                            icon: const Icon(Icons.arrow_downward_rounded),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(),
+                  child: const Text('Cancel'),
+                ),
+                FilledButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(ordered),
+                  child: const Text('Save order'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    if (confirmed == null) {
+      return;
+    }
+
+    try {
+      await _api.reorderCategories(confirmed.map((category) => category.id).toList(growable: false));
+      await _reload();
+      await _showMessage('Category order updated');
+    } catch (error) {
+      await _showMessage('Unable to reorder categories: $error');
+    }
+  }
+
+  Future<void> _reorderSubcategories(_CatalogSnapshot snapshot) async {
+    if (snapshot.categories.isEmpty) return;
+    final selectedCategoryId = ValueNotifier<String>(snapshot.categories.first.id);
+    final ordered = ValueNotifier<List<_AdminSubcategory>>(snapshot.subcategoriesForCategory(snapshot.categories.first.id).toList(growable: true));
+
+    final confirmed = await showDialog<_ReorderSelection<_AdminSubcategory>>(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setState) {
+            final category = snapshot.categoryById(selectedCategoryId.value) ?? snapshot.categories.first;
+            final categorySubcategories = snapshot.subcategoriesForCategory(category.id);
+            if (ordered.value.length != categorySubcategories.length) {
+              ordered.value = categorySubcategories.toList(growable: true);
+            }
+
+            return AlertDialog(
+              title: const Text('Reorder subcategories'),
+              content: SizedBox(
+                width: 620,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    DropdownButtonFormField<String>(
+                      initialValue: selectedCategoryId.value,
+                      items: snapshot.categories
+                          .map(
+                            (item) => DropdownMenuItem(
+                              value: item.id,
+                              child: Text(item.name),
+                            ),
+                          )
+                          .toList(growable: false),
+                      onChanged: (value) {
+                        if (value == null) return;
+                        setState(() {
+                          selectedCategoryId.value = value;
+                          ordered.value = snapshot.subcategoriesForCategory(value).toList(growable: true);
+                        });
+                      },
+                      decoration: const InputDecoration(
+                        labelText: 'Category',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    SizedBox(
+                      height: 420,
+                      child: ListView.separated(
+                        shrinkWrap: true,
+                        itemCount: ordered.value.length,
+                        separatorBuilder: (_, __) => const SizedBox(height: 8),
+                        itemBuilder: (context, index) {
+                          final item = ordered.value[index];
+                          return ListTile(
+                            tileColor: const Color(0xFFF9FAFB),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            leading: CircleAvatar(
+                              backgroundColor: const Color(0xFFE5E7EB),
+                              child: Text('${index + 1}'),
+                            ),
+                            title: Text(item.name),
+                            subtitle: Text('${item.serviceCount} services'),
+                            trailing: Wrap(
+                              spacing: 4,
+                              children: [
+                                IconButton(
+                                  onPressed: index == 0
+                                      ? null
+                                      : () => setState(() {
+                                          final moved = ordered.value.removeAt(index);
+                                          ordered.value = [...ordered.value]..insert(index - 1, moved);
+                                        }),
+                                  icon: const Icon(Icons.arrow_upward_rounded),
+                                ),
+                                IconButton(
+                                  onPressed: index == ordered.value.length - 1
+                                      ? null
+                                      : () => setState(() {
+                                          final moved = ordered.value.removeAt(index);
+                                          ordered.value = [...ordered.value]..insert(index + 1, moved);
+                                        }),
+                                  icon: const Icon(Icons.arrow_downward_rounded),
+                                ),
+                              ],
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(),
+                  child: const Text('Cancel'),
+                ),
+                FilledButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(
+                    _ReorderSelection<_AdminSubcategory>(parentId: selectedCategoryId.value, items: ordered.value),
+                  ),
+                  child: const Text('Save order'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    if (confirmed == null) return;
+
+    try {
+      await _api.reorderSubcategories(confirmed.parentId, confirmed.items.map((item) => item.id).toList(growable: false));
+      await _reload();
+      await _showMessage('Subcategory order updated');
+    } catch (error) {
+      await _showMessage('Unable to reorder subcategories: $error');
+    }
+  }
+
+  Future<void> _reorderServices(_CatalogSnapshot snapshot) async {
+    if (snapshot.subcategories.isEmpty) return;
+    final selectedSubcategoryId = ValueNotifier<String>(snapshot.subcategories.first.id);
+    final ordered = ValueNotifier<List<_AdminService>>(snapshot.servicesForSubcategory(snapshot.subcategories.first.id).toList(growable: true));
+
+    final confirmed = await showDialog<_ReorderSelection<_AdminService>>(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setState) {
+            final subcategory = snapshot.subcategoryById(selectedSubcategoryId.value) ?? snapshot.subcategories.first;
+            final services = snapshot.servicesForSubcategory(subcategory.id);
+            if (ordered.value.length != services.length) {
+              ordered.value = services.toList(growable: true);
+            }
+
+            return AlertDialog(
+              title: const Text('Reorder services'),
+              content: SizedBox(
+                width: 680,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    DropdownButtonFormField<String>(
+                      initialValue: selectedSubcategoryId.value,
+                      items: snapshot.subcategories
+                          .map(
+                            (item) => DropdownMenuItem(
+                              value: item.id,
+                              child: Text('${snapshot.categoryById(item.categoryId)?.name ?? 'Category'} / ${item.name}'),
+                            ),
+                          )
+                          .toList(growable: false),
+                      onChanged: (value) {
+                        if (value == null) return;
+                        setState(() {
+                          selectedSubcategoryId.value = value;
+                          ordered.value = snapshot.servicesForSubcategory(value).toList(growable: true);
+                        });
+                      },
+                      decoration: const InputDecoration(
+                        labelText: 'Subcategory',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    SizedBox(
+                      height: 420,
+                      child: ListView.separated(
+                        shrinkWrap: true,
+                        itemCount: ordered.value.length,
+                        separatorBuilder: (_, __) => const SizedBox(height: 8),
+                        itemBuilder: (context, index) {
+                          final item = ordered.value[index];
+                          return ListTile(
+                            tileColor: const Color(0xFFF9FAFB),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            leading: CircleAvatar(
+                              backgroundColor: const Color(0xFFE5E7EB),
+                              child: Text('${index + 1}'),
+                            ),
+                            title: Text(item.name),
+                            subtitle: Text('Rs ${item.startingPrice.toStringAsFixed(0)} - ${item.estimatedDurationMins} mins'),
+                            trailing: Wrap(
+                              spacing: 4,
+                              children: [
+                                IconButton(
+                                  onPressed: index == 0
+                                      ? null
+                                      : () => setState(() {
+                                          final moved = ordered.value.removeAt(index);
+                                          ordered.value = [...ordered.value]..insert(index - 1, moved);
+                                        }),
+                                  icon: const Icon(Icons.arrow_upward_rounded),
+                                ),
+                                IconButton(
+                                  onPressed: index == ordered.value.length - 1
+                                      ? null
+                                      : () => setState(() {
+                                          final moved = ordered.value.removeAt(index);
+                                          ordered.value = [...ordered.value]..insert(index + 1, moved);
+                                        }),
+                                  icon: const Icon(Icons.arrow_downward_rounded),
+                                ),
+                              ],
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(),
+                  child: const Text('Cancel'),
+                ),
+                FilledButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(
+                    _ReorderSelection<_AdminService>(parentId: selectedSubcategoryId.value, items: ordered.value),
+                  ),
+                  child: const Text('Save order'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    if (confirmed == null) return;
+
+    try {
+      await _api.reorderServices(confirmed.parentId, confirmed.items.map((item) => item.id).toList(growable: false));
+      await _reload();
+      await _showMessage('Service order updated');
+    } catch (error) {
+      await _showMessage('Unable to reorder services: $error');
     }
   }
 
@@ -449,6 +783,8 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
     final descriptionController = TextEditingController(text: existing?.description ?? '');
     final shortDescriptionController = TextEditingController(text: existing?.shortDescription ?? '');
     final startingPriceController = TextEditingController(text: (existing?.startingPrice ?? 0).toStringAsFixed(0));
+    final gstRateController = TextEditingController(text: (existing?.gstRate ?? 18).toStringAsFixed(2));
+    final sacCodeController = TextEditingController(text: existing?.sacCode ?? 'PENDING');
     final durationController = TextEditingController(text: (existing?.estimatedDurationMins ?? 0).toString());
     final warrantyController = TextEditingController(text: (existing?.warrantyDays ?? 0).toString());
     final iconController = TextEditingController(text: existing?.iconUrl ?? '');
@@ -538,6 +874,15 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
                         keyboardType: TextInputType.number,
                       ),
                       TextFormField(
+                        controller: gstRateController,
+                        decoration: const InputDecoration(labelText: 'GST rate (%)'),
+                        keyboardType: TextInputType.number,
+                      ),
+                      TextFormField(
+                        controller: sacCodeController,
+                        decoration: const InputDecoration(labelText: 'SAC code'),
+                      ),
+                      TextFormField(
                         controller: durationController,
                         decoration: const InputDecoration(labelText: 'Estimated duration (mins)'),
                         keyboardType: TextInputType.number,
@@ -599,6 +944,8 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
                           ? null
                           : shortDescriptionController.text.trim(),
                       'startingPrice': double.tryParse(startingPriceController.text.trim()) ?? 0,
+                      'gstRate': double.tryParse(gstRateController.text.trim()) ?? 18,
+                      'sacCode': sacCodeController.text.trim().isEmpty ? 'PENDING' : sacCodeController.text.trim(),
                       'estimatedDurationMins': int.tryParse(durationController.text.trim()) ?? 0,
                       'warrantyDays': int.tryParse(warrantyController.text.trim()) ?? 0,
                       'iconUrl': iconController.text.trim().isEmpty ? null : iconController.text.trim(),
@@ -625,6 +972,8 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
       descriptionController.dispose();
       shortDescriptionController.dispose();
       startingPriceController.dispose();
+      gstRateController.dispose();
+      sacCodeController.dispose();
       durationController.dispose();
       warrantyController.dispose();
       iconController.dispose();
@@ -786,7 +1135,12 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
                           ],
                         ),
                         const SizedBox(height: 18),
-                        const _SearchBar(),
+                        _SearchBar(
+                          controller: _searchController,
+                          onChanged: (value) => setState(() => _catalogQuery = value.trim()),
+                        ),
+                        const SizedBox(height: 12),
+                        if (!loading && data != null) _OverviewMetrics(snapshot: data),
                         const SizedBox(height: 18),
                         const TabBar(
                           isScrollable: true,
@@ -811,25 +1165,32 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
                                 children: [
                                   _CategoriesTab(
                                     snapshot: data,
+                                    query: _catalogQuery,
                                     onCreate: _createCategory,
                                     onEdit: _editCategory,
                                     onDisable: _toggleCategory,
+                                    onReorder: () => _reorderCategories(data),
                                   ),
                                   _SubcategoriesTab(
                                     snapshot: data,
+                                    query: _catalogQuery,
                                     onCreate: () => _createSubcategory(data),
                                     onEdit: (subcategory) => _editSubcategory(data, subcategory),
                                     onDisable: _toggleSubcategory,
+                                    onReorder: () => _reorderSubcategories(data),
                                   ),
                                   _ServicesTab(
                                     snapshot: data,
+                                    query: _catalogQuery,
                                     onCreate: () => _createService(data),
                                     onEdit: (service) => _editService(data, service),
                                     onDisable: _toggleService,
                                     onPricingRule: _addPricingRule,
+                                    onReorder: () => _reorderServices(data),
                                   ),
                                   _PricingTab(
                                     snapshot: data,
+                                    query: _catalogQuery,
                                     onPricingRule: _addPricingRule,
                                   ),
                                   _ImportExportTab(
@@ -850,49 +1211,157 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
 }
 
 class _SearchBar extends StatelessWidget {
-  const _SearchBar();
+  const _SearchBar({
+    required this.controller,
+    required this.onChanged,
+  });
+
+  final TextEditingController controller;
+  final ValueChanged<String> onChanged;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: const Color(0xFFE5E7EB)),
         boxShadow: AbzioTheme.eliteShadow,
       ),
-      child: Row(
-        children: [
-          Icon(Icons.search_rounded, color: Theme.of(context).colorScheme.onSurfaceVariant),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              'Search category, service, slug, or keyword',
-              style: GoogleFonts.inter(
-                color: Colors.black54,
-                fontSize: 15,
-              ),
-            ),
-          ),
-        ],
+      child: TextField(
+        controller: controller,
+        onChanged: onChanged,
+        decoration: InputDecoration(
+          border: InputBorder.none,
+          prefixIcon: Icon(Icons.search_rounded, color: Theme.of(context).colorScheme.onSurfaceVariant),
+          hintText: 'Search category, subcategory, service, or slug',
+        ),
+        style: GoogleFonts.inter(
+          color: Colors.black87,
+          fontSize: 15,
+        ),
       ),
     );
   }
 }
 
+class _OverviewMetrics extends StatelessWidget {
+  const _OverviewMetrics({required this.snapshot});
+
+  final _CatalogSnapshot snapshot;
+
+  @override
+  Widget build(BuildContext context) {
+    final totalCategories = snapshot.categories.length;
+    final totalSubcategories = snapshot.subcategories.length;
+    final totalServices = snapshot.services.length;
+    final activeServices = snapshot.services.where((service) => service.isActive).length;
+    final metrics = <_MetricData>[
+      _MetricData(label: 'Categories', value: totalCategories.toString(), icon: Icons.category_rounded, accent: const Color(0xFF6366F1)),
+      _MetricData(label: 'Subcategories', value: totalSubcategories.toString(), icon: Icons.view_module_rounded, accent: const Color(0xFF38BDF8)),
+      _MetricData(label: 'Services', value: totalServices.toString(), icon: Icons.design_services_rounded, accent: const Color(0xFF10B981)),
+      _MetricData(label: 'Active', value: activeServices.toString(), icon: Icons.verified_rounded, accent: const Color(0xFFF59E0B)),
+    ];
+
+    return Wrap(
+      spacing: 12,
+      runSpacing: 12,
+      children: metrics
+          .map(
+            (metric) => SizedBox(
+              width: 180,
+              child: Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: const Color(0xFFE5E7EB)),
+                  boxShadow: AbzioTheme.eliteShadow,
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      height: 42,
+                      width: 42,
+                      decoration: BoxDecoration(
+                        color: metric.accent.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Icon(metric.icon, color: metric.accent, size: 20),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            metric.value,
+                            style: GoogleFonts.poppins(
+                              fontSize: 22,
+                              fontWeight: FontWeight.w800,
+                              color: Colors.black87,
+                            ),
+                          ),
+                          Text(
+                            metric.label,
+                            style: GoogleFonts.inter(
+                              fontSize: 13,
+                              color: Colors.black54,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          )
+          .toList(growable: false),
+    );
+  }
+}
+
+class _MetricData {
+  const _MetricData({
+    required this.label,
+    required this.value,
+    required this.icon,
+    required this.accent,
+  });
+
+  final String label;
+  final String value;
+  final IconData icon;
+  final Color accent;
+}
+
+bool _matchesQuery(Iterable<String> fields, String query) {
+  final needle = query.trim().toLowerCase();
+  if (needle.isEmpty) {
+    return true;
+  }
+
+  return fields.any((field) => field.toLowerCase().contains(needle));
+}
+
 class _CategoriesTab extends StatelessWidget {
   const _CategoriesTab({
     required this.snapshot,
+    required this.query,
     required this.onCreate,
     required this.onEdit,
     required this.onDisable,
+    required this.onReorder,
   });
 
   final _CatalogSnapshot snapshot;
+  final String query;
   final VoidCallback onCreate;
   final ValueChanged<_AdminCategory> onEdit;
   final ValueChanged<_AdminCategory> onDisable;
+  final VoidCallback onReorder;
 
   @override
   Widget build(BuildContext context) {
@@ -930,13 +1399,23 @@ class _CategoriesTab extends StatelessWidget {
               child: const Text('Create category'),
             ),
             FilledButton.tonal(
-              onPressed: () {},
+              onPressed: onReorder,
               child: const Text('Reorder'),
             ),
           ],
         ),
         const SizedBox(height: 16),
-        ...snapshot.categories.map(
+        ...snapshot.categories.where((category) => _matchesQuery([
+              category.name,
+              category.slug,
+              category.description ?? '',
+              ...category.subcategories.expand((subcategory) => [
+                    subcategory.name,
+                    subcategory.slug,
+                    subcategory.description ?? '',
+                    ...subcategory.services.map((service) => service.name),
+                  ]),
+            ], query)).map(
           (category) => _CatalogCard(
             title: category.name,
             subtitle:
@@ -955,15 +1434,19 @@ class _CategoriesTab extends StatelessWidget {
 class _SubcategoriesTab extends StatelessWidget {
   const _SubcategoriesTab({
     required this.snapshot,
+    required this.query,
     required this.onCreate,
     required this.onEdit,
     required this.onDisable,
+    required this.onReorder,
   });
 
   final _CatalogSnapshot snapshot;
+  final String query;
   final VoidCallback onCreate;
   final ValueChanged<_AdminSubcategory> onEdit;
   final ValueChanged<_AdminSubcategory> onDisable;
+  final VoidCallback onReorder;
 
   @override
   Widget build(BuildContext context) {
@@ -996,8 +1479,19 @@ class _SubcategoriesTab extends StatelessWidget {
           onPressed: onCreate,
           child: const Text('Create subcategory'),
         ),
+        const SizedBox(height: 8),
+        OutlinedButton.icon(
+          onPressed: onReorder,
+          icon: const Icon(Icons.swap_vert_rounded),
+          label: const Text('Reorder subcategories'),
+        ),
         const SizedBox(height: 16),
-        ...snapshot.subcategories.map(
+        ...snapshot.subcategories.where((subcategory) => _matchesQuery([
+              subcategory.name,
+              subcategory.slug,
+              subcategory.description ?? '',
+              snapshot.categoryById(subcategory.categoryId)?.name ?? '',
+            ], query)).map(
           (subcategory) {
             final category = snapshot.categoryById(subcategory.categoryId);
             return _CatalogCard(
@@ -1019,17 +1513,21 @@ class _SubcategoriesTab extends StatelessWidget {
 class _ServicesTab extends StatelessWidget {
   const _ServicesTab({
     required this.snapshot,
+    required this.query,
     required this.onCreate,
     required this.onEdit,
     required this.onDisable,
     required this.onPricingRule,
+    required this.onReorder,
   });
 
   final _CatalogSnapshot snapshot;
+  final String query;
   final VoidCallback onCreate;
   final ValueChanged<_AdminService> onEdit;
   final ValueChanged<_AdminService> onDisable;
   final ValueChanged<_AdminService> onPricingRule;
+  final VoidCallback onReorder;
 
   @override
   Widget build(BuildContext context) {
@@ -1062,15 +1560,33 @@ class _ServicesTab extends StatelessWidget {
           onPressed: onCreate,
           child: const Text('Create service'),
         ),
+        const SizedBox(height: 8),
+        OutlinedButton.icon(
+          onPressed: onReorder,
+          icon: const Icon(Icons.swap_vert_rounded),
+          label: const Text('Reorder services'),
+        ),
         const SizedBox(height: 16),
-        ...snapshot.services.map(
+        ...snapshot.services.where((service) {
+          final category = snapshot.categoryById(service.categoryId);
+          final subcategory = snapshot.subcategoryById(service.subcategoryId);
+          return _matchesQuery([
+            service.name,
+            service.slug,
+            service.code ?? '',
+            service.description ?? '',
+            service.shortDescription ?? '',
+            category?.name ?? '',
+            subcategory?.name ?? '',
+          ], query);
+        }).map(
           (service) {
             final category = snapshot.categoryById(service.categoryId);
             final subcategory = snapshot.subcategoryById(service.subcategoryId);
             return _CatalogCard(
               title: service.name,
               subtitle:
-                  '${category?.name ?? 'Category'} / ${subcategory?.name ?? 'Subcategory'} - Rs ${service.startingPrice.toStringAsFixed(0)} - ${service.estimatedDurationMins} mins',
+                  '${category?.name ?? 'Category'} / ${subcategory?.name ?? 'Subcategory'} - Rs ${service.startingPrice.toStringAsFixed(0)} - GST ${service.gstRate.toStringAsFixed(2)}% - SAC ${service.sacCode} - ${service.estimatedDurationMins} mins',
               tag: service.isActive ? 'Active' : 'Disabled',
               accent: service.featured ? const Color(0xFFC2A15E) : const Color(0xFF10B981),
               onEdit: () => onEdit(service),
@@ -1106,10 +1622,12 @@ class _ServicesTab extends StatelessWidget {
 class _PricingTab extends StatelessWidget {
   const _PricingTab({
     required this.snapshot,
+    required this.query,
     required this.onPricingRule,
   });
 
   final _CatalogSnapshot snapshot;
+  final String query;
   final ValueChanged<_AdminService> onPricingRule;
 
   @override
@@ -1139,11 +1657,15 @@ class _PricingTab extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 12),
-        ...snapshot.services.map(
+        ...snapshot.services.where((service) => _matchesQuery([
+              service.name,
+              service.slug,
+              snapshot.subcategoryById(service.subcategoryId)?.name ?? '',
+            ], query)).map(
           (service) => _CatalogCard(
             title: service.name,
             subtitle:
-                'Base price Rs ${service.startingPrice.toStringAsFixed(0)} - ${service.pricingRules.length} rules',
+                'Base price Rs ${service.startingPrice.toStringAsFixed(0)} - GST ${service.gstRate.toStringAsFixed(2)}% - SAC ${service.sacCode} - ${service.pricingRules.length} rules',
             tag: 'Pricing',
             accent: const Color(0xFFF59E0B),
             onEdit: () => onPricingRule(service),
@@ -1402,6 +1924,17 @@ class _CatalogAdminApi {
     await _dio.delete('/admin/catalog/categories/$id', data: const {});
   }
 
+  Future<void> reorderCategories(List<String> ids) async {
+    await _dio.post('/admin/catalog/categories/reorder', data: {'ids': ids});
+  }
+
+  Future<void> reorderSubcategories(String categoryId, List<String> ids) async {
+    await _dio.post('/admin/catalog/subcategories/reorder', data: {
+      'categoryId': categoryId,
+      'ids': ids,
+    });
+  }
+
   Future<void> createSubcategory(Map<String, dynamic> data) async {
     await _dio.post('/admin/catalog/subcategories', data: data);
   }
@@ -1424,6 +1957,13 @@ class _CatalogAdminApi {
 
   Future<void> deleteService(String id) async {
     await _dio.delete('/admin/catalog/services/$id', data: const {});
+  }
+
+  Future<void> reorderServices(String subcategoryId, List<String> ids) async {
+    await _dio.post('/admin/catalog/services/reorder', data: {
+      'subcategoryId': subcategoryId,
+      'ids': ids,
+    });
   }
 
   Future<void> addPricingRule(String serviceId, Map<String, dynamic> data) async {
@@ -1470,6 +2010,20 @@ class _CatalogSnapshot {
     if (category == null) return const [];
     return category.subcategories;
   }
+
+  List<_AdminService> servicesForSubcategory(String subcategoryId) {
+    return subcategoryById(subcategoryId)?.services ?? const [];
+  }
+}
+
+class _ReorderSelection<T> {
+  const _ReorderSelection({
+    required this.parentId,
+    required this.items,
+  });
+
+  final String parentId;
+  final List<T> items;
 }
 
 class _AdminCategory {
@@ -1580,6 +2134,8 @@ class _AdminService {
     required this.slug,
     required this.code,
     required this.startingPrice,
+    required this.gstRate,
+    required this.sacCode,
     required this.estimatedDurationMins,
     required this.isActive,
     required this.featured,
@@ -1600,6 +2156,8 @@ class _AdminService {
   final String slug;
   final String? code;
   final double startingPrice;
+  final double gstRate;
+  final String sacCode;
   final int estimatedDurationMins;
   final bool isActive;
   final bool featured;
@@ -1621,6 +2179,8 @@ class _AdminService {
       slug: json['slug'] as String? ?? '',
       code: json['code'] as String?,
       startingPrice: _toDouble(json['startingPrice']),
+      gstRate: json['gstRate'] == null ? 18 : _toDouble(json['gstRate']),
+      sacCode: (json['sacCode'] as String?)?.trim().isNotEmpty == true ? json['sacCode'] as String : 'PENDING',
       estimatedDurationMins: (json['estimatedDurationMins'] as num?)?.toInt() ?? 0,
       isActive: json['isActive'] as bool? ?? true,
       featured: json['featured'] as bool? ?? false,

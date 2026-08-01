@@ -18,6 +18,8 @@ class HomePage extends ConsumerWidget {
 
     final catalogAsync = ref.watch(homeCatalogProvider);
     final professionalsAsync = ref.watch(homeProfessionalsProvider);
+    final catalogCategories = catalogAsync.valueOrNull?.categories ?? const <CatalogCategory>[];
+    final catalogSubcategories = catalogCategories.expand((category) => category.subcategories).toList(growable: false);
 
     return Scaffold(
       body: LiquidRefresh(
@@ -63,22 +65,36 @@ class HomePage extends ConsumerWidget {
                     )
                   : ListView.separated(
                       scrollDirection: Axis.horizontal,
-                      itemCount: (catalogAsync.valueOrNull?.categories.length ?? 0) > 0
-                          ? catalogAsync.valueOrNull!.categories.length
-                          : _categories.length,
+                      itemCount: catalogCategories.isNotEmpty ? catalogCategories.length : _categories.length,
                       separatorBuilder: (_, __) => const SizedBox(width: 12),
                       itemBuilder: (context, index) {
-                        final hasData = (catalogAsync.valueOrNull?.categories.length ?? 0) > 0;
+                        final hasData = catalogCategories.isNotEmpty;
                         final category = hasData
-                            ? catalogAsync.valueOrNull!.categories[index]
+                            ? catalogCategories[index]
                             : _categories[index];
                         return _CategoryChip(
                           category: category,
-                          // If it's a real API model, map it. The widget expects a Map mock currently.
                         );
                       },
                     ),
             ),
+            if (catalogSubcategories.isNotEmpty) ...[
+              const SizedBox(height: 20),
+              const _SectionLabel(
+                title: 'Subcategories',
+                subtitle: 'Jump directly into specific service types.',
+              ),
+              const SizedBox(height: 12),
+              SizedBox(
+                height: 132,
+                child: ListView.separated(
+                  scrollDirection: Axis.horizontal,
+                  itemCount: catalogSubcategories.length,
+                  separatorBuilder: (_, __) => const SizedBox(width: 12),
+                  itemBuilder: (context, index) => _SubcategoryChip(subcategory: catalogSubcategories[index]),
+                ),
+              ),
+            ],
             const SizedBox(height: 18),
             _FeaturedBanner(
               title: 'Trusted Professionals',
@@ -427,53 +443,162 @@ class _CategoryChip extends StatelessWidget {
   String get _title => category is CatalogCategory ? (category as CatalogCategory).name : (category as _Category).title;
   IconData get _icon => category is CatalogCategory ? Icons.home_repair_service_rounded : (category as _Category).icon;
   Color get _accent => category is CatalogCategory ? const Color(0xFF6366F1) : (category as _Category).accent;
+  String get _subtitle {
+    if (category is CatalogCategory) {
+      final catalogCategory = category as CatalogCategory;
+      return '${catalogCategory.subcategories.length} subcategories';
+    }
+    return 'Popular pick';
+  }
 
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     return SizedBox(
-      width: 84,
+      width: 108,
       child: TapScale(
         onTap: () {},
         child: Column(
-        children: [
-          Hero(
-            tag: 'category_${category is CatalogCategory ? (category as CatalogCategory).id : (category as _Category).title}',
-            child: Container(
-              height: 72,
-              width: 72,
-              decoration: BoxDecoration(
-                color: colorScheme.surface,
-                borderRadius: BorderRadius.circular(AbzioTheme.cardRadius),
-                boxShadow: AbzioTheme.eliteShadow,
-              ),
-              child: Center(
-                child: Container(
-                  height: 52,
-                  width: 52,
-                  decoration: BoxDecoration(
-                    color: _accent.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(AbzioTheme.cardRadius),
+          children: [
+            Hero(
+              tag: 'category_${category is CatalogCategory ? (category as CatalogCategory).id : (category as _Category).title}',
+              child: Container(
+                height: 72,
+                width: 72,
+                decoration: BoxDecoration(
+                  color: colorScheme.surface,
+                  borderRadius: BorderRadius.circular(AbzioTheme.cardRadius),
+                  boxShadow: AbzioTheme.eliteShadow,
+                ),
+                child: Center(
+                  child: Container(
+                    height: 52,
+                    width: 52,
+                    decoration: BoxDecoration(
+                      color: _accent.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(AbzioTheme.cardRadius),
+                    ),
+                    child: Icon(_icon, color: _accent),
                   ),
-                  child: Icon(_icon, color: _accent),
                 ),
               ),
             ),
-          ),
-          const SizedBox(height: 10),
-          Text(
-            _title,
-            textAlign: TextAlign.center,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                  fontWeight: FontWeight.w700,
-                  color: colorScheme.onSurface.withValues(alpha: 0.84),
-                ),
-          ),
-        ],
+            const SizedBox(height: 10),
+            Text(
+              _title,
+              textAlign: TextAlign.center,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                    fontWeight: FontWeight.w700,
+                    color: colorScheme.onSurface.withValues(alpha: 0.84),
+                  ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              _subtitle,
+              textAlign: TextAlign.center,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                    color: colorScheme.onSurfaceVariant,
+                  ),
+            ),
+          ],
+        ),
       ),
-    ));
+    );
+  }
+}
+
+class _SubcategoryChip extends StatelessWidget {
+  const _SubcategoryChip({required this.subcategory});
+
+  final CatalogSubcategory subcategory;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return SizedBox(
+      width: 168,
+      child: TapScale(
+        onTap: () => context.push('/search'),
+        child: Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: colorScheme.surface,
+            borderRadius: BorderRadius.circular(AbzioTheme.cardRadius),
+            boxShadow: AbzioTheme.eliteShadow,
+            border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.45)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    height: 38,
+                    width: 38,
+                    decoration: BoxDecoration(
+                      color: colorScheme.primary.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(AbzioTheme.buttonRadius),
+                    ),
+                    child: Icon(Icons.view_module_rounded, color: colorScheme.primary, size: 20),
+                  ),
+                  const Spacer(),
+                  _SmallBadge(label: '${subcategory.serviceCount} services'),
+                ],
+              ),
+              const Spacer(),
+              Text(
+                subcategory.name,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w800,
+                    ),
+              ),
+              if (subcategory.description != null && subcategory.description!.trim().isNotEmpty) ...[
+                const SizedBox(height: 6),
+                Text(
+                  subcategory.description!,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: colorScheme.onSurfaceVariant,
+                      ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SmallBadge extends StatelessWidget {
+  const _SmallBadge({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: colorScheme.secondary.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        label,
+        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+              fontWeight: FontWeight.w800,
+              color: colorScheme.secondary,
+            ),
+      ),
+    );
   }
 }
 
@@ -501,11 +626,16 @@ class _ServiceCard extends StatelessWidget {
   final Object service;
 
   String get _title => service is CatalogService ? (service as CatalogService).name : (service as _Service).title;
-  String get _price => service is CatalogService ? '₹${(service as CatalogService).startingPrice.toInt()}' : (service as _Service).price;
+  String get _price => service is CatalogService ? 'Rs ${(service as CatalogService).startingPrice.toInt()}' : (service as _Service).price;
   double get _rating => service is CatalogService ? (service as CatalogService).rating : (service as _Service).rating;
   String get _jobs => service is CatalogService ? '${(service as CatalogService).reviewCount} reviews' : (service as _Service).jobs;
   IconData get _icon => service is CatalogService ? Icons.design_services_rounded : (service as _Service).icon;
   Color get _accent => service is CatalogService ? const Color(0xFF6366F1) : (service as _Service).accent;
+  String get _subtitle => service is CatalogService
+      ? ((service as CatalogService).hierarchyLabel.isNotEmpty
+          ? (service as CatalogService).hierarchyLabel
+          : ((service as CatalogService).shortDescription ?? 'Premium service'))
+      : (service as _Service).jobs;
 
   @override
   Widget build(BuildContext context) {
@@ -549,6 +679,15 @@ class _ServiceCard extends StatelessWidget {
               overflow: TextOverflow.ellipsis,
               style: Theme.of(context).textTheme.titleMedium?.copyWith(
                     fontWeight: FontWeight.w800,
+                  ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              _subtitle,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: colorScheme.onSurfaceVariant,
                   ),
             ),
             const Spacer(),

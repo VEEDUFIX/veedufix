@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { BookingStatus, Prisma } from "@prisma/client";
+import { BookingStatus, PaymentStatus, Prisma } from "@prisma/client";
 import { requireAuth, requireRole, type AuthenticatedRequest } from "../../middleware/auth.js";
 import { prisma } from "../../lib/prisma.js";
 
@@ -9,6 +9,15 @@ type AdminBookingRecord = Prisma.BookingGetPayload<{
   include: {
     customer: { select: { name: true } };
     worker: { select: { fullName: true } };
+    payments: {
+      select: {
+        status: true;
+        notes: true;
+        updatedAt: true;
+      };
+      orderBy: { updatedAt: "desc" };
+      take: 1;
+    };
     services: {
       include: {
         service: { select: { name: true } };
@@ -133,6 +142,15 @@ adminBookingsRouter.get("/", async (request: AuthenticatedRequest, response) => 
     include: {
       customer: { select: { name: true } },
       worker: { select: { fullName: true } },
+      payments: {
+        select: {
+          status: true,
+          notes: true,
+          updatedAt: true,
+        },
+        orderBy: { updatedAt: "desc" },
+        take: 1,
+      },
       services: {
         include: {
           service: { select: { name: true } },
@@ -147,22 +165,41 @@ adminBookingsRouter.get("/", async (request: AuthenticatedRequest, response) => 
     take: 100,
   })) as AdminBookingRecord[];
 
-  const serialized = bookings.map((b) => ({
-    id: b.id,
-    code: b.code,
-    status: b.status,
-    customerName: b.customer.name ?? "Customer",
-    workerName: b.worker?.fullName ?? null,
-    serviceName:
-      b.services[0]?.service?.name ??
-      b.services[0]?.serviceSubcategory?.name ??
-      "Service",
-    scheduledAt: b.scheduledAt.toISOString(),
-    totalAmount: Number(b.totalAmount),
-    addressLabel: b.address
-      ? `${b.address.label}, ${b.address.line1}`
-      : null,
-  }));
+  const serialized = bookings.map((b) => {
+    const latestPayment = b.payments[0] ?? null;
+    const paymentStatus = latestPayment?.status ?? PaymentStatus.PENDING;
+    const paymentNotes =
+      latestPayment?.notes && typeof latestPayment.notes === "object" && !Array.isArray(latestPayment.notes)
+        ? (latestPayment.notes as Record<string, unknown>)
+        : null;
+    const paymentRecoveryLabel =
+      paymentNotes && (paymentNotes.reconciledBy === "scheduler" || paymentNotes.webhookEvent === "reconciled.order.paid")
+        ? "Reconciled"
+        : paymentStatus === PaymentStatus.CAPTURED
+          ? "Captured"
+          : paymentStatus === PaymentStatus.FAILED
+            ? "Failed"
+            : "Pending";
+
+    return {
+      id: b.id,
+      code: b.code,
+      status: b.status,
+      paymentStatus,
+      paymentRecoveryLabel,
+      customerName: b.customer.name ?? "Customer",
+      workerName: b.worker?.fullName ?? null,
+      serviceName:
+        b.services[0]?.service?.name ??
+        b.services[0]?.serviceSubcategory?.name ??
+        "Service",
+      scheduledAt: b.scheduledAt.toISOString(),
+      totalAmount: Number(b.totalAmount),
+      addressLabel: b.address
+        ? `${b.address.label}, ${b.address.line1}`
+        : null
+    };
+  });
 
   response.status(200).json({ bookings: serialized });
 });

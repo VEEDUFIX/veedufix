@@ -4,8 +4,62 @@ import 'package:go_router/go_router.dart';
 import 'package:marketplace_shared/marketplace_shared.dart';
 import '../../../../core/widgets/shimmer_placeholder.dart';
 
+class _SearchFilters {
+  const _SearchFilters({
+    required this.query,
+    this.categorySlug,
+    this.subcategorySlug,
+  });
+
+  final String query;
+  final String? categorySlug;
+  final String? subcategorySlug;
+
+  @override
+  bool operator ==(Object other) {
+    return other is _SearchFilters &&
+        other.query == query &&
+        other.categorySlug == categorySlug &&
+        other.subcategorySlug == subcategorySlug;
+  }
+
+  @override
+  int get hashCode => Object.hash(query, categorySlug, subcategorySlug);
+}
+
+final searchCatalogFilteredProvider = FutureProvider.autoDispose.family<List<CatalogService>, _SearchFilters>((ref, filters) async {
+  if (filters.query.trim().isEmpty && filters.categorySlug == null && filters.subcategorySlug == null) {
+    return const [];
+  }
+
+  final apiClient = ref.watch(apiClientProvider);
+  final queryParameters = <String, dynamic>{
+    if (filters.query.trim().isNotEmpty) 'q': filters.query,
+    if (filters.categorySlug != null && filters.categorySlug!.isNotEmpty) 'categorySlug': filters.categorySlug,
+    if (filters.subcategorySlug != null && filters.subcategorySlug!.isNotEmpty) 'subcategorySlug': filters.subcategorySlug,
+  };
+  final response = await apiClient.get(
+    '/catalog/search',
+    queryParameters: queryParameters,
+  );
+  final payload = response['items'] ?? response['results'] ?? response['data'] ?? const [];
+  if (payload is! List) {
+    return const [];
+  }
+  return payload.whereType<Map<String, dynamic>>().map(CatalogService.fromJson).toList(growable: false);
+});
+
 class SearchPage extends ConsumerStatefulWidget {
-  const SearchPage({super.key});
+  const SearchPage({
+    super.key,
+    this.initialQuery = '',
+    this.initialCategorySlug,
+    this.initialSubcategorySlug,
+  });
+
+  final String initialQuery;
+  final String? initialCategorySlug;
+  final String? initialSubcategorySlug;
 
   @override
   ConsumerState<SearchPage> createState() => _SearchPageState();
@@ -14,6 +68,8 @@ class SearchPage extends ConsumerStatefulWidget {
 class _SearchPageState extends ConsumerState<SearchPage> {
   final TextEditingController _controller = TextEditingController();
   String _query = '';
+  String? _selectedCategorySlug;
+  String? _selectedSubcategorySlug;
 
   // Session-scoped recent searches — mutable so clear/add works live
   final List<String> _recent = [];
@@ -33,6 +89,15 @@ class _SearchPageState extends ConsumerState<SearchPage> {
     Color(0xFF8B5CF6), Color(0xFF14B8A6), Color(0xFFEC4899),
   ];
 
+  @override
+  void initState() {
+    super.initState();
+    _controller.text = widget.initialQuery;
+    _query = widget.initialQuery;
+    _selectedCategorySlug = widget.initialCategorySlug;
+    _selectedSubcategorySlug = widget.initialSubcategorySlug;
+  }
+
   void _setQuery(String q) {
     if (q.trim().isEmpty) return;
     _controller.text = q;
@@ -51,6 +116,45 @@ class _SearchPageState extends ConsumerState<SearchPage> {
     if (_recent.length > 8) _recent.removeLast();
   }
 
+  void _goToSearch({
+    String? query,
+    String? categorySlug,
+    String? subcategorySlug,
+  }) {
+    final params = <String, String>{};
+    if (query != null && query.trim().isNotEmpty) {
+      params['q'] = query.trim();
+    }
+    if (categorySlug != null && categorySlug.isNotEmpty) {
+      params['categorySlug'] = categorySlug;
+    }
+    if (subcategorySlug != null && subcategorySlug.isNotEmpty) {
+      params['subcategorySlug'] = subcategorySlug;
+    }
+    context.go(Uri(path: '/search', queryParameters: params.isEmpty ? null : params).toString());
+  }
+
+  bool get _hasBrowseSelection => _selectedCategorySlug != null || _selectedSubcategorySlug != null;
+
+  String _browseLabel(List<CatalogCategory> categories) {
+    if (_selectedSubcategorySlug != null) {
+      final subcategory = categories
+          .expand((category) => category.subcategories)
+          .where((item) => item.slug == _selectedSubcategorySlug)
+          .firstOrNull;
+      if (subcategory != null) {
+        return subcategory.name;
+      }
+    }
+    if (_selectedCategorySlug != null) {
+      final category = categories.where((item) => item.slug == _selectedCategorySlug).firstOrNull;
+      if (category != null) {
+        return category.name;
+      }
+    }
+    return 'Browse';
+  }
+
   @override
   void dispose() {
     _controller.dispose();
@@ -61,23 +165,49 @@ class _SearchPageState extends ConsumerState<SearchPage> {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final tt = Theme.of(context).textTheme;
-    final searchAsync = ref.watch(searchCatalogProvider(_query));
+    final searchAsync = ref.watch(
+      searchCatalogFilteredProvider(
+        _SearchFilters(
+          query: _query,
+          categorySlug: _selectedCategorySlug,
+          subcategorySlug: _selectedSubcategorySlug,
+        ),
+      ),
+    );
     final catalogAsync = ref.watch(homeCatalogProvider);
+    final catalogCategories = catalogAsync.valueOrNull?.categories ?? const <CatalogCategory>[];
+    final catalogSubcategories = catalogCategories.expand((category) => category.subcategories).toList(growable: false);
+    final showResults = _query.trim().isNotEmpty || _hasBrowseSelection;
+    final browseLabel = _browseLabel(catalogCategories);
 
-    // Build trending items: real categories from API if available, else fallback
+    // Build trending items: real categories and subcategories from API when available, else fallback.
     final trendingItems = catalogAsync.maybeWhen(
       data: (data) => data.categories.isEmpty
           ? _fallbackTrending
-          : data.categories.take(9).toList().asMap().entries.map((e) {
-              final cat = e.value;
-              final color = _accentCycle[e.key % _accentCycle.length];
-              return _SearchItem(
-                title: cat.name,
-                icon: Icons.home_repair_service_rounded,
-                accent: color,
-                slug: cat.slug,
-              );
-            }).toList(),
+          : [
+              ...data.categories.take(6).toList().asMap().entries.map((e) {
+                final cat = e.value;
+                final color = _accentCycle[e.key % _accentCycle.length];
+                return _SearchItem(
+                  title: cat.name,
+                  subtitle: '${cat.subcategories.length} subcategories',
+                  icon: Icons.home_repair_service_rounded,
+                  accent: color,
+                  slug: cat.slug,
+                );
+              }),
+              ...catalogSubcategories.take(6).toList().asMap().entries.map((e) {
+                final subcategory = e.value;
+                final color = _accentCycle[(e.key + 3) % _accentCycle.length];
+                return _SearchItem(
+                  title: subcategory.name,
+                  subtitle: '${subcategory.serviceCount} services',
+                  icon: Icons.view_module_rounded,
+                  accent: color,
+                  slug: subcategory.slug,
+                );
+              }),
+            ],
       orElse: () => _fallbackTrending,
     );
 
@@ -137,17 +267,29 @@ class _SearchPageState extends ConsumerState<SearchPage> {
           ),
         ),
       ),
-      body: _query.isEmpty
+      body: !showResults
           ? _SearchHome(
               recent: _recent,
               trending: trendingItems,
+              categories: catalogCategories,
+              selectedCategorySlug: _selectedCategorySlug,
+              selectedSubcategorySlug: _selectedSubcategorySlug,
+              onCategoryTap: (slug) => _goToSearch(
+                categorySlug: _selectedCategorySlug == slug ? null : slug,
+              ),
+              onSubcategoryTap: (categorySlug, subcategorySlug) => _goToSearch(
+                categorySlug: categorySlug,
+                subcategorySlug: _selectedSubcategorySlug == subcategorySlug ? null : subcategorySlug,
+              ),
               onQueryTap: _setQuery,
               onClearRecent: () => setState(() => _recent.clear()),
             )
           : searchAsync.when(
               data: (results) => _SearchResults(
                 results: results,
-                query: _query,
+                query: _query.isNotEmpty ? _query : browseLabel,
+                categorySlug: _selectedCategorySlug,
+                subcategorySlug: _selectedSubcategorySlug,
                 onResultTap: _addToRecent,
               ),
               loading: () => ListView.separated(
@@ -170,11 +312,21 @@ class _SearchHome extends StatelessWidget {
   const _SearchHome({
     required this.recent,
     required this.trending,
+    required this.categories,
+    required this.selectedCategorySlug,
+    required this.selectedSubcategorySlug,
+    required this.onCategoryTap,
+    required this.onSubcategoryTap,
     required this.onQueryTap,
     required this.onClearRecent,
   });
   final List<String> recent;
   final List<_SearchItem> trending;
+  final List<CatalogCategory> categories;
+  final String? selectedCategorySlug;
+  final String? selectedSubcategorySlug;
+  final ValueChanged<String> onCategoryTap;
+  final void Function(String categorySlug, String subcategorySlug) onSubcategoryTap;
   final ValueChanged<String> onQueryTap;
   final VoidCallback onClearRecent;
 
@@ -185,6 +337,57 @@ class _SearchHome extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.all(24),
       children: [
+        if (categories.isNotEmpty) ...[
+          Text('Categories',
+              style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: categories
+                .map(
+                  (category) => FilterChip(
+                    label: Text(category.name),
+                    selected: selectedCategorySlug == category.slug,
+                    onSelected: (_) => onCategoryTap(category.slug),
+                  ),
+                )
+                .toList(growable: false),
+          ),
+          const SizedBox(height: 18),
+          if (selectedCategorySlug != null)
+            Builder(
+              builder: (context) {
+                final category = categories.where((item) => item.slug == selectedCategorySlug).firstOrNull;
+                final subcategories = category?.subcategories ?? const <CatalogSubcategory>[];
+                if (subcategories.isEmpty) {
+                  return const SizedBox.shrink();
+                }
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Subcategories',
+                        style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
+                    const SizedBox(height: 12),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: subcategories
+                          .map(
+                            (subcategory) => FilterChip(
+                              label: Text(subcategory.name),
+                              selected: selectedSubcategorySlug == subcategory.slug,
+                              onSelected: (_) => onSubcategoryTap(category!.slug, subcategory.slug),
+                            ),
+                          )
+                          .toList(growable: false),
+                    ),
+                    const SizedBox(height: 18),
+                  ],
+                );
+              },
+            ),
+        ],
         if (recent.isNotEmpty) ...[
           Row(
             children: [
@@ -273,6 +476,18 @@ class _SearchHome extends StatelessWidget {
                               fontWeight: FontWeight.w700,
                             ),
                       ),
+                      if (item.subtitle != null) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          item.subtitle!,
+                          textAlign: TextAlign.center,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                                color: Theme.of(context).colorScheme.onSurfaceVariant,
+                              ),
+                        ),
+                      ],
                     ],
                   ),
                 ),
@@ -289,10 +504,14 @@ class _SearchResults extends StatelessWidget {
   const _SearchResults({
     required this.results,
     required this.query,
+    this.categorySlug,
+    this.subcategorySlug,
     this.onResultTap,
   });
   final List<CatalogService> results;
   final String query;
+  final String? categorySlug;
+  final String? subcategorySlug;
   final ValueChanged<String>? onResultTap;
 
   @override
@@ -343,9 +562,18 @@ class _SearchResults extends StatelessWidget {
                             style: Theme.of(context).textTheme.titleMedium?.copyWith(
                                   fontWeight: FontWeight.w700,
                                 )),
+                        if (item.hierarchyLabel.isNotEmpty) ...[
+                          const SizedBox(height: 4),
+                          Text(
+                            item.hierarchyLabel,
+                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                  color: cs.onSurfaceVariant,
+                                ),
+                          ),
+                        ],
                         if (item.startingPrice > 0)
                           Text(
-                            'From ₹${item.startingPrice.toInt()}',
+                            'From Rs ${item.startingPrice.toInt()}',
                             style: Theme.of(context).textTheme.bodySmall?.copyWith(
                                   color: cs.primary,
                                   fontWeight: FontWeight.w600,
@@ -371,10 +599,16 @@ class _SearchItem {
     required this.title,
     required this.icon,
     required this.accent,
+    this.subtitle,
     this.slug,
   });
   final String title;
   final IconData icon;
   final Color accent;
+  final String? subtitle;
   final String? slug;
+}
+
+extension _IterableFirstOrNull<T> on Iterable<T> {
+  T? get firstOrNull => isEmpty ? null : first;
 }

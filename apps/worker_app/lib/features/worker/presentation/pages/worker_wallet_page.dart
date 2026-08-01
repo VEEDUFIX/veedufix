@@ -1,6 +1,9 @@
 import 'dart:async';
+import 'dart:convert';
 
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
@@ -226,6 +229,29 @@ class _WalletBody extends ConsumerWidget {
         const SizedBox(height: 24),
 
         // ── Transaction history ──────────────────────────────────────────
+        TapScale(
+          onTap: () => _exportStatement(context, ref),
+          child: Container(
+            padding: const EdgeInsets.symmetric(vertical: 16),
+            decoration: BoxDecoration(
+              color: cs.surfaceContainerHighest.withValues(alpha: 0.55),
+              borderRadius: BorderRadius.circular(AbzioTheme.buttonRadius),
+              border: Border.all(color: cs.outlineVariant),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.receipt_long_rounded, color: cs.onSurfaceVariant, size: 20),
+                const SizedBox(width: 10),
+                Text(
+                  'Export statement CSV',
+                  style: tt.titleSmall?.copyWith(color: cs.onSurface, fontWeight: FontWeight.w800),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 20),
         Text('Transaction History', style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
         const SizedBox(height: 12),
 
@@ -257,6 +283,44 @@ class _WalletBody extends ConsumerWidget {
       backgroundColor: Colors.transparent,
       builder: (_) => _PayoutSheet(availableBalance: balance, ref: ref),
     );
+  }
+
+  Future<void> _exportStatement(BuildContext context, WidgetRef ref) async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final response = await ref.read(apiClientProvider).dio.get<List<int>>(
+        '/worker/earnings/export/csv',
+        options: Options(responseType: ResponseType.bytes),
+      );
+      final bytes = response.data ?? const <int>[];
+      if (bytes.isEmpty) {
+        messenger.showSnackBar(
+          const SnackBar(content: Text('Statement export is empty right now.')),
+        );
+        return;
+      }
+
+      final csv = utf8.decode(bytes);
+      await Clipboard.setData(ClipboardData(text: csv));
+      if (!context.mounted) return;
+      await showDialog<void>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('Statement exported'),
+          content: const Text('The CSV has been copied to your clipboard.'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('Close'),
+            ),
+          ],
+        ),
+      );
+    } catch (e) {
+      messenger.showSnackBar(
+        SnackBar(content: Text('Could not export statement: $e')),
+      );
+    }
   }
 }
 

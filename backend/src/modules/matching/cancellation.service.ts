@@ -2,6 +2,7 @@ import { BookingStatus } from "@prisma/client";
 import { prisma } from "../../lib/prisma.js";
 import { logger } from "../../lib/logger.js";
 import { publishNotificationEvent } from "../../lib/realtime.js";
+import { recordBookingTimelineEvent } from "../../lib/booking-timeline.js";
 
 export class CancellationNotFoundError extends Error {
   constructor(message = "Booking not found") {
@@ -130,6 +131,12 @@ export async function cancelBooking(
       status: BookingStatus.CANCELLED_MANUAL
     }
   });
+  void recordBookingTimelineEvent({
+    bookingId,
+    status: BookingStatus.CANCELLED_MANUAL,
+    title: "Booking cancelled",
+    description: "The booking was cancelled manually."
+  });
 
   await prisma.jobExecution.upsert({
     where: { bookingId },
@@ -165,4 +172,3 @@ export async function cancelBooking(
 export const cancellationService = {
   cancelBooking
 };
-

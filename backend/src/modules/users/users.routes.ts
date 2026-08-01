@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { requireAuth, type AuthenticatedRequest } from "../../middleware/auth.js";
 import { prisma } from "../../lib/prisma.js";
+import { getBookingTimelineEvents } from "../../lib/booking-timeline.js";
 import { serializeWorkerProfile } from "../worker-onboarding/worker-onboarding.service.js";
 
 export const usersRouter = Router();
@@ -440,6 +441,7 @@ usersRouter.get("/bookings/:bookingId", requireAuth, async (request: Authenticat
       totalAmount: Number(booking.totalAmount),
       serviceName: booking.services[0]?.service?.name ?? booking.services[0]?.serviceSubcategory?.name ?? "Service",
       serviceIcon: booking.services[0]?.service?.iconUrl ?? null,
+      serviceSlug: booking.services[0]?.service?.slug ?? null,
       addressLabel: booking.address
         ? `${booking.address.label}, ${booking.address.line1}, ${booking.address.city?.name ?? ""}`
         : null,
@@ -451,7 +453,107 @@ usersRouter.get("/bookings/:bookingId", requireAuth, async (request: Authenticat
             avatarUrl: booking.worker.user?.avatarUrl ?? null,
           }
         : null,
+      timeline: (await getBookingTimelineEvents(booking.id)).map((event) => ({
+        id: event.id,
+        status: event.status,
+        title: event.title,
+        description: event.description,
+        createdAt: event.createdAt.toISOString()
+      }))
     },
+  });
+});
+
+usersRouter.patch("/bookings/:bookingId", requireAuth, async (request: AuthenticatedRequest, response) => {
+  const { bookingId } = request.params as { bookingId: string };
+  const userId = request.auth!.userId;
+  const { addressId, scheduledAt } = request.body as { addressId?: string; scheduledAt?: string };
+
+  if (!addressId && !scheduledAt) {
+    response.status(400).json({ message: "addressId or scheduledAt is required" });
+    return;
+  }
+
+  const booking = await prisma.booking.findUnique({
+    where: { id: bookingId },
+    select: {
+      id: true,
+      customerId: true,
+      status: true,
+      workerId: true,
+      addressId: true,
+      cityId: true,
+      scheduledAt: true,
+      dispatchOffers: {
+        where: { status: "pending" },
+        select: { id: true }
+      }
+    }
+  });
+
+  if (!booking) {
+    response.status(404).json({ message: "Booking not found" });
+    return;
+  }
+
+  if (booking.customerId !== userId) {
+    response.status(403).json({ message: "Access denied" });
+    return;
+  }
+
+  if (booking.status !== "PENDING" || booking.workerId != null || booking.dispatchOffers.length > 0) {
+    response.status(409).json({ message: "Booking can only be modified before dispatch" });
+    return;
+  }
+
+  let nextAddressId = booking.addressId;
+  let nextCityId = booking.cityId;
+  if (addressId) {
+    const address = await prisma.address.findFirst({
+      where: { id: addressId, userId },
+      select: { id: true, cityId: true }
+    });
+    if (!address) {
+      response.status(404).json({ message: "Address not found" });
+      return;
+    }
+    nextAddressId = address.id;
+    nextCityId = address.cityId;
+  }
+
+  let nextScheduledAt = booking.scheduledAt;
+  if (scheduledAt) {
+    const parsed = new Date(scheduledAt);
+    if (Number.isNaN(parsed.getTime())) {
+      response.status(400).json({ message: "scheduledAt is invalid" });
+      return;
+    }
+    nextScheduledAt = parsed;
+  }
+
+  const updated = await prisma.booking.update({
+    where: { id: booking.id },
+    data: {
+      addressId: nextAddressId,
+      cityId: nextCityId,
+      scheduledAt: nextScheduledAt,
+      scheduledFor: nextScheduledAt
+    },
+    include: {
+      address: {
+        select: { label: true, line1: true, city: { select: { name: true } } }
+      }
+    }
+  });
+
+  response.status(200).json({
+    success: true,
+    booking: {
+      id: updated.id,
+      addressLabel: updated.address ? `${updated.address.label}, ${updated.address.line1}` : null,
+      cityName: updated.address?.city?.name ?? null,
+      scheduledAt: updated.scheduledAt.toISOString()
+    }
   });
 });
 

@@ -296,3 +296,60 @@ export async function getWorkerTransactionHistory(
     totalPages: Math.max(1, Math.ceil(total / limit))
   };
 }
+
+export async function exportWorkerEarningsCsv(
+  workerUserId: string,
+  filters: EarningsFilterInput = {}
+): Promise<string> {
+  const workerProfileId = await getWorkerProfileIdByUserId(workerUserId);
+  const createdAtFilter: Prisma.DateTimeFilter = {};
+
+  if (filters.fromDate) {
+    createdAtFilter.gte = startOfLocalDay(filters.fromDate);
+  }
+
+  if (filters.toDate) {
+    createdAtFilter.lt = addDays(startOfLocalDay(filters.toDate), 1);
+  }
+
+  const where: Prisma.PayoutWhereInput = {
+    workerId: workerProfileId,
+    ...(filters.status ? { status: filters.status } : {}),
+    ...(Object.keys(createdAtFilter).length > 0 ? { createdAt: createdAtFilter } : {})
+  };
+
+  const rows = await prisma.payout.findMany({
+    where,
+    include: {
+      booking: {
+        select: {
+          code: true,
+          services: {
+            select: {
+              service: { select: { name: true } },
+              serviceSubcategory: { select: { name: true } }
+            }
+          }
+        }
+      }
+    },
+    orderBy: [{ createdAt: "desc" }]
+  });
+
+  const header = "booking_code,service_name,amount,commission_amount,status,date";
+  const lines = rows.map((row) => {
+    const serviceName = resolveServiceName(row as WorkerEarningsTransactionRecord);
+    return [
+      row.booking.code,
+      serviceName,
+      toNumber(row.amount).toFixed(2),
+      toNumber(row.commissionAmount).toFixed(2),
+      row.status,
+      row.createdAt.toISOString()
+    ]
+      .map((value) => `"${String(value).replace(/"/g, '""')}"`)
+      .join(",");
+  });
+
+  return [header, ...lines].join("\n");
+}

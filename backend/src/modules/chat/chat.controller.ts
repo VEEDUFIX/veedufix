@@ -11,7 +11,8 @@ export async function getChatRoomHandler(request: AuthenticatedRequest, response
     const role = request.auth!.role as UserRole;
 
     const chatRoom = await getOrCreateChatRoom(bookingId, userId, role);
-    response.json({ chatRoom });
+    const unreadCount = chatRoom.messages.filter((message) => !message.isRead && message.senderId !== userId).length;
+    response.json({ chatRoom, unreadCount });
   } catch (error) {
     logger.error({ error, bookingId: request.params.bookingId }, "Failed to get chat room");
     if (error instanceof Error && error.message === "Unauthorized") {
@@ -25,12 +26,12 @@ export async function getChatRoomHandler(request: AuthenticatedRequest, response
 export async function sendMessageHandler(request: AuthenticatedRequest, response: Response) {
   try {
     const bookingId = request.params.bookingId as string;
-    const { content } = request.body;
+    const { content, attachments } = request.body;
     const userId = request.auth!.userId;
     const role = request.auth!.role as UserRole;
 
     await getOrCreateChatRoom(bookingId, userId, role);
-    const message = await saveMessage(bookingId, userId, role, content);
+    const message = await saveMessage(bookingId, userId, role, content, attachments);
 
     response.json({ message });
   } catch (error) {

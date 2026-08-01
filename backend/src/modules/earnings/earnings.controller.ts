@@ -3,7 +3,8 @@ import { type AuthenticatedRequest } from "../../middleware/auth.js";
 import {
   WorkerProfileNotFoundError,
   getWorkerEarningsSummary,
-  getWorkerTransactionHistory
+  getWorkerTransactionHistory,
+  exportWorkerEarningsCsv
 } from "./earnings.service.js";
 
 function sendError(response: Response, error: unknown): void {
@@ -75,6 +76,30 @@ export async function getWorkerTransactionHistoryHandler(
     );
 
     response.status(200).json(result);
+  } catch (error) {
+    sendError(response, error);
+  }
+}
+
+export async function exportWorkerEarningsCsvHandler(
+  request: AuthenticatedRequest,
+  response: Response,
+  _next: NextFunction
+): Promise<void> {
+  if (!assertWorkerAccess(request, response)) {
+    return;
+  }
+
+  try {
+    const csv = await exportWorkerEarningsCsv(request.auth!.userId, {
+      fromDate: request.query.fromDate as Date | undefined,
+      toDate: request.query.toDate as Date | undefined,
+      status: request.query.status as "pending" | "processing" | "success" | "failed" | undefined
+    });
+
+    response.setHeader("Content-Type", "text/csv; charset=utf-8");
+    response.setHeader("Content-Disposition", `attachment; filename="worker-earnings-${Date.now()}.csv"`);
+    response.status(200).send(csv);
   } catch (error) {
     sendError(response, error);
   }

@@ -11,7 +11,11 @@
     "prisma:migrate": "prisma migrate dev",
     "prisma:deploy": "prisma migrate deploy",
     "db:seed": "tsx prisma/seed.ts",
-    "lint": "eslint . --ext .ts"
+    "lint": "eslint . --ext .ts",
+    "loadtest:catalog": "k6 run load-tests/catalog-home.js",
+    "loadtest:dispatch": "k6 run load-tests/booking-dispatch.js",
+    "loadtest:otp": "k6 run load-tests/otp-verify.js",
+    "loadtest:payouts": "k6 run load-tests/admin-payouts.js"
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",

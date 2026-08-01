@@ -1,4 +1,4 @@
-import { Prisma, VerificationStatus } from "@prisma/client";
+import { Gender, Prisma, VerificationStatus } from "@prisma/client";
 import { prisma } from "../../lib/prisma.js";
 import { logger } from "../../lib/logger.js";
 import { uploadBufferToCloudinary, generateSignedUrl } from "../../lib/cloudinary.js";
@@ -30,14 +30,21 @@ export class WorkerStatusConflictError extends Error {
 
 type ProfileDetails = {
   fullName?: string;
+  gender?: Gender;
   dateOfBirth?: Date | string;
   addressLine1?: string;
+  alternatePhone?: string;
   city?: string;
   pincode?: string;
   bankAccountNumber?: string;
   bankIfsc?: string;
   upiId?: string;
   aadhaarNumber?: string;
+  toolsOwned?: string[];
+  emergencyContactName?: string;
+  emergencyContactPhone?: string;
+  agreementAccepted?: boolean;
+  dataConsentAccepted?: boolean;
 };
 
 type PendingReviewFilters = {
@@ -80,6 +87,7 @@ type WorkerProfileWithRelations = Prisma.WorkerProfileGetPayload<{
         category: true;
       };
     };
+    availability: true;
   };
 }>;
 
@@ -90,6 +98,7 @@ type MinimalWorkerProfile = Prisma.WorkerProfileGetPayload<{
         category: true;
       };
     };
+    availability: true;
   };
 }>;
 
@@ -111,6 +120,7 @@ type WorkerDirectoryProfile = Prisma.WorkerProfileGetPayload<{
         category: true;
       };
     };
+    availability: true;
   };
 }>;
 
@@ -161,12 +171,25 @@ function normalizeProfile(profile: WorkerProfileWithRelations | MinimalWorkerPro
   }
 
   // Destructure raw KYC doc fields — never send these to any client.
-  const { aadhaarDocUrl, aadhaarDocPublicId, ...rest } = maskWorkerFinancialFields(profile) as typeof profile & { aadhaarDocPublicId?: string | null };
+  const { aadhaarDocUrl, aadhaarDocPublicId, availability, ...rest } = maskWorkerFinancialFields(profile) as typeof profile & {
+    aadhaarDocPublicId?: string | null;
+    availability?: Array<{
+      dayOfWeek: number;
+      startTime: string;
+      endTime: string;
+    }>;
+  };
 
   const base = {
     ...rest,
     // Boolean presence indicator replaces the raw URL in every response.
     hasAadhaarDoc: Boolean(aadhaarDocUrl?.trim()),
+    hasAvailability: Boolean(availability?.length),
+    availabilitySlots: (availability ?? []).map((slot) => ({
+      dayOfWeek: slot.dayOfWeek,
+      startTime: slot.startTime,
+      endTime: slot.endTime
+    })),
     skills: profile.skills.map((skill: WorkerSkillWithCategory) => ({
       id: skill.id,
       categoryId: skill.categoryId,
@@ -219,7 +242,8 @@ async function getWorkerProfile(userId: string) {
         include: {
           category: true
         }
-      }
+      },
+      availability: true
     }
   });
 }
@@ -252,7 +276,8 @@ async function getWorkerProfileByIdOrThrow(workerProfileId: string) {
         include: {
           category: true
         }
-      }
+      },
+      availability: true
     }
   });
 
@@ -265,13 +290,22 @@ async function getWorkerProfileByIdOrThrow(workerProfileId: string) {
 
 function missingProfileFields(profile: MinimalWorkerProfile): string[] {
   const missingFields: string[] = [];
+  const hasUpi = Boolean(profile.upiId?.trim());
+  const hasBankFallback = Boolean(profile.bankAccountNumber?.trim() && profile.bankIfsc?.trim());
 
   if (!profile.fullName?.trim()) missingFields.push("fullName");
+  if (!profile.aadhaarNumber?.trim()) missingFields.push("aadhaarNumber");
   if (!profile.addressLine1?.trim()) missingFields.push("addressLine1");
   if (!profile.city?.trim()) missingFields.push("city");
   if (!profile.pincode?.trim()) missingFields.push("pincode");
   if (!profile.aadhaarDocUrl?.trim()) missingFields.push("aadhaarDocUrl");
+  if (!hasUpi && !hasBankFallback) missingFields.push("upiId");
   if (!profile.skills.length) missingFields.push("skills");
+  if (!profile.availability.length) missingFields.push("availability");
+  if (!profile.emergencyContactName?.trim()) missingFields.push("emergencyContactName");
+  if (!profile.emergencyContactPhone?.trim()) missingFields.push("emergencyContactPhone");
+  if (!profile.agreementAcceptedAt) missingFields.push("agreementAcceptedAt");
+  if (!profile.dataConsentAcceptedAt) missingFields.push("dataConsentAcceptedAt");
 
   return missingFields;
 }
@@ -324,19 +358,33 @@ export async function createOrGetProfile(userId: string) {
 
 export async function updatePersonalDetails(userId: string, details: ProfileDetails) {
   await ensureWorkerProfile(userId);
+  const current = await prisma.workerProfile.findUnique({
+    where: { userId },
+    select: {
+      agreementAcceptedAt: true,
+      dataConsentAcceptedAt: true
+    }
+  });
 
   await prisma.workerProfile.update({
     where: { userId },
     data: {
       fullName: details.fullName,
+      gender: details.gender,
       dateOfBirth: toDate(details.dateOfBirth),
       addressLine1: details.addressLine1,
+      alternatePhone: details.alternatePhone,
       city: details.city,
       pincode: details.pincode,
       bankAccountNumber: details.bankAccountNumber,
       bankIfsc: details.bankIfsc,
       upiId: details.upiId,
-      aadhaarNumber: details.aadhaarNumber
+      aadhaarNumber: details.aadhaarNumber,
+      toolsOwned: details.toolsOwned,
+      emergencyContactName: details.emergencyContactName,
+      emergencyContactPhone: details.emergencyContactPhone,
+      agreementAcceptedAt: details.agreementAccepted ? current?.agreementAcceptedAt ?? new Date() : undefined,
+      dataConsentAcceptedAt: details.dataConsentAccepted ? current?.dataConsentAcceptedAt ?? new Date() : undefined
     }
   });
 
@@ -413,6 +461,36 @@ export async function addSkill(userId: string, categoryId: string) {
   return normalizeProfile(await getWorkerProfileOrThrow(userId));
 }
 
+export async function addService(userId: string, serviceId: string) {
+  const profile = await ensureWorkerProfile(userId);
+  const service = await prisma.service.findUnique({
+    where: { id: serviceId },
+    select: { id: true, categoryId: true }
+  });
+
+  if (!service) {
+    throw new WorkerProfileNotFoundError("Service not found");
+  }
+
+  await prisma.workerService.upsert({
+    where: {
+      workerId_serviceId: {
+        workerId: profile.id,
+        serviceId: service.id
+      }
+    },
+    create: {
+      workerId: profile.id,
+      serviceId: service.id
+    },
+    update: {}
+  });
+
+  await addSkill(userId, service.categoryId);
+
+  return normalizeProfile(await getWorkerProfileOrThrow(userId));
+}
+
 export async function submitForReview(userId: string) {
   const profile = await ensureWorkerProfile(userId);
   const fullProfile = await prisma.workerProfile.findUnique({
@@ -422,7 +500,8 @@ export async function submitForReview(userId: string) {
         include: {
           category: true
         }
-      }
+      },
+      availability: true
     }
   });
 
@@ -494,7 +573,8 @@ export async function listPendingReview(filters: PendingReviewFilters = {}) {
           include: {
             category: true
           }
-        }
+        },
+        availability: true
       },
       orderBy: [{ submittedAt: "asc" }, { createdAt: "asc" }],
       skip,
@@ -677,7 +757,8 @@ export async function getWorkerDirectory(filters: WorkerDirectoryFilters = {}) {
           include: {
             category: true
           }
-        }
+        },
+        availability: true
       },
       orderBy: [{ createdAt: "desc" }],
       skip,
@@ -920,4 +1001,3 @@ export async function getOwnSkillCertSignedUrl(
 
   return getSkillCertSignedUrl(skillId, profile.id);
 }
-

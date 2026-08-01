@@ -12,6 +12,8 @@ class AdminBooking {
     required this.id,
     required this.code,
     required this.status,
+    required this.paymentStatus,
+    required this.paymentRecoveryLabel,
     required this.customerName,
     required this.serviceName,
     required this.scheduledAt,
@@ -23,6 +25,8 @@ class AdminBooking {
   final String id;
   final String code;
   final String status;
+  final String paymentStatus;
+  final String paymentRecoveryLabel;
   final String customerName;
   final String serviceName;
   final DateTime scheduledAt;
@@ -34,6 +38,8 @@ class AdminBooking {
         id: json['id'] as String? ?? '',
         code: json['code'] as String? ?? '',
         status: json['status'] as String? ?? 'PENDING',
+        paymentStatus: json['paymentStatus'] as String? ?? 'PENDING',
+        paymentRecoveryLabel: json['paymentRecoveryLabel'] as String? ?? 'Pending',
         customerName: json['customerName'] as String? ?? 'Customer',
         serviceName: json['serviceName'] as String? ?? 'Service',
         scheduledAt: DateTime.tryParse(json['scheduledAt'] as String? ?? '') ?? DateTime.now(),
@@ -239,6 +245,13 @@ class _AdminBookingCard extends StatelessWidget {
         _ => 'Pending',
       };
 
+  Color get _paymentColor => switch (booking.paymentRecoveryLabel) {
+        'Reconciled' => const Color(0xFF0EA5E9),
+        'Captured' => const Color(0xFF10B981),
+        'Failed' => const Color(0xFFEF4444),
+        _ => const Color(0xFFF59E0B),
+      };
+
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
@@ -312,6 +325,39 @@ class _AdminBookingCard extends StatelessWidget {
                 _InfoChip(
                   icon: Icons.currency_rupee_rounded,
                   label: '₹${booking.totalAmount.toStringAsFixed(0)}',
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: _paymentColor.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.payments_rounded, size: 14, color: _paymentColor),
+                      const SizedBox(width: 5),
+                      Text(
+                        'Payment: ${booking.paymentRecoveryLabel}',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: _paymentColor,
+                              fontWeight: FontWeight.w700,
+                            ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 12),
+                _InfoChip(
+                  icon: booking.paymentStatus == 'CAPTURED'
+                      ? Icons.verified_rounded
+                      : Icons.hourglass_bottom_rounded,
+                  label: booking.paymentStatus.replaceAll('_', ' '),
                 ),
               ],
             ),

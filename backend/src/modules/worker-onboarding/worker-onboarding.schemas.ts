@@ -2,14 +2,21 @@ import { z } from "zod";
 
 const baseProfileBodySchema = z.object({
   fullName: z.string().trim().min(2).max(120).optional(),
+  gender: z.enum(["MALE", "FEMALE", "OTHER", "PREFER_NOT_TO_SAY"]).optional(),
   dateOfBirth: z.coerce.date().optional(),
   addressLine1: z.string().trim().min(3).max(255).optional(),
+  alternatePhone: z.string().trim().min(7).max(20).optional(),
   city: z.string().trim().min(2).max(120).optional(),
   pincode: z.string().trim().min(3).max(20).optional(),
-  bankAccountNumber: z.string().trim().min(6).max(34).optional(),
+  bankAccountNumber: z.string().trim().regex(/^\d{9,18}$/, "Bank account number must contain 9 to 18 digits").optional(),
   bankIfsc: z.string().trim().min(6).max(20).optional(),
   upiId: z.string().trim().min(3).max(128).optional(),
-  aadhaarNumber: z.string().trim().min(4).max(32).optional()
+  aadhaarNumber: z.string().trim().regex(/^\d{12}$/, "Aadhaar number must contain exactly 12 digits").optional(),
+  toolsOwned: z.array(z.string().trim().min(1).max(80)).max(20).optional(),
+  emergencyContactName: z.string().trim().min(2).max(120).optional(),
+  emergencyContactPhone: z.string().trim().min(7).max(20).optional(),
+  agreementAccepted: z.boolean().optional(),
+  dataConsentAccepted: z.boolean().optional()
 });
 
 export const updateProfileSchema = z.object({
@@ -41,6 +48,14 @@ export const uploadDocumentSchema = z.object({
 export const addSkillSchema = z.object({
   body: z.object({
     categoryId: z.string().trim().min(1)
+  }),
+  query: z.object({}).optional(),
+  params: z.object({}).optional()
+});
+
+export const addServiceSchema = z.object({
+  body: z.object({
+    serviceId: z.string().trim().min(1)
   }),
   query: z.object({}).optional(),
   params: z.object({}).optional()
@@ -158,4 +173,3 @@ export const adminDocSkillParamsSchema = z.object({
     skillId: z.string().trim().min(1)
   })
 });
-

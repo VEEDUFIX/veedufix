@@ -6,6 +6,7 @@ import {
   workerEarningsTransactionsQuerySchema
 } from "./earnings.schemas.js";
 import {
+  exportWorkerEarningsCsvHandler,
   getWorkerEarningsSummaryHandler,
   getWorkerTransactionHistoryHandler
 } from "./earnings.controller.js";
@@ -20,4 +21,9 @@ earningsRouter.get(
   "/worker/earnings/transactions",
   validate(workerEarningsTransactionsQuerySchema),
   getWorkerTransactionHistoryHandler
+);
+earningsRouter.get(
+  "/worker/earnings/export/csv",
+  validate(workerEarningsTransactionsQuerySchema),
+  exportWorkerEarningsCsvHandler
 );

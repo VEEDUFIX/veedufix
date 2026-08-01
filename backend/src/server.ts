@@ -6,6 +6,7 @@ import { attachRealtimeGateway } from "./lib/realtime.js";
 import { startExpiredOfferRecovery } from "./modules/matching/matching.service.js";
 import { startNoShowChecker } from "./modules/scheduler/no-show-checker.js";
 import { startDisputeEscalation } from "./modules/scheduler/dispute-escalation.js";
+import { startPaymentReconciliation } from "./modules/scheduler/payment-reconciliation.js";
 
 const app = createApp();
 const server = createServer(app);
@@ -14,6 +15,7 @@ attachRealtimeGateway(server);
 startExpiredOfferRecovery();
 startNoShowChecker();
 startDisputeEscalation();
+startPaymentReconciliation();
 
 server.listen(env.PORT, () => {
   logger.info(`API listening on port ${env.PORT}`);

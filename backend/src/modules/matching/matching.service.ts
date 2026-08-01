@@ -3,6 +3,7 @@ import cron from "node-cron";
 import { prisma } from "../../lib/prisma.js";
 import { logger } from "../../lib/logger.js";
 import { publishNotificationEvent, publishTrackingEvent } from "../../lib/realtime.js";
+import { recordBookingTimelineEvent } from "../../lib/booking-timeline.js";
 import { getTokensForUser } from "../device-token/device-token.service.js";
 import { sendMulticastPush } from "../../lib/fcm.js";
 
@@ -768,6 +769,12 @@ async function createJobExecutionAssignment(bookingId: string, workerProfileId: 
       status: BookingStatus.WORKER_ASSIGNED
     }
   });
+  void recordBookingTimelineEvent({
+    bookingId,
+    status: BookingStatus.WORKER_ASSIGNED,
+    title: "Worker assigned",
+    description: "A professional accepted the job offer."
+  });
 
   await prisma.jobExecution.upsert({
     where: { bookingId },
@@ -909,6 +916,12 @@ async function dispatchLoop(session: DispatchSession): Promise<void> {
     data: {
       status: BookingStatus.DISPATCH_FAILED
     }
+  });
+  void recordBookingTimelineEvent({
+    bookingId: session.bookingId,
+    status: BookingStatus.DISPATCH_FAILED,
+    title: "Dispatch failed",
+    description: "No eligible worker accepted the booking yet."
   });
 
   await notifyAdmins(

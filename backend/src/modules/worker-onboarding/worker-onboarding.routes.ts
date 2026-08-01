@@ -3,6 +3,7 @@ import { requireAuth, requireRole } from "../../middleware/auth.js";
 import { validate } from "../../middleware/validate.js";
 import {
   addSkillSchema,
+  addServiceSchema,
   adminDocAadhaarParamsSchema,
   adminDocSkillParamsSchema,
   adminProfileParamsSchema,
@@ -21,6 +22,7 @@ import {
 } from "./worker-onboarding.schemas.js";
 import {
   addSkillHandler,
+  addServiceHandler,
   approveWorkerHandler,
   getAdminAadhaarDocHandler,
   getAdminSkillCertDocHandler,
@@ -46,6 +48,7 @@ workerOnboardingRouter.use(requireAuth, requireRole("WORKER"));
 workerOnboardingRouter.post("/profile", validate(updateProfileSchema), updateProfileHandler);
 workerOnboardingRouter.post("/documents", validate(uploadDocumentSchema), uploadDocumentHandler);
 workerOnboardingRouter.post("/skills", validate(addSkillSchema), addSkillHandler);
+workerOnboardingRouter.post("/services", validate(addServiceSchema), addServiceHandler);
 workerOnboardingRouter.post("/submit", validate(submitForReviewSchema), submitForReviewHandler);
 workerOnboardingRouter.get("/status", validate(onboardingStatusSchema), getStatusHandler);
 // KYC document access — worker retrieves their own documents via signed URLs
@@ -65,4 +68,3 @@ adminWorkerReviewRouter.get("/:profileId/documents/skills/:skillId/certification
 adminWorkerDirectoryRouter.use(requireAuth, requireRole("ADMIN"));
 adminWorkerDirectoryRouter.get("/", validate(adminWorkersQuerySchema), getWorkerDirectoryHandler);
 adminWorkerDirectoryRouter.get("/:profileId/history", validate(adminWorkerHistoryParamsSchema), getWorkerHistoryHandler);
-

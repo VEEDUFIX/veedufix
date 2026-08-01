@@ -39,11 +39,13 @@ import { walletRouter } from "./modules/wallet/wallet.routes.js";
 import { aiRouter } from "./modules/ai/ai.routes.js";
 import { supportRouter } from "./modules/support/support.routes.js";
 import { adminSearchRouter } from "./modules/admin/admin-search.routes.js";
+import { adminAuditRouter } from "./modules/admin/admin-audit.routes.js";
 import { adminCustomersRouter, adminBookingsRouter } from "./modules/users/admin-users.routes.js";
 import { adminCouponsRouter } from "./modules/catalog/admin-coupons.routes.js";
 import { adminReportsRouter } from "./modules/analytics/admin-reports.routes.js";
 import { adminNotificationsRouter } from "./modules/admin/admin-notifications.routes.js";
 import { deviceTokenRouter } from "./modules/device-token/device-token.routes.js";
+import { invoiceRouter } from "./modules/invoice/invoice.routes.js";
 
 export function createApp() {
   const app = express();
@@ -117,6 +119,7 @@ export function createApp() {
   app.use("/api/admin/coupons", adminCouponsRouter);
   app.use("/api/admin/reports", adminReportsRouter);
   app.use("/api/admin", adminSearchRouter);
+  app.use("/api/admin", adminAuditRouter);
   app.use("/api/admin/notifications", adminNotificationsRouter);
   app.use("/api/webhooks", webhooksRouter);
   app.use("/api/users", usersRouter);
@@ -126,6 +129,7 @@ export function createApp() {
   app.use("/api/ai", aiRouter);
   app.use("/api", supportRouter);
   app.use("/api/device-tokens", deviceTokenRouter);
+  app.use("/api", invoiceRouter);
 
   app.use(notFoundHandler);
   app.use(errorHandler);

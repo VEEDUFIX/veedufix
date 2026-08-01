@@ -1,5 +1,5 @@
-import { prisma as db } from "../../lib/prisma.js";
 import { UserRole } from "@prisma/client";
+import { prisma as db } from "../../lib/prisma.js";
 
 export async function getOrCreateChatRoom(bookingId: string, userId: string, role: UserRole) {
   const booking = await db.booking.findUnique({
@@ -43,7 +43,13 @@ export async function getOrCreateChatRoom(bookingId: string, userId: string, rol
   return chatRoom;
 }
 
-export async function saveMessage(bookingId: string, senderId: string, senderRole: UserRole, content: string) {
+export async function saveMessage(
+  bookingId: string,
+  senderId: string,
+  senderRole: UserRole,
+  content: string,
+  attachments?: Array<{ url: string; name?: string; mimeType?: string; size?: number; kind: "image" | "file" }>
+) {
   const chatRoom = await db.chatRoom.findUnique({
     where: { bookingId }
   });
@@ -57,7 +63,8 @@ export async function saveMessage(bookingId: string, senderId: string, senderRol
       chatRoomId: chatRoom.id,
       senderId,
       senderRole,
-      content
+      content,
+      attachments: attachments && attachments.length > 0 ? attachments : undefined
     }
   });
 

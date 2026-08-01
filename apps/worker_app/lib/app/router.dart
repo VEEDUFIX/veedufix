@@ -182,6 +182,7 @@ final routerProvider = Provider<GoRouter>((ref) {
 class _RouterRefreshNotifier extends ChangeNotifier {
   _RouterRefreshNotifier(this.ref) {
     ref.listen(authControllerProvider, (_, __) => notifyListeners());
+    ref.listen(workerOnboardingStatusProvider, (_, __) => notifyListeners());
   }
 
   final Ref ref;

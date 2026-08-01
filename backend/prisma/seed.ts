@@ -183,6 +183,32 @@ async function seedCities() {
   }
 }
 
+async function seedPlatformConfig() {
+  await prisma.platformConfig.upsert({
+    where: { key: "primary" },
+    update: {
+      gstin: "33ABFCA5879G1ZH",
+      legalBusinessName: "ABZORA SOLUTION PRIVATE LIMITED",
+      registeredAddress: "2nd Floor, 17/37, Gafoor Street, Mirsahibpet, Chennai, Tamil Nadu, 600014"
+    },
+    create: {
+      key: "primary",
+      gstin: "33ABFCA5879G1ZH",
+      legalBusinessName: "ABZORA SOLUTION PRIVATE LIMITED",
+      registeredAddress: "2nd Floor, 17/37, Gafoor Street, Mirsahibpet, Chennai, Tamil Nadu, 600014"
+    }
+  });
+
+  await prisma.invoiceSequence.upsert({
+    where: { key: "invoice" },
+    update: {},
+    create: {
+      key: "invoice",
+      currentValue: 0
+    }
+  });
+}
+
 async function seedCatalog() {
   const createdServices: Array<{ id: string; slug: string; name: string }> = [];
 
@@ -217,7 +243,7 @@ async function seedCatalog() {
         const suffix = serviceSuffixes[serviceIndex];
         const serviceName = `${subcategoryName} ${suffix}`;
         const serviceSlug = slugify(`${category.slug}-${subcategoryName}-${suffix}`);
-        const service = await catalogService.createService({
+      const service = await catalogService.createService({
           categoryId: createdCategory.id,
           subcategoryId: createdSubcategory.id,
           name: serviceName,
@@ -226,6 +252,8 @@ async function seedCatalog() {
           description: `Professional ${serviceName.toLowerCase()} delivered by verified VeeduFix experts.`,
           shortDescription: `Reliable ${serviceName.toLowerCase()}.`,
           startingPrice: 299 + categoryIndex * 45 + subIndex * 35 + serviceIndex * 40,
+          gstRate: 18,
+          sacCode: "PENDING",
           estimatedDurationMins: 30 + serviceIndex * 20,
           warrantyDays: 7 + serviceIndex * 7,
           gstApplicable: true,
@@ -506,6 +534,7 @@ async function seedApprovedWorkers() {
 
 async function main() {
   await seedCities();
+  await seedPlatformConfig();
   const serviceCount = await seedCatalog();
   await seedApprovedWorkers();
   console.log(`Seed complete: ${blueprint.length} categories, ${serviceCount} services, approved workers seeded`);

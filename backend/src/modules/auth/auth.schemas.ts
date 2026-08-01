@@ -35,3 +35,9 @@ export const signOutSchema = z.object({
     refreshToken: z.string().min(20)
   })
 });
+
+export const sessionIdParamsSchema = z.object({
+  params: z.object({
+    sessionId: z.string().min(1)
+  })
+});

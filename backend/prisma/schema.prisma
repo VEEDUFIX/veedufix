@@ -146,8 +146,10 @@ model WorkerProfile {
   user                User               @relation(fields: [userId], references: [id], onDelete: Cascade)
   onboardingStatus    String             @default("pending_documents")
   fullName            String?
+  gender              Gender?
   dateOfBirth         DateTime?
   addressLine1        String?
+  alternatePhone      String?
   city                String?
   pincode             String?
   aadhaarNumber       String?
@@ -156,6 +158,11 @@ model WorkerProfile {
   bankAccountNumber   String?
   bankIfsc            String?
   upiId               String?
+  toolsOwned          String[]           @default([])
+  emergencyContactName  String?
+  emergencyContactPhone  String?
+  agreementAcceptedAt DateTime?
+  dataConsentAcceptedAt DateTime?
   rejectionReason     String?
   reviewedBy          String?
   reviewedAt          DateTime?
@@ -265,6 +272,8 @@ model Service {
   description           String?
   shortDescription      String?
   startingPrice         Decimal               @db.Decimal(12, 2)
+  gstRate               Decimal               @default(18.00) @db.Decimal(5, 2)
+  sacCode               String?
   estimatedDurationMins  Int
   warrantyDays          Int                   @default(0)
   gstApplicable         Boolean               @default(true)
@@ -373,6 +382,7 @@ model Booking {
   createdAt       DateTime       @default(now())
   updatedAt       DateTime       @updatedAt
   services        BookingService[]
+  invoice         Invoice?
   payments        Payment[]
   reviews         Review[]
   timeline        BookingTimelineEvent[]
@@ -509,7 +519,44 @@ model BookingService {
   quantity             Int                   @default(1)
   unitPrice            Decimal               @db.Decimal(12, 2)
   totalPrice           Decimal               @db.Decimal(12, 2)
+  gstRate              Decimal               @default(18.00) @db.Decimal(5, 2)
+  gstAmount            Decimal               @default(0.0) @db.Decimal(12, 2)
+  sacCode              String                @default("PENDING")
   createdAt            DateTime              @default(now())
+}
+
+model PlatformConfig {
+  key                 String   @id @default("primary")
+  gstin               String?
+  legalBusinessName   String?
+  registeredAddress   String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+}
+
+model InvoiceSequence {
+  key            String   @id @default("invoice")
+  currentValue   Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model Invoice {
+  id               String   @id @default(cuid())
+  bookingId        String   @unique
+  booking          Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  invoiceNumber    String   @unique
+  issuedAt         DateTime @default(now())
+  platformGstin    String
+  customerName     String
+  customerGstin    String?
+  lineItems        Json
+  subtotalAmount   Decimal  @db.Decimal(12, 2)
+  totalGstAmount   Decimal  @db.Decimal(12, 2)
+  discountAmount   Decimal  @db.Decimal(12, 2)
+  grandTotal       Decimal  @db.Decimal(12, 2)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 }
 
 model Payment {
@@ -659,6 +706,8 @@ model AuthSession {
   providerId  String   @unique
   accessToken String?
   refreshToken String?
+  ipAddress   String?
+  userAgent   String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 }
@@ -962,6 +1011,7 @@ model Message {
   senderId    String
   senderRole  UserRole
   content     String
+  attachments Json?
   isRead      Boolean  @default(false)
   createdAt   DateTime @default(now())
 

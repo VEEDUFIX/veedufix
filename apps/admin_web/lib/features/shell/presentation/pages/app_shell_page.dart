@@ -1,9 +1,9 @@
 import 'dart:ui';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
-
 import 'package:marketplace_shared/marketplace_shared.dart';
 
 class AppShellPage extends ConsumerStatefulWidget {
@@ -25,36 +25,43 @@ class _AppShellPageState extends ConsumerState<AppShellPage> {
   Widget build(BuildContext context) {
     final location = GoRouterState.of(context).matchedLocation;
     final isDesktop = MediaQuery.of(context).size.width > 900;
-    
-    // Auto-collapse on small screens
     final showExpanded = isDesktop && _isSidebarExpanded;
     final sidebarWidth = showExpanded ? 260.0 : 80.0;
+    final cs = Theme.of(context).colorScheme;
+    final panelColor = cs.surface.withValues(alpha: 0.9);
+    final borderColor = cs.outlineVariant.withValues(alpha: 0.35);
+    final textPrimary = cs.onSurface;
+    final textMuted = cs.onSurfaceVariant;
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF3F4F6),
+      backgroundColor: Colors.transparent,
       body: Row(
         children: [
-          // Sidebar
           AnimatedContainer(
-            duration: const Duration(milliseconds: 200),
+            duration: const Duration(milliseconds: 220),
             curve: Curves.easeInOut,
             width: sidebarWidth,
             decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.9),
-              border: const Border(right: BorderSide(color: Color(0xFFE5E7EB))),
-              boxShadow: AbzioTheme.eliteShadow,
+              color: panelColor,
+              border: Border(right: BorderSide(color: borderColor)),
+              boxShadow: AbzioTheme.shadowFor(Theme.of(context).brightness),
             ),
             child: ClipRRect(
               child: BackdropFilter(
-                filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    // Logo Area
                     Padding(
-                      padding: EdgeInsets.fromLTRB(showExpanded ? 24 : 12, 32, showExpanded ? 24 : 12, 32),
+                      padding: EdgeInsets.fromLTRB(
+                        showExpanded ? 24 : 12,
+                        32,
+                        showExpanded ? 24 : 12,
+                        28,
+                      ),
                       child: Row(
-                        mainAxisAlignment: showExpanded ? MainAxisAlignment.spaceBetween : MainAxisAlignment.center,
+                        mainAxisAlignment:
+                            showExpanded ? MainAxisAlignment.spaceBetween : MainAxisAlignment.center,
                         children: [
                           if (showExpanded)
                             Column(
@@ -73,7 +80,7 @@ class _AppShellPageState extends ConsumerState<AppShellPage> {
                                 Text(
                                   'ADMIN PANEL',
                                   style: GoogleFonts.inter(
-                                    color: Colors.black54,
+                                    color: textMuted,
                                     fontWeight: FontWeight.w700,
                                     letterSpacing: 1.5,
                                     fontSize: 10,
@@ -81,56 +88,134 @@ class _AppShellPageState extends ConsumerState<AppShellPage> {
                                 ),
                               ],
                             ),
-                          if (showExpanded)
-                            IconButton(
-                              icon: const Icon(Icons.menu_open_rounded, size: 20, color: Colors.black54),
-                              onPressed: () => setState(() => _isSidebarExpanded = false),
-                            )
-                          else
-                            IconButton(
-                              icon: const Icon(Icons.menu_rounded, size: 24, color: Color(0xFF0F766E)),
-                              onPressed: () => setState(() => _isSidebarExpanded = true),
+                          IconButton(
+                            icon: Icon(
+                              showExpanded ? Icons.menu_open_rounded : Icons.menu_rounded,
+                              size: showExpanded ? 20 : 24,
+                              color: textMuted,
                             ),
+                            onPressed: () => setState(() => _isSidebarExpanded = !showExpanded),
+                          ),
                         ],
                       ),
                     ),
-                    // Navigation Items
                     Expanded(
                       child: ListView(
                         padding: const EdgeInsets.symmetric(horizontal: 12),
                         children: [
-                          _buildCategoryHeader('Overview', showExpanded),
-                          _buildNavItem('/admin', Icons.space_dashboard_outlined, Icons.space_dashboard_rounded, 'Dashboard', location, showExpanded),
-                          _buildNavItem('/analytics', Icons.insights_outlined, Icons.insights_rounded, 'Analytics', location, showExpanded),
-                          
-                          _buildCategoryHeader('Operations', showExpanded),
-                          _buildNavItem('/ops/overview', Icons.monitor_heart_outlined, Icons.monitor_heart_rounded, 'Health', location, showExpanded),
-                          _buildNavItem('/ops/live-jobs', Icons.map_outlined, Icons.map_rounded, 'Live Jobs', location, showExpanded),
-                          _buildNavItem('/ops/alerts', Icons.warning_amber_outlined, Icons.warning_rounded, 'Alerts', location, showExpanded, badge: '3'),
-                          _buildNavItem('/ops/disputes', Icons.gavel_outlined, Icons.gavel_rounded, 'Disputes', location, showExpanded),
-
-                          _buildCategoryHeader('Workforce', showExpanded),
-                          _buildNavItem('/workers', Icons.people_outline_rounded, Icons.people_rounded, 'Directory', location, showExpanded),
-                          _buildNavItem('/worker-review', Icons.how_to_reg_outlined, Icons.how_to_reg_rounded, 'Review Queue', location, showExpanded, badge: '12'),
-
-                          _buildCategoryHeader('Marketplace', showExpanded),
-                          _buildNavItem('/catalog', Icons.category_outlined, Icons.category_rounded, 'Catalog', location, showExpanded),
-
-                          _buildCategoryHeader('Finance', showExpanded),
-                          _buildNavItem('/finance', Icons.account_balance_outlined, Icons.account_balance_rounded, 'Overview', location, showExpanded),
-                          _buildNavItem('/finance/payouts', Icons.payments_outlined, Icons.payments_rounded, 'Payouts', location, showExpanded),
-                          _buildNavItem('/finance/refunds', Icons.receipt_long_outlined, Icons.receipt_long_rounded, 'Refunds', location, showExpanded),
+                          _buildCategoryHeader('Overview', showExpanded, textMuted),
+                          _buildNavItem(
+                            '/admin',
+                            Icons.space_dashboard_outlined,
+                            Icons.space_dashboard_rounded,
+                            'Dashboard',
+                            location,
+                            showExpanded,
+                          ),
+                          _buildNavItem(
+                            '/analytics',
+                            Icons.insights_outlined,
+                            Icons.insights_rounded,
+                            'Analytics',
+                            location,
+                            showExpanded,
+                          ),
+                          _buildCategoryHeader('Operations', showExpanded, textMuted),
+                          _buildNavItem(
+                            '/ops/overview',
+                            Icons.monitor_heart_outlined,
+                            Icons.monitor_heart_rounded,
+                            'Health',
+                            location,
+                            showExpanded,
+                          ),
+                          _buildNavItem(
+                            '/ops/live-jobs',
+                            Icons.map_outlined,
+                            Icons.map_rounded,
+                            'Live Jobs',
+                            location,
+                            showExpanded,
+                          ),
+                          _buildNavItem(
+                            '/ops/alerts',
+                            Icons.warning_amber_outlined,
+                            Icons.warning_rounded,
+                            'Alerts',
+                            location,
+                            showExpanded,
+                            badge: '3',
+                          ),
+                          _buildNavItem(
+                            '/ops/disputes',
+                            Icons.gavel_outlined,
+                            Icons.gavel_rounded,
+                            'Disputes',
+                            location,
+                            showExpanded,
+                          ),
+                          _buildCategoryHeader('Workforce', showExpanded, textMuted),
+                          _buildNavItem(
+                            '/workers',
+                            Icons.people_outline_rounded,
+                            Icons.people_rounded,
+                            'Directory',
+                            location,
+                            showExpanded,
+                          ),
+                          _buildNavItem(
+                            '/worker-review',
+                            Icons.how_to_reg_outlined,
+                            Icons.how_to_reg_rounded,
+                            'Review Queue',
+                            location,
+                            showExpanded,
+                            badge: '12',
+                          ),
+                          _buildCategoryHeader('Marketplace', showExpanded, textMuted),
+                          _buildNavItem(
+                            '/catalog',
+                            Icons.category_outlined,
+                            Icons.category_rounded,
+                            'Catalog',
+                            location,
+                            showExpanded,
+                          ),
+                          _buildCategoryHeader('Finance', showExpanded, textMuted),
+                          _buildNavItem(
+                            '/finance',
+                            Icons.account_balance_outlined,
+                            Icons.account_balance_rounded,
+                            'Overview',
+                            location,
+                            showExpanded,
+                          ),
+                          _buildNavItem(
+                            '/finance/payouts',
+                            Icons.payments_outlined,
+                            Icons.payments_rounded,
+                            'Payouts',
+                            location,
+                            showExpanded,
+                          ),
+                          _buildNavItem(
+                            '/finance/refunds',
+                            Icons.receipt_long_outlined,
+                            Icons.receipt_long_rounded,
+                            'Refunds',
+                            location,
+                            showExpanded,
+                          ),
                         ],
                       ),
                     ),
-                    // Footer
                     if (showExpanded)
                       Padding(
                         padding: const EdgeInsets.all(24),
                         child: Text(
-                          '© 2026 VeeduFix',
+                          '(c) 2026 VeeduFix',
                           style: GoogleFonts.inter(
-                            color: Colors.black38,
+                            color: textMuted.withValues(alpha: 0.72),
                             fontSize: 12,
                           ),
                         ),
@@ -140,81 +225,83 @@ class _AppShellPageState extends ConsumerState<AppShellPage> {
               ),
             ),
           ),
-          // Main Content
           Expanded(
             child: Column(
               children: [
-                // Top Header Bar
                 Container(
                   height: 72,
                   padding: const EdgeInsets.symmetric(horizontal: 32),
                   decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.9),
-                    border: const Border(bottom: BorderSide(color: Color(0xFFE5E7EB))),
+                    color: panelColor,
+                    border: Border(bottom: BorderSide(color: borderColor)),
                   ),
                   child: ClipRRect(
                     child: BackdropFilter(
-                      filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                      filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
                       child: Row(
                         children: [
-                          // Global Search
                           Container(
-                            width: 300,
-                            height: 40,
+                            width: 320,
+                            height: 42,
                             padding: const EdgeInsets.symmetric(horizontal: 16),
                             decoration: BoxDecoration(
-                              color: const Color(0xFFF3F4F6),
+                              color: cs.surfaceContainerHighest.withValues(alpha: 0.82),
                               borderRadius: BorderRadius.circular(AbzioTheme.cardRadius),
-                              border: Border.all(color: const Color(0xFFE5E7EB)),
+                              border: Border.all(color: borderColor),
                             ),
-                              child: Row(
-                                children: [
-                                  const Icon(Icons.search_rounded, size: 18, color: Colors.black45),
-                                  const SizedBox(width: 8),
-                                  Expanded(
-                                    child: TextField(
-                                      readOnly: true,
-                                      onTap: () => _openQuickLauncher(context),
-                                      decoration: InputDecoration(
-                                        hintText: 'Search jobs, workers, etc. (Ctrl+K)',
-                                        hintStyle: GoogleFonts.inter(fontSize: 13, color: Colors.black45),
-                                        border: InputBorder.none,
-                                        isDense: true,
+                            child: Row(
+                              children: [
+                                Icon(Icons.search_rounded, size: 18, color: textMuted),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: TextField(
+                                    readOnly: true,
+                                    onTap: () => _openQuickLauncher(context),
+                                    decoration: InputDecoration(
+                                      hintText: 'Search jobs, workers, support, etc. (Ctrl+K)',
+                                      hintStyle: GoogleFonts.inter(fontSize: 13, color: textMuted),
+                                      border: InputBorder.none,
+                                      isDense: true,
                                     ),
-                                    style: GoogleFonts.inter(fontSize: 14),
+                                    style: GoogleFonts.inter(fontSize: 14, color: textPrimary),
                                   ),
                                 ),
                               ],
                             ),
                           ),
                           const Spacer(),
-                          // Actions
                           IconButton(
-                            icon: const Icon(Icons.notifications_none_rounded, color: Colors.black54),
+                            icon: Icon(Icons.notifications_none_rounded, color: textMuted),
                             onPressed: () => context.go('/ops/alerts'),
                           ),
                           const SizedBox(width: 16),
-                          Container(width: 1, height: 24, color: const Color(0xFFE5E7EB)),
+                          Container(width: 1, height: 24, color: borderColor),
                           const SizedBox(width: 16),
-                          // Profile
                           TapScale(
                             onTap: () => context.go('/profile'),
                             child: Row(
                               children: [
                                 CircleAvatar(
                                   radius: 16,
-                                  backgroundColor: const Color(0xFF0F766E).withValues(alpha: 0.1),
+                                  backgroundColor: const Color(0xFF0F766E).withValues(alpha: 0.12),
                                   child: const Text(
                                     'AD',
-                                    style: TextStyle(color: Color(0xFF0F766E), fontSize: 12, fontWeight: FontWeight.bold),
+                                    style: TextStyle(
+                                      color: Color(0xFF0F766E),
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.bold,
+                                    ),
                                   ),
                                 ),
                                 const SizedBox(width: 8),
                                 Text(
                                   'Admin',
-                                  style: GoogleFonts.inter(fontWeight: FontWeight.w600, color: Colors.black87),
+                                  style: GoogleFonts.inter(
+                                    fontWeight: FontWeight.w600,
+                                    color: textPrimary,
+                                  ),
                                 ),
-                                const Icon(Icons.keyboard_arrow_down_rounded, size: 16, color: Colors.black54),
+                                Icon(Icons.keyboard_arrow_down_rounded, size: 16, color: textMuted),
                               ],
                             ),
                           ),
@@ -223,7 +310,6 @@ class _AppShellPageState extends ConsumerState<AppShellPage> {
                     ),
                   ),
                 ),
-                // Page Content
                 Expanded(
                   child: ClipRect(
                     child: widget.child,
@@ -238,7 +324,7 @@ class _AppShellPageState extends ConsumerState<AppShellPage> {
   }
 
   void _openQuickLauncher(BuildContext context) {
-    final actions = [
+    const actions = [
       _QuickAction('Global Search', '/search', Icons.search_rounded),
       _QuickAction('Dashboard', '/admin', Icons.space_dashboard_rounded),
       _QuickAction('Alerts', '/ops/alerts', Icons.warning_rounded),
@@ -284,19 +370,20 @@ class _AppShellPageState extends ConsumerState<AppShellPage> {
     );
   }
 
-  Widget _buildCategoryHeader(String title, bool showExpanded) {
+  Widget _buildCategoryHeader(String title, bool showExpanded, Color textMuted) {
     if (!showExpanded) {
-      return const Padding(
-        padding: EdgeInsets.symmetric(vertical: 8.0),
-        child: Divider(color: Color(0xFFE5E7EB), height: 1),
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8.0),
+        child: Divider(color: textMuted.withValues(alpha: 0.2), height: 1),
       );
     }
+
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 24, 16, 8),
       child: Text(
         title.toUpperCase(),
         style: GoogleFonts.inter(
-          color: Colors.black45,
+          color: textMuted,
           fontWeight: FontWeight.w700,
           fontSize: 11,
           letterSpacing: 1.2,
@@ -305,27 +392,37 @@ class _AppShellPageState extends ConsumerState<AppShellPage> {
     );
   }
 
-  Widget _buildNavItem(String path, IconData icon, IconData activeIcon, String label, String location, bool showExpanded, {String? badge}) {
+  Widget _buildNavItem(
+    String path,
+    IconData icon,
+    IconData activeIcon,
+    String label,
+    String location,
+    bool showExpanded, {
+    String? badge,
+  }) {
     final isSelected = location == path || (path != '/admin' && location.startsWith('$path/'));
-    
+
     return Padding(
       padding: const EdgeInsets.only(bottom: 4),
       child: InkWell(
         onTap: () => context.go(path),
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(14),
         child: Container(
           padding: EdgeInsets.symmetric(horizontal: showExpanded ? 16 : 0, vertical: 12),
           decoration: BoxDecoration(
             color: isSelected ? const Color(0xFF0F766E).withValues(alpha: 0.08) : Colors.transparent,
-            borderRadius: BorderRadius.circular(10),
-            border: isSelected && !showExpanded ? const Border(left: BorderSide(color: Color(0xFF0F766E), width: 3)) : null,
+            borderRadius: BorderRadius.circular(14),
+            border: isSelected && !showExpanded
+                ? const Border(left: BorderSide(color: Color(0xFF0F766E), width: 3))
+                : null,
           ),
           child: showExpanded
               ? Row(
                   children: [
                     Icon(
                       isSelected ? activeIcon : icon,
-                      color: isSelected ? const Color(0xFF0F766E) : Colors.black54,
+                      color: isSelected ? const Color(0xFF0F766E) : Theme.of(context).colorScheme.onSurfaceVariant,
                       size: 20,
                     ),
                     const SizedBox(width: 12),
@@ -333,7 +430,9 @@ class _AppShellPageState extends ConsumerState<AppShellPage> {
                       child: Text(
                         label,
                         style: GoogleFonts.inter(
-                          color: isSelected ? const Color(0xFF0F766E) : Colors.black87,
+                          color: isSelected
+                              ? const Color(0xFF0F766E)
+                              : Theme.of(context).colorScheme.onSurface,
                           fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
                           fontSize: 14,
                         ),
@@ -360,10 +459,10 @@ class _AppShellPageState extends ConsumerState<AppShellPage> {
               : Center(
                   child: Badge(
                     isLabelVisible: badge != null,
-                    label: badge != null ? Text(badge ) : null,
+                    label: badge != null ? Text(badge) : null,
                     child: Icon(
                       isSelected ? activeIcon : icon,
-                      color: isSelected ? const Color(0xFF0F766E) : Colors.black54,
+                      color: isSelected ? const Color(0xFF0F766E) : Theme.of(context).colorScheme.onSurfaceVariant,
                       size: 24,
                     ),
                   ),
@@ -376,6 +475,7 @@ class _AppShellPageState extends ConsumerState<AppShellPage> {
 
 class _QuickAction {
   const _QuickAction(this.label, this.route, this.icon);
+
   final String label;
   final String route;
   final IconData icon;

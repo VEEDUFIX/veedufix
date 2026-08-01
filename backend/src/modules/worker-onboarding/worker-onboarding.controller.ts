@@ -1,11 +1,14 @@
 import { type NextFunction, type Response } from "express";
 import { type AuthenticatedRequest } from "../../middleware/auth.js";
+import { prisma } from "../../lib/prisma.js";
+import { publishNotificationEvent } from "../../lib/realtime.js";
 import { writeAuditLog } from "../../lib/audit.js";
 import {
   IncompleteProfileError,
   WorkerProfileNotFoundError,
   WorkerStatusConflictError,
   addSkill,
+  addService,
   approveWorker,
   getAadhaarSignedUrl,
   getOnboardingStatus,
@@ -94,6 +97,19 @@ export async function addSkillHandler(
   }
 }
 
+export async function addServiceHandler(
+  request: AuthenticatedRequest,
+  response: Response,
+  _next: NextFunction
+) {
+  try {
+    const profile = await addService(request.auth!.userId, request.body.serviceId);
+    response.status(200).json({ profile });
+  } catch (error) {
+    sendError(response, error);
+  }
+}
+
 export async function submitForReviewHandler(
   request: AuthenticatedRequest,
   response: Response,
@@ -147,8 +163,26 @@ export async function approveWorkerHandler(
   try {
     const profileId = String(request.params.profileId);
     const adminId = request.auth!.userId;
+    const target = await prisma.workerProfile.findUnique({
+      where: { id: profileId },
+      select: { userId: true, fullName: true }
+    });
     const profile = await approveWorker(profileId, adminId);
     void writeAuditLog({ adminId, action: "worker.approved", targetType: "worker_profile", targetId: profileId });
+    if (target) {
+      void publishNotificationEvent({
+        userId: target.userId,
+        title: "Onboarding approved",
+        body: "Your worker profile has been approved. You can start receiving jobs.",
+        type: "WORKER_ONBOARDING_APPROVED",
+        data: {
+          profileId,
+          fullName: target.fullName,
+          route: "/worker",
+          onboardingStatus: "approved"
+        }
+      });
+    }
     response.status(200).json({ profile });
   } catch (error) {
     sendError(response, error);
@@ -164,8 +198,26 @@ export async function rejectWorkerHandler(
     const profileId = String(request.params.profileId);
     const adminId = request.auth!.userId;
     const body = request.body as { reason: string };
+    const target = await prisma.workerProfile.findUnique({
+      where: { id: profileId },
+      select: { userId: true, fullName: true }
+    });
     const profile = await rejectWorker(profileId, adminId, body.reason);
     void writeAuditLog({ adminId, action: "worker.rejected", targetType: "worker_profile", targetId: profileId, note: body.reason });
+    if (target) {
+      void publishNotificationEvent({
+        userId: target.userId,
+        title: "Onboarding needs changes",
+        body: body.reason || "Please review the feedback and resubmit your profile.",
+        type: "WORKER_ONBOARDING_REJECTED",
+        data: {
+          profileId,
+          fullName: target.fullName,
+          route: "/onboarding/status",
+          onboardingStatus: "rejected"
+        }
+      });
+    }
     response.status(200).json({ profile });
   } catch (error) {
     sendError(response, error);
@@ -181,8 +233,26 @@ export async function suspendWorkerHandler(
     const profileId = String(request.params.profileId);
     const adminId = request.auth!.userId;
     const body = request.body as { reason: string };
+    const target = await prisma.workerProfile.findUnique({
+      where: { id: profileId },
+      select: { userId: true, fullName: true }
+    });
     const profile = await suspendWorker(profileId, adminId, body.reason);
     void writeAuditLog({ adminId, action: "worker.suspended", targetType: "worker_profile", targetId: profileId, note: body.reason });
+    if (target) {
+      void publishNotificationEvent({
+        userId: target.userId,
+        title: "Account suspended",
+        body: body.reason || "Please contact support for more details.",
+        type: "WORKER_ONBOARDING_SUSPENDED",
+        data: {
+          profileId,
+          fullName: target.fullName,
+          route: "/onboarding/status",
+          onboardingStatus: "suspended"
+        }
+      });
+    }
     response.status(200).json({ profile });
   } catch (error) {
     sendError(response, error);
@@ -198,8 +268,26 @@ export async function reinstateWorkerHandler(
     const profileId = String(request.params.profileId);
     const adminId = request.auth!.userId;
     const body = request.body as { note: string };
+    const target = await prisma.workerProfile.findUnique({
+      where: { id: profileId },
+      select: { userId: true, fullName: true }
+    });
     const profile = await reinstateWorker(profileId, adminId, body.note);
     void writeAuditLog({ adminId, action: "worker.reinstated", targetType: "worker_profile", targetId: profileId, note: body.note });
+    if (target) {
+      void publishNotificationEvent({
+        userId: target.userId,
+        title: "Account reinstated",
+        body: body.note || "Your worker account is active again.",
+        type: "WORKER_ONBOARDING_REINSTATED",
+        data: {
+          profileId,
+          fullName: target.fullName,
+          route: "/worker",
+          onboardingStatus: "approved"
+        }
+      });
+    }
     response.status(200).json({ profile });
   } catch (error) {
     sendError(response, error);

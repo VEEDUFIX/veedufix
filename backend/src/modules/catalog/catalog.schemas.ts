@@ -71,8 +71,18 @@ export const catalogSlugParamsSchema = z.object({
 
 export const catalogSearchQuerySchema = z.object({
   query: z.object({
-    q: z.string().trim().min(1).max(120),
+    q: z.string().trim().min(1).max(120).optional(),
     locale: locale.optional(),
+    cityId: z.string().optional(),
+    categorySlug: z.string().trim().min(1).max(120).optional(),
+    subcategorySlug: z.string().trim().min(1).max(120).optional(),
+    limit: z.coerce.number().int().min(1).max(50).default(12)
+  })
+});
+
+export const autocompleteCatalogQuerySchema = z.object({
+  query: z.object({
+    q: z.string().trim().min(1).max(120),
     cityId: z.string().optional(),
     limit: z.coerce.number().int().min(1).max(50).default(12)
   })
@@ -80,6 +90,20 @@ export const catalogSearchQuerySchema = z.object({
 
 export const reorderCategoriesSchema = z.object({
   body: z.object({
+    ids: z.array(id).min(1)
+  })
+});
+
+export const reorderSubcategoriesSchema = z.object({
+  body: z.object({
+    categoryId: id,
+    ids: z.array(id).min(1)
+  })
+});
+
+export const reorderServicesSchema = z.object({
+  body: z.object({
+    subcategoryId: id,
     ids: z.array(id).min(1)
   })
 });
@@ -142,6 +166,8 @@ export const createServiceSchema = z.object({
     description: z.string().max(10000).optional(),
     shortDescription: z.string().max(500).optional(),
     startingPrice: z.number().positive(),
+    gstRate: z.number().positive().default(18),
+    sacCode: z.string().max(80).optional(),
     estimatedDurationMins: z.number().int().positive(),
     warrantyDays: z.number().int().min(0).optional(),
     gstApplicable: z.boolean().optional(),
@@ -226,6 +252,8 @@ export const importCatalogSchema = z.object({
                 description: z.string().max(10000).optional(),
                 shortDescription: z.string().max(500).optional(),
                 startingPrice: z.number().positive(),
+                gstRate: z.number().positive().default(18),
+                sacCode: z.string().max(80).optional(),
                 estimatedDurationMins: z.number().int().positive(),
                 warrantyDays: z.number().int().min(0).optional(),
                 gstApplicable: z.boolean().optional(),
@@ -250,4 +278,3 @@ export const importCatalogSchema = z.object({
     )
   })
 });
-

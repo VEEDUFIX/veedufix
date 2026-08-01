@@ -1,7 +1,43 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:intl/intl.dart';
 import 'package:marketplace_shared/marketplace_shared.dart';
+
+final customerAuthSessionsProvider = FutureProvider.autoDispose<List<CustomerAuthSession>>((ref) async {
+  final api = ref.watch(apiClientProvider);
+  final data = await api.get('/auth/sessions');
+  return (data['sessions'] as List<dynamic>? ?? [])
+      .map((item) => CustomerAuthSession.fromJson(item as Map<String, dynamic>))
+      .toList();
+});
+
+class CustomerAuthSession {
+  const CustomerAuthSession({
+    required this.id,
+    required this.provider,
+    required this.createdAt,
+    required this.updatedAt,
+    required this.isCurrent,
+    required this.isActive,
+  });
+
+  final String id;
+  final String provider;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  final bool isCurrent;
+  final bool isActive;
+
+  factory CustomerAuthSession.fromJson(Map<String, dynamic> json) => CustomerAuthSession(
+        id: json['id'] as String? ?? '',
+        provider: json['provider'] as String? ?? 'PHONE',
+        createdAt: DateTime.tryParse(json['createdAt'] as String? ?? '') ?? DateTime.now(),
+        updatedAt: DateTime.tryParse(json['updatedAt'] as String? ?? '') ?? DateTime.now(),
+        isCurrent: json['isCurrent'] as bool? ?? false,
+        isActive: json['isActive'] as bool? ?? false,
+      );
+}
 
 class ProfilePage extends ConsumerWidget {
   const ProfilePage({super.key});
@@ -159,6 +195,15 @@ class ProfilePage extends ConsumerWidget {
           const _PreferenceRow(label: 'Language', value: 'English'),
           const _PreferenceRow(label: 'Theme', value: 'System'),
           const SizedBox(height: 18),
+          const PremiumSectionHeader(
+            title: 'Security',
+            subtitle: 'Review signed-in devices and end other sessions anytime.',
+          ),
+          const SizedBox(height: 12),
+          _SecuritySessionsCard(
+            onSignOutOthers: () => ref.read(apiClientProvider).delete('/auth/sessions'),
+          ),
+          const SizedBox(height: 18),
           FilledButton.icon(
             onPressed: () => ref.read(authControllerProvider.notifier).signOut(),
             icon: const Icon(Icons.logout_rounded),
@@ -174,6 +219,105 @@ class ProfilePage extends ConsumerWidget {
       return 'U';
     }
     return name[0].toUpperCase();
+  }
+}
+
+class _SecuritySessionsCard extends ConsumerWidget {
+  const _SecuritySessionsCard({required this.onSignOutOthers});
+
+  final Future<void> Function() onSignOutOthers;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
+    final sessionsAsync = ref.watch(customerAuthSessionsProvider);
+
+    return PremiumCard(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: sessionsAsync.when(
+          loading: () => const Center(child: Padding(
+            padding: EdgeInsets.all(12),
+            child: CircularProgressIndicator(),
+          )),
+          error: (error, _) => Text('Could not load sessions: $error'),
+          data: (sessions) => Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(Icons.devices_rounded, color: cs.primary),
+                  const SizedBox(width: 8),
+                  Text('Signed-in devices', style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
+                  const Spacer(),
+                  TextButton(
+                    onPressed: () async {
+                      await onSignOutOthers();
+                      ref.invalidate(customerAuthSessionsProvider);
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Other sessions signed out')),
+                        );
+                      }
+                    },
+                    child: const Text('Sign out others'),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              if (sessions.isEmpty)
+                Text('No active sessions found.', style: tt.bodyMedium?.copyWith(color: cs.onSurfaceVariant))
+              else
+                Column(
+                  children: sessions.map((session) {
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 10),
+                      child: Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: cs.surfaceContainerHighest.withValues(alpha: 0.35),
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(session.isCurrent ? Icons.smartphone_rounded : Icons.devices_other_rounded, size: 18, color: cs.primary),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    session.provider.toUpperCase(),
+                                    style: tt.labelLarge?.copyWith(fontWeight: FontWeight.w700),
+                                  ),
+                                  Text(
+                                    'Last active ${DateFormat('d MMM, h:mm a').format(session.updatedAt)}',
+                                    style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            if (session.isCurrent)
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                                decoration: BoxDecoration(
+                                  color: cs.primary.withValues(alpha: 0.12),
+                                  borderRadius: BorderRadius.circular(999),
+                                ),
+                                child: Text('Current', style: tt.labelSmall?.copyWith(color: cs.primary, fontWeight: FontWeight.w700)),
+                              ),
+                          ],
+                        ),
+                      ),
+                    );
+                  }).toList(),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }
 

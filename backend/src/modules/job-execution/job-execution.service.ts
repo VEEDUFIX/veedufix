@@ -8,6 +8,7 @@ import { sendPushNotification } from "../../config/firebase-admin.js";
 import { validateChecklistCompletion } from "../checklist/checklist.service.js";
 import { releaseWorkerPayout } from "../payout/payout.service.js";
 import { isWorkerEligible } from "../worker-onboarding/worker-onboarding.service.js";
+import { recordBookingTimelineEvent } from "../../lib/booking-timeline.js";
 
 export class UnauthorizedError extends Error {
   constructor(message = "Unauthorized") {
@@ -256,6 +257,12 @@ export async function generateArrivalOtp(
     where: { id: bookingId },
     data: { status: BookingStatus.ARRIVED }
   });
+  void recordBookingTimelineEvent({
+    bookingId,
+    status: BookingStatus.ARRIVED,
+    title: "Professional arrived",
+    description: "The assigned professional has reached the job location."
+  });
 
   await notifyCustomer(booking.customerId, "arrival_status_changed", {
     bookingId,
@@ -313,6 +320,12 @@ export async function verifyArrivalOtp(
   await prisma.booking.update({
     where: { id: bookingId },
     data: { status: BookingStatus.IN_PROGRESS }
+  });
+  void recordBookingTimelineEvent({
+    bookingId,
+    status: BookingStatus.IN_PROGRESS,
+    title: "Work started",
+    description: "The service is now in progress."
   });
 
   await notifyCustomer(booking.customerId, "job_started", { bookingId });
@@ -457,6 +470,12 @@ export async function verifyCompletionOtp(
   await prisma.booking.update({
     where: { id: bookingId },
     data: { status: BookingStatus.COMPLETED }
+  });
+  void recordBookingTimelineEvent({
+    bookingId,
+    status: BookingStatus.COMPLETED,
+    title: "Job completed",
+    description: "The service has been completed."
   });
 
   await releaseWorkerPayout(bookingId);

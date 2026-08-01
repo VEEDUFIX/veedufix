@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { requireAuth } from "../../middleware/auth.js";
 import { validate } from "../../middleware/validate.js";
 import {
   makeGoogleAuthLimiter,
@@ -11,13 +12,17 @@ import {
   authProviderSchema,
   refreshTokenSchema,
   requestOtpSchema,
+  sessionIdParamsSchema,
   signOutSchema,
   verifyOtpSchema
 } from "./auth.schemas.js";
 import {
   googleAuthHandler,
+  listSessionsHandler,
   refreshTokenHandler,
   requestOtpHandler,
+  revokeAllSessionsHandler,
+  revokeSessionHandler,
   signOutHandler,
   verifyOtpHandler
 } from "./auth.controller.js";
@@ -56,3 +61,6 @@ authRouter.post("/refresh", validate(refreshTokenSchema), refreshLimiter, refres
 // POST /api/auth/signout
 // Limit: 30 req / min per IP  — loose cap against scripted session-destruction
 authRouter.post("/signout", validate(signOutSchema), signOutLimiter, signOutHandler);
+authRouter.get("/sessions", requireAuth, listSessionsHandler);
+authRouter.delete("/sessions", requireAuth, revokeAllSessionsHandler);
+authRouter.delete("/sessions/:sessionId", requireAuth, validate(sessionIdParamsSchema), revokeSessionHandler);

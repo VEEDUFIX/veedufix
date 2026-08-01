@@ -170,7 +170,16 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/search',
-        builder: (context, state) => const SearchPage(),
+        builder: (context, state) {
+          final query = state.uri.queryParameters['q'] ?? '';
+          final categorySlug = state.uri.queryParameters['categorySlug'];
+          final subcategorySlug = state.uri.queryParameters['subcategorySlug'];
+          return SearchPage(
+            initialQuery: query,
+            initialCategorySlug: categorySlug,
+            initialSubcategorySlug: subcategorySlug,
+          );
+        },
       ),
       GoRoute(
         path: '/notifications',

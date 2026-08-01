@@ -51,6 +51,8 @@ class CatalogCategory {
     this.isActive = true,
     this.featured = false,
     this.popular = false,
+    this.subcategories = const [],
+    this.serviceCount = 0,
     this.translations = const [],
   });
 
@@ -65,6 +67,8 @@ class CatalogCategory {
   final bool isActive;
   final bool featured;
   final bool popular;
+  final List<CatalogSubcategory> subcategories;
+  final int serviceCount;
   final List<CatalogTranslation> translations;
 
   factory CatalogCategory.fromJson(Map<String, dynamic> json) {
@@ -80,6 +84,10 @@ class CatalogCategory {
       isActive: json['isActive'] as bool? ?? true,
       featured: json['featured'] as bool? ?? false,
       popular: json['popular'] as bool? ?? false,
+      subcategories: _decodeList(json['subcategories'], CatalogSubcategory.fromJson),
+      serviceCount: (json['_count'] is Map<String, dynamic>)
+          ? ((json['_count'] as Map<String, dynamic>)['services'] as num?)?.toInt() ?? 0
+          : (json['serviceCount'] as num?)?.toInt() ?? 0,
       translations: _decodeList(json['translations'], CatalogTranslation.fromJson),
     );
   }
@@ -97,6 +105,8 @@ class CatalogCategory {
       'isActive': isActive,
       'featured': featured,
       'popular': popular,
+      'subcategories': subcategories.map((item) => item.toJson()).toList(growable: false),
+      'serviceCount': serviceCount,
       'translations': translations.map((item) => item.toJson()).toList(growable: false),
     };
   }
@@ -117,6 +127,7 @@ class CatalogSubcategory {
     this.rating = 0,
     this.reviewCount = 0,
     this.isActive = true,
+    this.services = const [],
     this.translations = const [],
   });
 
@@ -133,6 +144,7 @@ class CatalogSubcategory {
   final double rating;
   final int reviewCount;
   final bool isActive;
+  final List<CatalogService> services;
   final List<CatalogTranslation> translations;
 
   factory CatalogSubcategory.fromJson(Map<String, dynamic> json) {
@@ -150,6 +162,7 @@ class CatalogSubcategory {
       rating: _toDouble(json['rating']),
       reviewCount: (json['reviewCount'] as num?)?.toInt() ?? 0,
       isActive: json['isActive'] as bool? ?? true,
+      services: _decodeList(json['catalogServices'] ?? json['services'], CatalogService.fromJson),
       translations: _decodeList(json['translations'], CatalogTranslation.fromJson),
     );
   }
@@ -169,9 +182,12 @@ class CatalogSubcategory {
       'rating': rating,
       'reviewCount': reviewCount,
       'isActive': isActive,
+      'services': services.map((item) => item.toJson()).toList(growable: false),
       'translations': translations.map((item) => item.toJson()).toList(growable: false),
     };
   }
+
+  int get serviceCount => services.length;
 }
 
 class CatalogServiceImage {
@@ -333,6 +349,8 @@ class CatalogService {
     this.seoKeywords,
     this.iconUrl,
     this.sortOrder = 0,
+    this.category,
+    this.subcategory,
     this.translations = const [],
     this.images = const [],
     this.requiredSkills = const [],
@@ -368,6 +386,8 @@ class CatalogService {
   final String? seoKeywords;
   final String? iconUrl;
   final int sortOrder;
+  final CatalogCategory? category;
+  final CatalogSubcategory? subcategory;
   final List<CatalogTranslation> translations;
   final List<CatalogServiceImage> images;
   final List<CatalogServiceRequirement> requiredSkills;
@@ -404,6 +424,12 @@ class CatalogService {
       seoKeywords: json['seoKeywords'] as String?,
       iconUrl: json['iconUrl'] as String?,
       sortOrder: (json['sortOrder'] as num?)?.toInt() ?? 0,
+      category: json['category'] is Map<String, dynamic>
+          ? CatalogCategory.fromJson(json['category'] as Map<String, dynamic>)
+          : null,
+      subcategory: json['subcategory'] is Map<String, dynamic>
+          ? CatalogSubcategory.fromJson(json['subcategory'] as Map<String, dynamic>)
+          : null,
       translations: _decodeList(json['translations'], CatalogTranslation.fromJson),
       images: _decodeList(json['images'], CatalogServiceImage.fromJson),
       requiredSkills: _decodeList(json['requiredSkills'], CatalogServiceRequirement.fromJson),
@@ -442,6 +468,8 @@ class CatalogService {
       'seoKeywords': seoKeywords,
       'iconUrl': iconUrl,
       'sortOrder': sortOrder,
+      'category': category?.toJson(),
+      'subcategory': subcategory?.toJson(),
       'translations': translations.map((item) => item.toJson()).toList(growable: false),
       'images': images.map((item) => item.toJson()).toList(growable: false),
       'requiredSkills': requiredSkills.map((item) => item.toJson()).toList(growable: false),
@@ -451,6 +479,16 @@ class CatalogService {
       'inclusions': inclusions,
       'exclusions': exclusions,
     };
+  }
+
+  String get hierarchyLabel {
+    final categoryName = category?.name.trim();
+    final subcategoryName = subcategory?.name.trim();
+    final parts = <String>[
+      if (categoryName != null && categoryName.isNotEmpty) categoryName,
+      if (subcategoryName != null && subcategoryName.isNotEmpty) subcategoryName,
+    ];
+    return parts.isEmpty ? '' : parts.join(' · ');
   }
 }
 

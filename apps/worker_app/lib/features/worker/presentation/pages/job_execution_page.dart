@@ -390,6 +390,7 @@ class _JobExecutionPageState extends ConsumerState<JobExecutionPage> {
     final error = state.errorFor(step);
     final notifier = ref.read(jobExecutionProvider.notifier);
     final canUpload = isBefore || state.allRequiredChecklistComplete;
+    final preparing = items.any((draft) => draft.uploading && !draft.isUploaded && draft.errorMessage == null);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -414,6 +415,26 @@ class _JobExecutionPageState extends ConsumerState<JobExecutionPage> {
         ],
         if (state.isLoading(step)) ...[
           const LinearProgressIndicator(minHeight: 4),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              const SizedBox(
+                height: 16,
+                width: 16,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  preparing ? 'Preparing photo...' : 'Uploading photos...',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        fontWeight: FontWeight.w600,
+                      ),
+                ),
+              ),
+            ],
+          ),
           const SizedBox(height: 12),
         ],
         FilledButton.icon(
@@ -950,7 +971,7 @@ class _PhotoDraftTile extends StatelessWidget {
               : draft.isUploaded
                   ? 'Uploaded successfully'
                   : draft.uploading
-                      ? 'Uploading...'
+                      ? 'Preparing photo...'
                       : 'Waiting to upload',
           maxLines: 2,
           overflow: TextOverflow.ellipsis,

@@ -1,0 +1,5 @@
+storeFile=/absolute/path/to/worker_app-release.jks
+storePassword=replace-with-store-password
+keyPassword=replace-with-key-password
+keyAlias=replace-with-key-alias
+storeType=JKS

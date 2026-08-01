@@ -7,6 +7,7 @@ import {
   publishNotificationEvent,
   publishTrackingEvent
 } from "../../lib/realtime.js";
+import { recordBookingTimelineEvent } from "../../lib/booking-timeline.js";
 import { dispatchBookingAfterPayment } from "../matching/matching.service.js";
 
 type RazorpayWebhookEvent = {
@@ -81,7 +82,7 @@ async function notifyUser(userId: string, title: string, body: string, data?: Re
   });
 }
 
-async function updatePaymentForWebhook(
+export async function updatePaymentForWebhook(
   orderId: string,
   status: PaymentStatus,
   notes: Record<string, unknown>,
@@ -166,6 +167,12 @@ async function updatePaymentForWebhook(
         status: BookingStatus.ACCEPTED
       }
     });
+    void recordBookingTimelineEvent({
+      bookingId: payment.bookingId,
+      status: BookingStatus.ACCEPTED,
+      title: "Payment captured",
+      description: "The payment webhook confirmed this booking."
+    });
 
     void dispatchBookingAfterPayment(payment.bookingId).catch((error) => {
       logger.error(
@@ -212,6 +219,12 @@ async function updatePaymentForWebhook(
       data: {
         status: BookingStatus.REFUNDED
       }
+    });
+    void recordBookingTimelineEvent({
+      bookingId: payment.bookingId,
+      status: BookingStatus.REFUNDED,
+      title: "Payment refunded",
+      description: "The payment was refunded by the provider."
     });
     await publishTrackingEvent({
       bookingId: payment.bookingId,

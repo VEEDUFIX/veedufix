@@ -59,10 +59,12 @@ export async function getServiceHandler(request: Request, response: Response): P
 }
 
 export async function searchCatalogHandler(request: Request, response: Response): Promise<void> {
-  const { q, locale, cityId, page, pageSize, includeInactive } = request.query as {
+  const { q, locale, cityId, categorySlug, subcategorySlug, page, pageSize, includeInactive } = request.query as {
     q?: string;
     locale?: string;
     cityId?: string;
+    categorySlug?: string;
+    subcategorySlug?: string;
     page?: string | number;
     pageSize?: string | number;
     includeInactive?: string | boolean;
@@ -72,6 +74,8 @@ export async function searchCatalogHandler(request: Request, response: Response)
     q,
     locale,
     cityId,
+    categorySlug,
+    subcategorySlug,
     page: typeof page === "string" ? Number(page) : page,
     pageSize: typeof pageSize === "string" ? Number(pageSize) : pageSize,
     includeInactive: includeInactive === "true" || includeInactive === true
@@ -143,6 +147,11 @@ export async function reorderCategoriesHandler(request: Request, response: Respo
   response.status(200).json({ categories: result });
 }
 
+export async function reorderSubcategoriesHandler(request: Request, response: Response): Promise<void> {
+  const result = await catalogService.reorderSubcategories(request.body.categoryId, request.body.ids);
+  response.status(200).json({ subcategories: result });
+}
+
 export async function createSubcategoryHandler(request: Request, response: Response): Promise<void> {
   const result = await catalogService.createSubcategory(request.body);
   response.status(201).json(result);
@@ -156,6 +165,11 @@ export async function updateSubcategoryHandler(request: Request, response: Respo
 export async function deleteSubcategoryHandler(request: Request, response: Response): Promise<void> {
   const result = await catalogService.updateSubcategory(String(request.params.id), { isActive: false });
   response.status(200).json(result);
+}
+
+export async function reorderServicesHandler(request: Request, response: Response): Promise<void> {
+  const result = await catalogService.reorderServices(request.body.subcategoryId, request.body.ids);
+  response.status(200).json({ services: result });
 }
 
 export async function createServiceHandler(request: Request, response: Response): Promise<void> {

@@ -578,14 +578,14 @@ class _WorkerProfileEditPageState extends ConsumerState<WorkerProfileEditPage> {
       );
       ref.invalidate(workerEditProfileProvider);
       ref.invalidate(workerPublicProfileProvider(workerId));
-      if (!mounted) {
+      if (!context.mounted) {
         return;
       }
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('${chosen.name} added to your skills.')),
       );
     } catch (error) {
-      if (!mounted) {
+      if (!context.mounted) {
         return;
       }
       ScaffoldMessenger.of(context).showSnackBar(

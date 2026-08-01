@@ -5,6 +5,7 @@ import { validate } from "../../middleware/validate.js";
 import {
   addServiceImagesSchema,
   addServicePricingSchema,
+  autocompleteCatalogQuerySchema,
   catalogListQuerySchema,
   catalogSearchQuerySchema,
   catalogSlugParamsSchema,
@@ -13,6 +14,8 @@ import {
   createSubcategorySchema,
   importCatalogSchema,
   reorderCategoriesSchema,
+  reorderServicesSchema,
+  reorderSubcategoriesSchema,
   updateCategorySchema,
   updatePriceRuleSchema,
   updateServiceSchema,
@@ -38,6 +41,8 @@ import {
   popularCatalogHandler,
   recommendedCatalogHandler,
   reorderCategoriesHandler,
+  reorderServicesHandler,
+  reorderSubcategoriesHandler,
   recentlyBookedCatalogHandler,
   searchCatalogHandler,
   trendingCatalogHandler,
@@ -92,7 +97,7 @@ catalogRouter.get('/coupons', async (_request, response) => {
 });
 
 catalogRouter.get("/search", validate(catalogSearchQuerySchema), searchCatalogHandler);
-catalogRouter.get("/autocomplete", validate(catalogSearchQuerySchema), autocompleteCatalogHandler);
+catalogRouter.get("/autocomplete", validate(autocompleteCatalogQuerySchema), autocompleteCatalogHandler);
 
 catalogRouter.get("/professionals", async (_request, response) => {
   const professionals = await prisma.workerProfile.findMany({
@@ -137,9 +142,11 @@ adminCatalogRouter.post("/categories/reorder", validate(reorderCategoriesSchema)
 adminCatalogRouter.post("/subcategories", validate(createSubcategorySchema), createSubcategoryHandler);
 adminCatalogRouter.patch("/subcategories/:id", validate(updateSubcategorySchema), updateSubcategoryHandler);
 adminCatalogRouter.delete("/subcategories/:id", validate(updateSubcategorySchema), deleteSubcategoryHandler);
+adminCatalogRouter.post("/subcategories/reorder", validate(reorderSubcategoriesSchema), reorderSubcategoriesHandler);
 adminCatalogRouter.post("/services", validate(createServiceSchema), createServiceHandler);
 adminCatalogRouter.patch("/services/:id", validate(updateServiceSchema), updateServiceHandler);
 adminCatalogRouter.delete("/services/:id", validate(updateServiceSchema), deleteServiceHandler);
+adminCatalogRouter.post("/services/reorder", validate(reorderServicesSchema), reorderServicesHandler);
 adminCatalogRouter.post("/services/:id/images", validate(addServiceImagesSchema), addServiceImagesHandler);
 adminCatalogRouter.post("/services/:id/pricing-rules", validate(addServicePricingSchema), addServicePricingHandler);
 adminCatalogRouter.patch("/pricing-rules/:id", validate(updatePriceRuleSchema), updatePriceRuleHandler);

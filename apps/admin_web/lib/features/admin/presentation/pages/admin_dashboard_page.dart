@@ -424,6 +424,81 @@ class _AdminDashboardPageState extends ConsumerState<AdminDashboardPage> {
                   );
                 },
               ),
+            const SizedBox(height: 24),
+            if (!_isLoading && _snapshot != null) ...[
+              Text(
+                'Operations Health',
+                style: GoogleFonts.poppins(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w700,
+                  color: Colors.black87,
+                ),
+              ),
+              const SizedBox(height: 16),
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final isSmall = constraints.maxWidth < 800;
+                  final cards = [
+                    _SnapshotCard(
+                      label: 'Live jobs',
+                      value: '${_snapshot!.summary.activeJobsCount}',
+                    ),
+                    if (isSmall) const SizedBox(height: 24) else const SizedBox(width: 24),
+                    _SnapshotCard(
+                      label: 'Dispatch failures',
+                      value: '${_snapshot!.summary.dispatchFailuresCount}',
+                    ),
+                    if (isSmall) const SizedBox(height: 24) else const SizedBox(width: 24),
+                    _SnapshotCard(
+                      label: 'Open disputes',
+                      value: '${_snapshot!.summary.openDisputesCount}',
+                    ),
+                  ];
+
+                  if (isSmall) {
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: cards,
+                    );
+                  }
+                  return Row(
+                    children: cards.map((c) => c is SizedBox ? c : Expanded(child: c)).toList(),
+                  );
+                },
+              ),
+              const SizedBox(height: 16),
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final isSmall = constraints.maxWidth < 800;
+                  final cards = [
+                    _SnapshotCard(
+                      label: 'Failed payouts',
+                      value: '${_snapshot!.summary.failedPayoutsCount}',
+                    ),
+                    if (isSmall) const SizedBox(height: 24) else const SizedBox(width: 24),
+                    _SnapshotCard(
+                      label: 'Failed refunds',
+                      value: '${_snapshot!.summary.failedRefundsCount}',
+                    ),
+                    if (isSmall) const SizedBox(height: 24) else const SizedBox(width: 24),
+                    _SnapshotCard(
+                      label: 'Completion ratio',
+                      value: '${_snapshot!.summary.totalBookings > 0 ? ((_snapshot!.summary.completedBookings / _snapshot!.summary.totalBookings) * 100).toStringAsFixed(1) : 0}%',
+                    ),
+                  ];
+
+                  if (isSmall) {
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: cards,
+                    );
+                  }
+                  return Row(
+                    children: cards.map((c) => c is SizedBox ? c : Expanded(child: c)).toList(),
+                  );
+                },
+              ),
+            ],
           ],
         ),
       ),
@@ -452,6 +527,14 @@ class _AdminDashboardPageState extends ConsumerState<AdminDashboardPage> {
                 onTap: () {
                   Navigator.of(sheetContext).pop();
                   context.go('/support-tickets');
+                },
+              ),
+              _QuickActionTile(
+                icon: Icons.assignment_rounded,
+                label: 'Audit logs',
+                onTap: () {
+                  Navigator.of(sheetContext).pop();
+                  context.go('/audit-logs');
                 },
               ),
               _QuickActionTile(

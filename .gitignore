@@ -16,7 +16,11 @@ coverage/
 backend/.turbo/
 backend/node_modules/
 backend/dist/
+backend/load-tests/results/
 apps/**/.dart_tool/
 apps/**/build/
 apps/**/.packages
 apps/**/pubspec.lock
+apps/**/android/key.properties
+apps/**/android/*.jks
+apps/**/android/*.keystore

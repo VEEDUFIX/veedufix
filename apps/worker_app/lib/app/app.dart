@@ -18,7 +18,7 @@ class AppBootstrap extends ConsumerStatefulWidget {
   ConsumerState<AppBootstrap> createState() => _AppBootstrapState();
 }
 
-class _AppBootstrapState extends ConsumerState<AppBootstrap> {
+class _AppBootstrapState extends ConsumerState<AppBootstrap> with WidgetsBindingObserver {
   final GlobalKey<ScaffoldMessengerState> _messengerKey = GlobalKey<ScaffoldMessengerState>();
   WebSocketChannel? _notificationChannel;
   StreamSubscription? _notificationSubscription;
@@ -27,6 +27,7 @@ class _AppBootstrapState extends ConsumerState<AppBootstrap> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _tokenRefreshSubscription?.cancel();
     _tokenRefreshSubscription = null;
     _disposeNotificationSocket();
@@ -36,9 +37,17 @@ class _AppBootstrapState extends ConsumerState<AppBootstrap> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _tokenRefreshSubscription = FirebaseMessaging.instance.onTokenRefresh.listen((_) {
       unawaited(_registerDeviceToken());
     });
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      ref.invalidate(workerOnboardingStatusProvider);
+    }
   }
 
   void _disposeNotificationSocket() {
@@ -80,6 +89,10 @@ class _AppBootstrapState extends ConsumerState<AppBootstrap> {
           if (type == 'notification.event') {
             final title = payload['title'] as String? ?? 'Update';
             final body = payload['body'] as String? ?? 'You have a new notification.';
+            final notificationType = payload['type'] as String? ?? '';
+            if (notificationType.startsWith('WORKER_ONBOARDING_')) {
+              ref.invalidate(workerOnboardingStatusProvider);
+            }
             _messengerKey.currentState?.showSnackBar(
               SnackBar(content: Text('$title: $body')),
             );
@@ -133,6 +146,10 @@ class _AppBootstrapState extends ConsumerState<AppBootstrap> {
       darkTheme: buildDarkTheme(),
       themeMode: ThemeMode.system,
       scaffoldMessengerKey: _messengerKey,
+      builder: (context, child) => AppBackdrop(
+        variant: AppBackdropVariant.worker,
+        child: child ?? const SizedBox.shrink(),
+      ),
       routerConfig: router,
     );
   }

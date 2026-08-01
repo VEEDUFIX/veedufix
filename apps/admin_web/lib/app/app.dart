@@ -73,6 +73,10 @@ class _AppBootstrapState extends ConsumerState<AppBootstrap> {
       theme: buildLightTheme(),
       darkTheme: buildDarkTheme(),
       themeMode: ThemeMode.system,
+      builder: (context, child) => AppBackdrop(
+        variant: AppBackdropVariant.admin,
+        child: child ?? const SizedBox.shrink(),
+      ),
       routerConfig: router,
     );
   }

@@ -5,19 +5,27 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:marketplace_shared/marketplace_shared.dart';
 
-import '../pages/booking_detail_page.dart';
-
-// ─── Invoice Page ──────────────────────────────────────────────────────────────
+final bookingInvoiceProvider =
+    FutureProvider.autoDispose.family<_BookingInvoice, String>((ref, bookingId) async {
+  final apiClient = ref.watch(apiClientProvider);
+  final response = await apiClient.get('/bookings/$bookingId/invoice');
+  final payload = response['invoice'] ?? response;
+  if (payload is! Map<String, dynamic>) {
+    throw StateError('Invoice payload missing');
+  }
+  return _BookingInvoice.fromJson(payload);
+});
 
 class BookingInvoicePage extends ConsumerWidget {
   const BookingInvoicePage({super.key, required this.bookingId});
+
   final String bookingId;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final cs = Theme.of(context).colorScheme;
     final tt = Theme.of(context).textTheme;
-    final bookingAsync = ref.watch(bookingDetailPageProvider(bookingId));
+    final invoiceAsync = ref.watch(bookingInvoiceProvider(bookingId));
 
     return Scaffold(
       backgroundColor: cs.surface,
@@ -39,41 +47,67 @@ class BookingInvoicePage extends ConsumerWidget {
         ),
         title: Text('Invoice', style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
         actions: [
-          bookingAsync.whenOrNull(
-                data: (b) => IconButton(
+          invoiceAsync.whenOrNull(
+                data: (invoice) => IconButton(
                   icon: const Icon(Icons.share_rounded),
-                  onPressed: () => _shareInvoice(context, b),
+                  onPressed: () => _shareInvoice(context, invoice),
                 ),
               ) ??
               const SizedBox.shrink(),
         ],
       ),
-      body: bookingAsync.when(
+      body: invoiceAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => const Center(
-          child: PremiumEmptyState(
-            icon: Icons.receipt_long_outlined,
-            title: 'Invoice not found',
-            subtitle: 'Could not load invoice details.',
+        error: (error, _) => Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const PremiumEmptyState(
+                  icon: Icons.receipt_long_outlined,
+                  title: 'Invoice not found',
+                  subtitle: 'Could not load invoice details.',
+                ),
+                const SizedBox(height: 16),
+                FilledButton(
+                  onPressed: () => ref.invalidate(bookingInvoiceProvider(bookingId)),
+                  child: const Text('Try again'),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  error.toString(),
+                  textAlign: TextAlign.center,
+                  style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+                ),
+              ],
+            ),
           ),
         ),
-        data: (booking) => _InvoiceBody(booking: booking),
+        data: (invoice) => RefreshIndicator(
+          onRefresh: () async {
+            ref.invalidate(bookingInvoiceProvider(bookingId));
+            await ref.read(bookingInvoiceProvider(bookingId).future);
+          },
+          child: SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.fromLTRB(20, 8, 20, 40),
+            child: _InvoiceBody(invoice: invoice),
+          ),
+        ),
       ),
     );
   }
 
-  void _shareInvoice(BuildContext context, BookingDetail booking) {
+  void _shareInvoice(BuildContext context, _BookingInvoice invoice) {
     final text = '''
-VeeduFix — Invoice
-━━━━━━━━━━━━━━━━━━━━━━━━━
-Booking Code:  #${booking.code}
-Service:       ${booking.serviceName}
-Date:          ${DateFormat('d MMM y').format(booking.scheduledAt)}
-Status:        ${booking.status}
-${booking.worker != null ? 'Professional:  ${booking.worker!.name}\n' : ''}━━━━━━━━━━━━━━━━━━━━━━━━━
-Total Amount:  ₹${booking.totalAmount.toStringAsFixed(2)}
-━━━━━━━━━━━━━━━━━━━━━━━━━
-Thank you for using VeeduFix!
+VeeduFix Invoice
+Invoice No: ${invoice.invoiceNumber}
+Booking Ref: #${invoice.bookingCode.isEmpty ? invoice.bookingId : invoice.bookingCode}
+Issued: ${DateFormat('d MMM y').format(invoice.issuedAt)}
+Business: ${invoice.legalBusinessName}
+GSTIN: ${invoice.platformGstin}
+Grand Total: ${_money(invoice.grandTotal)}
 ''';
     Clipboard.setData(ClipboardData(text: text));
     ScaffoldMessenger.of(context).showSnackBar(
@@ -83,391 +117,229 @@ Thank you for using VeeduFix!
 }
 
 class _InvoiceBody extends StatelessWidget {
-  const _InvoiceBody({required this.booking});
-  final BookingDetail booking;
+  const _InvoiceBody({required this.invoice});
 
-  static const _accent = Color(0xFFC2A15E);
+  final _BookingInvoice invoice;
   static const _green = Color(0xFF10B981);
 
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final tt = Theme.of(context).textTheme;
-    final subtotal = booking.totalAmount;
-    const platformFee = 0.0; // currently no separate fee
-    final total = subtotal + platformFee;
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(20, 8, 20, 40),
-      child: Column(
-        children: [
-          // ─── Invoice card ──────────────────────────────────────────────
-          Container(
-            width: double.infinity,
-            decoration: BoxDecoration(
-              color: cs.surface,
-              borderRadius: BorderRadius.circular(AbzioTheme.cardRadius),
-              border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.4)),
-              boxShadow: AbzioTheme.eliteShadow,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(
+              colors: [Color(0xFF111827), Color(0xFF1F2937)],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
             ),
-            child: Column(
-              children: [
-                // Header
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(28),
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [cs.primary, cs.primary.withValues(alpha: 0.75)],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
-                    borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'VeeduFix',
-                                  style: tt.titleLarge?.copyWith(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.w900,
-                                    letterSpacing: 0.5,
-                                  ),
-                                ),
-                                const SizedBox(height: 2),
-                                Text(
-                                  'Trusted Home Services',
-                                  style: tt.bodySmall?.copyWith(color: Colors.white70),
-                                ),
-                              ],
-                            ),
-                          ),
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.end,
-                            children: [
-                              Text(
-                                'INVOICE',
-                                style: tt.labelSmall?.copyWith(
-                                  color: Colors.white60,
-                                  letterSpacing: 2,
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                '#${booking.code}',
-                                style: tt.titleMedium?.copyWith(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.w800,
-                                  letterSpacing: 0.5,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 20),
-                      _DividerLine(),
-                      const SizedBox(height: 20),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          _HeaderInfo(
-                            label: 'Date',
-                            value: DateFormat('d MMM y').format(booking.scheduledAt),
-                          ),
-                          _HeaderInfo(
-                            label: 'Time',
-                            value: DateFormat('h:mm a').format(booking.scheduledAt),
-                            align: TextAlign.right,
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-
-                // Body
-                Padding(
-                  padding: const EdgeInsets.all(24),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // Status badge
-                      _StatusBadge(status: booking.status),
-                      const SizedBox(height: 20),
-
-                      // Service details
-                      const _InvoiceSection(label: 'Service Details'),
-                      const SizedBox(height: 12),
-                      _LineItem(
-                        description: booking.serviceName,
-                        amount: '₹${subtotal.toStringAsFixed(2)}',
-                        isBold: false,
-                      ),
-                      if (booking.addressLabel != null) ...[
-                        const SizedBox(height: 8),
-                        Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Icon(Icons.location_on_rounded, size: 14, color: cs.onSurfaceVariant),
-                            const SizedBox(width: 6),
-                            Expanded(
-                              child: Text(
-                                booking.addressLabel!,
-                                style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-
-                      // Worker
-                      if (booking.worker != null) ...[
-                        const SizedBox(height: 16),
-                        const _InvoiceSection(label: 'Professional'),
-                        const SizedBox(height: 12),
-                        Row(
-                          children: [
-                            MarketplaceNetworkAvatar(
-                              imageUrl: booking.worker!.avatarUrl,
-                              radius: 18,
-                              backgroundColor: _accent.withValues(alpha: 0.15),
-                              fallback: Text(
-                                booking.worker!.name.substring(0, 1).toUpperCase(),
-                                style: tt.labelMedium?.copyWith(
-                                  color: _accent,
-                                  fontWeight: FontWeight.w800,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  booking.worker!.name,
-                                  style: tt.bodyMedium?.copyWith(fontWeight: FontWeight.w700),
-                                ),
-                                Row(
-                                  children: [
-                                    const Icon(Icons.star_rounded, size: 12, color: Color(0xFFF59E0B)),
-                                    const SizedBox(width: 3),
-                                    Text(
-                                      booking.worker!.rating.toStringAsFixed(1),
-                                      style: tt.labelSmall?.copyWith(color: cs.onSurfaceVariant),
-                                    ),
-                                  ],
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ],
-
-                      const SizedBox(height: 20),
-                      const Divider(height: 1, thickness: 1),
-                      const SizedBox(height: 16),
-
-                      // Payment breakdown
-                      const _InvoiceSection(label: 'Payment Breakdown'),
-                      const SizedBox(height: 12),
-                      _LineItem(description: 'Service fee', amount: '₹${subtotal.toStringAsFixed(2)}'),
-                      const SizedBox(height: 6),
-                      const _LineItem(description: 'Platform fee', amount: '₹0.00'),
-                      const SizedBox(height: 6),
-                      const _LineItem(description: 'Taxes & GST', amount: 'Included'),
-                      const SizedBox(height: 12),
-                      Container(
-                        padding: const EdgeInsets.all(14),
-                        decoration: BoxDecoration(
-                          color: _green.withValues(alpha: 0.08),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: _green.withValues(alpha: 0.2)),
-                        ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text(
-                              'Total Paid',
-                              style: tt.titleSmall?.copyWith(fontWeight: FontWeight.w800),
-                            ),
-                            Text(
-                              '₹${total.toStringAsFixed(2)}',
-                              style: tt.titleSmall?.copyWith(
-                                fontWeight: FontWeight.w900,
-                                color: _green,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-
-                // Footer
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    color: cs.surfaceContainerHighest.withValues(alpha: 0.4),
-                    borderRadius: const BorderRadius.vertical(bottom: Radius.circular(24)),
-                  ),
-                  child: Column(
-                    children: [
-                      Text(
-                        'Thank you for using VeeduFix!',
-                        style: tt.titleSmall?.copyWith(fontWeight: FontWeight.w700),
-                        textAlign: TextAlign.center,
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'For support, contact us at support@veedufix.com',
-                        style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant),
-                        textAlign: TextAlign.center,
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
+            borderRadius: BorderRadius.circular(24),
           ),
-          const SizedBox(height: 24),
-
-          // Action buttons
-          Row(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Expanded(
-                child: TapScale(
-                  onTap: () => _shareInvoice(context, booking),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    decoration: BoxDecoration(
-                      color: cs.primaryContainer.withValues(alpha: 0.4),
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(color: cs.primary.withValues(alpha: 0.3)),
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.copy_rounded, size: 16, color: cs.primary),
-                        const SizedBox(width: 8),
-                        Text(
-                          'Copy Invoice',
-                          style: Theme.of(context)
-                              .textTheme
-                              .labelLarge
-                              ?.copyWith(color: cs.primary, fontWeight: FontWeight.w700),
-                        ),
-                      ],
-                    ),
-                  ),
+              Text(
+                'VeeduFix',
+                style: tt.headlineSmall?.copyWith(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w800,
                 ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                invoice.legalBusinessName,
+                style: tt.titleMedium?.copyWith(
+                  color: Colors.white.withValues(alpha: 0.92),
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                invoice.registeredAddress,
+                style: tt.bodyMedium?.copyWith(
+                  color: Colors.white.withValues(alpha: 0.82),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Wrap(
+                spacing: 10,
+                runSpacing: 10,
+                children: [
+                  _HeaderChip(label: 'Invoice #', value: invoice.invoiceNumber),
+                  _HeaderChip(label: 'Booking', value: invoice.bookingCode.isEmpty ? invoice.bookingId : invoice.bookingCode),
+                  _HeaderChip(label: 'Issued', value: DateFormat('d MMM y').format(invoice.issuedAt)),
+                  _HeaderChip(label: 'GSTIN', value: invoice.platformGstin),
+                ],
               ),
             ],
           ),
-        ],
-      ),
-    );
-  }
-
-  void _shareInvoice(BuildContext context, BookingDetail b) {
-    final text = '''
-VeeduFix — Invoice
-━━━━━━━━━━━━━━━━━━━━━━━━━
-Booking:  #${b.code}
-Service:  ${b.serviceName}
-Date:     ${DateFormat('d MMM y').format(b.scheduledAt)}
-${b.worker != null ? 'By:       ${b.worker!.name}\n' : ''}━━━━━━━━━━━━━━━━━━━━━━━━━
-Total:    ₹${b.totalAmount.toStringAsFixed(2)}
-━━━━━━━━━━━━━━━━━━━━━━━━━''';
-    Clipboard.setData(ClipboardData(text: text));
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Invoice copied to clipboard')),
-    );
-  }
-}
-
-// ─── Supporting widgets ───────────────────────────────────────────────────────
-
-class _DividerLine extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) => Container(
-        height: 1,
-        color: Colors.white.withValues(alpha: 0.2),
-      );
-}
-
-class _HeaderInfo extends StatelessWidget {
-  const _HeaderInfo({required this.label, required this.value, this.align = TextAlign.left});
-  final String label;
-  final String value;
-  final TextAlign align;
-
-  @override
-  Widget build(BuildContext context) {
-    final tt = Theme.of(context).textTheme;
-    return Column(
-      crossAxisAlignment: align == TextAlign.right ? CrossAxisAlignment.end : CrossAxisAlignment.start,
-      children: [
-        Text(label, style: tt.labelSmall?.copyWith(color: Colors.white60, letterSpacing: 0.5)),
-        const SizedBox(height: 2),
-        Text(value,
-            style: tt.bodyMedium?.copyWith(color: Colors.white, fontWeight: FontWeight.w700),
-            textAlign: align),
+        ),
+        const SizedBox(height: 16),
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: const Color(0xFFE5E7EB)),
+            boxShadow: AbzioTheme.eliteShadow,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Bill To', style: tt.labelLarge?.copyWith(color: Colors.black54)),
+              const SizedBox(height: 4),
+              Text(invoice.customerName, style: tt.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
+              const SizedBox(height: 4),
+              Text(
+                invoice.bookingStatus,
+                style: tt.bodyMedium?.copyWith(color: _green, fontWeight: FontWeight.w600),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+        Text(
+          'Line Items',
+          style: tt.titleLarge?.copyWith(fontWeight: FontWeight.w800),
+        ),
+        const SizedBox(height: 10),
+        ...invoice.lineItems.map((item) => _InvoiceLineCard(item: item)),
+        const SizedBox(height: 16),
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: const Color(0xFFE5E7EB)),
+            boxShadow: AbzioTheme.eliteShadow,
+          ),
+          child: Column(
+            children: [
+              _SummaryRow(label: 'Subtotal', value: _money(invoice.subtotalAmount)),
+              const SizedBox(height: 8),
+              _SummaryRow(label: 'Discount', value: '-${_money(invoice.discountAmount)}'),
+              const SizedBox(height: 8),
+              _SummaryRow(label: 'GST', value: _money(invoice.totalGstAmount)),
+              const Divider(height: 24),
+              _SummaryRow(
+                label: 'Grand Total',
+                value: _money(invoice.grandTotal),
+                emphasize: true,
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: cs.surfaceContainerHighest.withValues(alpha: 0.5),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.5)),
+          ),
+          child: Text(
+            'Prices are GST-inclusive. SAC codes and GST breakdowns are stored for compliance and invoicing, even though the checkout price stays unchanged.',
+            style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+          ),
+        ),
       ],
     );
   }
 }
 
-class _StatusBadge extends StatelessWidget {
-  const _StatusBadge({required this.status});
-  final String status;
+class _InvoiceLineCard extends StatelessWidget {
+  const _InvoiceLineCard({required this.item});
 
-  Color get _color => switch (status) {
-        'COMPLETED' => const Color(0xFF10B981),
-        'CANCELLED' || 'REFUNDED' => const Color(0xFFEF4444),
-        'IN_PROGRESS' => const Color(0xFF6366F1),
-        _ => const Color(0xFFF59E0B),
-      };
+  final _InvoiceLineItem item;
 
-  String get _label => switch (status) {
-        'COMPLETED' => 'Payment Successful',
-        'CANCELLED' => 'Booking Cancelled',
-        'REFUNDED' => 'Refunded',
-        'IN_PROGRESS' => 'Work in Progress',
-        _ => 'Pending',
-      };
+  static const _accent = Color(0xFFC2A15E);
+
+  @override
+  Widget build(BuildContext context) {
+    final tt = Theme.of(context).textTheme;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: const Color(0xFFE5E7EB)),
+        boxShadow: AbzioTheme.eliteShadow,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Text(
+                  item.description,
+                  style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Text(
+                _money(item.total),
+                style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w800, color: _accent),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _Tag(label: 'SAC ${item.sacCode}'),
+              _Tag(label: 'Qty ${item.quantity}'),
+              _Tag(label: 'GST ${item.gstRate.toStringAsFixed(2)}%'),
+            ],
+          ),
+          const SizedBox(height: 12),
+          _DetailRow(label: 'Unit price', value: _money(item.unitPrice)),
+          _DetailRow(label: 'Base price', value: _money(item.basePrice)),
+          _DetailRow(label: 'GST amount', value: _money(item.gstAmount)),
+        ],
+      ),
+    );
+  }
+}
+
+class _HeaderChip extends StatelessWidget {
+  const _HeaderChip({required this.label, required this.value});
+
+  final String label;
+  final String value;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
-        color: _color.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(AbzioTheme.cardRadius),
-        border: Border.all(color: _color.withValues(alpha: 0.3)),
+        color: Colors.white.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.14)),
       ),
-      child: Row(
+      child: Column(
         mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            width: 8, height: 8,
-            decoration: BoxDecoration(color: _color, shape: BoxShape.circle),
-          ),
-          const SizedBox(width: 8),
+          Text(label, style: Theme.of(context).textTheme.labelSmall?.copyWith(color: Colors.white70)),
+          const SizedBox(height: 2),
           Text(
-            _label,
-            style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                  color: _color,
+            value,
+            style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                  color: Colors.white,
                   fontWeight: FontWeight.w700,
                 ),
           ),
@@ -477,51 +349,184 @@ class _StatusBadge extends StatelessWidget {
   }
 }
 
-class _InvoiceSection extends StatelessWidget {
-  const _InvoiceSection({required this.label});
+class _Tag extends StatelessWidget {
+  const _Tag({required this.label});
+
   final String label;
 
   @override
   Widget build(BuildContext context) {
-    return Text(
-      label.toUpperCase(),
-      style: Theme.of(context).textTheme.labelSmall?.copyWith(
-            letterSpacing: 1.2,
-            fontWeight: FontWeight.w700,
-            color: Theme.of(context).colorScheme.onSurfaceVariant,
-          ),
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF9FAFB),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: const Color(0xFFE5E7EB)),
+      ),
+      child: Text(label, style: Theme.of(context).textTheme.labelMedium),
     );
   }
 }
 
-class _LineItem extends StatelessWidget {
-  const _LineItem({required this.description, required this.amount, this.isBold = false});
-  final String description;
-  final String amount;
-  final bool isBold;
+class _SummaryRow extends StatelessWidget {
+  const _SummaryRow({
+    required this.label,
+    required this.value,
+    this.emphasize = false,
+  });
+
+  final String label;
+  final String value;
+  final bool emphasize;
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
     final tt = Theme.of(context).textTheme;
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Expanded(
-          child: Text(
-            description,
-            style: isBold
-                ? tt.bodyMedium?.copyWith(fontWeight: FontWeight.w700)
-                : tt.bodyMedium?.copyWith(color: cs.onSurfaceVariant),
-          ),
+        Text(
+          label,
+          style: emphasize
+              ? tt.titleMedium?.copyWith(fontWeight: FontWeight.w800)
+              : tt.bodyMedium?.copyWith(color: Colors.black54),
         ),
         Text(
-          amount,
-          style: isBold
-              ? tt.bodyMedium?.copyWith(fontWeight: FontWeight.w700)
-              : tt.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
+          value,
+          style: emphasize
+              ? tt.titleMedium?.copyWith(fontWeight: FontWeight.w800, color: const Color(0xFFC2A15E))
+              : tt.bodyMedium?.copyWith(fontWeight: FontWeight.w700),
         ),
       ],
     );
   }
+}
+
+class _DetailRow extends StatelessWidget {
+  const _DetailRow({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    final tt = Theme.of(context).textTheme;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label, style: tt.bodyMedium?.copyWith(color: Colors.black54)),
+          Text(value, style: tt.bodyMedium?.copyWith(fontWeight: FontWeight.w700)),
+        ],
+      ),
+    );
+  }
+}
+
+class _BookingInvoice {
+  const _BookingInvoice({
+    required this.id,
+    required this.bookingId,
+    required this.bookingCode,
+    required this.bookingStatus,
+    required this.invoiceNumber,
+    required this.issuedAt,
+    required this.platformGstin,
+    required this.legalBusinessName,
+    required this.registeredAddress,
+    required this.customerName,
+    required this.customerGstin,
+    required this.lineItems,
+    required this.subtotalAmount,
+    required this.totalGstAmount,
+    required this.discountAmount,
+    required this.grandTotal,
+  });
+
+  final String id;
+  final String bookingId;
+  final String bookingCode;
+  final String bookingStatus;
+  final String invoiceNumber;
+  final DateTime issuedAt;
+  final String platformGstin;
+  final String legalBusinessName;
+  final String registeredAddress;
+  final String customerName;
+  final String? customerGstin;
+  final List<_InvoiceLineItem> lineItems;
+  final double subtotalAmount;
+  final double totalGstAmount;
+  final double discountAmount;
+  final double grandTotal;
+
+  factory _BookingInvoice.fromJson(Map<String, dynamic> json) {
+    return _BookingInvoice(
+      id: json['id'] as String? ?? '',
+      bookingId: json['bookingId'] as String? ?? '',
+      bookingCode: json['bookingCode'] as String? ?? '',
+      bookingStatus: json['bookingStatus'] as String? ?? '',
+      invoiceNumber: json['invoiceNumber'] as String? ?? '',
+      issuedAt: DateTime.tryParse(json['issuedAt'] as String? ?? '') ?? DateTime.now(),
+      platformGstin: json['platformGstin'] as String? ?? '',
+      legalBusinessName: json['legalBusinessName'] as String? ?? '',
+      registeredAddress: json['registeredAddress'] as String? ?? '',
+      customerName: json['customerName'] as String? ?? '',
+      customerGstin: json['customerGstin'] as String?,
+      lineItems: (json['lineItems'] as List? ?? const [])
+          .whereType<Map<String, dynamic>>()
+          .map(_InvoiceLineItem.fromJson)
+          .toList(growable: false),
+      subtotalAmount: _toDouble(json['subtotalAmount']),
+      totalGstAmount: _toDouble(json['totalGstAmount']),
+      discountAmount: _toDouble(json['discountAmount']),
+      grandTotal: _toDouble(json['grandTotal']),
+    );
+  }
+}
+
+class _InvoiceLineItem {
+  const _InvoiceLineItem({
+    required this.description,
+    required this.sacCode,
+    required this.quantity,
+    required this.unitPrice,
+    required this.basePrice,
+    required this.gstRate,
+    required this.gstAmount,
+    required this.total,
+  });
+
+  final String description;
+  final String sacCode;
+  final int quantity;
+  final double unitPrice;
+  final double basePrice;
+  final double gstRate;
+  final double gstAmount;
+  final double total;
+
+  factory _InvoiceLineItem.fromJson(Map<String, dynamic> json) {
+    return _InvoiceLineItem(
+      description: json['description'] as String? ?? 'Service',
+      sacCode: (json['sacCode'] as String?)?.trim().isNotEmpty == true ? json['sacCode'] as String : 'PENDING',
+      quantity: (json['quantity'] as num?)?.toInt() ?? 1,
+      unitPrice: _toDouble(json['unitPrice']),
+      basePrice: _toDouble(json['basePrice']),
+      gstRate: _toDouble(json['gstRate']),
+      gstAmount: _toDouble(json['gstAmount']),
+      total: _toDouble(json['total']),
+    );
+  }
+}
+
+double _toDouble(dynamic value) {
+  if (value is num) return value.toDouble();
+  if (value is String) return double.tryParse(value) ?? 0;
+  return 0;
+}
+
+String _money(double value) {
+  return NumberFormat.currency(locale: 'en_IN', symbol: '₹', decimalDigits: 2).format(value);
 }

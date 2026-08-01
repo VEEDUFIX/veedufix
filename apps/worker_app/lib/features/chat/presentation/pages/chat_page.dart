@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import 'package:marketplace_shared/marketplace_shared.dart';
 import '../providers/chat_providers.dart';
 
@@ -17,6 +19,8 @@ class _WorkerChatPageState extends ConsumerState<WorkerChatPage>
     with SingleTickerProviderStateMixin {
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
+  final ImagePicker _picker = ImagePicker();
+  final List<ChatAttachment> _draftAttachments = [];
   bool _isTyping = false;
 
   late final AnimationController _quickReplyAnimController;
@@ -52,6 +56,30 @@ class _WorkerChatPageState extends ConsumerState<WorkerChatPage>
     super.dispose();
   }
 
+  Future<void> _pickAttachment() async {
+    final picked = await _picker.pickImage(source: ImageSource.gallery, imageQuality: 80);
+    if (picked == null) return;
+    try {
+      final ref = FirebaseStorage.instance
+          .ref('chat-attachments/${widget.bookingId}/${DateTime.now().millisecondsSinceEpoch}_${picked.name}');
+      final uploadTask = await ref.putData(await picked.readAsBytes());
+      final url = await uploadTask.ref.getDownloadURL();
+      if (!mounted) return;
+      setState(() {
+        _draftAttachments.add(ChatAttachment(
+          url: url,
+          kind: 'image',
+          name: picked.name,
+        ));
+      });
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not attach the selected image.')),
+      );
+    }
+  }
+
   void _scrollToBottom() {
     if (_scrollController.hasClients) {
       _scrollController.animateTo(
@@ -64,7 +92,7 @@ class _WorkerChatPageState extends ConsumerState<WorkerChatPage>
 
   void _sendMessage([String? quickText]) {
     final text = quickText ?? _messageController.text.trim();
-    if (text.isEmpty) return;
+    if (text.isEmpty && _draftAttachments.isEmpty) return;
 
     final auth = ref.read(authControllerProvider).valueOrNull;
     if (auth == null) return;
@@ -73,10 +101,12 @@ class _WorkerChatPageState extends ConsumerState<WorkerChatPage>
       bookingId: widget.bookingId,
       text: text,
       senderId: auth.user.id,
+      attachments: [..._draftAttachments],
     );
 
     setState(() {
       _messageController.clear();
+      _draftAttachments.clear();
       _isTyping = false;
     });
 
@@ -209,6 +239,15 @@ class _WorkerChatPageState extends ConsumerState<WorkerChatPage>
               loading: () => const Center(child: CircularProgressIndicator()),
               error: (err, stack) => Center(child: Text('Error: $err')),
               data: (messages) {
+                final auth = ref.read(authControllerProvider).valueOrNull;
+                if (auth != null) {
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    ref.read(chatControllerProvider).markAsRead(
+                          bookingId: widget.bookingId,
+                          userId: auth.user.id,
+                        );
+                  });
+                }
                 if (messages.isEmpty) {
                   return Center(
                     child: Column(
@@ -252,7 +291,6 @@ class _WorkerChatPageState extends ConsumerState<WorkerChatPage>
                   itemCount: messages.length,
                   itemBuilder: (context, index) {
                     final message = messages[index];
-                    final auth = ref.read(authControllerProvider).valueOrNull;
                     final isMe = message.senderId == auth?.user.id;
 
                     bool showDateSeparator = false;
@@ -289,6 +327,7 @@ class _WorkerChatPageState extends ConsumerState<WorkerChatPage>
                           time: _formatTime(message.timestamp),
                           cs: cs,
                           tt: tt,
+                          attachments: message.attachments,
                         ),
                       ],
                     );
@@ -314,6 +353,23 @@ class _WorkerChatPageState extends ConsumerState<WorkerChatPage>
             ),
           ),
           const SizedBox(height: 8),
+          if (_draftAttachments.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+              child: Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: _draftAttachments.map((attachment) {
+                  return Chip(
+                    avatar: const Icon(Icons.image_rounded, size: 18),
+                    label: Text(attachment.name ?? 'Attachment'),
+                    onDeleted: () {
+                      setState(() => _draftAttachments.remove(attachment));
+                    },
+                  );
+                }).toList(growable: false),
+              ),
+            ),
           Container(
             padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
             decoration: BoxDecoration(
@@ -324,6 +380,19 @@ class _WorkerChatPageState extends ConsumerState<WorkerChatPage>
               top: false,
               child: Row(
                 children: [
+                  TapScale(
+                    onTap: _pickAttachment,
+                    child: Container(
+                      width: 48,
+                      height: 48,
+                      decoration: BoxDecoration(
+                        color: cs.surfaceContainerHighest,
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(Icons.attach_file_rounded, color: cs.onSurfaceVariant),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
                   Expanded(
                     child: Container(
                       padding: const EdgeInsets.symmetric(horizontal: 18),
@@ -388,6 +457,7 @@ class _WorkerChatPageState extends ConsumerState<WorkerChatPage>
     required String time,
     required ColorScheme cs,
     required TextTheme tt,
+    required List<ChatAttachment> attachments,
   }) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
@@ -434,6 +504,13 @@ class _WorkerChatPageState extends ConsumerState<WorkerChatPage>
                     ),
                   ),
                 ),
+                if (attachments.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  ...attachments.map((attachment) => _AttachmentPreview(
+                        attachment: attachment,
+                        isMe: isMe,
+                      )),
+                ],
                 const SizedBox(height: 4),
                 Row(
                   mainAxisSize: MainAxisSize.min,
@@ -453,6 +530,67 @@ class _WorkerChatPageState extends ConsumerState<WorkerChatPage>
             ),
           ),
           if (isMe) const SizedBox(width: 4),
+        ],
+      ),
+    );
+  }
+}
+
+class _AttachmentPreview extends StatelessWidget {
+  const _AttachmentPreview({required this.attachment, required this.isMe});
+
+  final ChatAttachment attachment;
+  final bool isMe;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
+
+    if (attachment.kind == 'image') {
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(14),
+        child: Container(
+          constraints: const BoxConstraints(maxWidth: 240, maxHeight: 180),
+          color: isMe ? Colors.white.withValues(alpha: 0.08) : cs.surfaceContainerHighest,
+          child: Image.network(
+            attachment.url,
+            fit: BoxFit.cover,
+            errorBuilder: (_, __, ___) => Container(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.broken_image_rounded, color: isMe ? cs.onPrimary : cs.onSurfaceVariant),
+                  const SizedBox(width: 8),
+                  Text(
+                    attachment.name ?? 'Image',
+                    style: tt.labelMedium?.copyWith(color: isMe ? cs.onPrimary : cs.onSurfaceVariant),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Container(
+      margin: const EdgeInsets.only(top: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: isMe ? Colors.white.withValues(alpha: 0.08) : cs.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.insert_drive_file_rounded, size: 18, color: isMe ? cs.onPrimary : cs.onSurfaceVariant),
+          const SizedBox(width: 8),
+          Text(
+            attachment.name ?? 'File',
+            style: tt.labelMedium?.copyWith(color: isMe ? cs.onPrimary : cs.onSurfaceVariant),
+          ),
         ],
       ),
     );

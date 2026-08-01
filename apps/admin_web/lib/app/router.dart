@@ -29,6 +29,7 @@ import '../features/admin/presentation/pages/booking_management_page.dart';
 import '../features/admin/presentation/pages/coupon_manager_page.dart';
 import '../features/admin/presentation/pages/reports_page.dart';
 import '../features/admin/presentation/pages/push_sender_page.dart';
+import '../features/admin/presentation/pages/audit_logs_page.dart';
 import '../features/admin/presentation/pages/global_search_page.dart';
 import '../features/admin/presentation/pages/support_tickets_page.dart';
 import '../features/shell/presentation/pages/app_shell_page.dart';
@@ -208,6 +209,13 @@ final routerProvider = Provider<GoRouter>((ref) {
             builder: (context, state) {
               final search = state.uri.queryParameters['search'] ?? '';
               return SupportTicketsPage(initialSearch: search);
+            },
+          ),
+          GoRoute(
+            path: '/audit-logs',
+            builder: (context, state) {
+              final search = state.uri.queryParameters['search'] ?? '';
+              return AuditLogsPage(initialSearch: search);
             },
           ),
         ],
