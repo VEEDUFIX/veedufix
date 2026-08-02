@@ -46,6 +46,7 @@ import { adminReportsRouter } from "./modules/analytics/admin-reports.routes.js"
 import { adminNotificationsRouter } from "./modules/admin/admin-notifications.routes.js";
 import { deviceTokenRouter } from "./modules/device-token/device-token.routes.js";
 import { invoiceRouter } from "./modules/invoice/invoice.routes.js";
+import { adminServiceAreaRouter, serviceAreaRouter } from "./modules/service-area/service-area.routes.js";
 
 export function createApp() {
   const app = express();
@@ -109,6 +110,7 @@ export function createApp() {
   app.use("/api/orders", paymentsRouter);
   app.use("/api/payment", paymentsRouter);
   app.use("/api", addressRouter);
+  app.use("/api", serviceAreaRouter);
   app.use("/api", availabilityRouter);
   app.use("/api", earningsRouter);
   app.use("/api/admin/payouts", payoutRouter);
@@ -118,6 +120,7 @@ export function createApp() {
   app.use("/api/admin/bookings", adminBookingsRouter);
   app.use("/api/admin/coupons", adminCouponsRouter);
   app.use("/api/admin/reports", adminReportsRouter);
+  app.use("/api/admin", adminServiceAreaRouter);
   app.use("/api/admin", adminSearchRouter);
   app.use("/api/admin", adminAuditRouter);
   app.use("/api/admin/notifications", adminNotificationsRouter);

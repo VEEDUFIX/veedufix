@@ -118,4 +118,18 @@ class SavedAddressesApi {
       (response.data ?? <String, dynamic>{})['address'] as Map<String, dynamic>,
     );
   }
+
+  Future<bool> isServiceablePincode({
+    required String pincode,
+    String? city,
+  }) async {
+    final response = await _dio.get<Map<String, dynamic>>(
+      '/service-areas/check',
+      queryParameters: {
+        'pincode': pincode,
+        if (city != null && city.trim().isNotEmpty) 'city': city.trim(),
+      },
+    );
+    return response.data?['serviceable'] == true;
+  }
 }

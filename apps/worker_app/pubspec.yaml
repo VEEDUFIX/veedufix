@@ -46,6 +46,7 @@ dependencies:
   flutter_animate: ^4.5.2
 
 dev_dependencies:
+  flutter_launcher_icons: ^0.13.1
   flutter_test:
     sdk: flutter
   flutter_lints: ^5.0.0
@@ -55,3 +56,16 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+
+  assets:
+    - assets/partner_logo.svg
+
+flutter_launcher_icons:
+  android: "launcher_icon"
+  ios: true
+  image_path: "assets/launcher_icon.png"
+  web:
+    generate: true
+    image_path: "assets/launcher_icon.png"
+    background_color: "#ffffff"
+    theme_color: "#ffffff"

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:marketplace_shared/marketplace_shared.dart';
 import '../../../../core/widgets/shimmer_placeholder.dart';
+import '../../../../core/widgets/customer_logo.dart';
 import '../../../../core/widgets/metallic_card.dart';
 import '../../../../core/widgets/liquid_refresh.dart';
 import '../../../search/presentation/widgets/ai_assistant_sheet.dart';
@@ -274,6 +275,8 @@ class _HomeHeader extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              const CustomerLogo(height: 28),
+              const SizedBox(height: 12),
               Text(
                 greeting,
                 style: textTheme.titleMedium?.copyWith(

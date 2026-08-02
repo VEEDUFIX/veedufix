@@ -9,7 +9,7 @@ const emptyObjectSchema = z.object({}).strict();
 const pincodeSchema = z
   .string()
   .trim()
-  .regex(/^\d{6}$/, "Pincode must be a 6-digit code");
+  .regex(/^[1-9][0-9]{5}$/, "A valid 6-digit pincode is required");
 
 const latSchema = z.coerce.number().min(-90).max(90);
 const lngSchema = z.coerce.number().min(-180).max(180);
@@ -35,7 +35,7 @@ const updateAddressBodySchema = z
     addressLine2: z.string().trim().max(255).optional().or(z.literal("")),
     landmark: z.string().trim().max(255).optional().or(z.literal("")),
     city: z.string().trim().min(2).max(100).optional(),
-    pincode: pincodeSchema.optional(),
+    pincode: pincodeSchema,
     lat: latSchema.optional(),
     lng: lngSchema.optional(),
     isDefault: z.coerce.boolean().optional()

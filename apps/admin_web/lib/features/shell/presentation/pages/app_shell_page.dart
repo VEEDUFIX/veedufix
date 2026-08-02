@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:marketplace_shared/marketplace_shared.dart';
+import '../../../../core/widgets/admin_logo.dart';
 
 class AppShellPage extends ConsumerStatefulWidget {
   const AppShellPage({
@@ -67,15 +68,7 @@ class _AppShellPageState extends ConsumerState<AppShellPage> {
                             Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text(
-                                  'VeeduFix',
-                                  style: GoogleFonts.poppins(
-                                    color: const Color(0xFF0F766E),
-                                    fontWeight: FontWeight.w900,
-                                    letterSpacing: -1,
-                                    fontSize: 22,
-                                  ),
-                                ),
+                                const AdminLogo(height: 28, color: Color(0xFF0F766E)),
                                 const SizedBox(height: 4),
                                 Text(
                                   'ADMIN PANEL',
@@ -178,6 +171,14 @@ class _AppShellPageState extends ConsumerState<AppShellPage> {
                             Icons.category_outlined,
                             Icons.category_rounded,
                             'Catalog',
+                            location,
+                            showExpanded,
+                          ),
+                          _buildNavItem(
+                            '/service-areas',
+                            Icons.my_location_outlined,
+                            Icons.my_location_rounded,
+                            'Service Areas',
                             location,
                             showExpanded,
                           ),
@@ -332,6 +333,7 @@ class _AppShellPageState extends ConsumerState<AppShellPage> {
       _QuickAction('Worker Review', '/worker-review', Icons.how_to_reg_rounded),
       _QuickAction('Workers', '/workers', Icons.people_rounded),
       _QuickAction('Catalog', '/catalog', Icons.category_rounded),
+      _QuickAction('Service Areas', '/service-areas', Icons.my_location_rounded),
       _QuickAction('Finance', '/finance', Icons.account_balance_rounded),
     ];
 

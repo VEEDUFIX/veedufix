@@ -4,6 +4,11 @@
     "module": "ES2022",
     "moduleResolution": "Bundler",
     "strict": true,
+    "baseUrl": ".",
+    "paths": {
+      "@prisma/client": ["src/types/prisma-client"],
+      "@prisma/client/runtime/library": ["src/types/prisma-runtime"]
+    },
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
     "skipLibCheck": true,
@@ -11,6 +16,6 @@
     "rootDir": "src",
     "types": ["node"]
   },
-  "include": ["src/**/*.ts"],
+  "include": ["src/**/*.ts", "src/**/*.d.ts"],
   "exclude": ["dist", "node_modules"]
 }

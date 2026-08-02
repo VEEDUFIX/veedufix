@@ -12,6 +12,7 @@ import { getTokensForUser } from "../device-token/device-token.service.js";
 import { sendMulticastPush } from "../../lib/fcm.js";
 import { allocateProportionalShares, reverseInclusiveTax, roundMoney, toPaise } from "../../lib/gst.js";
 import { generateInvoiceForBooking } from "../invoice/invoice.service.js";
+import { assertServiceablePincode } from "../service-area/service-area.service.js";
 
 type BookingItemInput = {
   serviceId: string;
@@ -175,18 +176,7 @@ async function ensureBookingAddress(userId: string, cityId: string): Promise<str
     return existing.id;
   }
 
-  const address = await prisma.address.create({
-    data: {
-      userId,
-      cityId,
-      label: "Home",
-      line1: "Default address",
-      pincode: "000000",
-      isDefault: true
-    }
-  });
-
-  return address.id;
+  throw new Error("Please add a valid saved address before placing a booking");
 }
 
 async function resolveCustomerContext(
@@ -229,6 +219,19 @@ async function resolveCustomerContext(
   }
 
   const addressId = await ensureBookingAddress(userId, bookingCity.id);
+  const address = await prisma.address.findFirst({
+    where: { id: addressId, userId },
+    select: { id: true, pincode: true }
+  });
+
+  if (!address) {
+    throw new Error("Please add a valid saved address before placing a booking");
+  }
+
+  await assertServiceablePincode({
+    pincode: address.pincode,
+    cityId: bookingCity.id
+  });
 
   return {
     user: {

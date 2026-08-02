@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:marketplace_shared/marketplace_shared.dart';
@@ -64,11 +65,27 @@ class _SavedAddressesPageState extends ConsumerState<SavedAddressesPage> {
       return;
     }
 
-    setState(() {
-      _isSaving = true;
-    });
-
     try {
+      final serviceable = await _api.isServiceablePincode(
+        pincode: result.pincode,
+        city: result.city,
+      );
+      if (!serviceable) {
+        if (!mounted) {
+          return;
+        }
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("We don't currently serve this area yet — we're expanding soon!"),
+          ),
+        );
+        return;
+      }
+
+      setState(() {
+        _isSaving = true;
+      });
+
       if (existing == null) {
         await _api.createAddress(result.toJson());
       } else {
@@ -456,6 +473,7 @@ class _SavedAddressEditorSheetState extends State<_SavedAddressEditorSheet> {
           top: false,
           child: Form(
             key: _formKey,
+            autovalidateMode: AutovalidateMode.onUserInteraction,
             child: ListView(
               shrinkWrap: true,
               padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
@@ -489,9 +507,14 @@ class _SavedAddressEditorSheetState extends State<_SavedAddressEditorSheet> {
                     Expanded(
                       child: _InputField(
                         controller: _pincodeController,
-                        label: 'Pincode',
+                        label: 'Pincode *',
                         validator: _pincodeValidator,
                         keyboardType: TextInputType.number,
+                        maxLength: 6,
+                        inputFormatters: [
+                          FilteringTextInputFormatter.digitsOnly,
+                          LengthLimitingTextInputFormatter(6),
+                        ],
                       ),
                     ),
                   ],
@@ -565,6 +588,8 @@ class _InputField extends StatelessWidget {
     required this.label,
     this.validator,
     this.keyboardType,
+    this.inputFormatters,
+    this.maxLength,
     this.optional = false,
   });
 
@@ -572,6 +597,8 @@ class _InputField extends StatelessWidget {
   final String label;
   final String? Function(String?)? validator;
   final TextInputType? keyboardType;
+  final List<TextInputFormatter>? inputFormatters;
+  final int? maxLength;
   final bool optional;
 
   @override
@@ -581,6 +608,8 @@ class _InputField extends StatelessWidget {
       child: TextFormField(
         controller: controller,
         keyboardType: keyboardType,
+        inputFormatters: inputFormatters,
+        maxLength: maxLength,
         validator: validator ?? (optional ? null : _requiredValidator),
         decoration: InputDecoration(
           labelText: label,
@@ -599,8 +628,8 @@ String? _requiredValidator(String? value) {
 }
 
 String? _pincodeValidator(String? value) {
-  if (value == null || !RegExp(r'^\d{6}$').hasMatch(value.trim())) {
-    return 'Enter a 6-digit pincode';
+  if (value == null || !RegExp(r'^[1-9][0-9]{5}$').hasMatch(value.trim())) {
+    return 'A valid 6-digit pincode is required';
   }
   return null;
 }

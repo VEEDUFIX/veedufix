@@ -297,6 +297,13 @@ class _AdminDashboardPageState extends ConsumerState<AdminDashboardPage> {
                   onTap: () => context.go('/catalog'),
                 ),
                 _ActionCard(
+                  title: 'Service Areas',
+                  subtitle: 'Launch zones and pincode coverage',
+                  icon: Icons.my_location_rounded,
+                  color: const Color(0xFF0F766E),
+                  onTap: () => context.go('/service-areas'),
+                ),
+                _ActionCard(
                   title: 'Worker Review',
                   subtitle: 'Approve or reject onboarding',
                   icon: Icons.verified_user_rounded,

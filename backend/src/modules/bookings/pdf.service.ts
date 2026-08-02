@@ -1,6 +1,5 @@
 import PDFDocument from "pdfkit";
 import { PaymentStatus, Prisma } from "@prisma/client";
-import { Decimal } from "@prisma/client/runtime/library";
 
 type BookingWithDetails = Prisma.BookingGetPayload<{
   include: {

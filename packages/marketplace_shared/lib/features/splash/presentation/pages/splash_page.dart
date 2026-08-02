@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 
 import '../../../../app/app_mode.dart';
 import '../../../../app/app_mode_routes.dart';
@@ -67,11 +68,13 @@ class SplashPage extends StatelessWidget {
                             ),
                           ],
                         ),
-                        child: Icon(
-                          splashIconForMode(mode),
-                          size: 40,
-                          color: scheme.primary,
-                        ),
+                        child: mode == AppMode.customer
+                            ? Padding(padding: const EdgeInsets.all(16), child: SvgPicture.asset('assets/logo.svg', fit: BoxFit.contain, colorFilter: ColorFilter.mode(scheme.primary, BlendMode.srcIn)))
+                            : Icon(
+                                splashIconForMode(mode),
+                                size: 40,
+                                color: scheme.primary,
+                              ),
                       ),
                     ],
                   ),

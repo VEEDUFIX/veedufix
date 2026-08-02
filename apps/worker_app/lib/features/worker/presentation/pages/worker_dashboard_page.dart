@@ -8,6 +8,7 @@ import 'package:marketplace_shared/marketplace_shared.dart';
 import 'package:intl/intl.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
+import '../../../../core/widgets/worker_logo.dart';
 import '../../../../core/realtime/realtime_socket_service.dart';
 import '../providers/worker_availability_provider.dart';
 
@@ -163,9 +164,15 @@ class _WorkerDashboardPageState extends ConsumerState<WorkerDashboardPage> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(
-          'Dashboard',
-          style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
+        title: Row(
+          children: [
+            const WorkerLogo(height: 24),
+            const SizedBox(width: 8),
+            Text(
+              'Dashboard',
+              style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
+            ),
+          ],
         ),
         actions: [
           IconButton(

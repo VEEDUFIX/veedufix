@@ -306,17 +306,20 @@ model Service {
 }
 
 model ServiceArea {
-  id        String   @id @default(cuid())
-  cityId    String
-  city      City     @relation(fields: [cityId], references: [id])
-  name      String
-  slug      String
-  pincode   String?
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id                String   @id @default(cuid())
+  cityId            String
+  city              City     @relation(fields: [cityId], references: [id])
+  name              String
+  slug              String
+  pincode           String?
+  pincodeRangeStart String?
+  pincodeRangeEnd   String?
+  isActive          Boolean  @default(true)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 
   @@unique([cityId, slug])
+  @@index([cityId, isActive])
 }
 
 model Address {

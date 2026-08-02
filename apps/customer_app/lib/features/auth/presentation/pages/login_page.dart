@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:marketplace_shared/marketplace_shared.dart';
+import '../../../../core/widgets/customer_logo.dart';
 
 class LoginPage extends ConsumerStatefulWidget {
   const LoginPage({super.key});
@@ -64,7 +65,11 @@ class _LoginPageState extends ConsumerState<LoginPage> {
       body: CustomScrollView(
         slivers: [
           SliverToBoxAdapter(
-            child: GradientHero(
+            child: Column(
+              children: [
+                const SizedBox(height: 48),
+                const CustomerLogo(height: 42),
+                GradientHero(
               title: 'Book trusted local experts.',
               subtitle:
                   'Premium service booking for homeowners who want speed, trust, and real-time tracking.',
@@ -99,6 +104,8 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                   ],
                 ),
               ),
+            ),
+              ],
             ),
           ),
           SliverPadding(

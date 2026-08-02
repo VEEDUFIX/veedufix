@@ -13,7 +13,8 @@ type SavedAddressInput = {
   isDefault?: boolean;
 };
 
-type SavedAddressUpdateInput = Partial<SavedAddressInput>;
+type SavedAddressUpdateInput = Pick<SavedAddressInput, "pincode"> &
+  Partial<Omit<SavedAddressInput, "pincode">>;
 
 export class SavedAddressNotFoundError extends Error {
   constructor(message = "Address not found") {

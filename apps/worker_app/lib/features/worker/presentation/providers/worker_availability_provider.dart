@@ -4,6 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:marketplace_shared/marketplace_shared.dart';
 
+import 'job_execution_provider.dart';
+
 // ─── Availability provider ──────────────────────────────────────────────────
 
 final availabilityToggleProvider =
@@ -60,8 +62,11 @@ class _LocationBroadcaster extends StateNotifier<void> {
     if (_activeBookingId == bookingId) return;
     stop();
     _activeBookingId = bookingId;
-    _timer = Timer.periodic(const Duration(seconds: 8), (_) => _broadcast());
-    _broadcast();
+    _syncWithJobState();
+    _ref.listen<JobExecutionState>(
+      jobExecutionProvider,
+      (_, __) => _syncWithJobState(),
+    );
   }
 
   void stop() {
@@ -70,8 +75,40 @@ class _LocationBroadcaster extends StateNotifier<void> {
     _activeBookingId = null;
   }
 
+  void _syncWithJobState() {
+    final execution = _ref.read(jobExecutionProvider);
+    final bookingId = _activeBookingId;
+    final hasActiveBooking =
+        bookingId != null && execution.hasBooking && execution.booking!.bookingId == bookingId;
+    final shouldTrack = hasActiveBooking && execution.summary == null && execution.currentStep >= 2 && execution.currentStep < 7;
+
+    if (!shouldTrack) {
+      _timer?.cancel();
+      _timer = null;
+      return;
+    }
+
+    if (_timer != null) {
+      return;
+    }
+
+    _timer = Timer.periodic(const Duration(seconds: 8), (_) => _broadcast());
+    _broadcast();
+  }
+
   Future<void> _broadcast() async {
     try {
+      final execution = _ref.read(jobExecutionProvider);
+      final bookingId = _activeBookingId;
+      final hasActiveBooking =
+          bookingId != null && execution.hasBooking && execution.booking!.bookingId == bookingId;
+      final shouldTrack = hasActiveBooking && execution.summary == null && execution.currentStep >= 2 && execution.currentStep < 7;
+      if (!shouldTrack) {
+        _timer?.cancel();
+        _timer = null;
+        return;
+      }
+
       final permission = await Geolocator.checkPermission();
       if (permission == LocationPermission.denied ||
           permission == LocationPermission.deniedForever) { return; }

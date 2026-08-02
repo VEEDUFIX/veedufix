@@ -31,7 +31,7 @@ export async function recordBookingTimelineEvent(input: {
 }
 
 export async function getBookingTimelineEvents(bookingId: string): Promise<BookingTimelineEntry[]> {
-  return prisma.bookingTimelineEvent.findMany({
+  const events = await prisma.bookingTimelineEvent.findMany({
     where: { bookingId },
     orderBy: { createdAt: "asc" },
     select: {
@@ -42,4 +42,12 @@ export async function getBookingTimelineEvents(bookingId: string): Promise<Booki
       createdAt: true
     }
   });
+
+  return events.map((event) => ({
+    id: String(event.id),
+    status: event.status as BookingStatus,
+    title: String(event.title),
+    description: event.description == null ? null : String(event.description),
+    createdAt: new Date(event.createdAt)
+  }));
 }

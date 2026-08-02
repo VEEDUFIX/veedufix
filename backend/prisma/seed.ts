@@ -183,6 +183,38 @@ async function seedCities() {
   }
 }
 
+async function seedServiceAreas() {
+  const chennai = await prisma.city.findUnique({ where: { slug: "chennai" } });
+  if (!chennai) {
+    return;
+  }
+
+  await prisma.serviceArea.upsert({
+    where: {
+      cityId_slug: {
+        cityId: chennai.id,
+        slug: "chennai"
+      }
+    },
+    update: {
+      name: "Chennai",
+      pincode: null,
+      pincodeRangeStart: "600001",
+      pincodeRangeEnd: "600123",
+      isActive: true
+    },
+    create: {
+      cityId: chennai.id,
+      name: "Chennai",
+      slug: "chennai",
+      pincode: null,
+      pincodeRangeStart: "600001",
+      pincodeRangeEnd: "600123",
+      isActive: true
+    }
+  });
+}
+
 async function seedPlatformConfig() {
   await prisma.platformConfig.upsert({
     where: { key: "primary" },
@@ -534,6 +566,7 @@ async function seedApprovedWorkers() {
 
 async function main() {
   await seedCities();
+  await seedServiceAreas();
   await seedPlatformConfig();
   const serviceCount = await seedCatalog();
   await seedApprovedWorkers();

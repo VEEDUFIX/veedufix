@@ -8,6 +8,7 @@ import '../features/auth/presentation/pages/otp_page.dart';
 import '../features/admin/presentation/pages/admin_dashboard_page.dart';
 import '../features/admin/presentation/pages/analytics_page.dart';
 import '../features/catalog/presentation/pages/catalog_manager_page.dart';
+import '../features/service_areas/presentation/pages/service_area_manager_page.dart';
 import '../features/finance/presentation/pages/finance_home_page.dart';
 import '../features/finance/presentation/pages/payouts_ledger_page.dart';
 import '../features/finance/presentation/pages/refunds_ledger_page.dart';
@@ -93,6 +94,10 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/catalog',
             builder: (context, state) => const CatalogManagerPage(),
+          ),
+          GoRoute(
+            path: '/service-areas',
+            builder: (context, state) => const ServiceAreaManagerPage(),
           ),
           GoRoute(
             path: '/finance',

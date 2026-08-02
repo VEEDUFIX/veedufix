@@ -3,6 +3,7 @@ import 'package:google_sign_in_web/google_sign_in_web.dart' as web;
 import 'package:google_sign_in_platform_interface/google_sign_in_platform_interface.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:marketplace_shared/marketplace_shared.dart';
+import '../../../../core/widgets/admin_logo.dart';
 import 'dart:ui';
 
 class LoginPage extends ConsumerStatefulWidget {
@@ -62,14 +63,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                         children: [
                           const Icon(Icons.shield, color: Colors.white, size: 80),
                           const SizedBox(height: 24),
-                          Text(
-                            'VeeduFix',
-                            style: Theme.of(context).textTheme.displayLarge?.copyWith(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.w900,
-                                  letterSpacing: -1.5,
-                                ),
-                          ),
+                          const AdminLogo(height: 64, color: Colors.white),
                           const SizedBox(height: 16),
                           Text(
                             'Admin Control Center',
