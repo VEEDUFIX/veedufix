@@ -216,7 +216,9 @@ class _WorkerChatPageState extends ConsumerState<WorkerChatPage>
         ),
         actions: [
           TapScale(
-            onTap: () => context.push('/support'),
+            onTap: () => context.push(
+              '/support?autoFocusForm=true&category=app&subject=${Uri.encodeComponent('Help with booking ${widget.bookingId}')}&message=${Uri.encodeComponent('I need help with booking ${widget.bookingId}. Please review this conversation and the booking details.')}',
+            ),
             child: Padding(
               padding: const EdgeInsets.only(right: 16),
               child: Container(

@@ -4,6 +4,7 @@ import {
   deleteCommissionHandler,
   getPlatformSettingsHandler,
   listCommissionsHandler,
+  listPlatformSettingsHistoryHandler,
   saveCommissionHandler,
   savePlatformSettingsHandler
 } from "./platform-settings.controller.js";
@@ -16,6 +17,7 @@ adminPlatformSettingsRouter.get("/", getPlatformSettingsHandler);
 adminPlatformSettingsRouter.put("/", savePlatformSettingsHandler);
 
 adminPlatformSettingsRouter.get("/commissions", listCommissionsHandler);
+adminPlatformSettingsRouter.get("/history", listPlatformSettingsHistoryHandler);
 adminPlatformSettingsRouter.post("/commissions", saveCommissionHandler);
 adminPlatformSettingsRouter.patch("/commissions/:commissionId", saveCommissionHandler);
 adminPlatformSettingsRouter.delete("/commissions/:commissionId", deleteCommissionHandler);

@@ -93,6 +93,10 @@ final routerProvider = Provider<GoRouter>((ref) {
             builder: (context, state) => const AdminDashboardPage(),
           ),
           GoRoute(
+            path: '/admin/quick-actions',
+            builder: (context, state) => const AdminQuickActionsPage(),
+          ),
+          GoRoute(
             path: '/analytics',
             builder: (context, state) => const AnalyticsPage(),
           ),
@@ -101,8 +105,36 @@ final routerProvider = Provider<GoRouter>((ref) {
             builder: (context, state) => const CatalogManagerPage(),
           ),
           GoRoute(
+            path: '/catalog/categories/:categoryId',
+            builder: (context, state) {
+              final categoryId = state.pathParameters['categoryId'] ?? '';
+              return CategoryDetailPage(categoryId: categoryId);
+            },
+          ),
+          GoRoute(
+            path: '/catalog/subcategories/:subcategoryId',
+            builder: (context, state) {
+              final subcategoryId = state.pathParameters['subcategoryId'] ?? '';
+              return SubcategoryDetailPage(subcategoryId: subcategoryId);
+            },
+          ),
+          GoRoute(
+            path: '/catalog/services/:serviceId',
+            builder: (context, state) {
+              final serviceId = state.pathParameters['serviceId'] ?? '';
+              return ServiceDetailPage(serviceId: serviceId);
+            },
+          ),
+          GoRoute(
             path: '/service-areas',
             builder: (context, state) => const ServiceAreaManagerPage(),
+          ),
+          GoRoute(
+            path: '/service-areas/:areaId',
+            builder: (context, state) {
+              final areaId = state.pathParameters['areaId'] ?? '';
+              return ServiceAreaDetailPage(areaId: areaId);
+            },
           ),
           GoRoute(
             path: '/finance',
@@ -288,6 +320,19 @@ final routerProvider = Provider<GoRouter>((ref) {
             builder: (context, state) => const PushSenderPage(),
           ),
           GoRoute(
+            path: '/push/broadcasts/:broadcastId',
+            builder: (context, state) {
+              final broadcastId = state.pathParameters['broadcastId'] ?? '';
+              final initialBroadcast = state.extra is AdminBroadcastSummary
+                  ? state.extra as AdminBroadcastSummary
+                  : null;
+              return BroadcastDetailPage(
+                broadcastId: broadcastId,
+                initialBroadcast: initialBroadcast,
+              );
+            },
+          ),
+          GoRoute(
             path: '/search',
             builder: (context, state) {
               final query = state.uri.queryParameters['q'] ?? '';
@@ -313,6 +358,17 @@ final routerProvider = Provider<GoRouter>((ref) {
             builder: (context, state) {
               final search = state.uri.queryParameters['search'] ?? '';
               return AuditLogsPage(initialSearch: search);
+            },
+          ),
+          GoRoute(
+            path: '/audit-logs/:logId',
+            builder: (context, state) {
+              final logId = state.pathParameters['logId'] ?? '';
+              final initialLog = state.extra is AdminAuditLogEntry ? state.extra as AdminAuditLogEntry : null;
+              return AuditLogDetailPage(
+                logId: logId,
+                initialLog: initialLog,
+              );
             },
           ),
         ],

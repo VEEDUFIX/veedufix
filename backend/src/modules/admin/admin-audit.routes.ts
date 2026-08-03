@@ -64,3 +64,43 @@ adminAuditRouter.get("/audit-logs", async (request: AuthenticatedRequest, respon
     total
   });
 });
+
+adminAuditRouter.get("/audit-logs/:logId", async (request: AuthenticatedRequest, response) => {
+  const logId = String(request.params.logId ?? "").trim();
+  if (!logId) {
+    response.status(400).json({ message: "logId is required" });
+    return;
+  }
+
+  const log = await prisma.adminAuditLog.findUnique({
+    where: { id: logId },
+    select: {
+      id: true,
+      adminId: true,
+      action: true,
+      targetType: true,
+      targetId: true,
+      note: true,
+      metadata: true,
+      createdAt: true
+    }
+  });
+
+  if (!log) {
+    response.status(404).json({ message: "Audit log not found" });
+    return;
+  }
+
+  response.status(200).json({
+    log: {
+      id: log.id,
+      adminId: log.adminId,
+      action: log.action,
+      targetType: log.targetType,
+      targetId: log.targetId,
+      note: log.note,
+      metadata: log.metadata,
+      createdAt: log.createdAt.toISOString()
+    }
+  });
+});

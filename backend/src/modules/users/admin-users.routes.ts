@@ -140,6 +140,24 @@ adminCustomersRouter.get("/:customerId", async (request: AuthenticatedRequest, r
     take: 10
   });
 
+  const recentSupportTickets = await prisma.supportTicket.findMany({
+    where: { userId: customer.id },
+    include: {
+      assignedTo: {
+        select: {
+          id: true,
+          name: true,
+          role: true
+        }
+      },
+      _count: {
+        select: { replies: true }
+      }
+    },
+    orderBy: { createdAt: "desc" },
+    take: 5
+  });
+
   response.status(200).json({
     customer: {
       id: customer.id,
@@ -164,6 +182,15 @@ adminCustomersRouter.get("/:customerId", async (request: AuthenticatedRequest, r
         booking.services[0]?.serviceSubcategory?.name ??
         "Service",
       addressLabel: booking.address ? `${booking.address.label}, ${booking.address.line1}` : null
+    })),
+    recentSupportTickets: recentSupportTickets.map((ticket) => ({
+      id: ticket.id,
+      subject: ticket.subject,
+      status: ticket.status,
+      replyCount: ticket._count.replies,
+      assignedToName: ticket.assignedTo?.name ?? null,
+      createdAt: ticket.createdAt.toISOString(),
+      updatedAt: ticket.updatedAt.toISOString()
     }))
   });
 });

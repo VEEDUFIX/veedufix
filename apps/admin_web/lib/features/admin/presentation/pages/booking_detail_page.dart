@@ -193,9 +193,19 @@ class _AdminBookingDetailPageState extends ConsumerState<AdminBookingDetailPage>
                     padding: const EdgeInsets.all(16),
                     child: Column(
                       children: [
-                        _DetailRow(label: 'Customer', value: booking.customer.name),
+                        _DetailRow(
+                          label: 'Customer',
+                          value: booking.customer.name,
+                          onTap: booking.customer.id.isEmpty ? null : () => context.push('/customers/${booking.customer.id}'),
+                        ),
                         _DetailRow(label: 'Phone', value: booking.customer.phone ?? 'Not provided'),
-                        _DetailRow(label: 'Worker', value: booking.worker?.fullName ?? 'Unassigned'),
+                        _DetailRow(
+                          label: 'Worker',
+                          value: booking.worker?.fullName ?? 'Unassigned',
+                          onTap: booking.worker == null || booking.worker!.id.isEmpty
+                              ? null
+                              : () => context.push('/workers/${booking.worker!.id}'),
+                        ),
                       ],
                     ),
                   ),
@@ -249,6 +259,9 @@ class _AdminBookingDetailPageState extends ConsumerState<AdminBookingDetailPage>
                               child: _DetailRow(
                                 label: service.serviceId ?? service.serviceName,
                                 value: service.serviceName,
+                                onTap: service.serviceId == null
+                                    ? null
+                                    : () => context.push('/catalog/services/${service.serviceId}'),
                               ),
                             ),
                           )
@@ -668,15 +681,22 @@ class _SectionTitle extends StatelessWidget {
 }
 
 class _DetailRow extends StatelessWidget {
-  const _DetailRow({required this.label, required this.value});
+  const _DetailRow({
+    required this.label,
+    required this.value,
+    this.onTap,
+  });
+
   final String label;
   final String value;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     final tt = Theme.of(context).textTheme;
     final cs = Theme.of(context).colorScheme;
-    return Padding(
+
+    final content = Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -699,6 +719,16 @@ class _DetailRow extends StatelessWidget {
           ),
         ],
       ),
+    );
+
+    if (onTap == null) {
+      return content;
+    }
+
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: content,
     );
   }
 }

@@ -126,29 +126,27 @@ class HomePage extends ConsumerWidget {
                       borderRadius: 24,
                     ),
                   )
-                : GridView.builder(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    itemCount: (catalogAsync.valueOrNull?.trending.length ?? 0) > 0
-                        ? catalogAsync.valueOrNull!.trending.length
-                        : _services.length,
-                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 2,
-                      mainAxisSpacing: 12,
-                      crossAxisSpacing: 12,
-                      childAspectRatio: 0.88,
-                    ),
-                    itemBuilder: (context, index) {
-                      final hasData = (catalogAsync.valueOrNull?.trending.length ?? 0) > 0;
-                      final service = hasData
-                          ? catalogAsync.valueOrNull!.trending[index]
-                          : _services[index];
-                      return _ServiceCard(
-                        service: service,
-                        // If it's a real API model, map it. The widget expects a Map mock currently.
-                      );
-                    },
-                  ),
+                : (catalogAsync.valueOrNull?.trending.isNotEmpty ?? false)
+                    ? GridView.builder(
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        itemCount: catalogAsync.valueOrNull!.trending.length,
+                        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: 2,
+                          mainAxisSpacing: 12,
+                          crossAxisSpacing: 12,
+                          childAspectRatio: 0.88,
+                        ),
+                        itemBuilder: (context, index) {
+                          final service = catalogAsync.valueOrNull!.trending[index];
+                          return _ServiceCard(service: service);
+                        },
+                      )
+                    : const PremiumEmptyState(
+                        icon: Icons.design_services_rounded,
+                        title: 'No featured services right now',
+                        subtitle: 'Check back soon for fresh recommendations and offers.',
+                      ),
             const SizedBox(height: 20),
             const _SectionLabel(
               title: 'Nearby professionals',

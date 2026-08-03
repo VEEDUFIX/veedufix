@@ -9,7 +9,21 @@ export type DailyTrendPoint = {
   newWorkers: number;
 };
 
-export async function getAnalyticsTrends(days: number = 30): Promise<DailyTrendPoint[]> {
+export type AnalyticsBreakdownItem = {
+  label: string;
+  bookings: number;
+  revenue: number;
+};
+
+export type AnalyticsInsights = {
+  byCity: AnalyticsBreakdownItem[];
+  byCategory: AnalyticsBreakdownItem[];
+};
+
+export async function getAnalyticsTrends(days: number = 30): Promise<{
+  trends: DailyTrendPoint[];
+  insights: AnalyticsInsights;
+}> {
   const startDate = startOfDay(subDays(new Date(), days - 1));
 
   // Fetch data
@@ -20,7 +34,24 @@ export async function getAnalyticsTrends(days: number = 30): Promise<DailyTrendP
     },
     select: {
       totalAmount: true,
-      updatedAt: true
+      updatedAt: true,
+      city: {
+        select: { name: true }
+      },
+      services: {
+        select: {
+          service: {
+            select: {
+              category: { select: { name: true } }
+            }
+          },
+          serviceSubcategory: {
+            select: {
+              category: { select: { name: true } }
+            }
+          }
+        }
+      }
     }
   });
 
@@ -67,5 +98,35 @@ export async function getAnalyticsTrends(days: number = 30): Promise<DailyTrendP
     }
   }
 
-  return Array.from(trendsMap.values());
+  const cityMap = new Map<string, AnalyticsBreakdownItem>();
+  const categoryMap = new Map<string, AnalyticsBreakdownItem>();
+
+  for (const booking of bookings) {
+    const revenue = Number(booking.totalAmount || 0);
+    const cityLabel = booking.city?.name?.trim() || "Unknown city";
+    const city = cityMap.get(cityLabel) ?? { label: cityLabel, bookings: 0, revenue: 0 };
+    city.bookings += 1;
+    city.revenue += revenue;
+    cityMap.set(cityLabel, city);
+
+    const categoryLabel =
+      booking.services[0]?.service?.category?.name?.trim() ||
+      booking.services[0]?.serviceSubcategory?.category?.name?.trim() ||
+      "Uncategorized";
+    const category = categoryMap.get(categoryLabel) ?? { label: categoryLabel, bookings: 0, revenue: 0 };
+    category.bookings += 1;
+    category.revenue += revenue;
+    categoryMap.set(categoryLabel, category);
+  }
+
+  const sorter = (a: AnalyticsBreakdownItem, b: AnalyticsBreakdownItem) =>
+    b.revenue - a.revenue || b.bookings - a.bookings || a.label.localeCompare(b.label);
+
+  return {
+    trends: Array.from(trendsMap.values()),
+    insights: {
+      byCity: Array.from(cityMap.values()).sort(sorter).slice(0, 6),
+      byCategory: Array.from(categoryMap.values()).sort(sorter).slice(0, 6)
+    }
+  };
 }

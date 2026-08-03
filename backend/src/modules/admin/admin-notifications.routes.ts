@@ -34,19 +34,12 @@ function getBroadcastData(data: unknown): { broadcastId: string | null; route: s
   };
 }
 
-adminNotificationsRouter.get("/broadcasts", async (_req, res) => {
-  const notifications = await prisma.notification.findMany({
-    where: { type: "ADMIN_BROADCAST" },
-    select: {
-      title: true,
-      body: true,
-      data: true,
-      createdAt: true
-    },
-    orderBy: { createdAt: "desc" },
-    take: 1000
-  });
-
+function buildBroadcastGroups(notifications: Array<{
+  title: string;
+  body: string;
+  data: unknown;
+  createdAt: Date;
+}>) {
   const groups = new Map<
     string,
     {
@@ -92,12 +85,79 @@ adminNotificationsRouter.get("/broadcasts", async (_req, res) => {
     });
   }
 
+  return groups;
+}
+
+type BroadcastNotificationRecord = {
+  title: string;
+  body: string;
+  data: unknown;
+  createdAt: Date;
+};
+
+adminNotificationsRouter.get("/broadcasts", async (_req, res) => {
+  const notifications = (await prisma.notification.findMany({
+    where: { type: "ADMIN_BROADCAST" },
+    select: {
+      title: true,
+      body: true,
+      data: true,
+      createdAt: true
+    },
+    orderBy: { createdAt: "desc" },
+    take: 1000
+  })) as BroadcastNotificationRecord[];
+
+  const groups = buildBroadcastGroups(notifications);
+
   const broadcasts = Array.from(groups.values())
     .sort((a, b) => b._sentAtMs - a._sentAtMs)
     .slice(0, 20)
     .map(({ _sentAtMs, ...broadcast }) => broadcast);
 
   res.json({ broadcasts });
+});
+
+adminNotificationsRouter.get("/broadcasts/:broadcastId", async (req, res) => {
+  const broadcastId = String(req.params.broadcastId ?? "").trim();
+  if (!broadcastId) {
+    return res.status(400).json({ error: "broadcastId is required" });
+  }
+
+  const notifications = (await prisma.notification.findMany({
+    where: { type: "ADMIN_BROADCAST" },
+    select: {
+      title: true,
+      body: true,
+      data: true,
+      createdAt: true
+    },
+    orderBy: { createdAt: "desc" },
+    take: 1000
+  })) as BroadcastNotificationRecord[];
+
+  const groups = buildBroadcastGroups(notifications);
+  const summary = Array.from(groups.values()).find((broadcast) => broadcast.broadcastId === broadcastId);
+  if (!summary) {
+    return res.status(404).json({ error: "Broadcast not found" });
+  }
+
+  const deliveries = notifications
+    .filter((notification) => getBroadcastData(notification.data).broadcastId === broadcastId)
+    .map((notification) => ({
+      title: notification.title,
+      body: notification.body,
+      route: getBroadcastData(notification.data).route,
+      targetRole: getBroadcastData(notification.data).targetRole,
+      sentAt: notification.createdAt.toISOString()
+    }));
+
+  return res.json({
+    broadcast: {
+      ...summary
+    },
+    deliveries
+  });
 });
 
 adminNotificationsRouter.post(

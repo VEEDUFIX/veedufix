@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:marketplace_shared/marketplace_shared.dart';
 
@@ -1422,6 +1423,7 @@ class _CategoriesTab extends StatelessWidget {
                 '${category.subcategories.length} subcategories - ${category.serviceCount} services',
             tag: category.isActive ? 'Active' : 'Disabled',
             accent: category.featured ? const Color(0xFFC2A15E) : const Color(0xFF10B981),
+            onTap: () => context.push('/catalog/categories/${category.id}'),
             onEdit: () => onEdit(category),
             onDisable: () => onDisable(category),
           ),
@@ -1500,6 +1502,7 @@ class _SubcategoriesTab extends StatelessWidget {
                   '${category?.name ?? 'Category'} - ${subcategory.serviceCount} services - Rs ${subcategory.basePrice.toStringAsFixed(0)} base',
               tag: subcategory.isActive ? 'Active' : 'Disabled',
               accent: const Color(0xFF38BDF8),
+              onTap: () => context.push('/catalog/subcategories/${subcategory.id}'),
               onEdit: () => onEdit(subcategory),
               onDisable: () => onDisable(subcategory),
             );
@@ -1589,6 +1592,7 @@ class _ServicesTab extends StatelessWidget {
                   '${category?.name ?? 'Category'} / ${subcategory?.name ?? 'Subcategory'} - Rs ${service.startingPrice.toStringAsFixed(0)} - GST ${service.gstRate.toStringAsFixed(2)}% - SAC ${service.sacCode} - ${service.estimatedDurationMins} mins',
               tag: service.isActive ? 'Active' : 'Disabled',
               accent: service.featured ? const Color(0xFFC2A15E) : const Color(0xFF10B981),
+              onTap: () => context.push('/catalog/services/${service.id}'),
               onEdit: () => onEdit(service),
               onDisable: () => onDisable(service),
               trailing: Row(
@@ -1668,6 +1672,7 @@ class _PricingTab extends StatelessWidget {
                 'Base price Rs ${service.startingPrice.toStringAsFixed(0)} - GST ${service.gstRate.toStringAsFixed(2)}% - SAC ${service.sacCode} - ${service.pricingRules.length} rules',
             tag: 'Pricing',
             accent: const Color(0xFFF59E0B),
+            onTap: () => context.push('/catalog/services/${service.id}'),
             onEdit: () => onPricingRule(service),
             onDisable: () {},
             secondaryLabel: 'Add rule',
@@ -1756,6 +1761,7 @@ class _CatalogCard extends StatelessWidget {
     required this.subtitle,
     required this.tag,
     required this.accent,
+    required this.onTap,
     required this.onEdit,
     required this.onDisable,
     this.trailing,
@@ -1766,6 +1772,7 @@ class _CatalogCard extends StatelessWidget {
   final String subtitle;
   final String tag;
   final Color accent;
+  final VoidCallback onTap;
   final VoidCallback onEdit;
   final VoidCallback onDisable;
   final Widget? trailing;
@@ -1782,7 +1789,10 @@ class _CatalogCard extends StatelessWidget {
           border: Border.all(color: const Color(0xFFE5E7EB)),
           boxShadow: AbzioTheme.eliteShadow,
         ),
-        child: ListTile(
+        child: InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: onTap,
+          child: ListTile(
           contentPadding: const EdgeInsets.all(16),
           leading: Container(
             height: 48,
@@ -1824,6 +1834,7 @@ class _CatalogCard extends StatelessWidget {
                   ),
                 ],
               ),
+          ),
         ),
       ),
     );
@@ -1854,6 +1865,613 @@ class _TagChip extends StatelessWidget {
               color: accent,
             ),
       ),
+    );
+  }
+}
+
+class CategoryDetailPage extends ConsumerStatefulWidget {
+  const CategoryDetailPage({
+    super.key,
+    required this.categoryId,
+  });
+
+  final String categoryId;
+
+  @override
+  ConsumerState<CategoryDetailPage> createState() => _CategoryDetailPageState();
+}
+
+class _CategoryDetailPageState extends ConsumerState<CategoryDetailPage> {
+  late final _CatalogAdminApi _api;
+  late Future<({_CatalogSnapshot snapshot, _AdminCategory category})?> _future;
+
+  @override
+  void initState() {
+    super.initState();
+    _api = _CatalogAdminApi(ref.read(apiClientProvider).dio);
+    _future = _load();
+  }
+
+  Future<({_CatalogSnapshot snapshot, _AdminCategory category})?> _load() async {
+    final snapshot = await _api.fetchSnapshot();
+    for (final category in snapshot.categories) {
+      if (category.id == widget.categoryId) {
+        return (snapshot: snapshot, category: category);
+      }
+    }
+    return null;
+  }
+
+  Future<void> _reload() async {
+    setState(() {
+      _future = _load();
+    });
+    await _future;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
+
+    return Scaffold(
+      backgroundColor: Colors.white,
+      appBar: AppBar(
+        title: const Text('Category Details'),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios_new_rounded),
+          onPressed: () => context.pop(),
+        ),
+        actions: [
+          IconButton(onPressed: _reload, icon: const Icon(Icons.refresh_rounded)),
+        ],
+      ),
+      body: FutureBuilder<({_CatalogSnapshot snapshot, _AdminCategory category})?>(
+        future: _future,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting && !snapshot.hasData) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          if (snapshot.hasError) {
+            return Center(child: Text('Unable to load category: ${snapshot.error}'));
+          }
+          final data = snapshot.data;
+          if (data == null) {
+            return Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.search_off_rounded, size: 48),
+                    const SizedBox(height: 12),
+                    Text('Category not found', style: tt.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
+                    const SizedBox(height: 8),
+                    Text(
+                      'This category is not present in the current catalog snapshot.',
+                      textAlign: TextAlign.center,
+                      style: tt.bodyMedium?.copyWith(color: cs.onSurfaceVariant),
+                    ),
+                    const SizedBox(height: 16),
+                    FilledButton(onPressed: _reload, child: const Text('Reload')),
+                  ],
+                ),
+              ),
+            );
+          }
+
+          final category = data.category;
+          return ListView(
+            padding: const EdgeInsets.all(24),
+            children: [
+              Row(
+                children: [
+                  Container(
+                    width: 52,
+                    height: 52,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF10B981).withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: const Icon(Icons.category_rounded, color: Color(0xFF10B981)),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(category.name, style: tt.headlineSmall?.copyWith(fontWeight: FontWeight.w900)),
+                        const SizedBox(height: 6),
+                        Text(category.slug, style: tt.bodyMedium?.copyWith(color: cs.onSurfaceVariant)),
+                      ],
+                    ),
+                  ),
+                  if (!category.isActive) const _DetailBadge(label: 'Disabled'),
+                ],
+              ),
+              const SizedBox(height: 18),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  _DetailChip(label: category.featured ? 'Featured' : 'Standard'),
+                  _DetailChip(label: category.popular ? 'Popular' : 'Not popular'),
+                  _DetailChip(label: '${category.subcategories.length} subcategories'),
+                  _DetailChip(label: '${category.serviceCount} services'),
+                ],
+              ),
+              const SizedBox(height: 18),
+              if ((category.description ?? '').trim().isNotEmpty) ...[
+                Text('Description', style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
+                const SizedBox(height: 6),
+                Text(category.description!.trim()),
+                const SizedBox(height: 18),
+              ],
+              _DetailLine(label: 'Category ID', value: category.id),
+              _DetailLine(label: 'Slug', value: category.slug),
+              _DetailLine(label: 'Status', value: category.isActive ? 'Active' : 'Disabled'),
+              _DetailLine(label: 'Sort order', value: '${category.sortOrder}'),
+              const SizedBox(height: 18),
+              Text('Subcategories', style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
+              const SizedBox(height: 12),
+              ...category.subcategories.map(
+                (subcategory) => Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: ListTile(
+                    tileColor: const Color(0xFFF8FAFC),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                    title: Text(subcategory.name),
+                    subtitle: Text('${subcategory.services.length} services - Rs ${subcategory.basePrice.toStringAsFixed(0)} base'),
+                    trailing: const Icon(Icons.chevron_right_rounded),
+                    onTap: () => context.push('/catalog/subcategories/${subcategory.id}'),
+                  ),
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+class SubcategoryDetailPage extends ConsumerStatefulWidget {
+  const SubcategoryDetailPage({
+    super.key,
+    required this.subcategoryId,
+  });
+
+  final String subcategoryId;
+
+  @override
+  ConsumerState<SubcategoryDetailPage> createState() => _SubcategoryDetailPageState();
+}
+
+class _SubcategoryDetailPageState extends ConsumerState<SubcategoryDetailPage> {
+  late final _CatalogAdminApi _api;
+  late Future<({_CatalogSnapshot snapshot, _AdminSubcategory subcategory})?> _future;
+
+  @override
+  void initState() {
+    super.initState();
+    _api = _CatalogAdminApi(ref.read(apiClientProvider).dio);
+    _future = _load();
+  }
+
+  Future<({_CatalogSnapshot snapshot, _AdminSubcategory subcategory})?> _load() async {
+    final snapshot = await _api.fetchSnapshot();
+    for (final subcategory in snapshot.subcategories) {
+      if (subcategory.id == widget.subcategoryId) {
+        return (snapshot: snapshot, subcategory: subcategory);
+      }
+    }
+    return null;
+  }
+
+  Future<void> _reload() async {
+    setState(() {
+      _future = _load();
+    });
+    await _future;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
+
+    return Scaffold(
+      backgroundColor: Colors.white,
+      appBar: AppBar(
+        title: const Text('Subcategory Details'),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios_new_rounded),
+          onPressed: () => context.pop(),
+        ),
+        actions: [
+          IconButton(onPressed: _reload, icon: const Icon(Icons.refresh_rounded)),
+        ],
+      ),
+      body: FutureBuilder<({_CatalogSnapshot snapshot, _AdminSubcategory subcategory})?>(
+        future: _future,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting && !snapshot.hasData) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          if (snapshot.hasError) {
+            return Center(child: Text('Unable to load subcategory: ${snapshot.error}'));
+          }
+          final data = snapshot.data;
+          if (data == null) {
+            return Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.search_off_rounded, size: 48),
+                    const SizedBox(height: 12),
+                    Text('Subcategory not found', style: tt.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
+                    const SizedBox(height: 8),
+                    Text(
+                      'This subcategory is not present in the current catalog snapshot.',
+                      textAlign: TextAlign.center,
+                      style: tt.bodyMedium?.copyWith(color: cs.onSurfaceVariant),
+                    ),
+                    const SizedBox(height: 16),
+                    FilledButton(onPressed: _reload, child: const Text('Reload')),
+                  ],
+                ),
+              ),
+            );
+          }
+
+          final subcategory = data.subcategory;
+          final category = data.snapshot.categoryById(subcategory.categoryId);
+          return ListView(
+            padding: const EdgeInsets.all(24),
+            children: [
+              Row(
+                children: [
+                  Container(
+                    width: 52,
+                    height: 52,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF38BDF8).withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: const Icon(Icons.layers_rounded, color: Color(0xFF38BDF8)),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(subcategory.name, style: tt.headlineSmall?.copyWith(fontWeight: FontWeight.w900)),
+                        const SizedBox(height: 6),
+                        Text(category?.name ?? 'Category', style: tt.bodyMedium?.copyWith(color: cs.onSurfaceVariant)),
+                      ],
+                    ),
+                  ),
+                  if (!subcategory.isActive) const _DetailBadge(label: 'Disabled'),
+                ],
+              ),
+              const SizedBox(height: 18),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  _DetailChip(label: '${subcategory.services.length} services'),
+                  _DetailChip(label: 'Rs ${subcategory.basePrice.toStringAsFixed(0)} base'),
+                  _DetailChip(label: subcategory.isActive ? 'Active' : 'Disabled'),
+                ],
+              ),
+              const SizedBox(height: 18),
+              if ((subcategory.description ?? '').trim().isNotEmpty) ...[
+                Text('Description', style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
+                const SizedBox(height: 6),
+                Text(subcategory.description!.trim()),
+                const SizedBox(height: 18),
+              ],
+              _DetailLine(label: 'Subcategory ID', value: subcategory.id),
+              _DetailLine(label: 'Category', value: category?.name ?? 'Unknown'),
+              _DetailLine(label: 'Slug', value: subcategory.slug),
+              _DetailLine(label: 'Base price', value: 'Rs ${subcategory.basePrice.toStringAsFixed(0)}'),
+              _DetailLine(label: 'Status', value: subcategory.isActive ? 'Active' : 'Disabled'),
+              _DetailLine(label: 'Sort order', value: '${subcategory.sortOrder}'),
+              const SizedBox(height: 18),
+              Text('Services', style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
+              const SizedBox(height: 12),
+              ...subcategory.services.map(
+                (service) => Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: ListTile(
+                    tileColor: const Color(0xFFF8FAFC),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                    title: Text(service.name),
+                    subtitle: Text('Rs ${service.startingPrice.toStringAsFixed(0)} - ${service.estimatedDurationMins} mins'),
+                    trailing: const Icon(Icons.chevron_right_rounded),
+                    onTap: () => context.push('/catalog/services/${service.id}'),
+                  ),
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+class ServiceDetailPage extends ConsumerStatefulWidget {
+  const ServiceDetailPage({
+    super.key,
+    required this.serviceId,
+  });
+
+  final String serviceId;
+
+  @override
+  ConsumerState<ServiceDetailPage> createState() => _ServiceDetailPageState();
+}
+
+class _ServiceDetailPageState extends ConsumerState<ServiceDetailPage> {
+  late final _CatalogAdminApi _api;
+  late Future<({_CatalogSnapshot snapshot, _AdminService service})?> _future;
+
+  @override
+  void initState() {
+    super.initState();
+    _api = _CatalogAdminApi(ref.read(apiClientProvider).dio);
+    _future = _load();
+  }
+
+  Future<({_CatalogSnapshot snapshot, _AdminService service})?> _load() async {
+    final snapshot = await _api.fetchSnapshot();
+    for (final service in snapshot.services) {
+      if (service.id == widget.serviceId) {
+        return (snapshot: snapshot, service: service);
+      }
+    }
+    return null;
+  }
+
+  Future<void> _reload() async {
+    setState(() {
+      _future = _load();
+    });
+    await _future;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
+
+    return Scaffold(
+      backgroundColor: Colors.white,
+      appBar: AppBar(
+        title: const Text('Service Details'),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios_new_rounded),
+          onPressed: () => context.pop(),
+        ),
+        actions: [
+          IconButton(onPressed: _reload, icon: const Icon(Icons.refresh_rounded)),
+        ],
+      ),
+      body: FutureBuilder<({_CatalogSnapshot snapshot, _AdminService service})?>(
+        future: _future,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting && !snapshot.hasData) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          if (snapshot.hasError) {
+            return Center(child: Text('Unable to load service: ${snapshot.error}'));
+          }
+          final data = snapshot.data;
+          if (data == null) {
+            return Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.search_off_rounded, size: 48),
+                    const SizedBox(height: 12),
+                    Text('Service not found', style: tt.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
+                    const SizedBox(height: 8),
+                    Text(
+                      'This service is not present in the current catalog snapshot.',
+                      textAlign: TextAlign.center,
+                      style: tt.bodyMedium?.copyWith(color: cs.onSurfaceVariant),
+                    ),
+                    const SizedBox(height: 16),
+                    FilledButton(onPressed: _reload, child: const Text('Reload')),
+                  ],
+                ),
+              ),
+            );
+          }
+
+          final service = data.service;
+          final category = data.snapshot.categoryById(service.categoryId);
+          final subcategory = data.snapshot.subcategoryById(service.subcategoryId);
+          return ListView(
+            padding: const EdgeInsets.all(24),
+            children: [
+              Row(
+                children: [
+                  Container(
+                    width: 52,
+                    height: 52,
+                    decoration: BoxDecoration(
+                      color: service.featured ? const Color(0xFFC2A15E).withValues(alpha: 0.12) : const Color(0xFF10B981).withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: Icon(
+                      Icons.design_services_rounded,
+                      color: service.featured ? const Color(0xFFC2A15E) : const Color(0xFF10B981),
+                    ),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(service.name, style: tt.headlineSmall?.copyWith(fontWeight: FontWeight.w900)),
+                        const SizedBox(height: 6),
+                        Text('${category?.name ?? 'Category'} / ${subcategory?.name ?? 'Subcategory'}', style: tt.bodyMedium?.copyWith(color: cs.onSurfaceVariant)),
+                      ],
+                    ),
+                  ),
+                  if (!service.isActive) const _DetailBadge(label: 'Disabled'),
+                ],
+              ),
+              const SizedBox(height: 18),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  _DetailChip(label: 'Rs ${service.startingPrice.toStringAsFixed(0)}'),
+                  _DetailChip(label: '${service.estimatedDurationMins} mins'),
+                  _DetailChip(label: 'GST ${service.gstRate.toStringAsFixed(2)}%'),
+                  _DetailChip(label: 'SAC ${service.sacCode}'),
+                  _DetailChip(label: service.isActive ? 'Active' : 'Disabled'),
+                ],
+              ),
+              const SizedBox(height: 18),
+              if ((service.description ?? '').trim().isNotEmpty) ...[
+                Text('Description', style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
+                const SizedBox(height: 6),
+                Text(service.description!.trim()),
+                const SizedBox(height: 18),
+              ],
+              if ((service.shortDescription ?? '').trim().isNotEmpty) ...[
+                Text('Short Description', style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
+                const SizedBox(height: 6),
+                Text(service.shortDescription!.trim()),
+                const SizedBox(height: 18),
+              ],
+              _DetailLine(label: 'Service ID', value: service.id),
+              _DetailLine(label: 'Category', value: category?.name ?? 'Unknown'),
+              _DetailLine(label: 'Subcategory', value: subcategory?.name ?? 'Unknown'),
+              _DetailLine(label: 'Slug', value: service.slug),
+              _DetailLine(label: 'Code', value: service.code ?? 'None'),
+              _DetailLine(label: 'Duration', value: '${service.estimatedDurationMins} mins'),
+              _DetailLine(label: 'Home visit', value: service.homeVisit ? 'Yes' : 'No'),
+              _DetailLine(label: 'Featured', value: service.featured ? 'Yes' : 'No'),
+              _DetailLine(label: 'Status', value: service.isActive ? 'Active' : 'Disabled'),
+              const SizedBox(height: 18),
+              Text('Pricing Rules', style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
+              const SizedBox(height: 12),
+              if (service.pricingRules.isEmpty)
+                Text('No pricing rules configured yet.', style: tt.bodyMedium?.copyWith(color: cs.onSurfaceVariant))
+              else
+                ...service.pricingRules.map(
+                  (rule) => Padding(
+                    padding: const EdgeInsets.only(bottom: 10),
+                    child: Container(
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF8FAFC),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(color: const Color(0xFFE5E7EB)),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Text(rule.title, style: tt.titleSmall?.copyWith(fontWeight: FontWeight.w800)),
+                              ),
+                              _DetailChip(label: rule.type),
+                            ],
+                          ),
+                          const SizedBox(height: 6),
+                          Text('Rs ${rule.price.toStringAsFixed(0)}'),
+                          const SizedBox(height: 4),
+                          Text('Currency: ${rule.currency}'),
+                          const SizedBox(height: 4),
+                          Text('Priority: ${rule.priority}'),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _DetailLine extends StatelessWidget {
+  const _DetailLine({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 120,
+            child: Text(
+              label,
+              style: tt.bodyMedium?.copyWith(color: cs.onSurfaceVariant, fontWeight: FontWeight.w700),
+            ),
+          ),
+          Expanded(
+            child: Text(value, style: tt.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DetailChip extends StatelessWidget {
+  const _DetailChip({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+      ),
+      child: Text(label, style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700)),
+    );
+  }
+}
+
+class _DetailBadge extends StatelessWidget {
+  const _DetailBadge({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: const Color(0xFF94A3B8).withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(label, style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700)),
     );
   }
 }

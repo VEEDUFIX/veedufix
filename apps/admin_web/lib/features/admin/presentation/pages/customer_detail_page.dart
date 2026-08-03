@@ -28,7 +28,11 @@ class _AdminCustomerDetailPageState extends ConsumerState<AdminCustomerDetailPag
   Future<_AdminCustomerDetail> _load() async {
     final api = ref.read(apiClientProvider);
     final data = await api.get('/admin/customers/${widget.customerId}');
-    return _AdminCustomerDetail.fromJson((data['customer'] as Map<String, dynamic>? ?? const <String, dynamic>{}), data['recentBookings'] as List<dynamic>? ?? const []);
+    return _AdminCustomerDetail.fromJson(
+      (data['customer'] as Map<String, dynamic>? ?? const <String, dynamic>{}),
+      data['recentBookings'] as List<dynamic>? ?? const [],
+      data['recentSupportTickets'] as List<dynamic>? ?? const [],
+    );
   }
 
   Future<void> _reload() async {
@@ -207,7 +211,34 @@ class _AdminCustomerDetailPageState extends ConsumerState<AdminCustomerDetailPag
                         .map(
                           (booking) => Padding(
                             padding: const EdgeInsets.only(bottom: 10),
-                            child: _BookingRow(booking: booking),
+                            child: _BookingRow(
+                              booking: booking,
+                              onTap: () => context.push('/admin-bookings/${booking.id}'),
+                            ),
+                          ),
+                        )
+                        .toList(growable: false),
+                  ),
+                const SizedBox(height: 16),
+                const _SectionTitle(title: 'Support history'),
+                const SizedBox(height: 10),
+                if (customer.recentSupportTickets.isEmpty)
+                  const _SurfaceCard(
+                    child: Padding(
+                      padding: EdgeInsets.all(16),
+                      child: Text('No support tickets found.'),
+                    ),
+                  )
+                else
+                  Column(
+                    children: customer.recentSupportTickets
+                        .map(
+                          (ticket) => Padding(
+                            padding: const EdgeInsets.only(bottom: 10),
+                            child: _SupportTicketRow(
+                              ticket: ticket,
+                              onTap: () => context.push('/support-tickets/${ticket.id}'),
+                            ),
                           ),
                         )
                         .toList(growable: false),
@@ -233,6 +264,7 @@ class _AdminCustomerDetail {
     required this.totalSpend,
     required this.createdAt,
     required this.recentBookings,
+    required this.recentSupportTickets,
   });
 
   final String id;
@@ -245,8 +277,13 @@ class _AdminCustomerDetail {
   final double totalSpend;
   final DateTime createdAt;
   final List<_AdminCustomerBooking> recentBookings;
+  final List<_AdminCustomerSupportTicket> recentSupportTickets;
 
-  factory _AdminCustomerDetail.fromJson(Map<String, dynamic> json, List<dynamic> bookingsJson) {
+  factory _AdminCustomerDetail.fromJson(
+    Map<String, dynamic> json,
+    List<dynamic> bookingsJson,
+    List<dynamic> ticketsJson,
+  ) {
     return _AdminCustomerDetail(
       id: json['id'] as String? ?? '',
       name: json['name'] as String? ?? 'Customer',
@@ -260,6 +297,10 @@ class _AdminCustomerDetail {
       recentBookings: bookingsJson
           .whereType<Map<String, dynamic>>()
           .map(_AdminCustomerBooking.fromJson)
+          .toList(growable: false),
+      recentSupportTickets: ticketsJson
+          .whereType<Map<String, dynamic>>()
+          .map(_AdminCustomerSupportTicket.fromJson)
           .toList(growable: false),
     );
   }
@@ -300,46 +341,150 @@ class _AdminCustomerBooking {
   }
 }
 
+class _AdminCustomerSupportTicket {
+  const _AdminCustomerSupportTicket({
+    required this.id,
+    required this.subject,
+    required this.status,
+    required this.replyCount,
+    required this.assignedToName,
+    required this.createdAt,
+    required this.updatedAt,
+  });
+
+  final String id;
+  final String subject;
+  final String status;
+  final int replyCount;
+  final String? assignedToName;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+
+  factory _AdminCustomerSupportTicket.fromJson(Map<String, dynamic> json) {
+    return _AdminCustomerSupportTicket(
+      id: json['id'] as String? ?? '',
+      subject: json['subject'] as String? ?? 'Support ticket',
+      status: json['status'] as String? ?? 'OPEN',
+      replyCount: (json['replyCount'] as num?)?.toInt() ?? 0,
+      assignedToName: json['assignedToName'] as String?,
+      createdAt: DateTime.tryParse(json['createdAt'] as String? ?? '') ?? DateTime.now(),
+      updatedAt: DateTime.tryParse(json['updatedAt'] as String? ?? '') ?? DateTime.now(),
+    );
+  }
+}
+
 class _BookingRow extends StatelessWidget {
-  const _BookingRow({required this.booking});
+  const _BookingRow({
+    required this.booking,
+    required this.onTap,
+  });
   final _AdminCustomerBooking booking;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final tt = Theme.of(context).textTheme;
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: cs.surfaceContainerHighest.withValues(alpha: 0.35),
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
         borderRadius: BorderRadius.circular(AbzioTheme.buttonRadius),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('#${booking.code}', style: tt.labelMedium?.copyWith(fontWeight: FontWeight.w800)),
-                const SizedBox(height: 4),
-                Text(booking.serviceName, style: tt.titleSmall?.copyWith(fontWeight: FontWeight.w800)),
-                const SizedBox(height: 2),
-                Text(
-                  '${booking.status.replaceAll('_', ' ')} • ${DateFormat('d MMM y, h:mm a').format(booking.scheduledAt)}',
-                  style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant),
-                ),
-              ],
-            ),
+        child: Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: cs.surfaceContainerHighest.withValues(alpha: 0.35),
+            borderRadius: BorderRadius.circular(AbzioTheme.buttonRadius),
           ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
+          child: Row(
             children: [
-              Text('₹${booking.totalAmount.toStringAsFixed(0)}', style: tt.titleSmall?.copyWith(fontWeight: FontWeight.w800)),
-              const SizedBox(height: 4),
-              Text(booking.workerName ?? 'Unassigned', style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('#${booking.code}', style: tt.labelMedium?.copyWith(fontWeight: FontWeight.w800)),
+                    const SizedBox(height: 4),
+                    Text(booking.serviceName, style: tt.titleSmall?.copyWith(fontWeight: FontWeight.w800)),
+                    const SizedBox(height: 2),
+                    Text(
+                      '${booking.status.replaceAll('_', ' ')} • ${DateFormat('d MMM y, h:mm a').format(booking.scheduledAt)}',
+                      style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+                    ),
+                  ],
+                ),
+              ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text('₹${booking.totalAmount.toStringAsFixed(0)}', style: tt.titleSmall?.copyWith(fontWeight: FontWeight.w800)),
+                  const SizedBox(height: 4),
+                  Text(booking.workerName ?? 'Unassigned', style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
+                ],
+              ),
             ],
           ),
-        ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SupportTicketRow extends StatelessWidget {
+  const _SupportTicketRow({
+    required this.ticket,
+    required this.onTap,
+  });
+
+  final _AdminCustomerSupportTicket ticket;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(AbzioTheme.buttonRadius),
+        child: Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: cs.surfaceContainerHighest.withValues(alpha: 0.35),
+            borderRadius: BorderRadius.circular(AbzioTheme.buttonRadius),
+          ),
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(ticket.subject, style: tt.titleSmall?.copyWith(fontWeight: FontWeight.w800)),
+                    const SizedBox(height: 2),
+                    Text(
+                      '${ticket.status.replaceAll('_', ' ')} · ${ticket.replyCount} replies',
+                      style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+                    ),
+                  ],
+                ),
+              ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    ticket.assignedToName ?? 'Unassigned',
+                    style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    DateFormat('d MMM y').format(ticket.updatedAt),
+                    style: tt.labelMedium?.copyWith(fontWeight: FontWeight.w700),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

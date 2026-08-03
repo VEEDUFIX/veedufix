@@ -360,54 +360,158 @@ class _TxCard extends StatelessWidget {
     final isCredit = tx.isCredit;
     final color = isCredit ? const Color(0xFF10B981) : const Color(0xFFEF4444);
 
-    return PremiumGlassCard(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Row(
-          children: [
-            Container(
-              width: 44,
-              height: 44,
-              decoration: BoxDecoration(
-                color: color.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(12),
+    return TapScale(
+      onTap: () => _showTransactionDetails(context, tx),
+      child: PremiumGlassCard(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(
+                  isCredit ? Icons.arrow_downward_rounded : Icons.arrow_upward_rounded,
+                  color: color,
+                  size: 20,
+                ),
               ),
-              child: Icon(
-                isCredit ? Icons.arrow_downward_rounded : Icons.arrow_upward_rounded,
-                color: color,
-                size: 20,
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(tx.label, style: tt.bodyMedium?.copyWith(fontWeight: FontWeight.w700)),
+                    const SizedBox(height: 2),
+                    Text(
+                      DateFormat('d MMM y, h:mm a').format(tx.createdAt),
+                      style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+                    ),
+                  ],
+                ),
               ),
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
-                  Text(tx.label, style: tt.bodyMedium?.copyWith(fontWeight: FontWeight.w700)),
+                  Text(
+                    '${isCredit ? '+' : ''}₹${tx.amount.abs().toStringAsFixed(2)}',
+                    style: tt.titleSmall?.copyWith(color: color, fontWeight: FontWeight.w800),
+                  ),
                   const SizedBox(height: 2),
                   Text(
-                    DateFormat('d MMM y, h:mm a').format(tx.createdAt),
-                    style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+                    'Bal: ₹${tx.balanceAfter.toStringAsFixed(2)}',
+                    style: tt.labelSmall?.copyWith(color: cs.onSurfaceVariant),
                   ),
                 ],
               ),
-            ),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Text(
-                  '${isCredit ? '+' : ''}₹${tx.amount.abs().toStringAsFixed(2)}',
-                  style: tt.titleSmall?.copyWith(color: color, fontWeight: FontWeight.w800),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  'Bal: ₹${tx.balanceAfter.toStringAsFixed(2)}',
-                  style: tt.labelSmall?.copyWith(color: cs.onSurfaceVariant),
-                ),
-              ],
-            ),
-          ],
+            ],
+          ),
         ),
+      ),
+    );
+  }
+}
+
+Future<void> _showTransactionDetails(BuildContext context, WorkerWalletTransaction tx) {
+  final amountColor = tx.isCredit ? const Color(0xFF10B981) : const Color(0xFFEF4444);
+  return showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    showDragHandle: true,
+    builder: (sheetContext) {
+      final cs = Theme.of(sheetContext).colorScheme;
+      final tt = Theme.of(sheetContext).textTheme;
+
+      return SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    height: 52,
+                    width: 52,
+                    decoration: BoxDecoration(
+                      color: amountColor.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(AbzioTheme.buttonRadius),
+                    ),
+                    child: Icon(
+                      tx.isCredit ? Icons.arrow_downward_rounded : Icons.arrow_upward_rounded,
+                      color: amountColor,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(tx.label, style: tt.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
+                        const SizedBox(height: 4),
+                        Text(
+                          DateFormat('d MMM y, h:mm a').format(tx.createdAt),
+                          style: tt.bodyMedium?.copyWith(color: cs.onSurfaceVariant),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              _DetailRow(label: 'Transaction ID', value: tx.id),
+              _DetailRow(label: 'Amount', value: '${tx.isCredit ? '+' : '-'}₹${tx.amount.abs().toStringAsFixed(2)}'),
+              _DetailRow(label: 'Balance after', value: '₹${tx.balanceAfter.toStringAsFixed(2)}'),
+              if (tx.note != null && tx.note!.trim().isNotEmpty) _DetailRow(label: 'Note', value: tx.note!.trim()),
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton.tonal(
+                  onPressed: () async {
+                    await Clipboard.setData(ClipboardData(text: tx.id));
+                    if (sheetContext.mounted) {
+                      ScaffoldMessenger.of(sheetContext).showSnackBar(
+                        const SnackBar(content: Text('Transaction ID copied')),
+                      );
+                    }
+                  },
+                  child: const Text('Copy transaction ID'),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    },
+  );
+}
+
+class _DetailRow extends StatelessWidget {
+  const _DetailRow({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    final tt = Theme.of(context).textTheme;
+    final cs = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 104,
+            child: Text(label, style: tt.bodyMedium?.copyWith(color: cs.onSurfaceVariant, fontWeight: FontWeight.w700)),
+          ),
+          Expanded(child: Text(value, style: tt.bodyMedium?.copyWith(fontWeight: FontWeight.w600))),
+        ],
       ),
     );
   }

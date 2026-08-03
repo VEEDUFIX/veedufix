@@ -3,6 +3,7 @@ import {
   deleteCommission,
   getPlatformSettings,
   listCommissions,
+  listPlatformSettingsHistory,
   saveCommission,
   savePlatformSettings
 } from "./platform-settings.service.js";
@@ -23,9 +24,7 @@ export async function listCommissionsHandler(_request: Request, response: Respon
 }
 
 export async function saveCommissionHandler(request: Request, response: Response): Promise<void> {
-  const commissionId = Array.isArray(request.params.commissionId)
-    ? request.params.commissionId[0] ?? null
-    : request.params.commissionId ?? null;
+  const commissionId = typeof request.params.commissionId === "string" ? request.params.commissionId : null;
 
   const result = await saveCommission(
     commissionId,
@@ -35,9 +34,7 @@ export async function saveCommissionHandler(request: Request, response: Response
 }
 
 export async function deleteCommissionHandler(request: Request, response: Response): Promise<void> {
-  const commissionId = Array.isArray(request.params.commissionId)
-    ? request.params.commissionId[0]
-    : request.params.commissionId;
+  const commissionId = typeof request.params.commissionId === "string" ? request.params.commissionId : null;
 
   if (!commissionId) {
     response.status(400).json({ error: "commissionId is required" });
@@ -46,4 +43,9 @@ export async function deleteCommissionHandler(request: Request, response: Respon
 
   await deleteCommission(commissionId);
   response.status(200).json({ success: true });
+}
+
+export async function listPlatformSettingsHistoryHandler(_request: Request, response: Response): Promise<void> {
+  const result = await listPlatformSettingsHistory();
+  response.status(200).json(result);
 }

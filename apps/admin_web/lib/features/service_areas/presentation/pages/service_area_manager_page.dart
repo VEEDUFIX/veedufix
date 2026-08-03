@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:marketplace_shared/marketplace_shared.dart';
 
@@ -510,11 +511,12 @@ class _ServiceAreaManagerPageState extends ConsumerState<ServiceAreaManagerPage>
                           ...visibleAreas.map(
                             (area) => Padding(
                               padding: const EdgeInsets.only(bottom: 14),
-                              child: _ServiceAreaTile(
-                                area: area,
-                                onEdit: () => _editArea(data, area),
-                                onDelete: () => _deleteArea(area),
-                                onToggleActive: (value) => _toggleAreaActive(area, value),
+                      child: _ServiceAreaTile(
+                        area: area,
+                        onTap: () => context.push('/service-areas/${area.id}', extra: area),
+                        onEdit: () => _editArea(data, area),
+                        onDelete: () => _deleteArea(area),
+                        onToggleActive: (value) => _toggleAreaActive(area, value),
                               ),
                             ),
                           ),
@@ -545,12 +547,14 @@ class _ServiceAreaManagerPageState extends ConsumerState<ServiceAreaManagerPage>
 class _ServiceAreaTile extends StatelessWidget {
   const _ServiceAreaTile({
     required this.area,
+    required this.onTap,
     required this.onEdit,
     required this.onDelete,
     required this.onToggleActive,
   });
 
   final _ServiceAreaRecord area;
+  final VoidCallback onTap;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
   final ValueChanged<bool> onToggleActive;
@@ -568,9 +572,12 @@ class _ServiceAreaTile extends StatelessWidget {
         borderRadius: BorderRadius.circular(20),
         side: BorderSide(color: Colors.black.withValues(alpha: 0.06)),
       ),
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Row(
+      child: InkWell(
+        borderRadius: BorderRadius.circular(20),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Container(
@@ -637,8 +644,299 @@ class _ServiceAreaTile extends StatelessWidget {
               ],
             ),
           ],
+          ),
         ),
       ),
+    );
+  }
+}
+
+class ServiceAreaDetailPage extends ConsumerStatefulWidget {
+  const ServiceAreaDetailPage({
+    super.key,
+    required this.areaId,
+  });
+
+  final String areaId;
+
+  @override
+  ConsumerState<ServiceAreaDetailPage> createState() => _ServiceAreaDetailPageState();
+}
+
+class _ServiceAreaDetailPageState extends ConsumerState<ServiceAreaDetailPage> {
+  late final _ServiceAreaAdminApi _api;
+  late Future<({ _ServiceAreaSnapshot snapshot, _ServiceAreaRecord area })?> _future;
+  bool _busy = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _api = _ServiceAreaAdminApi(ref.read(apiClientProvider).dio);
+    _future = _load();
+  }
+
+  Future<({ _ServiceAreaSnapshot snapshot, _ServiceAreaRecord area })?> _load() async {
+    final snapshot = await _api.fetchSnapshot();
+    _ServiceAreaRecord? area;
+    for (final item in snapshot.serviceAreas) {
+      if (item.id == widget.areaId) {
+        area = item;
+        break;
+      }
+    }
+    if (area == null) {
+      return null;
+    }
+    return (snapshot: snapshot, area: area);
+  }
+
+  Future<void> _reload() async {
+    setState(() {
+      _future = _load();
+    });
+    await _future;
+  }
+
+  Future<void> _toggleActive(_ServiceAreaRecord area) async {
+    setState(() => _busy = true);
+    try {
+      await _api.updateServiceArea(
+        area.id,
+        {
+          'cityId': area.cityId,
+          'name': area.name,
+          'slug': area.slug,
+          'isActive': !area.isActive,
+          'pincode': area.pincode,
+          'pincodeRangeStart': area.pincodeRangeStart,
+          'pincodeRangeEnd': area.pincodeRangeEnd,
+        },
+      );
+      await _reload();
+    } finally {
+      if (mounted) {
+        setState(() => _busy = false);
+      }
+    }
+  }
+
+  Future<void> _deleteArea(_ServiceAreaRecord area) async {
+    setState(() => _busy = true);
+    try {
+      await _api.deleteServiceArea(area.id);
+      if (!mounted) {
+        return;
+      }
+      context.pop();
+    } finally {
+      if (mounted) {
+        setState(() => _busy = false);
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
+
+    return Scaffold(
+      backgroundColor: Colors.white,
+      appBar: AppBar(
+        title: const Text('Service Area'),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios_new_rounded),
+          onPressed: () => context.pop(),
+        ),
+        actions: [
+          IconButton(
+            onPressed: _reload,
+            icon: const Icon(Icons.refresh_rounded),
+          ),
+        ],
+      ),
+      body: FutureBuilder<({ _ServiceAreaSnapshot snapshot, _ServiceAreaRecord area })?>(
+        future: _future,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting && !snapshot.hasData) {
+            return const Center(child: CircularProgressIndicator());
+          }
+
+          if (snapshot.hasError) {
+            return Center(child: Text('Unable to load service area: ${snapshot.error}'));
+          }
+
+          final data = snapshot.data;
+          if (data == null) {
+            return Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.search_off_rounded, size: 48),
+                    const SizedBox(height: 12),
+                    Text('Service area not found', style: tt.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
+                    const SizedBox(height: 8),
+                    Text(
+                      'This service area is not present in the current snapshot.',
+                      textAlign: TextAlign.center,
+                      style: tt.bodyMedium?.copyWith(color: cs.onSurfaceVariant),
+                    ),
+                    const SizedBox(height: 16),
+                    FilledButton(onPressed: _reload, child: const Text('Reload')),
+                  ],
+                ),
+              ),
+            );
+          }
+
+          final area = data.area;
+          final coverage = area.pincode != null
+              ? 'Exact pincode ${area.pincode}'
+              : 'Range ${area.pincodeRangeStart ?? 'n/a'} - ${area.pincodeRangeEnd ?? 'n/a'}';
+
+          return ListView(
+            padding: const EdgeInsets.all(24),
+            children: [
+              Row(
+                children: [
+                  Container(
+                    width: 52,
+                    height: 52,
+                    decoration: BoxDecoration(
+                      color: area.isActive
+                          ? const Color(0xFF0F766E).withValues(alpha: 0.12)
+                          : const Color(0xFF94A3B8).withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: Icon(
+                      area.isActive ? Icons.check_circle_rounded : Icons.pause_circle_rounded,
+                      color: area.isActive ? const Color(0xFF0F766E) : const Color(0xFF64748B),
+                    ),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(area.name, style: tt.headlineSmall?.copyWith(fontWeight: FontWeight.w900)),
+                        const SizedBox(height: 6),
+                        Text('${area.city.name} • ${area.slug}', style: tt.bodyMedium?.copyWith(color: cs.onSurfaceVariant)),
+                      ],
+                    ),
+                  ),
+                  if (!area.isActive) const _DetailBadge(label: 'Paused'),
+                ],
+              ),
+              const SizedBox(height: 18),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  _DetailChip(label: coverage),
+                  _DetailChip(label: area.isActive ? 'Active' : 'Paused'),
+                  _DetailChip(label: area.city.slug),
+                ],
+              ),
+              const SizedBox(height: 18),
+              _DetailLine(label: 'Area ID', value: area.id),
+              _DetailLine(label: 'City', value: area.city.name),
+              _DetailLine(label: 'City slug', value: area.city.slug),
+              _DetailLine(label: 'Slug', value: area.slug),
+              _DetailLine(label: 'Coverage', value: coverage),
+              _DetailLine(label: 'Status', value: area.isActive ? 'Active' : 'Paused'),
+              const SizedBox(height: 20),
+              Wrap(
+                spacing: 12,
+                runSpacing: 12,
+                children: [
+                  FilledButton(
+                    onPressed: _busy ? null : () => _toggleActive(area),
+                    child: Text(area.isActive ? 'Pause area' : 'Activate area'),
+                  ),
+                  OutlinedButton(
+                    onPressed: _busy ? null : () => _deleteArea(area),
+                    style: OutlinedButton.styleFrom(foregroundColor: cs.error),
+                    child: const Text('Delete area'),
+                  ),
+                  OutlinedButton(
+                    onPressed: _reload,
+                    child: const Text('Refresh'),
+                  ),
+                ],
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _DetailLine extends StatelessWidget {
+  const _DetailLine({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 120,
+            child: Text(
+              label,
+              style: tt.bodyMedium?.copyWith(color: cs.onSurfaceVariant, fontWeight: FontWeight.w700),
+            ),
+          ),
+          Expanded(
+            child: Text(value, style: tt.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DetailChip extends StatelessWidget {
+  const _DetailChip({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.04),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(label, style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700)),
+    );
+  }
+}
+
+class _DetailBadge extends StatelessWidget {
+  const _DetailBadge({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: const Color(0xFF94A3B8).withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(label, style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700)),
     );
   }
 }

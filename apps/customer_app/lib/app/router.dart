@@ -143,9 +143,7 @@ final routerProvider = Provider<GoRouter>((ref) {
           if (extra is Map<String, dynamic>) {
             final cityId = extra['cityId'] as String? ?? '';
             final rawItems = extra['items'] as List<dynamic>? ?? [];
-            final items = rawItems
-                .whereType<CheckoutItem>()
-                .toList();
+            final items = rawItems.whereType<CheckoutItem>().toList();
             return CheckoutPage(cityId: cityId, items: items);
           }
 
@@ -215,7 +213,34 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/support',
-        builder: (context, state) => const SupportPage(),
+        builder: (context, state) {
+          final autoCompose = state.uri.queryParameters['autoCompose'] == 'true';
+          final bookingId = state.uri.queryParameters['bookingId'];
+          final bookingCode = state.uri.queryParameters['bookingCode'];
+          final serviceName = state.uri.queryParameters['serviceName'];
+          final initialCategory = state.uri.queryParameters['category'];
+          final initialSubject = state.uri.queryParameters['subject'];
+          final initialMessage = state.uri.queryParameters['message'];
+          return SupportPage(
+            autoCompose: autoCompose,
+            bookingId: bookingId?.trim().isNotEmpty == true ? bookingId!.trim() : null,
+            bookingCode: bookingCode?.trim().isNotEmpty == true
+                ? bookingCode!.trim()
+                : null,
+            serviceName: serviceName?.trim().isNotEmpty == true
+                ? serviceName!.trim()
+                : null,
+            initialCategory: initialCategory?.trim().isNotEmpty == true
+                ? initialCategory!.trim()
+                : null,
+            initialSubject: initialSubject?.trim().isNotEmpty == true
+                ? initialSubject!.trim()
+                : null,
+            initialMessage: initialMessage?.trim().isNotEmpty == true
+                ? initialMessage!.trim()
+                : null,
+          );
+        },
       ),
       GoRoute(
         path: '/settings',

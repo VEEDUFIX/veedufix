@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:marketplace_shared/marketplace_shared.dart';
@@ -352,6 +353,7 @@ class _EarningsPageState extends ConsumerState<EarningsPage> {
                         subtitle: _buildTransactionSubtitle(entry),
                         amount: _formatMoney(entry.amount),
                         positive: entry.status == 'success',
+                        onTap: () => _showTransactionDetails(context, entry),
                       );
                     },
                     childCount: _transactions.length,
@@ -580,20 +582,24 @@ class _TransactionTile extends StatelessWidget {
     required this.subtitle,
     required this.amount,
     required this.positive,
+    required this.onTap,
   });
 
   final String title;
   final String subtitle;
   final String amount;
   final bool positive;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final accent = positive ? const Color(0xFF10B981) : Theme.of(context).colorScheme.primary;
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
-      child: PremiumGlassCard(
-        child: ListTile(
+      child: TapScale(
+        onTap: onTap,
+        child: PremiumGlassCard(
+          child: ListTile(
           contentPadding: const EdgeInsets.all(16),
           leading: Container(
             height: 48,
@@ -622,7 +628,109 @@ class _TransactionTile extends StatelessWidget {
                   color: accent,
                 ),
           ),
+          ),
         ),
+      ),
+    );
+  }
+}
+
+Future<void> _showTransactionDetails(BuildContext context, WorkerEarningsTransaction entry) {
+  return showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    showDragHandle: true,
+    builder: (sheetContext) {
+      final tt = Theme.of(sheetContext).textTheme;
+      final cs = Theme.of(sheetContext).colorScheme;
+      final accent = entry.status == 'success' ? const Color(0xFF10B981) : cs.primary;
+
+      return SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    height: 52,
+                    width: 52,
+                    decoration: BoxDecoration(
+                      color: accent.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(AbzioTheme.buttonRadius),
+                    ),
+                    child: Icon(
+                      entry.status == 'success' ? Icons.check_circle_outline_rounded : Icons.receipt_long_rounded,
+                      color: accent,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(entry.serviceName, style: tt.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
+                        const SizedBox(height: 4),
+                        Text(_formatStatusLabel(entry.status), style: tt.bodyMedium?.copyWith(color: cs.onSurfaceVariant)),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              _DetailRow(label: 'Booking', value: entry.bookingCode?.isNotEmpty == true ? entry.bookingCode! : entry.bookingId),
+              _DetailRow(label: 'Amount', value: _formatMoney(entry.amount)),
+              _DetailRow(label: 'Commission', value: _formatMoney(entry.commissionAmount)),
+              _DetailRow(label: 'Date', value: DateFormat('d MMM y, h:mm a').format(entry.date)),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: FilledButton.tonal(
+                      onPressed: () async {
+                        await Clipboard.setData(ClipboardData(text: entry.bookingId));
+                        if (sheetContext.mounted) {
+                          ScaffoldMessenger.of(sheetContext).showSnackBar(
+                            const SnackBar(content: Text('Booking ID copied')),
+                          );
+                        }
+                      },
+                      child: const Text('Copy booking ID'),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      );
+    },
+  );
+}
+
+class _DetailRow extends StatelessWidget {
+  const _DetailRow({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    final tt = Theme.of(context).textTheme;
+    final cs = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 90,
+            child: Text(label, style: tt.bodyMedium?.copyWith(color: cs.onSurfaceVariant, fontWeight: FontWeight.w700)),
+          ),
+          Expanded(child: Text(value, style: tt.bodyMedium?.copyWith(fontWeight: FontWeight.w600))),
+        ],
       ),
     );
   }

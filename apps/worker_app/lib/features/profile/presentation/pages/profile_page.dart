@@ -356,7 +356,9 @@ class _ProfileContent extends ConsumerWidget {
           _ActionTile(
             icon: Icons.support_agent_rounded,
             title: 'Support',
-            onTap: () => context.push('/support'),
+            onTap: () => context.push(
+              '/support?autoFocusForm=true&category=app&subject=${Uri.encodeComponent('Worker support request')}&message=${Uri.encodeComponent('I need help with my worker account, jobs, payouts, or app experience.')}',
+            ),
           ),
           _ActionTile(
             icon: Icons.star_rounded,

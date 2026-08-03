@@ -151,7 +151,9 @@ class _ChatPageState extends ConsumerState<ChatPage> {
         ),
         actions: [
           TapScale(
-            onTap: () => context.push('/support'),
+            onTap: () => context.push(
+              '/support?autoCompose=true&bookingId=${Uri.encodeComponent(widget.bookingId)}&category=booking&subject=${Uri.encodeComponent('Issue with booking ${widget.bookingId}')}&message=${Uri.encodeComponent('I need help with booking ${widget.bookingId}. Please review this conversation and the booking details.')}',
+            ),
             child: Padding(
               padding: const EdgeInsets.only(right: 16),
               child: Container(

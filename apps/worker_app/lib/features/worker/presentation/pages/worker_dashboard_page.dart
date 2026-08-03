@@ -265,8 +265,8 @@ class _WorkerDashboardPageState extends ConsumerState<WorkerDashboardPage> {
                   children: [
                     Expanded(
                       child: PremiumStatCard(
-                        label: 'Today',
-                        value: '${stats.completedJobsCount} jobs',
+                        label: 'Completed',
+                        value: '${stats.todayJobs.length} jobs today',
                         icon: Icons.work_history_rounded,
                         accentColor: const Color(0xFF0F766E),
                       ),
@@ -335,13 +335,14 @@ class _WorkerDashboardPageState extends ConsumerState<WorkerDashboardPage> {
               }
               return Column(
                 children: stats.todayJobs.map((job) {
+                  final route = job.bookingId.isNotEmpty ? '/job-execution?bookingId=${job.bookingId}' : '/jobs';
                   return Padding(
                     padding: const EdgeInsets.only(bottom: 12),
                     child: _JobCard(
                       title: job.serviceName,
                       status: job.status,
                       time: '${DateFormat('h:mm a').format(job.scheduledAt)} • ${job.addressLabel ?? 'No address'}',
-                      onTap: () => context.go('/jobs'),
+                      onTap: () => context.push(route),
                     ),
                   );
                 }).toList(),
@@ -391,7 +392,9 @@ class _WorkerDashboardPageState extends ConsumerState<WorkerDashboardPage> {
                 icon: Icons.support_agent_rounded,
                 label: 'Support',
                 color: const Color(0xFF3B82F6),
-                onTap: () => context.push('/support'),
+                onTap: () => context.push(
+                  '/support?autoFocusForm=true&category=app&subject=${Uri.encodeComponent('Worker app support')}&message=${Uri.encodeComponent('I need help with my worker app account, jobs, or payouts.')}',
+                ),
               ),
             ],
           ),

@@ -39,7 +39,9 @@ class WalletPage extends ConsumerWidget {
                     const SizedBox(width: 12),
                     Expanded(
                       child: OutlinedButton.icon(
-                        onPressed: () => context.push('/support'),
+                        onPressed: () => context.push(
+                          '/support?autoCompose=true&category=payment&subject=${Uri.encodeComponent('Wallet or payment help')}&message=${Uri.encodeComponent('I need help with my wallet balance, credits, or a payment issue.')}',
+                        ),
                         icon: const Icon(Icons.support_agent_rounded),
                         label: const Text('Support'),
                       ),

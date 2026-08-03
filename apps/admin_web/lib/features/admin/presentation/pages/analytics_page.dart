@@ -15,9 +15,10 @@ class AnalyticsPage extends ConsumerStatefulWidget {
 
 class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
   late final AnalyticsApi _api;
-  List<DailyTrendPoint>? _trends;
+  AnalyticsPayload? _payload;
   bool _isLoading = true;
   String? _error;
+  int _days = 30;
 
   @override
   void initState() {
@@ -32,10 +33,10 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
       _error = null;
     });
     try {
-      final trends = await _api.fetchTrends(days: 30);
+      final payload = await _api.fetchTrends(days: _days);
       if (mounted) {
         setState(() {
-          _trends = trends;
+          _payload = payload;
           _isLoading = false;
         });
       }
@@ -101,6 +102,37 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
               ],
             ),
             const SizedBox(height: 32),
+            Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: [
+                _RangeChip(
+                  label: '7 days',
+                  selected: _days == 7,
+                  onTap: () {
+                    setState(() => _days = 7);
+                    _loadData();
+                  },
+                ),
+                _RangeChip(
+                  label: '30 days',
+                  selected: _days == 30,
+                  onTap: () {
+                    setState(() => _days = 30);
+                    _loadData();
+                  },
+                ),
+                _RangeChip(
+                  label: '90 days',
+                  selected: _days == 90,
+                  onTap: () {
+                    setState(() => _days = 90);
+                    _loadData();
+                  },
+                ),
+              ],
+            ),
+            const SizedBox(height: 24),
 
             if (_isLoading)
               const Center(
@@ -113,15 +145,46 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
               Center(
                 child: Text('Failed to load data: $_error', style: const TextStyle(color: Colors.red)),
               )
-            else if (_trends != null) ...[
+            else if (_payload != null) ...[
+              _AnalyticsSummaryRow(trends: _payload!.trends),
+              const SizedBox(height: 24),
               // Charts Area
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Expanded(child: _buildRevenueChart(_trends!)),
+                  Expanded(child: _buildRevenueChart(_payload!.trends)),
                   const SizedBox(width: 24),
-                  Expanded(child: _buildBookingsChart(_trends!)),
+                  Expanded(child: _buildBookingsChart(_payload!.trends)),
                 ],
+              ),
+              const SizedBox(height: 24),
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final compact = constraints.maxWidth < 900;
+                  final items = [
+                    _BreakdownCard(title: 'Top cities', items: _payload!.insights.byCity),
+                    _BreakdownCard(title: 'Top categories', items: _payload!.insights.byCategory),
+                  ];
+
+                  if (compact) {
+                    return Column(
+                      children: [
+                        items[0],
+                        const SizedBox(height: 16),
+                        items[1],
+                      ],
+                    );
+                  }
+
+                  return Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(child: items[0]),
+                      const SizedBox(width: 24),
+                      Expanded(child: items[1]),
+                    ],
+                  );
+                },
               ),
             ]
           ],
@@ -290,6 +353,160 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
   }
 }
 
+class _RangeChip extends StatelessWidget {
+  const _RangeChip({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(999),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: selected ? const Color(0xFF0F766E).withValues(alpha: 0.12) : Colors.white,
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(color: selected ? const Color(0xFF0F766E).withValues(alpha: 0.3) : cs.outlineVariant),
+        ),
+        child: Text(
+          label,
+          style: tt.labelMedium?.copyWith(
+            fontWeight: FontWeight.w700,
+            color: selected ? const Color(0xFF0F766E) : cs.onSurfaceVariant,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _AnalyticsSummaryRow extends StatelessWidget {
+  const _AnalyticsSummaryRow({required this.trends});
+
+  final List<DailyTrendPoint> trends;
+
+  @override
+  Widget build(BuildContext context) {
+    final totalRevenue = trends.fold<double>(0, (sum, point) => sum + point.revenue);
+    final totalBookings = trends.fold<int>(0, (sum, point) => sum + point.bookings);
+    final totalWorkers = trends.fold<int>(0, (sum, point) => sum + point.newWorkers);
+    final topRevenueDay = trends.isEmpty
+        ? null
+        : trends.reduce((a, b) => a.revenue >= b.revenue ? a : b);
+    final topBookingsDay = trends.isEmpty
+        ? null
+        : trends.reduce((a, b) => a.bookings >= b.bookings ? a : b);
+
+    return Wrap(
+      spacing: 16,
+      runSpacing: 16,
+      children: [
+        _MetricCard(
+          label: 'Total revenue',
+          value: 'Rs ${NumberFormat.compact().format(totalRevenue)}',
+          sublabel: '${trends.length} days tracked',
+          icon: Icons.payments_rounded,
+          color: const Color(0xFF0F766E),
+        ),
+        _MetricCard(
+          label: 'Completed bookings',
+          value: '$totalBookings',
+          sublabel: topBookingsDay == null ? 'No booking data' : 'Peak day ${DateFormat('MMM d').format(DateTime.parse(topBookingsDay.date))}',
+          icon: Icons.receipt_long_rounded,
+          color: const Color(0xFF2563EB),
+        ),
+        _MetricCard(
+          label: 'New workers',
+          value: '$totalWorkers',
+          sublabel: 'Average ${(trends.isEmpty ? 0 : totalWorkers / trends.length).toStringAsFixed(1)} per day',
+          icon: Icons.person_add_alt_rounded,
+          color: const Color(0xFFF59E0B),
+        ),
+        _MetricCard(
+          label: 'Best revenue day',
+          value: topRevenueDay == null ? 'N/A' : 'Rs ${NumberFormat.compact().format(topRevenueDay.revenue)}',
+          sublabel: topRevenueDay == null ? 'No data' : DateFormat('MMM d').format(DateTime.parse(topRevenueDay.date)),
+          icon: Icons.trending_up_rounded,
+          color: const Color(0xFF8B5CF6),
+        ),
+      ],
+    );
+  }
+}
+
+class _MetricCard extends StatelessWidget {
+  const _MetricCard({
+    required this.label,
+    required this.value,
+    required this.sublabel,
+    required this.icon,
+    required this.color,
+  });
+
+  final String label;
+  final String value;
+  final String sublabel;
+  final IconData icon;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
+    return Container(
+      width: 260,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(AbzioTheme.buttonRadius),
+        border: Border.all(color: const Color(0xFFE5E7EB)),
+        boxShadow: AbzioTheme.eliteShadow,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(icon, color: color, size: 20),
+              ),
+              const Spacer(),
+              Text(label, style: tt.labelMedium?.copyWith(color: cs.onSurfaceVariant, fontWeight: FontWeight.w700)),
+            ],
+          ),
+          const SizedBox(height: 18),
+          Text(
+            value,
+            style: GoogleFonts.poppins(
+              fontSize: 28,
+              fontWeight: FontWeight.w800,
+              color: Colors.black87,
+              letterSpacing: -0.8,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(sublabel, style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
+        ],
+      ),
+    );
+  }
+}
+
 class _ChartCard extends StatelessWidget {
   const _ChartCard({required this.title, required this.chart});
   
@@ -320,6 +537,99 @@ class _ChartCard extends StatelessWidget {
           ),
           const SizedBox(height: 24),
           Expanded(child: chart),
+        ],
+      ),
+    );
+  }
+}
+
+class _BreakdownCard extends StatelessWidget {
+  const _BreakdownCard({
+    required this.title,
+    required this.items,
+  });
+
+  final String title;
+  final List<AnalyticsBreakdownItem> items;
+
+  @override
+  Widget build(BuildContext context) {
+    final tt = Theme.of(context).textTheme;
+    final cs = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(AbzioTheme.buttonRadius),
+        border: Border.all(color: const Color(0xFFE5E7EB)),
+        boxShadow: AbzioTheme.eliteShadow,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: GoogleFonts.poppins(
+              fontSize: 18,
+              fontWeight: FontWeight.w700,
+              color: Colors.black87,
+            ),
+          ),
+          const SizedBox(height: 18),
+          if (items.isEmpty)
+            Text('No breakdown data yet.', style: tt.bodyMedium?.copyWith(color: cs.onSurfaceVariant))
+          else
+            Column(
+              children: items
+                  .take(5)
+                  .map(
+                    (item) => Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: _BreakdownRow(item: item),
+                    ),
+                  )
+                  .toList(growable: false),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _BreakdownRow extends StatelessWidget {
+  const _BreakdownRow({required this.item});
+
+  final AnalyticsBreakdownItem item;
+
+  @override
+  Widget build(BuildContext context) {
+    final tt = Theme.of(context).textTheme;
+    final cs = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: cs.surfaceContainerHighest.withValues(alpha: 0.35),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(item.label, style: tt.titleSmall?.copyWith(fontWeight: FontWeight.w800)),
+                const SizedBox(height: 4),
+                Text(
+                  '${item.bookings} bookings',
+                  style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+                ),
+              ],
+            ),
+          ),
+          Text(
+            'Rs ${NumberFormat.compact().format(item.revenue)}',
+            style: tt.titleSmall?.copyWith(fontWeight: FontWeight.w800),
+          ),
         ],
       ),
     );

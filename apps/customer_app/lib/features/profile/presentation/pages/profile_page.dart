@@ -177,7 +177,9 @@ class ProfilePage extends ConsumerWidget {
             icon: Icons.support_agent_rounded,
             title: 'Help & support',
             subtitle: 'Raise a query or track a request',
-            onTap: () => context.push('/support'),
+            onTap: () => context.push(
+              '/support?autoCompose=true&category=other&subject=${Uri.encodeComponent('Account support')}&message=${Uri.encodeComponent('I need help with my account or app experience.')}',
+            ),
           ),
           _ProfileTile(
             icon: Icons.settings_rounded, 

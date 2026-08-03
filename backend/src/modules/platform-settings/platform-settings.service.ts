@@ -1,5 +1,6 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "../../lib/prisma.js";
+import { writeAuditLog } from "../../lib/audit.js";
 
 type CommissionRecord = {
   id: string;
@@ -160,6 +161,20 @@ export async function savePlatformSettings(payload: Record<string, unknown>) {
         })
   ]);
 
+  await writeAuditLog({
+    adminId: "system",
+    action: "platform.settings_updated",
+    targetType: "platform_settings",
+    targetId: "primary",
+    note: "Updated business identity and invoice sequence",
+    metadata: {
+      gstin,
+      legalBusinessName,
+      registeredAddress,
+      invoiceSequenceCurrentValue: invoiceSequenceCurrentValue ?? null
+    }
+  });
+
   return getPlatformSettings();
 }
 
@@ -215,6 +230,20 @@ export async function saveCommission(commissionId: string | null, payload: Recor
       })
     : null;
 
+  await writeAuditLog({
+    adminId: "system",
+    action: existing ? "commission.updated" : "commission.created",
+    targetType: "commission_rule",
+    targetId: saved.id,
+    note: cityId ? `Commission rule for ${cityId}` : "Global commission rule",
+    metadata: {
+      cityId,
+      rate,
+      fixedFee,
+      isActive
+    }
+  });
+
   return {
     commission: serializeCommission({
       ...saved,
@@ -224,7 +253,51 @@ export async function saveCommission(commissionId: string | null, payload: Recor
 }
 
 export async function deleteCommission(commissionId: string) {
+  await writeAuditLog({
+    adminId: "system",
+    action: "commission.deleted",
+    targetType: "commission_rule",
+    targetId: commissionId,
+    note: "Commission rule deleted"
+  });
+
   await prisma.commissions.delete({
     where: { id: commissionId }
   });
+}
+
+export async function listPlatformSettingsHistory() {
+  const logs = await prisma.adminAuditLog.findMany({
+    where: {
+      OR: [
+        { targetType: "platform_settings" },
+        { targetType: "commission_rule" }
+      ]
+    },
+    orderBy: { createdAt: "desc" },
+    take: 50,
+    select: {
+      id: true,
+      adminId: true,
+      action: true,
+      targetType: true,
+      targetId: true,
+      note: true,
+      metadata: true,
+      createdAt: true
+    }
+  });
+
+  return {
+    history: logs.map((log) => ({
+      id: log.id,
+      adminId: log.adminId,
+      action: log.action,
+      targetType: log.targetType,
+      targetId: log.targetId,
+      note: log.note,
+      metadata: log.metadata,
+      createdAt: log.createdAt.toISOString()
+    }))
+  };
 }

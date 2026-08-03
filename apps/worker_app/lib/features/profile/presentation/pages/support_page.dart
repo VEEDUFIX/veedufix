@@ -40,7 +40,18 @@ class WorkerSupportTicket {
 }
 
 class SupportPage extends ConsumerStatefulWidget {
-  const SupportPage({super.key});
+  const SupportPage({
+    super.key,
+    this.initialCategory,
+    this.initialSubject,
+    this.initialMessage,
+    this.autoFocusForm = false,
+  });
+
+  final String? initialCategory;
+  final String? initialSubject;
+  final String? initialMessage;
+  final bool autoFocusForm;
 
   @override
   ConsumerState<SupportPage> createState() => _SupportPageState();
@@ -49,11 +60,44 @@ class SupportPage extends ConsumerStatefulWidget {
 class _SupportPageState extends ConsumerState<SupportPage> {
   final _subjectCtrl = TextEditingController();
   final _messageCtrl = TextEditingController();
+  final _scrollController = ScrollController();
+  final _ticketFormKey = GlobalKey();
   String _selectedCategory = 'payment';
   bool _isSubmitting = false;
+  bool _didPrefill = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedCategory = widget.initialCategory?.trim().isNotEmpty == true
+        ? widget.initialCategory!.trim()
+        : _selectedCategory;
+    _subjectCtrl.text = widget.initialSubject?.trim().isNotEmpty == true
+        ? widget.initialSubject!.trim()
+        : '';
+    _messageCtrl.text = widget.initialMessage?.trim().isNotEmpty == true
+        ? widget.initialMessage!.trim()
+        : '';
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _didPrefill || !widget.autoFocusForm) {
+        return;
+      }
+      _didPrefill = true;
+      final context = _ticketFormKey.currentContext;
+      if (context != null) {
+        Scrollable.ensureVisible(
+          context,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOutCubic,
+          alignment: 0.1,
+        );
+      }
+    });
+  }
 
   @override
   void dispose() {
+    _scrollController.dispose();
     _subjectCtrl.dispose();
     _messageCtrl.dispose();
     super.dispose();
@@ -115,6 +159,7 @@ class _SupportPageState extends ConsumerState<SupportPage> {
       body: RefreshIndicator(
         onRefresh: () async => ref.refresh(workerSupportTicketsProvider.future),
         child: SingleChildScrollView(
+          controller: _scrollController,
           physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.all(16.0),
           child: Column(
@@ -128,8 +173,16 @@ class _SupportPageState extends ConsumerState<SupportPage> {
               const SizedBox(height: 16),
               _buildFaqList(),
               const SizedBox(height: 32),
-              Text('Raise a Ticket', style: tt.titleLarge),
-              const SizedBox(height: 16),
+              Container(
+                key: _ticketFormKey,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text('Raise a Ticket', style: tt.titleLarge),
+                    const SizedBox(height: 16),
+                  ],
+                ),
+              ),
               _buildTicketForm(context),
               const SizedBox(height: 32),
               Text('My Tickets', style: tt.titleLarge),

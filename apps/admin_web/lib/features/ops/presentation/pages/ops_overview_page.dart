@@ -232,7 +232,7 @@ class _OpsOverviewPageState extends ConsumerState<OpsOverviewPage> {
                                           subtitle: Text('${job.serviceLabel}\n${job.statusLabel} - ${job.elapsedLabel} active'),
                                           isThreeLine: true,
                                           trailing: const Icon(Icons.chevron_right_rounded, color: Colors.black26),
-                                          onTap: () => context.go('/ops/live-jobs'),
+                                          onTap: () => context.push('/ops/live-jobs/${job.bookingId}', extra: job),
                                         ),
                                       ),
                                     ),
@@ -283,7 +283,7 @@ class _OpsOverviewPageState extends ConsumerState<OpsOverviewPage> {
                                           ),
                                           isThreeLine: true,
                                           trailing: TextButton(
-                                            onPressed: () => context.go('/ops/alerts'),
+                                            onPressed: () => context.push('/ops/alerts/${alert.id}', extra: alert),
                                             child: const Text('Open'),
                                           ),
                                         ),

@@ -124,7 +124,18 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/support',
-        builder: (context, state) => const SupportPage(),
+        builder: (context, state) {
+          final autoFocusForm = state.uri.queryParameters['autoFocusForm'] == 'true';
+          final initialCategory = state.uri.queryParameters['category'];
+          final initialSubject = state.uri.queryParameters['subject'];
+          final initialMessage = state.uri.queryParameters['message'];
+          return SupportPage(
+            autoFocusForm: autoFocusForm,
+            initialCategory: initialCategory?.trim().isNotEmpty == true ? initialCategory!.trim() : null,
+            initialSubject: initialSubject?.trim().isNotEmpty == true ? initialSubject!.trim() : null,
+            initialMessage: initialMessage?.trim().isNotEmpty == true ? initialMessage!.trim() : null,
+          );
+        },
       ),
       GoRoute(
         path: '/reviews',

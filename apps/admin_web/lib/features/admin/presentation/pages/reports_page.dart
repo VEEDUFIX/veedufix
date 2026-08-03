@@ -4,6 +4,8 @@ import 'package:go_router/go_router.dart';
 import 'package:marketplace_shared/marketplace_shared.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../../admin/presentation/widgets/admin_surface.dart';
+
 class ReportsPage extends ConsumerWidget {
   const ReportsPage({super.key});
 
@@ -40,6 +42,37 @@ class ReportsPage extends ConsumerWidget {
         padding: const EdgeInsets.all(20),
         children: [
           const PremiumSectionHeader(title: 'CSV Downloads'),
+          const SizedBox(height: 12),
+          AdminSurfacePanel(
+            child: Padding(
+              padding: const EdgeInsets.all(18),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Saved report presets', style: tt.titleSmall?.copyWith(fontWeight: FontWeight.w800)),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 10,
+                    runSpacing: 10,
+                    children: [
+                      FilledButton.tonal(
+                        onPressed: () => _download('$baseUrl/api/admin/reports/bookings?status=COMPLETED'),
+                        child: const Text('Completed bookings'),
+                      ),
+                      FilledButton.tonal(
+                        onPressed: () => _download('$baseUrl/api/admin/reports/payouts?status=pending'),
+                        child: const Text('Pending payouts'),
+                      ),
+                      FilledButton.tonal(
+                        onPressed: () => _download('$baseUrl/api/admin/reports/payouts?status=failed'),
+                        child: const Text('Failed payouts'),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
           const SizedBox(height: 12),
           _ReportCard(
             title: 'Bookings Report',

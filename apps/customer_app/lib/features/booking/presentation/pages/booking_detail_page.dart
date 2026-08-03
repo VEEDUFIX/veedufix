@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 import 'package:marketplace_shared/marketplace_shared.dart';
 
 import '../../../profile/data/saved_addresses_api.dart';
+
 class BookingDetailPage extends ConsumerWidget {
   const BookingDetailPage({super.key, required this.bookingId});
   final String bookingId;
@@ -34,14 +35,16 @@ class BookingDetailPage extends ConsumerWidget {
             ),
           ),
         ),
-        title: Text('Booking Details', style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
+        title: Text('Booking Details',
+            style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
         actions: [
           bookingAsync.whenOrNull(
-            data: (b) => IconButton(
-              icon: const Icon(Icons.share_rounded),
-              onPressed: () => _shareBooking(context, b),
-            ),
-          ) ?? const SizedBox.shrink(),
+                data: (b) => IconButton(
+                  icon: const Icon(Icons.share_rounded),
+                  onPressed: () => _shareBooking(context, b),
+                ),
+              ) ??
+              const SizedBox.shrink(),
         ],
       ),
       body: bookingAsync.when(
@@ -123,8 +126,14 @@ class _BookingDetailBody extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final cs = Theme.of(context).colorScheme;
     final tt = Theme.of(context).textTheme;
-    final isActive = ['PENDING', 'ACCEPTED', 'WORKER_ASSIGNED', 'EN_ROUTE', 'ARRIVED', 'IN_PROGRESS']
-        .contains(booking.status);
+    final isActive = [
+      'PENDING',
+      'ACCEPTED',
+      'WORKER_ASSIGNED',
+      'EN_ROUTE',
+      'ARRIVED',
+      'IN_PROGRESS'
+    ].contains(booking.status);
     final canCancel = isActive;
     final canRebook = booking.serviceSlug != null && !isActive;
 
@@ -148,7 +157,8 @@ class _BookingDetailBody extends ConsumerWidget {
             child: Row(
               children: [
                 Container(
-                  width: 48, height: 48,
+                  width: 48,
+                  height: 48,
                   decoration: BoxDecoration(
                     color: _statusColor.withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(14),
@@ -161,10 +171,13 @@ class _BookingDetailBody extends ConsumerWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(_statusLabel,
-                          style: tt.titleMedium?.copyWith(color: _statusColor, fontWeight: FontWeight.w800)),
+                          style: tt.titleMedium?.copyWith(
+                              color: _statusColor,
+                              fontWeight: FontWeight.w800)),
                       const SizedBox(height: 2),
                       Text('Booking #${booking.code}',
-                          style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant, letterSpacing: 0.5)),
+                          style: tt.bodySmall?.copyWith(
+                              color: cs.onSurfaceVariant, letterSpacing: 0.5)),
                     ],
                   ),
                 ),
@@ -178,18 +191,23 @@ class _BookingDetailBody extends ConsumerWidget {
             TapScale(
               onTap: () => _showEditBookingSheet(context, ref, booking),
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
                 decoration: BoxDecoration(
                   color: cs.surfaceContainerHighest.withValues(alpha: 0.5),
                   borderRadius: BorderRadius.circular(AbzioTheme.buttonRadius),
-                  border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.3)),
+                  border: Border.all(
+                      color: cs.outlineVariant.withValues(alpha: 0.3)),
                 ),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Icon(Icons.edit_calendar_rounded, size: 18, color: cs.primary),
+                    Icon(Icons.edit_calendar_rounded,
+                        size: 18, color: cs.primary),
                     const SizedBox(width: 8),
-                    Text('Edit address & time', style: tt.labelLarge?.copyWith(fontWeight: FontWeight.w700, color: cs.primary)),
+                    Text('Edit address & time',
+                        style: tt.labelLarge?.copyWith(
+                            fontWeight: FontWeight.w700, color: cs.primary)),
                   ],
                 ),
               ),
@@ -198,26 +216,41 @@ class _BookingDetailBody extends ConsumerWidget {
           ],
 
           if (isActive) ...[
-            if (booking.status == 'EN_ROUTE' || booking.status == 'ARRIVED' || booking.status == 'IN_PROGRESS')
+            if (booking.status == 'EN_ROUTE' ||
+                booking.status == 'ARRIVED' ||
+                booking.status == 'IN_PROGRESS')
               Consumer(
                 builder: (context, ref, _) => TapScale(
-                  onTap: () => context.push('/tracking?bookingId=${booking.id}'),
+                  onTap: () =>
+                      context.push('/tracking?bookingId=${booking.id}'),
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 20, vertical: 14),
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
                         colors: [cs.primary, cs.primary.withValues(alpha: 0.8)],
-                        begin: Alignment.topLeft, end: Alignment.bottomRight,
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
                       ),
-                      borderRadius: BorderRadius.circular(AbzioTheme.buttonRadius),
-                      boxShadow: [BoxShadow(color: cs.primary.withValues(alpha: 0.35), blurRadius: 16, offset: const Offset(0, 6))],
+                      borderRadius:
+                          BorderRadius.circular(AbzioTheme.buttonRadius),
+                      boxShadow: [
+                        BoxShadow(
+                            color: cs.primary.withValues(alpha: 0.35),
+                            blurRadius: 16,
+                            offset: const Offset(0, 6))
+                      ],
                     ),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        const Icon(Icons.location_on_rounded, color: Colors.white, size: 20),
+                        const Icon(Icons.location_on_rounded,
+                            color: Colors.white, size: 20),
                         const SizedBox(width: 10),
-                        Text('Track Professional', style: tt.titleSmall?.copyWith(color: Colors.white, fontWeight: FontWeight.w800)),
+                        Text('Track Professional',
+                            style: tt.titleSmall?.copyWith(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w800)),
                       ],
                     ),
                   ),
@@ -229,20 +262,27 @@ class _BookingDetailBody extends ConsumerWidget {
                 children: [
                   Expanded(
                     child: TapScale(
-                      onTap: () => context.push('/chat?bookingId=${booking.id}'),
+                      onTap: () =>
+                          context.push('/chat?bookingId=${booking.id}'),
                       child: Container(
                         padding: const EdgeInsets.symmetric(vertical: 14),
                         decoration: BoxDecoration(
-                          color: cs.surfaceContainerHighest.withValues(alpha: 0.5),
+                          color:
+                              cs.surfaceContainerHighest.withValues(alpha: 0.5),
                           borderRadius: BorderRadius.circular(14),
-                          border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.3)),
+                          border: Border.all(
+                              color: cs.outlineVariant.withValues(alpha: 0.3)),
                         ),
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Icon(Icons.chat_bubble_outline_rounded, size: 18, color: cs.primary),
+                            Icon(Icons.chat_bubble_outline_rounded,
+                                size: 18, color: cs.primary),
                             const SizedBox(width: 8),
-                            Text('Chat', style: tt.labelLarge?.copyWith(fontWeight: FontWeight.w700, color: cs.primary)),
+                            Text('Chat',
+                                style: tt.labelLarge?.copyWith(
+                                    fontWeight: FontWeight.w700,
+                                    color: cs.primary)),
                           ],
                         ),
                       ),
@@ -266,7 +306,8 @@ class _BookingDetailBody extends ConsumerWidget {
                   Row(
                     children: [
                       Container(
-                        width: 48, height: 48,
+                        width: 48,
+                        height: 48,
                         decoration: BoxDecoration(
                           color: _accent.withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(14),
@@ -279,11 +320,14 @@ class _BookingDetailBody extends ConsumerWidget {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(booking.serviceName,
-                                style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
+                                style: tt.titleMedium
+                                    ?.copyWith(fontWeight: FontWeight.w800)),
                             const SizedBox(height: 2),
                             Text(
-                              DateFormat('EEE, d MMM y • h:mm a').format(booking.scheduledAt),
-                              style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+                              DateFormat('EEE, d MMM y • h:mm a')
+                                  .format(booking.scheduledAt),
+                              style: tt.bodySmall
+                                  ?.copyWith(color: cs.onSurfaceVariant),
                             ),
                           ],
                         ),
@@ -297,11 +341,13 @@ class _BookingDetailBody extends ConsumerWidget {
                     Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Icon(Icons.location_on_rounded, size: 18, color: cs.primary),
+                        Icon(Icons.location_on_rounded,
+                            size: 18, color: cs.primary),
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(booking.addressLabel!,
-                              style: tt.bodyMedium?.copyWith(color: cs.onSurface, height: 1.4)),
+                              style: tt.bodyMedium
+                                  ?.copyWith(color: cs.onSurface, height: 1.4)),
                         ),
                       ],
                     ),
@@ -323,16 +369,20 @@ class _BookingDetailBody extends ConsumerWidget {
                     const _SectionLabel(label: 'Professional'),
                     const SizedBox(height: 12),
                     TapScale(
-                      onTap: () => context.push('/professional?id=${booking.worker!.id}'),
+                      onTap: () => context
+                          .push('/professional?id=${booking.worker!.id}'),
                       child: Row(
-                          children: [
+                        children: [
                           MarketplaceNetworkAvatar(
                             imageUrl: booking.worker!.avatarUrl,
                             radius: 26,
                             backgroundColor: _accent.withValues(alpha: 0.15),
                             fallback: Text(
-                              booking.worker!.name.substring(0, 1).toUpperCase(),
-                              style: tt.titleMedium?.copyWith(color: _accent, fontWeight: FontWeight.w800),
+                              booking.worker!.name
+                                  .substring(0, 1)
+                                  .toUpperCase(),
+                              style: tt.titleMedium?.copyWith(
+                                  color: _accent, fontWeight: FontWeight.w800),
                             ),
                           ),
                           const SizedBox(width: 14),
@@ -341,20 +391,26 @@ class _BookingDetailBody extends ConsumerWidget {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(booking.worker!.name,
-                                    style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
+                                    style: tt.titleMedium?.copyWith(
+                                        fontWeight: FontWeight.w800)),
                                 const SizedBox(height: 4),
                                 Row(
                                   children: [
-                                    const Icon(Icons.star_rounded, size: 14, color: Color(0xFFF59E0B)),
+                                    const Icon(Icons.star_rounded,
+                                        size: 14, color: Color(0xFFF59E0B)),
                                     const SizedBox(width: 4),
-                                    Text(booking.worker!.rating.toStringAsFixed(1),
-                                        style: tt.bodySmall?.copyWith(fontWeight: FontWeight.w600)),
+                                    Text(
+                                        booking.worker!.rating
+                                            .toStringAsFixed(1),
+                                        style: tt.bodySmall?.copyWith(
+                                            fontWeight: FontWeight.w600)),
                                   ],
                                 ),
                               ],
                             ),
                           ),
-                          Icon(Icons.chevron_right_rounded, color: cs.onSurfaceVariant),
+                          Icon(Icons.chevron_right_rounded,
+                              color: cs.onSurfaceVariant),
                         ],
                       ),
                     ),
@@ -373,17 +429,23 @@ class _BookingDetailBody extends ConsumerWidget {
                 children: [
                   const _SectionLabel(label: 'Payment'),
                   const SizedBox(height: 16),
-                  _PayRow(label: 'Service total', value: '₹${booking.totalAmount.toStringAsFixed(2)}'),
+                  _PayRow(
+                      label: 'Service total',
+                      value: '₹${booking.totalAmount.toStringAsFixed(2)}'),
                   const SizedBox(height: 10),
                   const Divider(height: 1),
                   const SizedBox(height: 10),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text('Amount paid', style: tt.titleSmall?.copyWith(fontWeight: FontWeight.w800)),
+                      Text('Amount paid',
+                          style: tt.titleSmall
+                              ?.copyWith(fontWeight: FontWeight.w800)),
                       Text(
                         '₹${booking.totalAmount.toStringAsFixed(2)}',
-                        style: tt.titleSmall?.copyWith(fontWeight: FontWeight.w800, color: const Color(0xFF10B981)),
+                        style: tt.titleSmall?.copyWith(
+                            fontWeight: FontWeight.w800,
+                            color: const Color(0xFF10B981)),
                       ),
                     ],
                   ),
@@ -406,24 +468,30 @@ class _BookingDetailBody extends ConsumerWidget {
                     children: [
                       _TimelineBadge(
                         icon: Icons.update_rounded,
-                        label: '${booking.timeline.isNotEmpty ? booking.timeline.length : 4} updates',
+                        label:
+                            '${booking.timeline.isNotEmpty ? booking.timeline.length : 4} updates',
                       ),
                       const SizedBox(width: 8),
                       _TimelineBadge(
                         icon: Icons.schedule_rounded,
                         label: DateFormat('d MMM, h:mm a').format(
-                          booking.timeline.isNotEmpty ? booking.timeline.last.createdAt : booking.scheduledAt,
+                          booking.timeline.isNotEmpty
+                              ? booking.timeline.last.createdAt
+                              : booking.scheduledAt,
                         ),
                       ),
                     ],
                   ),
                   const SizedBox(height: 16),
                   if (booking.timeline.isNotEmpty) ...[
-                    for (var index = 0; index < booking.timeline.length; index++)
+                    for (var index = 0;
+                        index < booking.timeline.length;
+                        index++)
                       _TimelineStep(
                         status: booking.timeline[index].status,
                         label: booking.timeline[index].title,
-                        time: DateFormat('d MMM, h:mm a').format(booking.timeline[index].createdAt),
+                        time: DateFormat('d MMM, h:mm a')
+                            .format(booking.timeline[index].createdAt),
                         description: booking.timeline[index].description,
                         isCompleted: true,
                         isFirst: index == 0,
@@ -433,12 +501,15 @@ class _BookingDetailBody extends ConsumerWidget {
                     _TimelineStep(
                       status: 'PENDING',
                       label: 'Booking placed',
-                      time: DateFormat('d MMM, h:mm a').format(booking.scheduledAt),
+                      time: DateFormat('d MMM, h:mm a')
+                          .format(booking.scheduledAt),
                       isCompleted: true,
                       isFirst: true,
                     ),
                     _TimelineStep(
-                      status: booking.worker != null ? 'WORKER_ASSIGNED' : 'PENDING',
+                      status: booking.worker != null
+                          ? 'WORKER_ASSIGNED'
+                          : 'PENDING',
                       label: 'Worker assigned',
                       time: booking.worker != null ? booking.worker!.name : '',
                       isCompleted: booking.worker != null,
@@ -447,7 +518,8 @@ class _BookingDetailBody extends ConsumerWidget {
                       status: 'IN_PROGRESS',
                       label: 'Work in progress',
                       time: '',
-                      isCompleted: ['IN_PROGRESS', 'ARRIVED', 'COMPLETED'].contains(booking.status),
+                      isCompleted: ['IN_PROGRESS', 'ARRIVED', 'COMPLETED']
+                          .contains(booking.status),
                     ),
                     _TimelineStep(
                       status: booking.status,
@@ -466,7 +538,8 @@ class _BookingDetailBody extends ConsumerWidget {
           // ─── Rate / Rebook CTAs ────────────────────────────────────────────
           if (booking.status == 'COMPLETED') ...[
             TapScale(
-              onTap: () => context.push('/booking-rating?bookingId=${booking.id}'),
+              onTap: () =>
+                  context.push('/booking-rating?bookingId=${booking.id}'),
               child: Container(
                 padding: const EdgeInsets.symmetric(vertical: 16),
                 decoration: BoxDecoration(
@@ -509,7 +582,8 @@ class _BookingDetailBody extends ConsumerWidget {
                   padding: const EdgeInsets.symmetric(vertical: 14),
                   decoration: BoxDecoration(
                     color: cs.errorContainer.withValues(alpha: 0.55),
-                    borderRadius: BorderRadius.circular(AbzioTheme.buttonRadius),
+                    borderRadius:
+                        BorderRadius.circular(AbzioTheme.buttonRadius),
                     border: Border.all(color: cs.error.withValues(alpha: 0.25)),
                   ),
                   child: Row(
@@ -532,6 +606,37 @@ class _BookingDetailBody extends ConsumerWidget {
             const SizedBox(height: 10),
           ],
 
+          TapScale(
+            onTap: () => context.push(
+              '/support?autoCompose=true&bookingId=${Uri.encodeComponent(booking.id)}&bookingCode=${Uri.encodeComponent(booking.code)}&serviceName=${Uri.encodeComponent(booking.serviceName)}&category=booking&subject=${Uri.encodeComponent('Issue with booking ${booking.code}')}&message=${Uri.encodeComponent('I need help with booking ${booking.code} for ${booking.serviceName}. Please review this booking and let me know the next steps.')}',
+            ),
+            child: Container(
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              decoration: BoxDecoration(
+                color: cs.surfaceContainerHighest.withValues(alpha: 0.45),
+                borderRadius: BorderRadius.circular(AbzioTheme.buttonRadius),
+                border: Border.all(
+                    color: cs.outlineVariant.withValues(alpha: 0.45)),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.support_agent_rounded,
+                      color: cs.primary, size: 18),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Need help? Contact support',
+                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                          color: cs.primary,
+                          fontWeight: FontWeight.w700,
+                        ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 10),
+
           if (canRebook) ...[
             TapScale(
               onTap: () => context.push('/service/${booking.serviceSlug}'),
@@ -544,7 +649,8 @@ class _BookingDetailBody extends ConsumerWidget {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    const Icon(Icons.refresh_rounded, color: Colors.white, size: 18),
+                    const Icon(Icons.refresh_rounded,
+                        color: Colors.white, size: 18),
                     const SizedBox(width: 8),
                     Text(
                       'Book Again',
@@ -562,26 +668,28 @@ class _BookingDetailBody extends ConsumerWidget {
           TapScale(
             onTap: () => context.push('/invoice/${booking.id}'),
             child: Container(
-                padding: const EdgeInsets.symmetric(vertical: 14),
-                decoration: BoxDecoration(
-                  color: cs.surfaceContainerHighest.withValues(alpha: 0.5),
-                  borderRadius: BorderRadius.circular(AbzioTheme.buttonRadius),
-                  border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.5)),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(Icons.receipt_long_rounded, color: cs.onSurface, size: 18),
-                    const SizedBox(width: 8),
-                    Text(
-                      'View Invoice',
-                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                            fontWeight: FontWeight.w700,
-                          ),
-                    ),
-                  ],
-                ),
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              decoration: BoxDecoration(
+                color: cs.surfaceContainerHighest.withValues(alpha: 0.5),
+                borderRadius: BorderRadius.circular(AbzioTheme.buttonRadius),
+                border:
+                    Border.all(color: cs.outlineVariant.withValues(alpha: 0.5)),
               ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.receipt_long_rounded,
+                      color: cs.onSurface, size: 18),
+                  const SizedBox(width: 8),
+                  Text(
+                    'View Invoice',
+                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w700,
+                        ),
+                  ),
+                ],
+              ),
+            ),
           ),
         ],
       ),
@@ -604,7 +712,8 @@ Future<void> _confirmCancelBooking(
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Text('Tell us why you want to cancel so we can improve support.'),
+              const Text(
+                  'Tell us why you want to cancel so we can improve support.'),
               const SizedBox(height: 12),
               TextField(
                 controller: controller,
@@ -641,7 +750,8 @@ Future<void> _confirmCancelBooking(
         return;
       }
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please provide a short cancellation reason.')),
+        const SnackBar(
+            content: Text('Please provide a short cancellation reason.')),
       );
       return;
     }
@@ -806,7 +916,8 @@ class _BookingEditSheetState extends ConsumerState<_BookingEditSheet> {
     final tt = Theme.of(context).textTheme;
 
     return Padding(
-      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+      padding:
+          EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
       child: Container(
         padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
         decoration: BoxDecoration(
@@ -830,7 +941,8 @@ class _BookingEditSheetState extends ConsumerState<_BookingEditSheet> {
                 ),
               ),
               const SizedBox(height: 18),
-              Text('Edit booking', style: tt.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
+              Text('Edit booking',
+                  style: tt.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
               const SizedBox(height: 4),
               Text(
                 'Update the address or reschedule before dispatch starts.',
@@ -838,21 +950,29 @@ class _BookingEditSheetState extends ConsumerState<_BookingEditSheet> {
               ),
               const SizedBox(height: 18),
               if (_loading)
-                const Center(child: Padding(padding: EdgeInsets.all(16), child: CircularProgressIndicator()))
+                const Center(
+                    child: Padding(
+                        padding: EdgeInsets.all(16),
+                        child: CircularProgressIndicator()))
               else if (_error != null)
                 Text(_error!, style: tt.bodyMedium?.copyWith(color: cs.error))
               else ...[
-                Text('Saved address', style: tt.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
+                Text('Saved address',
+                    style:
+                        tt.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
                 const SizedBox(height: 8),
                 RadioGroup<String>(
                   groupValue: _selectedAddressId,
-                  onChanged: (value) => setState(() => _selectedAddressId = value),
+                  onChanged: (value) =>
+                      setState(() => _selectedAddressId = value),
                   child: Column(
                     children: [
                       ..._addresses.map((address) {
                         return RadioListTile<String>(
                           value: address.id,
-                          title: Text(address.label, style: tt.bodyMedium?.copyWith(fontWeight: FontWeight.w700)),
+                          title: Text(address.label,
+                              style: tt.bodyMedium
+                                  ?.copyWith(fontWeight: FontWeight.w700)),
                           subtitle: Text(address.displayAddress),
                         );
                       }),
@@ -867,7 +987,8 @@ class _BookingEditSheetState extends ConsumerState<_BookingEditSheet> {
                       child: OutlinedButton.icon(
                         onPressed: _pickDate,
                         icon: const Icon(Icons.calendar_month_rounded),
-                        label: Text(DateFormat('d MMM y').format(_selectedDateTime)),
+                        label: Text(
+                            DateFormat('d MMM y').format(_selectedDateTime)),
                       ),
                     ),
                     const SizedBox(width: 12),
@@ -875,7 +996,8 @@ class _BookingEditSheetState extends ConsumerState<_BookingEditSheet> {
                       child: OutlinedButton.icon(
                         onPressed: _pickTime,
                         icon: const Icon(Icons.schedule_rounded),
-                        label: Text(DateFormat('h:mm a').format(_selectedDateTime)),
+                        label: Text(
+                            DateFormat('h:mm a').format(_selectedDateTime)),
                       ),
                     ),
                   ],
@@ -930,7 +1052,8 @@ class _PayRow extends StatelessWidget {
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
         Text(label, style: tt.bodyMedium?.copyWith(color: cs.onSurfaceVariant)),
-        Text(value, style: tt.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
+        Text(value,
+            style: tt.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
       ],
     );
   }
@@ -957,7 +1080,11 @@ class _TimelineStep extends StatelessWidget {
 
   Color _statusColor(ColorScheme cs) => switch (status) {
         'COMPLETED' => const Color(0xFF10B981),
-        'REFUNDED' || 'CANCELLED' || 'CANCELLED_MANUAL' || 'CANCELLED_NO_SHOW' => const Color(0xFFEF4444),
+        'REFUNDED' ||
+        'CANCELLED' ||
+        'CANCELLED_MANUAL' ||
+        'CANCELLED_NO_SHOW' =>
+          const Color(0xFFEF4444),
         'ARRIVED' || 'IN_PROGRESS' => const Color(0xFF6366F1),
         'WORKER_ASSIGNED' => const Color(0xFF0F766E),
         'PAYMENT_CAPTURED' => const Color(0xFF14B8A6),
@@ -967,7 +1094,11 @@ class _TimelineStep extends StatelessWidget {
 
   IconData _statusIcon() => switch (status) {
         'COMPLETED' => Icons.task_alt_rounded,
-        'REFUNDED' || 'CANCELLED' || 'CANCELLED_MANUAL' || 'CANCELLED_NO_SHOW' => Icons.cancel_rounded,
+        'REFUNDED' ||
+        'CANCELLED' ||
+        'CANCELLED_MANUAL' ||
+        'CANCELLED_NO_SHOW' =>
+          Icons.cancel_rounded,
         'ARRIVED' => Icons.location_on_rounded,
         'IN_PROGRESS' => Icons.handyman_rounded,
         'WORKER_ASSIGNED' => Icons.verified_rounded,
@@ -989,7 +1120,8 @@ class _TimelineStep extends StatelessWidget {
           Column(
             children: [
               Container(
-                width: 20, height: 20,
+                width: 20,
+                height: 20,
                 decoration: BoxDecoration(
                   color: isCompleted ? accent : cs.surfaceContainerHighest,
                   shape: BoxShape.circle,
@@ -1007,7 +1139,9 @@ class _TimelineStep extends StatelessWidget {
                   child: Container(
                     width: 2,
                     margin: const EdgeInsets.symmetric(vertical: 4),
-                    color: isCompleted ? accent.withValues(alpha: 0.35) : cs.outlineVariant.withValues(alpha: 0.4),
+                    color: isCompleted
+                        ? accent.withValues(alpha: 0.35)
+                        : cs.outlineVariant.withValues(alpha: 0.4),
                   ),
                 ),
             ],
@@ -1025,11 +1159,15 @@ class _TimelineStep extends StatelessWidget {
                     )),
                 if (time.isNotEmpty) ...[
                   const SizedBox(height: 2),
-                  Text(time, style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
+                  Text(time,
+                      style:
+                          tt.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
                 ],
                 if (description != null && description!.isNotEmpty) ...[
                   const SizedBox(height: 4),
-                  Text(description!, style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant, height: 1.35)),
+                  Text(description!,
+                      style: tt.bodySmall
+                          ?.copyWith(color: cs.onSurfaceVariant, height: 1.35)),
                 ],
               ],
             ),
@@ -1065,7 +1203,8 @@ class _TimelineBadge extends StatelessWidget {
         children: [
           Icon(icon, size: 14, color: cs.primary),
           const SizedBox(width: 6),
-          Text(label, style: tt.labelMedium?.copyWith(fontWeight: FontWeight.w700)),
+          Text(label,
+              style: tt.labelMedium?.copyWith(fontWeight: FontWeight.w700)),
         ],
       ),
     );
@@ -1106,7 +1245,8 @@ class BookingDetail {
         id: json['id'] as String? ?? '',
         code: json['code'] as String? ?? '',
         status: json['status'] as String? ?? 'PENDING',
-        scheduledAt: DateTime.tryParse(json['scheduledAt'] as String? ?? '') ?? DateTime.now(),
+        scheduledAt: DateTime.tryParse(json['scheduledAt'] as String? ?? '') ??
+            DateTime.now(),
         totalAmount: (json['totalAmount'] as num?)?.toDouble() ?? 0.0,
         serviceName: json['serviceName'] as String? ?? 'Service',
         serviceIcon: json['serviceIcon'] as String?,
@@ -1116,7 +1256,8 @@ class BookingDetail {
             ? BookingWorker.fromJson(json['worker'] as Map<String, dynamic>)
             : null,
         timeline: (json['timeline'] as List<dynamic>? ?? [])
-            .map((item) => BookingTimelineEvent.fromJson(item as Map<String, dynamic>))
+            .map((item) =>
+                BookingTimelineEvent.fromJson(item as Map<String, dynamic>))
             .toList(),
       );
 }
@@ -1136,19 +1277,21 @@ class BookingTimelineEvent {
   final String? description;
   final DateTime createdAt;
 
-  factory BookingTimelineEvent.fromJson(Map<String, dynamic> json) => BookingTimelineEvent(
+  factory BookingTimelineEvent.fromJson(Map<String, dynamic> json) =>
+      BookingTimelineEvent(
         id: json['id'] as String? ?? '',
         status: json['status'] as String? ?? 'PENDING',
         title: json['title'] as String? ?? 'Update',
         description: json['description'] as String?,
-        createdAt: DateTime.tryParse(json['createdAt'] as String? ?? '') ?? DateTime.now(),
+        createdAt: DateTime.tryParse(json['createdAt'] as String? ?? '') ??
+            DateTime.now(),
       );
 }
 
 // ─── Provider ─────────────────────────────────────────────────────────────────
 
-final bookingDetailPageProvider =
-    FutureProvider.family.autoDispose<BookingDetail, String>((ref, bookingId) async {
+final bookingDetailPageProvider = FutureProvider.family
+    .autoDispose<BookingDetail, String>((ref, bookingId) async {
   final api = ref.watch(apiClientProvider);
   final data = await api.get('/users/bookings/$bookingId');
   return BookingDetail.fromJson(data['booking'] as Map<String, dynamic>);

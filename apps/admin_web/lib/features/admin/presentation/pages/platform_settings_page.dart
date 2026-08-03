@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:intl/intl.dart';
 import 'package:marketplace_shared/marketplace_shared.dart';
 
 import '../widgets/admin_surface.dart';
@@ -16,6 +17,7 @@ class PlatformSettingsPage extends ConsumerStatefulWidget {
 
 class _PlatformSettingsPageState extends ConsumerState<PlatformSettingsPage> {
   late final _PlatformSettingsApi _api;
+  late Future<List<_PlatformSettingsHistoryEntry>> _historyFuture;
   final _gstinController = TextEditingController();
   final _businessNameController = TextEditingController();
   final _addressController = TextEditingController();
@@ -29,6 +31,7 @@ class _PlatformSettingsPageState extends ConsumerState<PlatformSettingsPage> {
   void initState() {
     super.initState();
     _api = _PlatformSettingsApi(ref.read(apiClientProvider).dio);
+    _historyFuture = _api.fetchHistory();
     _loadSnapshot();
   }
 
@@ -110,6 +113,7 @@ class _PlatformSettingsPageState extends ConsumerState<PlatformSettingsPage> {
 
   Future<void> _refresh() async {
     _controllersInitialized = false;
+    _historyFuture = _api.fetchHistory();
     await _loadSnapshot();
   }
 
@@ -548,6 +552,56 @@ class _PlatformSettingsPageState extends ConsumerState<PlatformSettingsPage> {
             AdminSurfacePanel(
               child: Padding(
                 padding: const EdgeInsets.all(22),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const AdminSectionHeader(
+                      title: 'Recent changes',
+                      subtitle: 'Latest platform setting and commission edits from the audit trail.',
+                    ),
+                    const SizedBox(height: 16),
+                    FutureBuilder<List<_PlatformSettingsHistoryEntry>>(
+                      future: _historyFuture,
+                      builder: (context, historySnapshot) {
+                        if (historySnapshot.connectionState == ConnectionState.waiting && !historySnapshot.hasData) {
+                          return const Center(
+                            child: Padding(
+                              padding: EdgeInsets.all(24),
+                              child: CircularProgressIndicator(),
+                            ),
+                          );
+                        }
+
+                        if (historySnapshot.hasError) {
+                          return Text('Unable to load history: ${historySnapshot.error}');
+                        }
+
+                        final history = historySnapshot.data ?? const <_PlatformSettingsHistoryEntry>[];
+                        if (history.isEmpty) {
+                          return const Text('No recent changes found.');
+                        }
+
+                        return Column(
+                          children: history
+                              .take(6)
+                              .map(
+                                (entry) => Padding(
+                                  padding: const EdgeInsets.only(bottom: 10),
+                                  child: _PlatformSettingsHistoryRow(entry: entry),
+                                ),
+                              )
+                              .toList(growable: false),
+                        );
+                      },
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            AdminSurfacePanel(
+              child: Padding(
+                padding: const EdgeInsets.all(22),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -595,6 +649,14 @@ class _PlatformSettingsApi {
   Future<_PlatformSettingsSnapshot> fetchSnapshot() async {
     final response = await _dio.get<Map<String, dynamic>>('/admin/platform-settings');
     return _PlatformSettingsSnapshot.fromJson(response.data ?? const <String, dynamic>{});
+  }
+
+  Future<List<_PlatformSettingsHistoryEntry>> fetchHistory() async {
+    final response = await _dio.get<Map<String, dynamic>>('/admin/platform-settings/history');
+    return (response.data?['history'] as List? ?? const [])
+        .whereType<Map<String, dynamic>>()
+        .map(_PlatformSettingsHistoryEntry.fromJson)
+        .toList(growable: false);
   }
 
   Future<_PlatformSettingsSnapshot> updatePlatformSettings({
@@ -756,6 +818,41 @@ class _CityOption {
   }
 }
 
+class _PlatformSettingsHistoryEntry {
+  const _PlatformSettingsHistoryEntry({
+    required this.id,
+    required this.adminId,
+    required this.action,
+    required this.targetType,
+    required this.targetId,
+    required this.note,
+    required this.metadata,
+    required this.createdAt,
+  });
+
+  final String id;
+  final String adminId;
+  final String action;
+  final String targetType;
+  final String targetId;
+  final String? note;
+  final Map<String, dynamic> metadata;
+  final DateTime createdAt;
+
+  factory _PlatformSettingsHistoryEntry.fromJson(Map<String, dynamic> json) {
+    return _PlatformSettingsHistoryEntry(
+      id: json['id'] as String? ?? '',
+      adminId: json['adminId'] as String? ?? '',
+      action: json['action'] as String? ?? '',
+      targetType: json['targetType'] as String? ?? '',
+      targetId: json['targetId'] as String? ?? '',
+      note: json['note'] as String?,
+      metadata: (json['metadata'] as Map?)?.cast<String, dynamic>() ?? const <String, dynamic>{},
+      createdAt: DateTime.tryParse(json['createdAt'] as String? ?? '') ?? DateTime.now(),
+    );
+  }
+}
+
 class _MetricCard extends StatelessWidget {
   const _MetricCard({
     required this.label,
@@ -800,6 +897,74 @@ class _MetricCard extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+class _PlatformSettingsHistoryRow extends StatelessWidget {
+  const _PlatformSettingsHistoryRow({required this.entry});
+
+  final _PlatformSettingsHistoryEntry entry;
+
+  @override
+  Widget build(BuildContext context) {
+    final tt = Theme.of(context).textTheme;
+    final cs = Theme.of(context).colorScheme;
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: cs.surfaceContainerHighest.withValues(alpha: 0.35),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 42,
+            height: 42,
+            decoration: BoxDecoration(
+              color: const Color(0xFF0F766E).withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: const Icon(Icons.history_rounded, color: Color(0xFF0F766E), size: 20),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(_readableAction(entry.action), style: tt.titleSmall?.copyWith(fontWeight: FontWeight.w800)),
+                const SizedBox(height: 4),
+                Text(
+                  entry.note ?? entry.targetId,
+                  style: tt.bodyMedium?.copyWith(color: cs.onSurfaceVariant),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  '${DateFormat('d MMM y, h:mm a').format(entry.createdAt)} · ${entry.adminId}',
+                  style: tt.labelMedium?.copyWith(color: cs.onSurfaceVariant),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+String _readableAction(String action) {
+  switch (action) {
+    case 'platform.settings_updated':
+      return 'Platform settings updated';
+    case 'commission.created':
+      return 'Commission rule created';
+    case 'commission.updated':
+      return 'Commission rule updated';
+    case 'commission.deleted':
+      return 'Commission rule deleted';
+    default:
+      return action.replaceAll('.', ' ');
   }
 }
 

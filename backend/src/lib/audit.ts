@@ -12,6 +12,10 @@ export type AuditAction =
   | "payout.bulk_retried"
   | "refund.retried"
   | "refund.bulk_retried"
+  | "platform.settings_updated"
+  | "commission.created"
+  | "commission.updated"
+  | "commission.deleted"
   | "catalog.category_created"
   | "catalog.category_updated"
   | "catalog.subcategory_created"
@@ -22,6 +26,8 @@ export type AuditTargetType =
   | "dispute"
   | "payout"
   | "refund"
+  | "platform_settings"
+  | "commission_rule"
   | "catalog_category"
   | "catalog_subcategory";
 
@@ -56,4 +62,3 @@ export async function writeAuditLog({
     logger.error({ error, adminId, action, targetId }, "Audit log write failed");
   }
 }
-

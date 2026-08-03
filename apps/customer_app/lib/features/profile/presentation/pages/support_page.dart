@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -27,7 +29,8 @@ class CustomerSupportTicket {
       subject: json['subject'] as String? ?? 'Support ticket',
       message: json['message'] as String? ?? '',
       status: json['status'] as String? ?? 'OPEN',
-      createdAt: DateTime.tryParse(json['createdAt'] as String? ?? '') ?? DateTime.now(),
+      createdAt: DateTime.tryParse(json['createdAt'] as String? ?? '') ??
+          DateTime.now(),
       replyCount: (json['replyCount'] as num?)?.toInt() ?? 0,
     );
   }
@@ -55,7 +58,8 @@ class CustomerSupportReply {
     return CustomerSupportReply(
       id: json['id'] as String? ?? '',
       message: json['message'] as String? ?? '',
-      createdAt: DateTime.tryParse(json['createdAt'] as String? ?? '') ?? DateTime.now(),
+      createdAt: DateTime.tryParse(json['createdAt'] as String? ?? '') ??
+          DateTime.now(),
       isInternal: json['isInternal'] as bool? ?? false,
       authorName: author?['name'] as String?,
       authorRole: author?['role'] as String?,
@@ -84,7 +88,8 @@ class CustomerSupportThread {
   }
 }
 
-final customerSupportTicketsProvider = FutureProvider.autoDispose<List<CustomerSupportTicket>>((ref) async {
+final customerSupportTicketsProvider =
+    FutureProvider.autoDispose<List<CustomerSupportTicket>>((ref) async {
   final api = ref.watch(apiClientProvider);
   final response = await api.get('/support/tickets/me');
   return (response['tickets'] as List<dynamic>? ?? const [])
@@ -93,20 +98,76 @@ final customerSupportTicketsProvider = FutureProvider.autoDispose<List<CustomerS
       .toList(growable: false);
 });
 
-final customerSupportThreadProvider =
-    FutureProvider.autoDispose.family<CustomerSupportThread, String>((ref, ticketId) async {
+final customerSupportThreadProvider = FutureProvider.autoDispose
+    .family<CustomerSupportThread, String>((ref, ticketId) async {
   final api = ref.watch(apiClientProvider);
   final response = await api.get('/support/tickets/$ticketId');
-  return CustomerSupportThread.fromJson(response['ticket'] as Map<String, dynamic>);
+  return CustomerSupportThread.fromJson(
+      response['ticket'] as Map<String, dynamic>);
 });
 
-class SupportPage extends StatelessWidget {
-  const SupportPage({super.key});
+class SupportPage extends ConsumerStatefulWidget {
+  const SupportPage({
+    super.key,
+    this.bookingId,
+    this.bookingCode,
+    this.serviceName,
+    this.autoCompose = false,
+    this.initialCategory,
+    this.initialSubject,
+    this.initialMessage,
+  });
+
+  final String? bookingId;
+  final String? bookingCode;
+  final String? serviceName;
+  final bool autoCompose;
+  final String? initialCategory;
+  final String? initialSubject;
+  final String? initialMessage;
+
+  @override
+  ConsumerState<SupportPage> createState() => _SupportPageState();
+}
+
+class _SupportPageState extends ConsumerState<SupportPage> {
+  bool _openedDraft = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _maybeOpenDraft();
+    });
+  }
+
+  void _maybeOpenDraft() {
+    if (!mounted || _openedDraft || !widget.autoCompose) {
+      return;
+    }
+
+    final subject = widget.initialSubject?.trim();
+    if (subject == null || subject.isEmpty) {
+      return;
+    }
+
+    _openedDraft = true;
+    unawaited(
+      _createSupportTicket(
+        context,
+        ref: ref,
+        category: widget.initialCategory?.trim().isNotEmpty == true ? widget.initialCategory!.trim() : 'other',
+        subject: subject,
+        initialMessage: widget.initialMessage?.trim().isNotEmpty == true ? widget.initialMessage!.trim() : null,
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final tt = Theme.of(context).textTheme;
+    final bookingIdLabel = widget.bookingId?.trim().isNotEmpty == true ? widget.bookingId!.trim() : null;
 
     final faqs = const [
       _Faq(
@@ -173,9 +234,11 @@ class SupportPage extends StatelessWidget {
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
                           color: cs.primary.withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(AbzioTheme.buttonRadius),
+                          borderRadius:
+                              BorderRadius.circular(AbzioTheme.buttonRadius),
                         ),
-                        child: Icon(Icons.headset_mic_rounded, color: cs.primary),
+                        child:
+                            Icon(Icons.headset_mic_rounded, color: cs.primary),
                       ),
                       const SizedBox(width: 14),
                       Expanded(
@@ -184,11 +247,13 @@ class SupportPage extends StatelessWidget {
                           children: [
                             Text(
                               '24/7 Customer Care',
-                              style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+                              style: tt.titleMedium
+                                  ?.copyWith(fontWeight: FontWeight.w800),
                             ),
                             Text(
                               'We typically reply within 5 minutes.',
-                              style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+                              style: tt.bodySmall
+                                  ?.copyWith(color: cs.onSurfaceVariant),
                             ),
                           ],
                         ),
@@ -210,7 +275,8 @@ class SupportPage extends StatelessWidget {
                             child: Row(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                Icon(Icons.call_rounded, color: cs.primary, size: 18),
+                                Icon(Icons.call_rounded,
+                                    color: cs.primary, size: 18),
                                 const SizedBox(width: 8),
                                 Text(
                                   'Call Us',
@@ -242,7 +308,8 @@ class SupportPage extends StatelessWidget {
                             child: Row(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                Icon(Icons.chat_rounded, color: cs.onPrimary, size: 18),
+                                Icon(Icons.chat_rounded,
+                                    color: cs.onPrimary, size: 18),
                                 const SizedBox(width: 8),
                                 Text(
                                   'Live Chat',
@@ -268,11 +335,14 @@ class SupportPage extends StatelessWidget {
             style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w800),
           ),
           const SizedBox(height: 14),
-          const _SupportOption(
+          _SupportOption(
             icon: Icons.receipt_long_rounded,
             label: 'Issue with a booking',
             accent: Color(0xFFF59E0B),
             onTap: _SupportAction.bookingIssue,
+            bookingId: bookingIdLabel,
+            bookingCode: widget.bookingCode,
+            serviceName: widget.serviceName,
           ),
           const _SupportOption(
             icon: Icons.payment_rounded,
@@ -313,7 +383,8 @@ class _MyTicketsSection extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('My Requests', style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
+        Text('My Requests',
+            style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
         const SizedBox(height: 12),
         ticketsAsync.when(
           loading: () => const Padding(
@@ -345,9 +416,11 @@ class _MyTicketsSection extends ConsumerWidget {
                     child: Container(
                       padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
-                        color: cs.surfaceContainerHighest.withValues(alpha: 0.3),
+                        color:
+                            cs.surfaceContainerHighest.withValues(alpha: 0.3),
                         borderRadius: BorderRadius.circular(18),
-                        border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.35)),
+                        border: Border.all(
+                            color: cs.outlineVariant.withValues(alpha: 0.35)),
                       ),
                       child: Row(
                         children: [
@@ -358,18 +431,22 @@ class _MyTicketsSection extends ConsumerWidget {
                               color: cs.primaryContainer,
                               borderRadius: BorderRadius.circular(14),
                             ),
-                            child: Icon(Icons.support_agent_rounded, color: cs.primary),
+                            child: Icon(Icons.support_agent_rounded,
+                                color: cs.primary),
                           ),
                           const SizedBox(width: 12),
                           Expanded(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text(ticket.subject, style: tt.titleSmall?.copyWith(fontWeight: FontWeight.w800)),
+                                Text(ticket.subject,
+                                    style: tt.titleSmall?.copyWith(
+                                        fontWeight: FontWeight.w800)),
                                 const SizedBox(height: 4),
                                 Text(
                                   '${ticket.status.replaceAll('_', ' ')}  ·  ${ticket.replyCount} replies',
-                                  style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+                                  style: tt.bodySmall
+                                      ?.copyWith(color: cs.onSurfaceVariant),
                                 ),
                               ],
                             ),
@@ -404,10 +481,12 @@ class _CustomerSupportThreadSheet extends ConsumerStatefulWidget {
   final String ticketId;
 
   @override
-  ConsumerState<_CustomerSupportThreadSheet> createState() => _CustomerSupportThreadSheetState();
+  ConsumerState<_CustomerSupportThreadSheet> createState() =>
+      _CustomerSupportThreadSheetState();
 }
 
-class _CustomerSupportThreadSheetState extends ConsumerState<_CustomerSupportThreadSheet> {
+class _CustomerSupportThreadSheetState
+    extends ConsumerState<_CustomerSupportThreadSheet> {
   final _replyController = TextEditingController();
 
   @override
@@ -436,11 +515,13 @@ class _CustomerSupportThreadSheetState extends ConsumerState<_CustomerSupportThr
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final tt = Theme.of(context).textTheme;
-    final threadAsync = ref.watch(customerSupportThreadProvider(widget.ticketId));
+    final threadAsync =
+        ref.watch(customerSupportThreadProvider(widget.ticketId));
 
     return SafeArea(
       child: Padding(
-        padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+        padding:
+            EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
         child: threadAsync.when(
           loading: () => const SizedBox(
             height: 360,
@@ -452,14 +533,17 @@ class _CustomerSupportThreadSheetState extends ConsumerState<_CustomerSupportThr
           ),
           data: (thread) {
             return ConstrainedBox(
-              constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.85),
+              constraints: BoxConstraints(
+                  maxHeight: MediaQuery.of(context).size.height * 0.85),
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text(thread.ticket.subject, style: tt.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
+                    Text(thread.ticket.subject,
+                        style: tt.titleLarge
+                            ?.copyWith(fontWeight: FontWeight.w800)),
                     const SizedBox(height: 6),
                     Text(
                       thread.ticket.status.replaceAll('_', ' '),
@@ -479,7 +563,8 @@ class _CustomerSupportThreadSheetState extends ConsumerState<_CustomerSupportThr
                             decoration: BoxDecoration(
                               color: reply.authorRole == 'ADMIN'
                                   ? cs.primaryContainer
-                                  : cs.surfaceContainerHighest.withValues(alpha: 0.35),
+                                  : cs.surfaceContainerHighest
+                                      .withValues(alpha: 0.35),
                               borderRadius: BorderRadius.circular(16),
                             ),
                             child: Column(
@@ -487,7 +572,8 @@ class _CustomerSupportThreadSheetState extends ConsumerState<_CustomerSupportThr
                               children: [
                                 Text(
                                   reply.authorName ?? 'Support',
-                                  style: tt.labelLarge?.copyWith(fontWeight: FontWeight.w800),
+                                  style: tt.labelLarge
+                                      ?.copyWith(fontWeight: FontWeight.w800),
                                 ),
                                 const SizedBox(height: 4),
                                 Text(reply.message),
@@ -503,7 +589,8 @@ class _CustomerSupportThreadSheetState extends ConsumerState<_CustomerSupportThr
                       maxLines: 3,
                       decoration: InputDecoration(
                         hintText: 'Add a reply',
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+                        border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(14)),
                       ),
                     ),
                     const SizedBox(height: 10),
@@ -531,12 +618,18 @@ class _SupportOption extends ConsumerWidget {
     required this.label,
     required this.accent,
     required this.onTap,
+    this.bookingId,
+    this.bookingCode,
+    this.serviceName,
   });
 
   final IconData icon;
   final String label;
   final Color accent;
   final _SupportAction onTap;
+  final String? bookingId;
+  final String? bookingCode;
+  final String? serviceName;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -546,13 +639,32 @@ class _SupportOption extends ConsumerWidget {
       padding: const EdgeInsets.only(bottom: 10),
       child: TapScale(
         onTap: () {
+          final bookingIdValue = bookingId?.trim().isNotEmpty == true
+              ? bookingId!.trim()
+              : null;
+          final bookingCodeValue = bookingCode?.trim().isNotEmpty == true
+              ? bookingCode!.trim()
+              : null;
+          final serviceLabel = serviceName?.trim().isNotEmpty == true
+              ? serviceName!.trim()
+              : null;
+          final bookingLabel = bookingCodeValue != null
+              ? 'booking $bookingCodeValue'
+              : bookingIdValue != null
+                  ? 'booking ID $bookingIdValue'
+                  : null;
           switch (onTap) {
             case _SupportAction.bookingIssue:
               _createSupportTicket(
                 context,
                 ref: ref,
                 category: 'booking',
-                subject: 'Issue with a booking',
+                subject: bookingLabel == null
+                    ? 'Issue with a booking'
+                    : 'Issue with $bookingLabel',
+                initialMessage: bookingLabel == null
+                    ? null
+                    : 'I need help with $bookingLabel${serviceLabel == null ? '' : ' for $serviceLabel'}. Please review this booking and let me know the next steps.',
               );
               break;
             case _SupportAction.paymentIssue:
@@ -607,7 +719,8 @@ enum _SupportAction { bookingIssue, paymentIssue, professionalReport }
 
 Future<void> _callSupport(BuildContext context) async {
   final uri = Uri(scheme: 'tel', path: '+918001234567');
-  if (!await launchUrl(uri, mode: LaunchMode.externalApplication) && context.mounted) {
+  if (!await launchUrl(uri, mode: LaunchMode.externalApplication) &&
+      context.mounted) {
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Call support at +91 80012 34567')),
     );
@@ -627,7 +740,8 @@ Future<void> _emailSupport(
       'body': body,
     },
   );
-  if (!await launchUrl(uri, mode: LaunchMode.externalApplication) && context.mounted) {
+  if (!await launchUrl(uri, mode: LaunchMode.externalApplication) &&
+      context.mounted) {
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Support email: support@veedufix.com')),
     );
@@ -639,8 +753,9 @@ Future<void> _createSupportTicket(
   required WidgetRef ref,
   required String category,
   required String subject,
+  String? initialMessage,
 }) async {
-  final messageController = TextEditingController();
+  final messageController = TextEditingController(text: initialMessage ?? '');
   try {
     final created = await showDialog<bool>(
       context: context,
@@ -679,7 +794,8 @@ Future<void> _createSupportTicket(
         return;
       }
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please add a bit more detail before sending.')),
+        const SnackBar(
+            content: Text('Please add a bit more detail before sending.')),
       );
       return;
     }
@@ -730,9 +846,11 @@ class _FaqTile extends StatelessWidget {
         data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
         child: PremiumCard(
           child: ExpansionTile(
-            tilePadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+            tilePadding:
+                const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
             childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
-            title: Text(faq.q, style: const TextStyle(fontWeight: FontWeight.w700)),
+            title: Text(faq.q,
+                style: const TextStyle(fontWeight: FontWeight.w700)),
             children: [
               Text(faq.a, style: Theme.of(context).textTheme.bodyMedium),
             ],
