@@ -134,7 +134,7 @@ export async function checkForNoShows(): Promise<{ checked: number; processed: n
 
   for (const booking of bookings) {
     try {
-      await processNoShowBooking(booking);
+      await processNoShowBooking(booking as NoShowBooking);
       processed += 1;
     } catch (error) {
       logger.warn(

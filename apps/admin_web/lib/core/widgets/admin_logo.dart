@@ -15,12 +15,14 @@ class AdminLogo extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final tint = color;
+
     return SvgPicture.asset(
       'assets/logo.svg',
       height: height,
       width: width,
       fit: BoxFit.contain,
-      colorFilter: color != null ? ColorFilter.mode(color, BlendMode.srcIn) : null,
+      colorFilter: tint != null ? ColorFilter.mode(tint, BlendMode.srcIn) : null,
     );
   }
 }

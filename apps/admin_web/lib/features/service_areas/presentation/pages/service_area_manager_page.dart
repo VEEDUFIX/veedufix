@@ -171,7 +171,7 @@ class _ServiceAreaManagerPageState extends ConsumerState<ServiceAreaManagerPage>
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           DropdownButtonFormField<String>(
-                            value: cityId.value.isEmpty ? null : cityId.value,
+                            initialValue: cityId.value.isEmpty ? null : cityId.value,
                             decoration: const InputDecoration(
                               labelText: 'City *',
                               border: OutlineInputBorder(),
@@ -614,7 +614,7 @@ class _ServiceAreaTile extends StatelessWidget {
                       _Chip(label: coverage, icon: Icons.route_rounded),
                       _Chip(label: area.isActive ? 'Active' : 'Paused', icon: area.isActive ? Icons.check_rounded : Icons.pause_rounded),
                       if (area.pincodeRangeStart != null && area.pincodeRangeEnd != null)
-                        _Chip(label: 'Range mode', icon: Icons.alt_route_rounded),
+                        const _Chip(label: 'Range mode', icon: Icons.alt_route_rounded),
                     ],
                   ),
                 ],

@@ -50,7 +50,10 @@ export async function submitReview(data: {
   });
 
   const totalReviews = allReviews.length;
-  const averageRating = allReviews.reduce((acc: number, curr: { rating: number }) => acc + curr.rating, 0) / totalReviews;
+  const averageRating = (allReviews as Array<{ rating: number }>).reduce(
+    (acc: number, curr: { rating: number }) => acc + curr.rating,
+    0
+  ) / totalReviews;
 
   await db.workerProfile.update({
     where: { id: booking.workerId },

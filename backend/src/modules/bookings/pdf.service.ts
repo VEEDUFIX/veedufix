@@ -95,7 +95,7 @@ export async function generateInvoicePdf(booking: BookingWithDetails): Promise<B
     doc.text(`INR ${totalAmount.toFixed(2)}`, 400, y, { width: 150, align: "right" });
 
     y += 40;
-    const isPaid = booking.payments.some((payment) => payment.status === PaymentStatus.CAPTURED);
+    const isPaid = booking.payments.some((payment: any) => payment.status === PaymentStatus.CAPTURED);
     if (isPaid) {
       doc.fillColor("#10B981").text("PAID IN FULL", 50, y);
     } else {

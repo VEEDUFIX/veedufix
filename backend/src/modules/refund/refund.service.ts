@@ -356,7 +356,7 @@ export async function getAllRefunds(filters: RefundListFilters = {}): Promise<{
     // Mask sensitive worker financial fields before sending to the client.
     // The worker's real data is untouched in the DB and available for any
     // internal operations (e.g. payout processing).
-    items: items.map((item) => {
+    items: items.map((item: any) => {
       if (!item.booking.worker) return item;
       return {
         ...item,
@@ -365,7 +365,7 @@ export async function getAllRefunds(filters: RefundListFilters = {}): Promise<{
           worker: maskWorkerFinancialFields(item.booking.worker)
         }
       };
-    }),
+    }) as RefundListItem[],
     total,
     page,
     pageSize

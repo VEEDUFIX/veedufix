@@ -11,7 +11,7 @@ export async function getChatRoomHandler(request: AuthenticatedRequest, response
     const role = request.auth!.role as UserRole;
 
     const chatRoom = await getOrCreateChatRoom(bookingId, userId, role);
-    const unreadCount = chatRoom.messages.filter((message) => !message.isRead && message.senderId !== userId).length;
+    const unreadCount = chatRoom.messages.filter((message: any) => !message.isRead && message.senderId !== userId).length;
     response.json({ chatRoom, unreadCount });
   } catch (error) {
     logger.error({ error, bookingId: request.params.bookingId }, "Failed to get chat room");

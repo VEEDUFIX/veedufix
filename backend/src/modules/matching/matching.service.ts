@@ -187,8 +187,8 @@ function resolveWorkerLocation(worker: WorkerPoolCandidate): { latitude: number;
 
 function resolveBookingCategoryId(booking: BookingWithDispatchData): string {
   const categoryId =
-    booking.services.find((item) => item.service?.categoryId)?.service?.categoryId ??
-    booking.services.find((item) => item.serviceSubcategory?.categoryId)?.serviceSubcategory.categoryId;
+    booking.services.find((item: any) => item.service?.categoryId)?.service?.categoryId ??
+    booking.services.find((item: any) => item.serviceSubcategory?.categoryId)?.serviceSubcategory.categoryId;
 
   if (!categoryId) {
     throw new MatchingError("Unable to resolve booking category");

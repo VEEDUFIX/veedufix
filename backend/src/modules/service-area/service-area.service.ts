@@ -89,16 +89,22 @@ export async function findServiceableArea(input: {
       }
     }
 
-    if (matchesArea(area, pincode)) {
+    const serviceArea = area as {
+      pincode: string | null;
+      pincodeRangeStart: string | null;
+      pincodeRangeEnd: string | null;
+    };
+
+    if (matchesArea(serviceArea, pincode)) {
       return {
         id: area.id,
         name: area.name,
         slug: area.slug,
         cityId: area.cityId,
         cityName: area.city.name,
-        pincodeRangeStart: area.pincodeRangeStart,
-        pincodeRangeEnd: area.pincodeRangeEnd,
-        pincode: area.pincode
+        pincodeRangeStart: serviceArea.pincodeRangeStart,
+        pincodeRangeEnd: serviceArea.pincodeRangeEnd,
+        pincode: serviceArea.pincode
       };
     }
   }

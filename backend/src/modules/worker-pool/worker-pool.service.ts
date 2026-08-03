@@ -51,7 +51,7 @@ function normalizeWorkerPoolItem(worker: WorkerPoolItem) {
     submittedAt: worker.submittedAt,
     reviewedAt: worker.reviewedAt,
     user: worker.user,
-    skills: worker.skills.map((skill) => ({
+    skills: worker.skills.map((skill: any) => ({
       id: skill.id,
       categoryId: skill.categoryId,
       verifiedByAdmin: skill.verifiedByAdmin,

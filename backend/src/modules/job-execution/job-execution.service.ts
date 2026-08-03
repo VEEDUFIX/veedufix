@@ -199,7 +199,7 @@ async function requireCustomerBooking(bookingId: string, customerId: string) {
 }
 
 function resolveServiceId(booking: Awaited<ReturnType<typeof getBookingWithExecution>>): string {
-  const serviceId = booking.services.find((item) => item.serviceId)?.serviceId;
+  const serviceId = booking.services.find((item: any) => item.serviceId)?.serviceId;
   if (!serviceId) {
     throw new Error("Service not found for booking");
   }

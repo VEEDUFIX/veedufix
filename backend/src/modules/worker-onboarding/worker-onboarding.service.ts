@@ -185,7 +185,7 @@ function normalizeProfile(profile: WorkerProfileWithRelations | MinimalWorkerPro
     // Boolean presence indicator replaces the raw URL in every response.
     hasAadhaarDoc: Boolean(aadhaarDocUrl?.trim()),
     hasAvailability: Boolean(availability?.length),
-    availabilitySlots: (availability ?? []).map((slot) => ({
+    availabilitySlots: (availability ?? []).map((slot: any) => ({
       dayOfWeek: slot.dayOfWeek,
       startTime: slot.startTime,
       endTime: slot.endTime

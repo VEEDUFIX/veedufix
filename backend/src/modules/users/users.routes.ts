@@ -40,7 +40,7 @@ usersRouter.get("/notifications", requireAuth, async (request: AuthenticatedRequ
   ]);
 
   response.status(200).json({
-    notifications: notifications.map(serializeNotification),
+    notifications: notifications.map((notification: any) => serializeNotification(notification)),
     unreadCount
   });
 });
@@ -651,17 +651,17 @@ usersRouter.get("/workers/:workerId/profile", async (request, response) => {
       experienceYears: profile.experienceYears,
       isAvailable: profile.isAvailable,
       verificationStatus: profile.verificationStatus,
-      skills: profile.skills.map((s) => ({
+      skills: profile.skills.map((s: any) => ({
         id: s.id,
         categoryName: s.category.name,
         categorySlug: s.category.slug
       })),
-      portfolioPhotos: profile.portfolioPhotos.map((p) => ({
+      portfolioPhotos: profile.portfolioPhotos.map((p: any) => ({
         id: p.id,
         url: p.url,
         caption: p.caption ?? null
       })),
-      reviews: profile.reviews.map((r) => ({
+      reviews: profile.reviews.map((r: any) => ({
         id: r.id,
         rating: r.rating,
         comment: r.comment ?? null,

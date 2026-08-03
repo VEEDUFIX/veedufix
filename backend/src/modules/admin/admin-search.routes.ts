@@ -196,7 +196,7 @@ adminSearchRouter.get(
       workers: workers.map((worker) => ({
         id: worker.id,
         title: worker.displayName ?? worker.fullName ?? worker.user.name ?? "Worker",
-        subtitle: worker.skills.map((skill) => skill.category.name).slice(0, 3).join(" · ") || worker.user.phone || "Worker",
+        subtitle: worker.skills.map((skill: any) => skill.category.name).slice(0, 3).join(" · ") || worker.user.phone || "Worker",
         route: routeForSearch("worker", worker.id),
         avatarUrl: worker.user.avatarUrl ?? null
       })),

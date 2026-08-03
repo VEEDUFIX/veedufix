@@ -103,7 +103,7 @@ export async function generateInvoiceForBooking(bookingId: string): Promise<Invo
     throw new Error("Booking not found");
   }
 
-  const hasCapturedPayment = booking.payments.some((payment) => payment.status === PaymentStatus.CAPTURED);
+  const hasCapturedPayment = booking.payments.some((payment: any) => payment.status === PaymentStatus.CAPTURED);
   if (!hasCapturedPayment) {
     throw new Error("Invoice can only be generated after payment capture");
   }
@@ -155,17 +155,19 @@ export async function generateInvoiceForBooking(bookingId: string): Promise<Invo
   const totalGstAmount = roundMoney(booking.taxAmount);
   const discountShares = allocateProportionalShares(
     discountAmount,
-    booking.services.map((service) => service.totalPrice)
+    booking.services.map((service: any) => service.totalPrice)
   );
 
-  const invoiceLineItems = booking.services.map((service, index) => {
+  const invoiceLineItems = booking.services.map((service: any, index: number) => {
     const discountShare = discountShares[index] ?? new Prisma.Decimal(0);
     const netTotal = roundMoney(service.totalPrice.sub(discountShare));
     const storedGstRate = service.gstRate instanceof Prisma.Decimal ? service.gstRate : new Prisma.Decimal(service.gstRate ?? 0);
     const reverseTax = reverseInclusiveTax(netTotal, storedGstRate);
     const gstAmount = index === booking.services.length - 1
       ? roundMoney(totalGstAmount.sub(
-          booking.services.slice(0, index).reduce((sum, previous) => sum.add(previous.gstAmount), new Prisma.Decimal(0))
+          booking.services
+            .slice(0, index)
+            .reduce((sum: Prisma.Decimal, previous: any) => sum.add(previous.gstAmount), new Prisma.Decimal(0))
         ))
       : reverseTax.gstAmount;
     const basePrice = roundMoney(netTotal.sub(gstAmount));

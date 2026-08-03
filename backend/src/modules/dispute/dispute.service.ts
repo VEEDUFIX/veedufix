@@ -418,7 +418,7 @@ export async function listOpenDisputes(filters: OpenDisputeFilters = {}): Promis
   ]);
 
   return {
-    items,
+    items: items as OpenDisputeListItem[],
     total,
     page,
     pageSize
