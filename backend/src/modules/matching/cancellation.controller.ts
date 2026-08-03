@@ -16,17 +16,17 @@ type AuthenticatedRequest = Request & {
 
 function handleCancellationError(response: Response, error: unknown): boolean {
   if (error instanceof CancellationNotFoundError) {
-    response.status(404).json({ message: error.message });
+    response.status(404).json({ message: "Cancellation not found" });
     return true;
   }
 
   if (error instanceof CancellationAccessError) {
-    response.status(403).json({ message: error.message });
+    response.status(403).json({ message: "You are not authorized to cancel this booking" });
     return true;
   }
 
   if (error instanceof CancellationConflictError) {
-    response.status(409).json({ message: error.message });
+    response.status(409).json({ message: "This booking cannot be cancelled" });
     return true;
   }
 
@@ -57,4 +57,3 @@ export async function cancelBookingHandler(request: Request, response: Response)
     }
   }
 }
-

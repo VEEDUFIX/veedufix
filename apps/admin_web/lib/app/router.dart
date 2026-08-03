@@ -12,7 +12,9 @@ import '../features/service_areas/presentation/pages/service_area_manager_page.d
 import '../features/finance/presentation/pages/finance_home_page.dart';
 import '../features/finance/presentation/pages/payouts_ledger_page.dart';
 import '../features/finance/presentation/pages/refunds_ledger_page.dart';
+import '../features/finance/data/finance_api.dart';
 import '../features/ops/presentation/pages/ops_alerts_page.dart';
+import '../features/ops/data/ops_api.dart';
 import '../features/ops/presentation/pages/dispute_detail_page.dart';
 import '../features/ops/presentation/pages/disputes_queue_page.dart';
 import '../features/ops/presentation/pages/ops_live_jobs_page.dart';
@@ -26,13 +28,16 @@ import '../features/worker_review/presentation/pages/worker_review_detail_page.d
 import '../features/worker_review/presentation/pages/worker_review_queue_page.dart';
 import '../features/profile/presentation/pages/profile_page.dart';
 import '../features/admin/presentation/pages/customer_management_page.dart';
+import '../features/admin/presentation/pages/customer_detail_page.dart';
 import '../features/admin/presentation/pages/booking_management_page.dart';
+import '../features/admin/presentation/pages/booking_detail_page.dart';
 import '../features/admin/presentation/pages/coupon_manager_page.dart';
 import '../features/admin/presentation/pages/reports_page.dart';
 import '../features/admin/presentation/pages/push_sender_page.dart';
 import '../features/admin/presentation/pages/audit_logs_page.dart';
 import '../features/admin/presentation/pages/global_search_page.dart';
 import '../features/admin/presentation/pages/support_tickets_page.dart';
+import '../features/admin/presentation/pages/platform_settings_page.dart';
 import '../features/shell/presentation/pages/app_shell_page.dart';
 
 final routerProvider = Provider<GoRouter>((ref) {
@@ -108,8 +113,41 @@ final routerProvider = Provider<GoRouter>((ref) {
             builder: (context, state) => const PayoutsLedgerPage(),
           ),
           GoRoute(
+            path: '/finance/payouts/:payoutId',
+            builder: (context, state) {
+              final payoutId = state.pathParameters['payoutId'] ?? '';
+              final initialPayout = state.extra is FinancePayoutItem ? state.extra as FinancePayoutItem : null;
+              return PayoutDetailPage(
+                payoutId: payoutId,
+                initialPayout: initialPayout,
+              );
+            },
+          ),
+          GoRoute(
             path: '/finance/refunds',
             builder: (context, state) => const RefundsLedgerPage(),
+          ),
+          GoRoute(
+            path: '/finance/refunds/:refundId',
+            builder: (context, state) {
+              final refundId = state.pathParameters['refundId'] ?? '';
+              final initialRefund = state.extra is FinanceRefundItem ? state.extra as FinanceRefundItem : null;
+              return RefundDetailPage(
+                refundId: refundId,
+                initialRefund: initialRefund,
+              );
+            },
+          ),
+          GoRoute(
+            path: '/platform-settings',
+            builder: (context, state) => const PlatformSettingsPage(),
+          ),
+          GoRoute(
+            path: '/platform-settings/commissions/:commissionId',
+            builder: (context, state) {
+              final commissionId = state.pathParameters['commissionId'] ?? '';
+              return CommissionDetailPage(commissionId: commissionId);
+            },
           ),
           GoRoute(
             path: '/worker-review',
@@ -128,8 +166,30 @@ final routerProvider = Provider<GoRouter>((ref) {
             builder: (context, state) => const OpsLiveJobsPage(),
           ),
           GoRoute(
+            path: '/ops/live-jobs/:bookingId',
+            builder: (context, state) {
+              final bookingId = state.pathParameters['bookingId'] ?? '';
+              final initialJob = state.extra is OpsLiveJob ? state.extra as OpsLiveJob : null;
+              return OpsLiveJobDetailPage(
+                bookingId: bookingId,
+                initialJob: initialJob,
+              );
+            },
+          ),
+          GoRoute(
             path: '/ops/alerts',
             builder: (context, state) => const OpsAlertsPage(),
+          ),
+          GoRoute(
+            path: '/ops/alerts/:alertId',
+            builder: (context, state) {
+              final alertId = state.pathParameters['alertId'] ?? '';
+              final initialAlert = state.extra is OpsAlert ? state.extra as OpsAlert : null;
+              return OpsAlertDetailPage(
+                alertId: alertId,
+                initialAlert: initialAlert,
+              );
+            },
           ),
           GoRoute(
             path: '/ops/map',
@@ -184,6 +244,13 @@ final routerProvider = Provider<GoRouter>((ref) {
             },
           ),
           GoRoute(
+            path: '/customers/:customerId',
+            builder: (context, state) {
+              final customerId = state.pathParameters['customerId'] ?? '';
+              return AdminCustomerDetailPage(customerId: customerId);
+            },
+          ),
+          GoRoute(
             path: '/admin-bookings',
             builder: (context, state) {
               final search = state.uri.queryParameters['search'] ?? '';
@@ -191,8 +258,26 @@ final routerProvider = Provider<GoRouter>((ref) {
             },
           ),
           GoRoute(
+            path: '/admin-bookings/:bookingId',
+            builder: (context, state) {
+              final bookingId = state.pathParameters['bookingId'] ?? '';
+              return AdminBookingDetailPage(bookingId: bookingId);
+            },
+          ),
+          GoRoute(
             path: '/coupons',
             builder: (context, state) => const CouponManagerPage(),
+          ),
+          GoRoute(
+            path: '/coupons/:couponId',
+            builder: (context, state) {
+              final couponId = state.pathParameters['couponId'] ?? '';
+              final initialCoupon = state.extra is AdminCoupon ? state.extra as AdminCoupon : null;
+              return CouponDetailPage(
+                couponId: couponId,
+                initialCoupon: initialCoupon,
+              );
+            },
           ),
           GoRoute(
             path: '/reports',
@@ -214,6 +299,13 @@ final routerProvider = Provider<GoRouter>((ref) {
             builder: (context, state) {
               final search = state.uri.queryParameters['search'] ?? '';
               return SupportTicketsPage(initialSearch: search);
+            },
+          ),
+          GoRoute(
+            path: '/support-tickets/:ticketId',
+            builder: (context, state) {
+              final ticketId = state.pathParameters['ticketId'] ?? '';
+              return SupportTicketDetailPage(ticketId: ticketId);
             },
           ),
           GoRoute(

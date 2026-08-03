@@ -267,7 +267,7 @@ class _ProfileBody extends StatelessWidget {
             children: [
               Expanded(
                 child: TapScale(
-                  onTap: () {},
+                  onTap: () => _openMessageOptions(context),
                   child: Container(
                     padding: const EdgeInsets.symmetric(vertical: 16),
                     decoration: BoxDecoration(
@@ -308,6 +308,53 @@ class _ProfileBody extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+
+  void _openMessageOptions(BuildContext context) {
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (sheetContext) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  'Message this professional',
+                  style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Messaging starts after you book this professional, so the fastest next step is to open checkout.',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                ),
+                const SizedBox(height: 16),
+                FilledButton(
+                  onPressed: () {
+                    Navigator.of(sheetContext).pop();
+                    context.push('/checkout');
+                  },
+                  child: const Text('Book now'),
+                ),
+                const SizedBox(height: 8),
+                OutlinedButton(
+                  onPressed: () {
+                    Navigator.of(sheetContext).pop();
+                    context.push('/search');
+                  },
+                  child: const Text('Browse similar services'),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 }

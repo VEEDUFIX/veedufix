@@ -294,8 +294,10 @@ async function resolveCatalogTree(cityId?: string, locale?: string, includeInact
 
 async function resolveServiceBySlug(slug: string, cityId?: string) {
   return readCatalogCache("service", [slug, cityId], async () =>
-    prisma.service.findUnique({
-      where: { slug },
+    prisma.service.findFirst({
+      where: {
+        OR: [{ slug }, { id: slug }]
+      },
       include: serviceInclude(cityId)
     })
   );

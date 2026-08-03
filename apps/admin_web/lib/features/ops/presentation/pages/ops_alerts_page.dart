@@ -56,51 +56,11 @@ class _OpsAlertsPageState extends ConsumerState<OpsAlertsPage> {
 
   Future<void> _viewAlert(OpsAlert alert) async {
     if (alert.isDispatchFailure && alert.bookingId != null) {
-      context.go('/ops/live-jobs');
+      context.push('/ops/live-jobs/${alert.bookingId}');
       return;
     }
 
-    if (!mounted) {
-      return;
-    }
-
-    await showDialog<void>(
-      context: context,
-      builder: (dialogContext) {
-        return AlertDialog(
-          title: Text(alert.title),
-          content: SizedBox(
-            width: 520,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(alert.message),
-                const SizedBox(height: 12),
-                _Line(
-                    label: 'Booking', value: alert.bookingCode ?? 'Not linked'),
-                _Line(
-                    label: 'Customer', value: alert.customerName ?? 'Unknown'),
-                _Line(
-                    label: 'Created',
-                    value: MaterialLocalizations.of(context)
-                        .formatMediumDate(alert.createdAt)),
-                if (alert.amount != null)
-                  _Line(
-                      label: 'Amount',
-                      value: 'Rs. ${alert.amount!.toStringAsFixed(2)}'),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(dialogContext).pop(),
-              child: const Text('Close'),
-            ),
-          ],
-        );
-      },
-    );
+    await context.push('/ops/alerts/${alert.id}');
   }
 
   Future<void> _retryAlert(OpsAlert alert) async {
@@ -350,6 +310,243 @@ class _OpsAlertsPageState extends ConsumerState<OpsAlertsPage> {
   }
 }
 
+class OpsAlertDetailPage extends ConsumerStatefulWidget {
+  const OpsAlertDetailPage({
+    super.key,
+    required this.alertId,
+    this.initialAlert,
+  });
+
+  final String alertId;
+  final OpsAlert? initialAlert;
+
+  @override
+  ConsumerState<OpsAlertDetailPage> createState() => _OpsAlertDetailPageState();
+}
+
+class _OpsAlertDetailPageState extends ConsumerState<OpsAlertDetailPage> {
+  late final OpsApi _api;
+  late Future<OpsAlert?> _alertFuture;
+  bool _busy = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _api = OpsApi(ref.read(apiClientProvider).dio);
+    _alertFuture = _loadAlert();
+  }
+
+  Future<OpsAlert?> _loadAlert() async {
+    if (widget.initialAlert != null && widget.initialAlert!.id == widget.alertId) {
+      return widget.initialAlert;
+    }
+
+    final snapshot = await _api.fetchOverview();
+    for (final alert in snapshot.alerts) {
+      if (alert.id == widget.alertId) {
+        return alert;
+      }
+    }
+    return null;
+  }
+
+  Future<void> _reload() async {
+    setState(() {
+      _alertFuture = _loadAlert();
+    });
+    await _alertFuture;
+  }
+
+  Future<void> _runAction(Future<void> Function() action) async {
+    setState(() => _busy = true);
+    try {
+      await action();
+      if (!mounted) return;
+      await _reload();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Action completed')),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error.toString())),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _busy = false);
+      }
+    }
+  }
+
+  Future<void> _retryAlert(OpsAlert alert) async {
+    if (!alert.retryAvailable || alert.sourceId == null) {
+      return;
+    }
+
+    if (alert.isDispatchFailure) {
+      await _runAction(() => _api.redispatchBooking(alert.sourceId!));
+      return;
+    }
+
+    if (alert.isPayoutFailure) {
+      await _runAction(() => _api.retryPayout(alert.sourceId!));
+      return;
+    }
+
+    if (alert.isRefundFailure) {
+      await _runAction(() => _api.retryRefund(alert.sourceId!));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
+
+    return Scaffold(
+      backgroundColor: cs.surface,
+      appBar: AppBar(
+        title: const Text('Alert Details'),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios_new_rounded),
+          onPressed: () => context.pop(),
+        ),
+        actions: [
+          IconButton(
+            onPressed: _reload,
+            icon: const Icon(Icons.refresh_rounded),
+          ),
+        ],
+      ),
+      body: FutureBuilder<OpsAlert?>(
+        future: _alertFuture,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting && !snapshot.hasData) {
+            return const Center(child: CircularProgressIndicator());
+          }
+
+          if (snapshot.hasError) {
+            return Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.error_outline_rounded, size: 48),
+                    const SizedBox(height: 12),
+                    Text(
+                      'Unable to load alert',
+                      style: tt.titleLarge?.copyWith(fontWeight: FontWeight.w800),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 8),
+                    Text(snapshot.error.toString(), textAlign: TextAlign.center),
+                    const SizedBox(height: 16),
+                    FilledButton(onPressed: _reload, child: const Text('Retry')),
+                  ],
+                ),
+              ),
+            );
+          }
+
+          final alert = snapshot.data;
+          if (alert == null) {
+            return Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.search_off_rounded, size: 48),
+                    const SizedBox(height: 12),
+                    Text(
+                      'Alert not found',
+                      style: tt.titleLarge?.copyWith(fontWeight: FontWeight.w800),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'This alert is no longer present in the current snapshot.',
+                      textAlign: TextAlign.center,
+                      style: tt.bodyMedium?.copyWith(color: cs.onSurfaceVariant),
+                    ),
+                    const SizedBox(height: 16),
+                    FilledButton(onPressed: _reload, child: const Text('Reload')),
+                  ],
+                ),
+              ),
+            );
+          }
+
+          return ListView(
+            padding: const EdgeInsets.all(24),
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _AlertIcon(kind: alert.kind),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(alert.title, style: tt.headlineSmall?.copyWith(fontWeight: FontWeight.w800)),
+                        const SizedBox(height: 6),
+                        Text(
+                          alert.message,
+                          style: tt.bodyMedium?.copyWith(color: cs.onSurfaceVariant),
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (alert.retryAvailable) _RetryBadge(kind: alert.kind),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  if (alert.bookingCode != null) _InfoChip(label: 'Booking ${alert.bookingCode}'),
+                  if (alert.customerName != null) _InfoChip(label: alert.customerName!),
+                  _InfoChip(label: MaterialLocalizations.of(context).formatMediumDate(alert.createdAt)),
+                  if (alert.amount != null) _InfoChip(label: 'Rs. ${alert.amount!.toStringAsFixed(2)}'),
+                  _InfoChip(label: alert.kind.replaceAll('_', ' ')),
+                ],
+              ),
+              const SizedBox(height: 18),
+              if (alert.isDispatchFailure && alert.bookingId != null)
+                FilledButton.icon(
+                  onPressed: () => context.push('/ops/live-jobs/${alert.bookingId}'),
+                  icon: const Icon(Icons.work_rounded),
+                  label: const Text('Open live job'),
+                ),
+              const SizedBox(height: 16),
+              Text('Actions', style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
+              const SizedBox(height: 10),
+              Wrap(
+                spacing: 12,
+                runSpacing: 12,
+                children: [
+                  if (alert.retryAvailable)
+                    FilledButton(
+                      onPressed: _busy ? null : () => _retryAlert(alert),
+                      child: const Text('Retry'),
+                    ),
+                  OutlinedButton(
+                    onPressed: _busy ? null : _reload,
+                    child: const Text('Refresh'),
+                  ),
+                ],
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
 class _AlertIcon extends StatelessWidget {
   const _AlertIcon({required this.kind});
 
@@ -438,39 +635,6 @@ class _InfoChip extends StatelessWidget {
             .textTheme
             .labelSmall
             ?.copyWith(fontWeight: FontWeight.w700),
-      ),
-    );
-  }
-}
-
-class _Line extends StatelessWidget {
-  const _Line({
-    required this.label,
-    required this.value,
-  });
-
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 104,
-            child: Text(
-              label,
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    fontWeight: FontWeight.w700,
-                  ),
-            ),
-          ),
-          Expanded(child: Text(value)),
-        ],
       ),
     );
   }

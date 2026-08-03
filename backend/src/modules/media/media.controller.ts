@@ -17,7 +17,7 @@ type RequestWithFile = Request & {
 
 function sendMediaError(response: Response, error: unknown): void {
   if (error instanceof Error) {
-    response.status(400).json({ message: error.message });
+    response.status(400).json({ message: "Unable to upload media" });
     return;
   }
   response.status(500).json({ message: "Unexpected error" });

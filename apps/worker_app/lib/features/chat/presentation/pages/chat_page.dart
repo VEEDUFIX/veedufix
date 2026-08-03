@@ -216,7 +216,7 @@ class _WorkerChatPageState extends ConsumerState<WorkerChatPage>
         ),
         actions: [
           TapScale(
-            onTap: () {},
+            onTap: () => context.push('/support'),
             child: Padding(
               padding: const EdgeInsets.only(right: 16),
               child: Container(

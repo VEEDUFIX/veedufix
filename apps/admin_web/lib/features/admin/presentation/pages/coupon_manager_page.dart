@@ -174,6 +174,7 @@ class CouponManagerPage extends ConsumerWidget {
                     coupon: coupons[i],
                     onToggle: () => ref.read(couponToggleProvider.notifier).toggle(coupons[i].id),
                     onDelete: () => _confirmDelete(context, ref, coupons[i]),
+                    onTap: () => context.push('/coupons/${coupons[i].id}', extra: coupons[i]),
                   ),
                 ),
               ),
@@ -215,10 +216,16 @@ class CouponManagerPage extends ConsumerWidget {
 // ─── Coupon card ──────────────────────────────────────────────────────────────
 
 class _CouponCard extends StatelessWidget {
-  const _CouponCard({required this.coupon, required this.onToggle, required this.onDelete});
+  const _CouponCard({
+    required this.coupon,
+    required this.onToggle,
+    required this.onDelete,
+    required this.onTap,
+  });
   final AdminCoupon coupon;
   final VoidCallback onToggle;
   final VoidCallback onDelete;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -227,12 +234,17 @@ class _CouponCard extends StatelessWidget {
     final isActive = coupon.isActive;
     final accent = isActive ? const Color(0xFF10B981) : cs.outline;
 
-    return PremiumGlassCard(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(20),
+        onTap: onTap,
+        child: PremiumGlassCard(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
             Row(
               children: [
                 Container(
@@ -314,8 +326,255 @@ class _CouponCard extends StatelessWidget {
                 ),
               ),
             ),
-          ],
+              ],
+            ),
+          ),
         ),
+      ),
+    );
+  }
+}
+
+class CouponDetailPage extends ConsumerStatefulWidget {
+  const CouponDetailPage({
+    super.key,
+    required this.couponId,
+    this.initialCoupon,
+  });
+
+  final String couponId;
+  final AdminCoupon? initialCoupon;
+
+  @override
+  ConsumerState<CouponDetailPage> createState() => _CouponDetailPageState();
+}
+
+class _CouponDetailPageState extends ConsumerState<CouponDetailPage> {
+  late Future<AdminCoupon?> _couponFuture;
+  bool _busy = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _couponFuture = _loadCoupon();
+  }
+
+  Future<AdminCoupon?> _loadCoupon() async {
+    if (widget.initialCoupon != null && widget.initialCoupon!.id == widget.couponId) {
+      return widget.initialCoupon;
+    }
+    final coupons = await ref.read(adminCouponsProvider.future);
+    for (final coupon in coupons) {
+      if (coupon.id == widget.couponId) {
+        return coupon;
+      }
+    }
+    return null;
+  }
+
+  Future<void> _reload() async {
+    setState(() {
+      _couponFuture = _loadCoupon();
+    });
+    await _couponFuture;
+  }
+
+  Future<void> _toggleCoupon(AdminCoupon coupon) async {
+    setState(() => _busy = true);
+    try {
+      await ref.read(couponToggleProvider.notifier).toggle(coupon.id);
+      await _reload();
+    } finally {
+      if (mounted) {
+        setState(() => _busy = false);
+      }
+    }
+  }
+
+  Future<void> _deleteCoupon(AdminCoupon coupon) async {
+    setState(() => _busy = true);
+    try {
+      await ref.read(couponToggleProvider.notifier).delete(coupon.id);
+      if (!mounted) {
+        return;
+      }
+      context.pop();
+    } finally {
+      if (mounted) {
+        setState(() => _busy = false);
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
+
+    return Scaffold(
+      backgroundColor: cs.surface,
+      appBar: AppBar(
+        title: const Text('Coupon Details'),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios_new_rounded),
+          onPressed: () => context.pop(),
+        ),
+        actions: [
+          IconButton(
+            onPressed: _reload,
+            icon: const Icon(Icons.refresh_rounded),
+          ),
+        ],
+      ),
+      body: FutureBuilder<AdminCoupon?>(
+        future: _couponFuture,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting && !snapshot.hasData) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          if (snapshot.hasError) {
+            return Center(child: Text('Unable to load coupon: ${snapshot.error}'));
+          }
+          final coupon = snapshot.data;
+          if (coupon == null) {
+            return Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.search_off_rounded, size: 48),
+                    const SizedBox(height: 12),
+                    Text('Coupon not found', style: tt.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
+                    const SizedBox(height: 8),
+                    Text(
+                      'This coupon is not present in the current catalog snapshot.',
+                      textAlign: TextAlign.center,
+                      style: tt.bodyMedium?.copyWith(color: cs.onSurfaceVariant),
+                    ),
+                    const SizedBox(height: 16),
+                    FilledButton(onPressed: _reload, child: const Text('Reload')),
+                  ],
+                ),
+              ),
+            );
+          }
+
+          return ListView(
+            padding: const EdgeInsets.all(24),
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: (coupon.isActive ? const Color(0xFF10B981) : cs.outline).withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      coupon.code,
+                      style: tt.titleSmall?.copyWith(fontWeight: FontWeight.w900, letterSpacing: 1.2),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(coupon.displayValue, style: tt.headlineSmall?.copyWith(fontWeight: FontWeight.w900)),
+                        const SizedBox(height: 6),
+                        Text(
+                          coupon.isActive ? 'Active coupon' : 'Inactive coupon',
+                          style: tt.bodyMedium?.copyWith(color: cs.onSurfaceVariant),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              if ((coupon.description ?? '').trim().isNotEmpty) ...[
+                Text('Description', style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
+                const SizedBox(height: 6),
+                Text(coupon.description!.trim()),
+                const SizedBox(height: 16),
+              ],
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  _Chip(label: coupon.type),
+                  _Chip(label: 'Created ${DateFormat('d MMM y').format(coupon.createdAt)}'),
+                  _Chip(label: 'Per user ${coupon.perUserLimit}'),
+                  _Chip(label: coupon.startsAt == null ? 'Starts anytime' : 'Starts ${DateFormat('d MMM y').format(coupon.startsAt!)}'),
+                  _Chip(label: coupon.endsAt == null ? 'No expiry' : 'Ends ${DateFormat('d MMM y').format(coupon.endsAt!)}'),
+                ],
+              ),
+              const SizedBox(height: 18),
+              _DetailLine(label: 'Coupon ID', value: coupon.id),
+              _DetailLine(label: 'Code', value: coupon.code),
+              _DetailLine(label: 'Discount type', value: coupon.type),
+              _DetailLine(label: 'Value', value: coupon.displayValue),
+              _DetailLine(label: 'Per-user limit', value: '${coupon.perUserLimit}'),
+              _DetailLine(label: 'Usage limit', value: coupon.usageLimit?.toString() ?? 'Unlimited'),
+              _DetailLine(label: 'Minimum order', value: coupon.minOrderAmount == null ? 'None' : 'Rs. ${coupon.minOrderAmount!.toStringAsFixed(0)}'),
+              _DetailLine(label: 'Maximum discount', value: coupon.maxDiscount == null ? 'None' : 'Rs. ${coupon.maxDiscount!.toStringAsFixed(0)}'),
+              _DetailLine(label: 'Created', value: DateFormat('d MMM y, h:mm a').format(coupon.createdAt)),
+              const SizedBox(height: 20),
+              Wrap(
+                spacing: 12,
+                runSpacing: 12,
+                children: [
+                  FilledButton(
+                    onPressed: _busy ? null : () => _toggleCoupon(coupon),
+                    child: Text(coupon.isActive ? 'Disable coupon' : 'Enable coupon'),
+                  ),
+                  OutlinedButton(
+                    onPressed: _busy ? null : () => _deleteCoupon(coupon),
+                    style: OutlinedButton.styleFrom(foregroundColor: cs.error),
+                    child: const Text('Delete coupon'),
+                  ),
+                  OutlinedButton(
+                    onPressed: _reload,
+                    child: const Text('Refresh'),
+                  ),
+                ],
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _DetailLine extends StatelessWidget {
+  const _DetailLine({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 120,
+            child: Text(
+              label,
+              style: tt.bodyMedium?.copyWith(color: cs.onSurfaceVariant, fontWeight: FontWeight.w700),
+            ),
+          ),
+          Expanded(
+            child: Text(value, style: tt.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
+          ),
+        ],
       ),
     );
   }

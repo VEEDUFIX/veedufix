@@ -364,6 +364,13 @@ class _AdminDashboardPageState extends ConsumerState<AdminDashboardPage> {
                   onTap: () => context.go('/finance'),
                 ),
                 _ActionCard(
+                  title: 'Platform Settings',
+                  subtitle: 'GSTIN, invoice sequence, commission rules',
+                  icon: Icons.tune_rounded,
+                  color: const Color(0xFF0F766E),
+                  onTap: () => context.go('/platform-settings'),
+                ),
+                _ActionCard(
                   title: 'Reports & Exports',
                   subtitle: 'Download CSV reports for bookings, earnings, payouts',
                   icon: Icons.download_rounded,

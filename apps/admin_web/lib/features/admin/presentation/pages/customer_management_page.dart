@@ -236,10 +236,12 @@ class _CustomerCard extends StatelessWidget {
     final tt = Theme.of(context).textTheme;
     final isActive = customer.isActive;
 
-    return PremiumGlassCard(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
+    return TapScale(
+      onTap: () => context.go('/customers/${customer.id}'),
+      child: PremiumGlassCard(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
           children: [
             Row(
               children: [
@@ -325,7 +327,8 @@ class _CustomerCard extends StatelessWidget {
                 label: Text(isActive ? 'Ban Customer' : 'Restore Access'),
               ),
             ),
-          ],
+            ],
+          ),
         ),
       ),
     );

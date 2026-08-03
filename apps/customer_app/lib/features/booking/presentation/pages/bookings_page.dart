@@ -29,6 +29,8 @@ class _BookingsPageState extends ConsumerState<BookingsPage> with SingleTickerPr
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+    final upcomingBookings = ref.watch(customerBookingsProvider('upcoming')).valueOrNull ?? const <CustomerBooking>[];
+    final completedBookings = ref.watch(customerBookingsProvider('completed')).valueOrNull ?? const <CustomerBooking>[];
     return Scaffold(
       body: SafeArea(
         child: Column(
@@ -70,7 +72,17 @@ class _BookingsPageState extends ConsumerState<BookingsPage> with SingleTickerPr
                           boxShadow: AbzioTheme.eliteShadow,
                         ),
                         child: IconButton(
-                          onPressed: () {},
+                          onPressed: () {
+                            if (completedBookings.isNotEmpty) {
+                              context.push('/invoice/${completedBookings.first.id}');
+                              return;
+                            }
+                            if (upcomingBookings.isNotEmpty) {
+                              context.push('/booking/${upcomingBookings.first.id}');
+                              return;
+                            }
+                            context.push('/search');
+                          },
                           icon: const Icon(Icons.receipt_long_rounded),
                         ),
                       ),

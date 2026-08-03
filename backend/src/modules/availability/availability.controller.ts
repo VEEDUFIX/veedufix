@@ -9,12 +9,12 @@ import {
 
 function sendError(response: Response, error: unknown): void {
   if (error instanceof WorkerAvailabilityNotFoundError) {
-    response.status(404).json({ message: error.message });
+    response.status(404).json({ message: "Worker availability not found" });
     return;
   }
 
   if (error instanceof Error) {
-    response.status(400).json({ message: error.message });
+    response.status(400).json({ message: "Unable to process availability request" });
     return;
   }
 

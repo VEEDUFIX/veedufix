@@ -12,17 +12,17 @@ import {
 
 function handleRefundError(response: Response, error: unknown): boolean {
   if (error instanceof RefundNotFoundError) {
-    response.status(404).json({ message: error.message });
+    response.status(404).json({ message: "Refund not found" });
     return true;
   }
 
   if (error instanceof RefundConflictError) {
-    response.status(409).json({ message: error.message });
+    response.status(409).json({ message: "This refund cannot be retried" });
     return true;
   }
 
   if (error instanceof Error) {
-    response.status(400).json({ message: error.message });
+    response.status(400).json({ message: "Unable to process refund request" });
     return true;
   }
 

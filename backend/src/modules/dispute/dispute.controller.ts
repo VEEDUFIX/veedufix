@@ -19,27 +19,27 @@ type AuthenticatedRequest = Request & {
 
 function handleDisputeError(response: Response, error: unknown): boolean {
   if (error instanceof BookingNotFoundError) {
-    response.status(404).json({ message: error.message });
+    response.status(404).json({ message: "Booking not found" });
     return true;
   }
 
   if (error instanceof DisputeNotFoundError) {
-    response.status(404).json({ message: error.message });
+    response.status(404).json({ message: "Dispute not found" });
     return true;
   }
 
   if (error instanceof DisputeAccessError) {
-    response.status(403).json({ message: error.message });
+    response.status(403).json({ message: "You are not allowed to perform this action" });
     return true;
   }
 
   if (error instanceof DisputeWindowExpiredError) {
-    response.status(410).json({ message: error.message });
+    response.status(410).json({ message: "The dispute window has expired" });
     return true;
   }
 
   if (error instanceof DisputeConflictError) {
-    response.status(409).json({ message: error.message });
+    response.status(409).json({ message: "A dispute already exists for this booking" });
     return true;
   }
 

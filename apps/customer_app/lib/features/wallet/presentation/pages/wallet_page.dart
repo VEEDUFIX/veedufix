@@ -31,25 +31,17 @@ class WalletPage extends ConsumerWidget {
                   children: [
                     Expanded(
                       child: FilledButton.icon(
-                        onPressed: () {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Coming soon')),
-                          );
-                        },
-                        icon: const Icon(Icons.add),
-                        label: const Text('Add Money'),
+                        onPressed: () => context.push('/referral'),
+                        icon: const Icon(Icons.people_alt_rounded),
+                        label: const Text('Referrals'),
                       ),
                     ),
                     const SizedBox(width: 12),
                     Expanded(
                       child: OutlinedButton.icon(
-                        onPressed: () {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Coming soon')),
-                          );
-                        },
-                        icon: const Icon(Icons.download),
-                        label: const Text('Withdraw'),
+                        onPressed: () => context.push('/support'),
+                        icon: const Icon(Icons.support_agent_rounded),
+                        label: const Text('Support'),
                       ),
                     ),
                   ],

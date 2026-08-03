@@ -151,7 +151,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
         ),
         actions: [
           TapScale(
-            onTap: () {},
+            onTap: () => context.push('/support'),
             child: Padding(
               padding: const EdgeInsets.only(right: 16),
               child: Container(

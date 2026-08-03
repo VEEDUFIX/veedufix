@@ -2,6 +2,7 @@ import { Router } from "express";
 import { BookingStatus, PaymentStatus, Prisma } from "@prisma/client";
 import { requireAuth, requireRole, type AuthenticatedRequest } from "../../middleware/auth.js";
 import { prisma } from "../../lib/prisma.js";
+import { getBookingTimelineEvents } from "../../lib/booking-timeline.js";
 
 export const adminCustomersRouter = Router();
 
@@ -14,6 +15,10 @@ type AdminBookingRecord = Prisma.BookingGetPayload<{
         status: true;
         notes: true;
         updatedAt: true;
+        amount: true;
+        gateway: true;
+        gatewayPaymentId: true;
+        gatewayOrderId: true;
       };
       orderBy: { updatedAt: "desc" };
       take: 1;
@@ -87,6 +92,82 @@ adminCustomersRouter.get("/", async (request: AuthenticatedRequest, response) =>
   response.status(200).json({ customers: serialized });
 });
 
+adminCustomersRouter.get("/:customerId", async (request: AuthenticatedRequest, response) => {
+  const { customerId } = request.params as { customerId: string };
+
+  const customer = await prisma.user.findFirst({
+    where: {
+      id: customerId,
+      role: "CUSTOMER"
+    },
+    select: {
+      id: true,
+      name: true,
+      phone: true,
+      avatarUrl: true,
+      email: true,
+      isActive: true,
+      createdAt: true,
+      _count: { select: { bookings: true } }
+    }
+  });
+
+  if (!customer) {
+    response.status(404).json({ message: "Customer not found" });
+    return;
+  }
+
+  const totalSpend = await prisma.booking.aggregate({
+    where: { customerId: customer.id, status: "COMPLETED" },
+    _sum: { totalAmount: true }
+  });
+
+  const recentBookings = await prisma.booking.findMany({
+    where: { customerId: customer.id },
+    include: {
+      worker: { select: { fullName: true } },
+      services: {
+        include: {
+          service: { select: { name: true } },
+          serviceSubcategory: { select: { name: true } }
+        }
+      },
+      address: {
+        select: { label: true, line1: true, city: { select: { name: true } } }
+      }
+    },
+    orderBy: { createdAt: "desc" },
+    take: 10
+  });
+
+  response.status(200).json({
+    customer: {
+      id: customer.id,
+      name: customer.name ?? "Customer",
+      phone: customer.phone,
+      email: customer.email ?? null,
+      avatarUrl: customer.avatarUrl ?? null,
+      isActive: customer.isActive,
+      totalBookings: customer._count.bookings,
+      totalSpend: Number(totalSpend._sum.totalAmount ?? 0),
+      createdAt: customer.createdAt.toISOString()
+    },
+    recentBookings: recentBookings.map((booking) => ({
+      id: booking.id,
+      code: booking.code,
+      status: booking.status,
+      scheduledAt: booking.scheduledAt.toISOString(),
+      totalAmount: Number(booking.totalAmount),
+      workerName: booking.worker?.fullName ?? null,
+      serviceName:
+        booking.services[0]?.service?.name ??
+        booking.services[0]?.serviceSubcategory?.name ??
+        "Service",
+      addressLabel: booking.address ? `${booking.address.label}, ${booking.address.line1}` : null
+    }))
+  });
+});
+
 // ─── Ban / Unban customer ─────────────────────────────────────────────────────
 adminCustomersRouter.patch("/:customerId/ban", async (request: AuthenticatedRequest, response) => {
   const { customerId } = request.params as { customerId: string };
@@ -109,6 +190,112 @@ adminCustomersRouter.patch("/:customerId/ban", async (request: AuthenticatedRequ
 export const adminBookingsRouter = Router();
 
 adminBookingsRouter.use(requireAuth, requireRole("ADMIN"));
+
+adminBookingsRouter.get("/:bookingId", async (request: AuthenticatedRequest, response) => {
+  const { bookingId } = request.params as { bookingId: string };
+
+  const booking = (await prisma.booking.findUnique({
+    where: { id: bookingId },
+    include: {
+      customer: { select: { id: true, name: true, phone: true, avatarUrl: true } },
+      worker: { select: { id: true, fullName: true } },
+      payments: {
+        select: {
+          status: true,
+          notes: true,
+          updatedAt: true,
+          amount: true,
+          gateway: true,
+          gatewayPaymentId: true,
+          gatewayOrderId: true
+        },
+        orderBy: { updatedAt: "desc" },
+        take: 5
+      },
+      services: {
+        include: {
+          service: { select: { id: true, name: true, iconUrl: true, slug: true } },
+          serviceSubcategory: { select: { id: true, name: true, slug: true } }
+        }
+      },
+      address: {
+        select: {
+          id: true,
+          label: true,
+          line1: true,
+          city: { select: { id: true, name: true } }
+        }
+      }
+    }
+  })) as AdminBookingRecord | null;
+
+  if (!booking) {
+    response.status(404).json({ message: "Booking not found" });
+    return;
+  }
+
+  const latestPayment = booking.payments[0] ?? null;
+  const paymentStatus = latestPayment?.status ?? PaymentStatus.PENDING;
+  const paymentNotes =
+    latestPayment?.notes && typeof latestPayment.notes === "object" && !Array.isArray(latestPayment.notes)
+      ? (latestPayment.notes as Record<string, unknown>)
+      : null;
+  const paymentRecoveryLabel =
+    paymentNotes && (paymentNotes.reconciledBy === "scheduler" || paymentNotes.webhookEvent === "reconciled.order.paid")
+      ? "Reconciled"
+      : paymentStatus === PaymentStatus.CAPTURED
+        ? "Captured"
+        : paymentStatus === PaymentStatus.FAILED
+          ? "Failed"
+          : "Pending";
+
+  response.status(200).json({
+    booking: {
+      id: booking.id,
+      code: booking.code,
+      status: booking.status,
+      paymentStatus,
+      paymentRecoveryLabel,
+      customer: booking.customer,
+      worker: booking.worker,
+      serviceName:
+        booking.services[0]?.service?.name ??
+        booking.services[0]?.serviceSubcategory?.name ??
+        "Service",
+      scheduledAt: booking.scheduledAt.toISOString(),
+      totalAmount: Number(booking.totalAmount),
+      address: booking.address
+        ? {
+            id: booking.address.id,
+            label: booking.address.label,
+            line1: booking.address.line1,
+            cityName: booking.address.city?.name ?? null
+          }
+        : null,
+      payments: booking.payments.map((payment: AdminBookingRecord["payments"][number]) => ({
+        status: payment.status,
+        amount: Number(payment.amount),
+        gateway: payment.gateway,
+        gatewayPaymentId: payment.gatewayPaymentId,
+        gatewayOrderId: payment.gatewayOrderId,
+        updatedAt: payment.updatedAt.toISOString()
+      })),
+      services: booking.services.map((bookingService: AdminBookingRecord["services"][number]) => ({
+        id: bookingService.id,
+        serviceName: bookingService.service?.name ?? bookingService.serviceSubcategory?.name ?? "Service",
+        serviceId: bookingService.service?.id ?? null,
+        serviceSlug: bookingService.service?.slug ?? bookingService.serviceSubcategory?.slug ?? null
+      })),
+      timeline: (await getBookingTimelineEvents(booking.id)).map((event) => ({
+        id: event.id,
+        status: event.status,
+        title: event.title,
+        description: event.description,
+        createdAt: event.createdAt.toISOString()
+      }))
+    }
+  });
+});
 
 adminBookingsRouter.get("/", async (request: AuthenticatedRequest, response) => {
   const status = (request.query.status as string) ?? "";

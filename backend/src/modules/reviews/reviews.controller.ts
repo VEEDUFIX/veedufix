@@ -22,7 +22,7 @@ export async function submitReviewHandler(request: AuthenticatedRequest, respons
     if (error instanceof Error && error.message === "Unauthorized") {
       response.status(403).json({ message: "Not authorized to review this booking" });
     } else if (error instanceof Error && error.message.includes("already submitted")) {
-      response.status(409).json({ message: error.message });
+      response.status(409).json({ message: "Review already submitted for this booking" });
     } else {
       response.status(500).json({ message: "Internal server error" });
     }

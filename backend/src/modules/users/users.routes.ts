@@ -259,6 +259,7 @@ usersRouter.get("/me/worker/jobs", requireAuth, async (request: AuthenticatedReq
       scheduledAt: o.booking.scheduledAt.toISOString(),
       totalAmount: Number(o.booking.totalAmount),
       expiresAt: o.expiresAt.toISOString(),
+      serviceId: o.booking.services[0]?.service?.id ?? null,
       serviceName: o.booking.services[0]?.service?.name ?? o.booking.services[0]?.serviceSubcategory?.name ?? "Service",
       serviceIcon: o.booking.services[0]?.service?.iconUrl ?? null,
       addressLabel: o.booking.address
@@ -300,17 +301,18 @@ usersRouter.get("/me/worker/jobs", requireAuth, async (request: AuthenticatedReq
     }
   });
 
-  const serialized = bookings.map((b) => ({
-    bookingId: b.id,
-    code: b.code,
-    status: b.status,
-    scheduledAt: b.scheduledAt.toISOString(),
-    totalAmount: Number(b.totalAmount),
-    serviceName: b.services[0]?.service?.name ?? b.services[0]?.serviceSubcategory?.name ?? "Service",
-    serviceIcon: b.services[0]?.service?.iconUrl ?? null,
-    customerName: b.customer.name ?? "Customer",
-    customerAvatarUrl: b.customer.avatarUrl ?? null,
-    addressLabel: b.address
+    const serialized = bookings.map((b) => ({
+      bookingId: b.id,
+      code: b.code,
+      status: b.status,
+      scheduledAt: b.scheduledAt.toISOString(),
+      totalAmount: Number(b.totalAmount),
+      serviceId: b.services[0]?.service?.id ?? null,
+      serviceName: b.services[0]?.service?.name ?? b.services[0]?.serviceSubcategory?.name ?? "Service",
+      serviceIcon: b.services[0]?.service?.iconUrl ?? null,
+      customerName: b.customer.name ?? "Customer",
+      customerAvatarUrl: b.customer.avatarUrl ?? null,
+      addressLabel: b.address
       ? `${b.address.label}, ${b.address.line1}`
       : null,
     cityName: b.address?.city?.name ?? null
@@ -387,6 +389,7 @@ usersRouter.get("/me/worker/stats", requireAuth, async (request: AuthenticatedRe
       code: j.code,
       status: j.status,
       scheduledAt: j.scheduledAt.toISOString(),
+      serviceId: j.services[0]?.service?.id ?? null,
       serviceName: j.services[0]?.service?.name ?? j.services[0]?.serviceSubcategory?.name ?? "Service",
       serviceIcon: j.services[0]?.service?.iconUrl ?? null,
       addressLabel: j.address ? `${j.address.label}, ${j.address.line1}` : null

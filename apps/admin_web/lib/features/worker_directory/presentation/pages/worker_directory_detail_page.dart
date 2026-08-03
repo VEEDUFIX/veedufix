@@ -25,6 +25,8 @@ class _WorkerDirectoryDetailPageState
   late final WorkerDirectoryApi _api;
   late Future<WorkerDirectoryHistoryResponse> _historyFuture;
   WorkerDirectoryProfile? _profile;
+  bool _loading = true;
+  String? _loadError;
   bool _busy = false;
 
   @override
@@ -33,23 +35,45 @@ class _WorkerDirectoryDetailPageState
     _api = WorkerDirectoryApi(ref.read(apiClientProvider).dio);
     _profile = widget.initialProfile;
     _historyFuture = _loadHistory();
+    if (_profile == null) {
+      _loadInitialProfile();
+    } else {
+      _loading = false;
+    }
   }
 
   Future<WorkerDirectoryHistoryResponse> _loadHistory() {
     return _api.fetchHistory(widget.profileId);
   }
 
+  Future<void> _loadInitialProfile() async {
+    try {
+      final history = await _historyFuture;
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _profile = history.worker;
+        _loading = false;
+        _loadError = null;
+      });
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _loading = false;
+        _loadError = error.toString();
+      });
+    }
+  }
+
   Future<void> _reload() async {
     setState(() {
+      _loading = true;
       _historyFuture = _loadHistory();
     });
-    final history = await _historyFuture;
-    if (!mounted) {
-      return;
-    }
-    setState(() {
-      _profile = history.worker;
-    });
+    await _loadInitialProfile();
   }
 
   Future<void> _runMutation(
@@ -175,15 +199,27 @@ class _WorkerDirectoryDetailPageState
     final profile = _profile;
 
     if (profile == null) {
+      if (_loading) {
+        return Scaffold(
+          backgroundColor: const Color(0xFFF9F5EC),
+          appBar: AppBar(title: const Text('Worker directory')),
+          body: const Center(
+            child: CircularProgressIndicator(),
+          ),
+        );
+      }
+
       return Scaffold(
         backgroundColor: const Color(0xFFF9F5EC),
         appBar: AppBar(title: const Text('Worker directory')),
-        body: const Center(
+        body: Center(
           child: PremiumEmptyState(
             icon: Icons.badge_rounded,
             title: 'Worker details unavailable',
-            subtitle:
-                'Open this page from the worker directory so the profile can be loaded.',
+            subtitle: _loadError ??
+                'Open this page from the worker directory or retry to load the profile.',
+            actionLabel: 'Retry',
+            onAction: _reload,
           ),
         ),
       );

@@ -11,12 +11,12 @@ import {
 
 function sendError(response: Response, error: unknown): void {
   if (error instanceof SavedAddressNotFoundError) {
-    response.status(404).json({ message: error.message });
+    response.status(404).json({ message: "Saved address not found" });
     return;
   }
 
   if (error instanceof Error) {
-    response.status(400).json({ message: error.message });
+    response.status(400).json({ message: "Unable to process address request" });
     return;
   }
 

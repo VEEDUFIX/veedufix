@@ -13,10 +13,10 @@ import '../providers/worker_availability_provider.dart';
 class JobExecutionPage extends ConsumerStatefulWidget {
   const JobExecutionPage({
     super.key,
-    required this.booking,
+    required this.bookingId,
   });
 
-  final JobExecutionBooking booking;
+  final String bookingId;
 
   @override
   ConsumerState<JobExecutionPage> createState() => _JobExecutionPageState();
@@ -25,15 +25,42 @@ class JobExecutionPage extends ConsumerStatefulWidget {
 class _JobExecutionPageState extends ConsumerState<JobExecutionPage> {
   final TextEditingController _arrivalOtpController = TextEditingController();
   final TextEditingController _completionOtpController = TextEditingController();
+  bool _loadingBooking = true;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      ref.read(jobExecutionProvider.notifier).start(widget.booking);
-      // Start broadcasting GPS location for live tracking
-      ref.read(locationBroadcasterProvider.notifier).start(widget.booking.bookingId);
+      _resolveBooking();
     });
+  }
+
+  Future<void> _resolveBooking() async {
+    try {
+      final booking = await ref.read(jobExecutionBookingProvider(widget.bookingId).future);
+      if (!mounted) {
+        return;
+      }
+      if (booking == null) {
+        setState(() {
+          _loadingBooking = false;
+        });
+        return;
+      }
+
+      ref.read(jobExecutionProvider.notifier).start(booking);
+      ref.read(locationBroadcasterProvider.notifier).start(booking.bookingId);
+      setState(() {
+        _loadingBooking = false;
+      });
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _loadingBooking = false;
+      });
+    }
   }
 
   @override
@@ -48,15 +75,24 @@ class _JobExecutionPageState extends ConsumerState<JobExecutionPage> {
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(jobExecutionProvider);
+    final hasCurrentBooking = state.booking?.bookingId == widget.bookingId;
 
-    if (!state.hasBooking) {
+    if (!hasCurrentBooking) {
+      if (_loadingBooking) {
+        return Scaffold(
+          appBar: AppBar(title: const Text('Job execution')),
+          body: const Center(
+            child: CircularProgressIndicator(),
+          ),
+        );
+      }
       return Scaffold(
         appBar: AppBar(title: const Text('Job execution')),
         body: const Center(
           child: PremiumEmptyState(
             icon: Icons.assignment_late_rounded,
             title: 'Missing job details',
-            subtitle: 'Open this flow from an accepted job in the Jobs tab.',
+            subtitle: 'Open this flow from a job in the Jobs tab.',
           ),
         ),
       );
@@ -466,7 +502,7 @@ class _JobExecutionPageState extends ConsumerState<JobExecutionPage> {
                               await notifier.retryPhoto(type, draft.id);
                             }
                           : null,
-                      accentColor: widget.booking.accentColor,
+                      accentColor: Theme.of(context).colorScheme.primary,
                     ),
                   ),
                 )

@@ -152,12 +152,7 @@ class _SupportTicketsPageState extends ConsumerState<SupportTicketsPage> {
   }
 
   Future<void> _openTicketDetails(AdminSupportTicket ticket) async {
-    await showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      showDragHandle: true,
-      builder: (_) => _SupportTicketThreadSheet(ticketId: ticket.id),
-    );
+    await context.push('/support-tickets/${ticket.id}');
     if (mounted) {
       ref.invalidate(adminSupportTicketsProvider((search: _search, status: _status)));
     }
@@ -334,16 +329,16 @@ class _SupportTicketsPageState extends ConsumerState<SupportTicketsPage> {
   }
 }
 
-class _SupportTicketThreadSheet extends ConsumerStatefulWidget {
-  const _SupportTicketThreadSheet({required this.ticketId});
+class SupportTicketDetailPage extends ConsumerStatefulWidget {
+  const SupportTicketDetailPage({super.key, required this.ticketId});
 
   final String ticketId;
 
   @override
-  ConsumerState<_SupportTicketThreadSheet> createState() => _SupportTicketThreadSheetState();
+  ConsumerState<SupportTicketDetailPage> createState() => _SupportTicketDetailPageState();
 }
 
-class _SupportTicketThreadSheetState extends ConsumerState<_SupportTicketThreadSheet> {
+class _SupportTicketDetailPageState extends ConsumerState<SupportTicketDetailPage> {
   final _replyController = TextEditingController();
   bool _internalNote = false;
 
@@ -408,139 +403,153 @@ class _SupportTicketThreadSheetState extends ConsumerState<_SupportTicketThreadS
     final tt = Theme.of(context).textTheme;
     final threadAsync = ref.watch(adminSupportTicketThreadProvider(widget.ticketId));
 
-    return SafeArea(
-      child: Padding(
-        padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
-        child: threadAsync.when(
-          loading: () => const SizedBox(
-            height: 360,
-            child: Center(child: CircularProgressIndicator()),
-          ),
-          error: (error, _) => SizedBox(
-            height: 360,
-            child: Center(child: Text('Could not open ticket: $error')),
-          ),
-          data: (thread) {
-            final ticket = thread.ticket;
-            return ConstrainedBox(
-              constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.85),
+    return Scaffold(
+      backgroundColor: cs.surface,
+      appBar: AppBar(
+        title: Text('Support Ticket', style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios_new_rounded),
+          onPressed: () => context.pop(),
+        ),
+      ),
+      body: SafeArea(
+        child: Padding(
+          padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+          child: threadAsync.when(
+            loading: () => const Center(child: CircularProgressIndicator()),
+            error: (error, _) => Center(
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(ticket.subject, style: tt.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
-                    const SizedBox(height: 6),
-                    Text(
-                      ticket.userName ?? 'Unknown user',
-                      style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant),
-                    ),
-                    const SizedBox(height: 12),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: [
-                        _MetaPill(label: 'Status: ${ticket.status.replaceAll('_', ' ')}'),
-                        _MetaPill(label: ticket.assignedToName == null ? 'Unassigned' : 'Assigned to ${ticket.assignedToName}'),
-                        _MetaPill(label: '${thread.replies.length} replies'),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    Text(ticket.message, style: tt.bodyMedium),
-                    const SizedBox(height: 16),
-                    Row(
-                      children: [
-                        TextButton(
-                          onPressed: () => _assignToMe(ticket.id),
-                          child: const Text('Assign to me'),
-                        ),
-                        TextButton(
-                          onPressed: () => _unassign(ticket.id),
-                          child: const Text('Unassign'),
-                        ),
-                        TextButton(
-                          onPressed: () => _setStatus(ticket.id, 'IN_PROGRESS'),
-                          child: const Text('In progress'),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    Expanded(
-                      child: ListView.separated(
-                        itemCount: thread.replies.length,
-                        separatorBuilder: (_, __) => const SizedBox(height: 8),
-                        itemBuilder: (context, index) {
-                          final reply = thread.replies[index];
-                          final isMine = reply.authorRole == 'ADMIN';
-                          return Align(
-                            alignment: isMine ? Alignment.centerRight : Alignment.centerLeft,
-                            child: Container(
-                              constraints: const BoxConstraints(maxWidth: 540),
-                              padding: const EdgeInsets.all(12),
-                              decoration: BoxDecoration(
-                                color: isMine ? cs.primaryContainer : cs.surfaceContainerHighest.withValues(alpha: 0.45),
-                                borderRadius: BorderRadius.circular(16),
-                              ),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Row(
-                                    children: [
-                                      Text(
-                                        reply.authorName ?? 'Agent',
-                                        style: tt.labelLarge?.copyWith(fontWeight: FontWeight.w800),
-                                      ),
-                                      const SizedBox(width: 8),
-                                      Text(
-                                        reply.isInternal ? 'Internal note' : 'Reply',
-                                        style: tt.labelSmall?.copyWith(color: cs.onSurfaceVariant),
-                                      ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 8),
-                                  Text(reply.message),
-                                ],
-                              ),
-                            ),
-                          );
-                        },
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: _replyController,
-                      maxLines: 3,
-                      decoration: InputDecoration(
-                        hintText: 'Write a reply...',
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    Row(
-                      children: [
-                        FilterChip(
-                          selected: _internalNote,
-                          label: const Text('Internal note'),
-                          onSelected: (value) => setState(() => _internalNote = value),
-                        ),
-                        const Spacer(),
-                        FilledButton(
-                          onPressed: () async {
-                            await _reply(ticket.id);
-                            if (mounted) {
-                              setState(() {});
-                            }
-                          },
-                          child: const Text('Send reply'),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
+                padding: const EdgeInsets.all(24),
+                child: Text('Could not open ticket: $error', textAlign: TextAlign.center),
               ),
-            );
-          },
+            ),
+            data: (thread) {
+              final ticket = thread.ticket;
+              return ListView(
+                padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+                children: [
+                  Text(ticket.subject, style: tt.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
+                  const SizedBox(height: 6),
+                  Text(
+                    ticket.userName ?? 'Unknown user',
+                    style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+                  ),
+                  const SizedBox(height: 12),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      _MetaPill(label: 'Status: ${ticket.status.replaceAll('_', ' ')}'),
+                      _MetaPill(label: ticket.assignedToName == null ? 'Unassigned' : 'Assigned to ${ticket.assignedToName}'),
+                      _MetaPill(label: '${thread.replies.length} replies'),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Text(ticket.message, style: tt.bodyMedium),
+                  const SizedBox(height: 16),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      TextButton(
+                        onPressed: ticket.assignedToName == null ? () => _assignToMe(ticket.id) : null,
+                        child: const Text('Assign to me'),
+                      ),
+                      TextButton(
+                        onPressed: ticket.assignedToName == null ? null : () => _unassign(ticket.id),
+                        child: const Text('Unassign'),
+                      ),
+                      TextButton(
+                        onPressed: ticket.status == 'OPEN' ? () => _setStatus(ticket.id, 'IN_PROGRESS') : null,
+                        child: const Text('In progress'),
+                      ),
+                      TextButton(
+                        onPressed: ticket.status == 'RESOLVED' ? null : () => _setStatus(ticket.id, 'RESOLVED'),
+                        child: const Text('Resolve'),
+                      ),
+                      TextButton(
+                        onPressed: ticket.status == 'CLOSED' ? null : () => _setStatus(ticket.id, 'CLOSED'),
+                        child: const Text('Close'),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  if (thread.replies.isEmpty)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      child: Text('No replies yet.', style: tt.bodyMedium?.copyWith(color: cs.onSurfaceVariant)),
+                    )
+                  else
+                    ...thread.replies.map((reply) {
+                      final isMine = reply.authorRole == 'ADMIN';
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: Align(
+                          alignment: isMine ? Alignment.centerRight : Alignment.centerLeft,
+                          child: Container(
+                            constraints: const BoxConstraints(maxWidth: 540),
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: isMine ? cs.primaryContainer : cs.surfaceContainerHighest.withValues(alpha: 0.45),
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Text(
+                                      reply.authorName ?? 'Agent',
+                                      style: tt.labelLarge?.copyWith(fontWeight: FontWeight.w800),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Text(
+                                      reply.isInternal ? 'Internal note' : 'Reply',
+                                      style: tt.labelSmall?.copyWith(color: cs.onSurfaceVariant),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 8),
+                                Text(reply.message),
+                              ],
+                            ),
+                          ),
+                        ),
+                      );
+                    }),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _replyController,
+                    maxLines: 3,
+                    decoration: InputDecoration(
+                      hintText: 'Write a reply...',
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      FilterChip(
+                        selected: _internalNote,
+                        label: const Text('Internal note'),
+                        onSelected: (value) => setState(() => _internalNote = value),
+                      ),
+                      const Spacer(),
+                      FilledButton(
+                        onPressed: () async {
+                          await _reply(ticket.id);
+                          if (mounted) {
+                            setState(() {});
+                          }
+                        },
+                        child: const Text('Send reply'),
+                      ),
+                    ],
+                  ),
+                ],
+              );
+            },
+          ),
         ),
       ),
     );

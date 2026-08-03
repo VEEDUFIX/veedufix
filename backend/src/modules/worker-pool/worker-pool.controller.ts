@@ -21,12 +21,7 @@ export async function listWorkerPoolHandler(
 
     response.status(200).json(result);
   } catch (error) {
-    if (error instanceof Error) {
-      response.status(400).json({ message: error.message });
-      return;
-    }
-
-    response.status(500).json({ message: "Unexpected error" });
+    void error;
+    response.status(400).json({ message: "Unable to load worker pool" });
   }
 }
-

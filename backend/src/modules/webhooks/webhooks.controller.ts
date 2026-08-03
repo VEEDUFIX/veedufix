@@ -18,7 +18,7 @@ export async function razorpayWebhookHandler(request: Request, response: Respons
     response.status(200).json({ ok: true });
   } catch (error) {
     response.status(400).json({
-      message: error instanceof Error ? error.message : "Webhook processing failed"
+      message: "Webhook processing failed"
     });
   }
 }

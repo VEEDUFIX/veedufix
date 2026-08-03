@@ -591,6 +591,10 @@ export async function listPendingReview(filters: PendingReviewFilters = {}) {
   };
 }
 
+export async function getWorkerReviewProfile(workerProfileId: string) {
+  return normalizeProfile(await getWorkerProfileByIdOrThrow(workerProfileId));
+}
+
 export async function approveWorker(workerProfileId: string, adminUserId: string) {
   const profile = await prisma.workerProfile.findUnique({
     where: { id: workerProfileId },

@@ -14,6 +14,7 @@ import {
   getOnboardingStatus,
   getOwnAadhaarSignedUrl,
   getOwnSkillCertSignedUrl,
+  getWorkerReviewProfile,
   getSkillCertSignedUrl,
   getWorkerDirectory,
   getWorkerHistory,
@@ -29,24 +30,24 @@ import {
 function sendError(response: Response, error: unknown): void {
   if (error instanceof IncompleteProfileError) {
     response.status(409).json({
-      message: error.message,
+      message: "Worker profile is incomplete",
       missingFields: error.missingFields
     });
     return;
   }
 
   if (error instanceof WorkerProfileNotFoundError) {
-    response.status(404).json({ message: error.message });
+    response.status(404).json({ message: "Worker profile not found" });
     return;
   }
 
   if (error instanceof WorkerStatusConflictError) {
-    response.status(409).json({ message: error.message });
+    response.status(409).json({ message: "Worker profile status conflict" });
     return;
   }
 
   if (error instanceof Error) {
-    response.status(400).json({ message: error.message });
+    response.status(400).json({ message: "Unable to process worker onboarding request" });
     return;
   }
 
@@ -150,6 +151,20 @@ export async function pendingReviewHandler(
     });
 
     response.status(200).json(result);
+  } catch (error) {
+    sendError(response, error);
+  }
+}
+
+export async function workerReviewDetailHandler(
+  request: AuthenticatedRequest,
+  response: Response,
+  _next: NextFunction
+) {
+  try {
+    const profileId = String(request.params.profileId);
+    const profile = await getWorkerReviewProfile(profileId);
+    response.status(200).json({ profile });
   } catch (error) {
     sendError(response, error);
   }

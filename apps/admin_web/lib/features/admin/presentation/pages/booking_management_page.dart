@@ -257,12 +257,14 @@ class _AdminBookingCard extends StatelessWidget {
     final cs = Theme.of(context).colorScheme;
     final tt = Theme.of(context).textTheme;
 
-    return PremiumGlassCard(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
+    return TapScale(
+      onTap: () => context.go('/admin-bookings/${booking.id}'),
+      child: PremiumGlassCard(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
             // Header row
             Row(
               children: [
@@ -378,7 +380,8 @@ class _AdminBookingCard extends StatelessWidget {
               const SizedBox(height: 6),
               _InfoChip(icon: Icons.location_on_rounded, label: booking.addressLabel!),
             ],
-          ],
+            ],
+          ),
         ),
       ),
     );

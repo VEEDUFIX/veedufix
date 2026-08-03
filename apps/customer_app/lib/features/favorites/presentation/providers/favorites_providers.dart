@@ -1,24 +1,38 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
-class FavoritesNotifier extends StateNotifier<Set<String>> {
-  FavoritesNotifier() : super({});
+const _favoritesStorageKey = 'customer_favorite_service_ids';
 
-  void toggleFavorite(String serviceId) {
-    if (state.contains(serviceId)) {
-      state = {...state}..remove(serviceId);
-    } else {
-      state = {...state, serviceId};
-    }
+class FavoritesNotifier extends AsyncNotifier<Set<String>> {
+  SharedPreferences? _prefs;
+
+  @override
+  Future<Set<String>> build() async {
+    _prefs = await SharedPreferences.getInstance();
+    return (_prefs!.getStringList(_favoritesStorageKey) ?? const <String>[]).toSet();
   }
 
-  bool isFavorite(String serviceId) => state.contains(serviceId);
+  Future<void> toggleFavorite(String serviceId) async {
+    final current = state.valueOrNull ?? await future;
+    final next = {...current};
+    if (!next.remove(serviceId)) {
+      next.add(serviceId);
+    }
+
+    state = AsyncData(next);
+
+    final prefs = _prefs ?? await SharedPreferences.getInstance();
+    await prefs.setStringList(_favoritesStorageKey, next.toList()..sort());
+  }
+
+  bool isFavorite(String serviceId) => state.valueOrNull?.contains(serviceId) ?? false;
 }
 
-final favoritesProvider =
-    StateNotifierProvider<FavoritesNotifier, Set<String>>((ref) {
-  return FavoritesNotifier();
-});
+final favoritesProvider = AsyncNotifierProvider<FavoritesNotifier, Set<String>>(FavoritesNotifier.new);
 
 final isFavoriteProvider = Provider.family<bool, String>((ref, serviceId) {
-  return ref.watch(favoritesProvider).contains(serviceId);
+  return ref.watch(favoritesProvider).maybeWhen(
+        data: (favorites) => favorites.contains(serviceId),
+        orElse: () => false,
+      );
 });

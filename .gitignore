@@ -24,3 +24,5 @@ apps/**/pubspec.lock
 apps/**/android/key.properties
 apps/**/android/*.jks
 apps/**/android/*.keystore
+
+.pnpm-store/

@@ -51,13 +51,13 @@ function handleMulterError(error: unknown, _request: Request, response: Response
       response.status(400).json({ message: "File is too large. Maximum allowed size is 10 MB." });
       return;
     }
-    response.status(400).json({ message: `Upload error: ${error.message}` });
+    response.status(400).json({ message: "Upload failed" });
     return;
   }
 
   if (error instanceof Error) {
     // fileFilter rejects arrive here as plain Error instances
-    response.status(400).json({ message: error.message });
+    response.status(400).json({ message: "Upload failed" });
     return;
   }
 

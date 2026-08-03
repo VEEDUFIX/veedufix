@@ -5,7 +5,7 @@ import { writeAuditLog } from "../../lib/audit.js";
 
 function sendError(response: Response, error: unknown): void {
   if (error instanceof Error) {
-    response.status(400).json({ message: error.message });
+    response.status(400).json({ message: "Unable to process payout request" });
     return;
   }
 

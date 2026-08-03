@@ -5,6 +5,7 @@ class WorkerJob {
     required this.status,
     required this.scheduledAt,
     required this.totalAmount,
+    this.serviceId,
     required this.serviceName,
     this.serviceIcon,
     this.addressLabel,
@@ -21,6 +22,7 @@ class WorkerJob {
   final String status;
   final DateTime scheduledAt;
   final double totalAmount;
+  final String? serviceId;
   final String serviceName;
   final String? serviceIcon;
   final String? addressLabel;
@@ -36,6 +38,7 @@ class WorkerJob {
         status: json['status'] as String? ?? '',
         scheduledAt: DateTime.tryParse(json['scheduledAt'] as String? ?? '') ?? DateTime.now(),
         totalAmount: (json['totalAmount'] as num?)?.toDouble() ?? 0.0,
+        serviceId: json['serviceId'] as String?,
         serviceName: json['serviceName'] as String? ?? 'Service',
         serviceIcon: json['serviceIcon'] as String?,
         addressLabel: json['addressLabel'] as String?,

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:marketplace_shared/marketplace_shared.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -126,6 +127,10 @@ class _RefundsLedgerPageState extends ConsumerState<RefundsLedgerPage> {
     if (_scrollController.position.extentAfter < 700) {
       _loadMore();
     }
+  }
+
+  Future<void> _openDetails(FinanceRefundItem refund) async {
+    await context.push('/finance/refunds/${refund.id}', extra: refund);
   }
 
   Future<void> _retry(String refundId) async {
@@ -447,6 +452,7 @@ class _RefundsLedgerPageState extends ConsumerState<RefundsLedgerPage> {
                                       : const SizedBox.shrink(),
                                 ),
                               ],
+                              onSelectChanged: (_) => _openDetails(refund),
                             );
                           }).toList(growable: false),
                         ),
@@ -504,6 +510,217 @@ class _RefundsLedgerPageState extends ConsumerState<RefundsLedgerPage> {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+class RefundDetailPage extends ConsumerStatefulWidget {
+  const RefundDetailPage({
+    super.key,
+    required this.refundId,
+    this.initialRefund,
+  });
+
+  final String refundId;
+  final FinanceRefundItem? initialRefund;
+
+  @override
+  ConsumerState<RefundDetailPage> createState() => _RefundDetailPageState();
+}
+
+class _RefundDetailPageState extends ConsumerState<RefundDetailPage> {
+  late final FinanceApi _api;
+  late Future<FinanceRefundItem?> _refundFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _api = FinanceApi(ref.read(apiClientProvider).dio);
+    _refundFuture = _loadRefund();
+  }
+
+  Future<FinanceRefundItem?> _loadRefund() async {
+    if (widget.initialRefund != null && widget.initialRefund!.id == widget.refundId) {
+      return widget.initialRefund;
+    }
+
+    final snapshot = await _api.fetchRefunds(page: 1, pageSize: 200);
+    for (final item in snapshot.items) {
+      if (item.id == widget.refundId) {
+        return item;
+      }
+    }
+    return null;
+  }
+
+  Future<void> _reload() async {
+    setState(() {
+      _refundFuture = _loadRefund();
+    });
+    await _refundFuture;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Refund Details'),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios_new_rounded),
+          onPressed: () => context.pop(),
+        ),
+        actions: [
+          IconButton(
+            onPressed: _reload,
+            icon: const Icon(Icons.refresh_rounded),
+          ),
+        ],
+      ),
+      body: FutureBuilder<FinanceRefundItem?>(
+        future: _refundFuture,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting && !snapshot.hasData) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          if (snapshot.hasError) {
+            return Center(child: Text('Unable to load refund: ${snapshot.error}'));
+          }
+          final refund = snapshot.data;
+          if (refund == null) {
+            return Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.search_off_rounded, size: 48),
+                    const SizedBox(height: 12),
+                    Text('Refund not found', style: tt.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
+                    const SizedBox(height: 8),
+                    Text(
+                      'This refund is not present in the current ledger snapshot.',
+                      textAlign: TextAlign.center,
+                      style: tt.bodyMedium?.copyWith(color: cs.onSurfaceVariant),
+                    ),
+                    const SizedBox(height: 16),
+                    FilledButton(onPressed: _reload, child: const Text('Reload')),
+                  ],
+                ),
+              ),
+            );
+          }
+
+          return ListView(
+            padding: const EdgeInsets.all(24),
+            children: [
+              Text(refund.bookingCode, style: tt.headlineSmall?.copyWith(fontWeight: FontWeight.w800)),
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  _DetailChip(label: refund.status),
+                  _DetailChip(label: refund.customerName ?? 'Unknown customer'),
+                  _DetailChip(label: 'Rs. ${refund.amount.toStringAsFixed(2)}'),
+                  _DetailChip(label: MaterialLocalizations.of(context).formatMediumDate(refund.createdAt)),
+                ],
+              ),
+              const SizedBox(height: 16),
+              _DetailLine(label: 'Refund ID', value: refund.id),
+              _DetailLine(label: 'Booking ID', value: refund.bookingId),
+              _DetailLine(label: 'Booking code', value: refund.bookingCode),
+              _DetailLine(label: 'Customer', value: refund.customerName ?? 'Unknown'),
+              _DetailLine(label: 'Amount', value: 'Rs. ${refund.amount.toStringAsFixed(2)}'),
+              _DetailLine(label: 'Reason', value: refund.reason),
+              _DetailLine(label: 'Created', value: MaterialLocalizations.of(context).formatMediumDate(refund.createdAt)),
+              if ((refund.razorpayRefundId ?? '').trim().isNotEmpty)
+                _DetailLine(label: 'Razorpay ID', value: refund.razorpayRefundId!),
+              if ((refund.failureReason ?? '').trim().isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Text('Failure reason', style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
+                const SizedBox(height: 6),
+                Text(refund.failureReason!),
+              ],
+              const SizedBox(height: 20),
+              Wrap(
+                spacing: 12,
+                runSpacing: 12,
+                children: [
+                  if (refund.status == 'failed')
+                    FilledButton(
+                      onPressed: () async {
+                        await _api.retryRefund(refund.id);
+                        if (mounted) {
+                          await _reload();
+                        }
+                      },
+                      child: const Text('Retry refund'),
+                    ),
+                  OutlinedButton(
+                    onPressed: _reload,
+                    child: const Text('Refresh'),
+                  ),
+                ],
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _DetailChip extends StatelessWidget {
+  const _DetailChip({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.7),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        label,
+        style: Theme.of(context).textTheme.labelSmall?.copyWith(fontWeight: FontWeight.w700),
+      ),
+    );
+  }
+}
+
+class _DetailLine extends StatelessWidget {
+  const _DetailLine({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    final tt = Theme.of(context).textTheme;
+    final cs = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 110,
+            child: Text(
+              label,
+              style: tt.bodyMedium?.copyWith(color: cs.onSurfaceVariant, fontWeight: FontWeight.w700),
+            ),
+          ),
+          Expanded(
+            child: Text(value, style: tt.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
+          ),
+        ],
       ),
     );
   }
@@ -613,4 +830,3 @@ class _SurfacePanel extends StatelessWidget {
     );
   }
 }
-

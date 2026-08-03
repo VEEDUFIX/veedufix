@@ -9,12 +9,12 @@ import {
 
 function sendError(response: Response, error: unknown): void {
   if (error instanceof WorkerProfileNotFoundError) {
-    response.status(404).json({ message: error.message });
+    response.status(404).json({ message: "Worker profile not found" });
     return;
   }
 
   if (error instanceof Error) {
-    response.status(400).json({ message: error.message });
+    response.status(400).json({ message: "Unable to load worker earnings" });
     return;
   }
 

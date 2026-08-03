@@ -260,6 +260,11 @@ class WorkerReviewApi {
     );
   }
 
+  Future<WorkerReviewProfile> fetchProfile(String profileId) async {
+    final response = await _dio.get<Map<String, dynamic>>('/admin/worker-review/$profileId');
+    return _parseProfile(response.data);
+  }
+
   Future<List<CatalogCategory>> fetchCategories() async {
     final response = await _dio.get<Map<String, dynamic>>('/catalog');
     final categories = response.data?['categories'];

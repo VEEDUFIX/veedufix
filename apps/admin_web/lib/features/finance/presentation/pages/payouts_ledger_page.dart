@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:marketplace_shared/marketplace_shared.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -126,6 +127,10 @@ class _PayoutsLedgerPageState extends ConsumerState<PayoutsLedgerPage> {
     if (_scrollController.position.extentAfter < 700) {
       _loadMore();
     }
+  }
+
+  Future<void> _openDetails(FinancePayoutItem payout) async {
+    await context.push('/finance/payouts/${payout.id}', extra: payout);
   }
 
   Future<void> _retry(String payoutId) async {
@@ -442,6 +447,7 @@ class _PayoutsLedgerPageState extends ConsumerState<PayoutsLedgerPage> {
                                       : const SizedBox.shrink(),
                                 ),
                               ],
+                              onSelectChanged: (_) => _openDetails(payout),
                             );
                           }).toList(growable: false),
                         ),
@@ -499,6 +505,217 @@ class _PayoutsLedgerPageState extends ConsumerState<PayoutsLedgerPage> {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+class PayoutDetailPage extends ConsumerStatefulWidget {
+  const PayoutDetailPage({
+    super.key,
+    required this.payoutId,
+    this.initialPayout,
+  });
+
+  final String payoutId;
+  final FinancePayoutItem? initialPayout;
+
+  @override
+  ConsumerState<PayoutDetailPage> createState() => _PayoutDetailPageState();
+}
+
+class _PayoutDetailPageState extends ConsumerState<PayoutDetailPage> {
+  late final FinanceApi _api;
+  late Future<FinancePayoutItem?> _payoutFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _api = FinanceApi(ref.read(apiClientProvider).dio);
+    _payoutFuture = _loadPayout();
+  }
+
+  Future<FinancePayoutItem?> _loadPayout() async {
+    if (widget.initialPayout != null && widget.initialPayout!.id == widget.payoutId) {
+      return widget.initialPayout;
+    }
+
+    final snapshot = await _api.fetchPayouts(page: 1, limit: 200);
+    for (final item in snapshot.items) {
+      if (item.id == widget.payoutId) {
+        return item;
+      }
+    }
+    return null;
+  }
+
+  Future<void> _reload() async {
+    setState(() {
+      _payoutFuture = _loadPayout();
+    });
+    await _payoutFuture;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Payout Details'),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios_new_rounded),
+          onPressed: () => context.pop(),
+        ),
+        actions: [
+          IconButton(
+            onPressed: _reload,
+            icon: const Icon(Icons.refresh_rounded),
+          ),
+        ],
+      ),
+      body: FutureBuilder<FinancePayoutItem?>(
+        future: _payoutFuture,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting && !snapshot.hasData) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          if (snapshot.hasError) {
+            return Center(child: Text('Unable to load payout: ${snapshot.error}'));
+          }
+          final payout = snapshot.data;
+          if (payout == null) {
+            return Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.search_off_rounded, size: 48),
+                    const SizedBox(height: 12),
+                    Text('Payout not found', style: tt.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
+                    const SizedBox(height: 8),
+                    Text(
+                      'This payout is not present in the current ledger snapshot.',
+                      textAlign: TextAlign.center,
+                      style: tt.bodyMedium?.copyWith(color: cs.onSurfaceVariant),
+                    ),
+                    const SizedBox(height: 16),
+                    FilledButton(onPressed: _reload, child: const Text('Reload')),
+                  ],
+                ),
+              ),
+            );
+          }
+
+          return ListView(
+            padding: const EdgeInsets.all(24),
+            children: [
+              Text(payout.bookingCode.isNotEmpty ? payout.bookingCode : payout.bookingId,
+                  style: tt.headlineSmall?.copyWith(fontWeight: FontWeight.w800)),
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  _DetailChip(label: payout.status),
+                  _DetailChip(label: payout.workerName ?? 'Unknown worker'),
+                  _DetailChip(label: 'Rs. ${payout.amount.toStringAsFixed(2)}'),
+                  _DetailChip(label: 'Commission Rs. ${payout.commissionAmount.toStringAsFixed(2)}'),
+                  _DetailChip(label: MaterialLocalizations.of(context).formatMediumDate(payout.createdAt)),
+                ],
+              ),
+              const SizedBox(height: 16),
+              _DetailLine(label: 'Payout ID', value: payout.id),
+              _DetailLine(label: 'Booking ID', value: payout.bookingId),
+              _DetailLine(label: 'Booking code', value: payout.bookingCode),
+              _DetailLine(label: 'Worker', value: payout.workerName ?? 'Unknown'),
+              _DetailLine(label: 'Amount', value: 'Rs. ${payout.amount.toStringAsFixed(2)}'),
+              _DetailLine(label: 'Commission', value: 'Rs. ${payout.commissionAmount.toStringAsFixed(2)}'),
+              _DetailLine(label: 'Created', value: MaterialLocalizations.of(context).formatMediumDate(payout.createdAt)),
+              if ((payout.failureReason ?? '').trim().isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Text('Failure reason', style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
+                const SizedBox(height: 6),
+                Text(payout.failureReason!),
+              ],
+              const SizedBox(height: 20),
+              Wrap(
+                spacing: 12,
+                runSpacing: 12,
+                children: [
+                  if (payout.status == 'failed')
+                    FilledButton(
+                      onPressed: () async {
+                        await _api.retryPayout(payout.id);
+                        if (mounted) {
+                          await _reload();
+                        }
+                      },
+                      child: const Text('Retry payout'),
+                    ),
+                  OutlinedButton(
+                    onPressed: _reload,
+                    child: const Text('Refresh'),
+                  ),
+                ],
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _DetailChip extends StatelessWidget {
+  const _DetailChip({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.7),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        label,
+        style: Theme.of(context).textTheme.labelSmall?.copyWith(fontWeight: FontWeight.w700),
+      ),
+    );
+  }
+}
+
+class _DetailLine extends StatelessWidget {
+  const _DetailLine({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    final tt = Theme.of(context).textTheme;
+    final cs = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 110,
+            child: Text(
+              label,
+              style: tt.bodyMedium?.copyWith(color: cs.onSurfaceVariant, fontWeight: FontWeight.w700),
+            ),
+          ),
+          Expanded(
+            child: Text(value, style: tt.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
+          ),
+        ],
       ),
     );
   }

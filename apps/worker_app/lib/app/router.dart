@@ -14,7 +14,6 @@ import '../features/worker/presentation/pages/jobs_page.dart';
 import '../features/worker/presentation/pages/earnings_page.dart';
 import '../features/worker/presentation/pages/schedule_page.dart';
 import '../features/profile/presentation/pages/worker_availability_page.dart';
-import '../features/worker/presentation/providers/job_execution_provider.dart';
 import '../features/profile/presentation/pages/profile_page.dart';
 import '../features/profile/presentation/pages/settings_page.dart';
 import '../features/profile/presentation/pages/notifications_page.dart';
@@ -108,9 +107,9 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/job-execution',
         builder: (context, state) {
-          final booking = state.extra;
-          if (booking is JobExecutionBooking) {
-            return JobExecutionPage(booking: booking);
+          final bookingId = state.uri.queryParameters['bookingId'];
+          if (bookingId != null && bookingId.isNotEmpty) {
+            return JobExecutionPage(bookingId: bookingId);
           }
           return const _MissingJobExecutionPage();
         },

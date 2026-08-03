@@ -43,7 +43,7 @@ export function validate(schema: z.ZodTypeAny) {
 
       response.status(400).json({
         message: "Validation failed",
-        issues: [{ path: "", message: error instanceof Error ? error.message : "Unknown validation error" }]
+        issues: [{ path: "", message: "Invalid request payload" }]
       });
     }
   };

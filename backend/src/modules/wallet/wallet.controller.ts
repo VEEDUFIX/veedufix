@@ -35,7 +35,7 @@ export async function applyReferralHandler(request: AuthenticatedRequest, respon
   } catch (error) {
     logger.error({ error }, "Failed to apply referral code");
     if (error instanceof Error && (error.message.includes("Invalid") || error.message.includes("Cannot") || error.message.includes("already"))) {
-      response.status(400).json({ message: error.message });
+      response.status(400).json({ message: "Unable to apply referral code" });
     } else {
       response.status(500).json({ message: "Internal server error" });
     }

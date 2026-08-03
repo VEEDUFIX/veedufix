@@ -22,13 +22,51 @@ class WorkerReviewDetailPage extends ConsumerStatefulWidget {
 class _WorkerReviewDetailPageState extends ConsumerState<WorkerReviewDetailPage> {
   late final WorkerReviewApi _api;
   WorkerReviewProfile? _profile;
+  bool _loading = true;
   bool _busy = false;
+  String? _loadError;
 
   @override
   void initState() {
     super.initState();
     _api = WorkerReviewApi(ref.read(apiClientProvider).dio);
     _profile = widget.initialProfile;
+    _loading = widget.initialProfile == null;
+    if (widget.initialProfile == null) {
+      _loadProfile();
+    }
+  }
+
+  Future<void> _loadProfile() async {
+    if (widget.profileId.trim().isEmpty) {
+      if (mounted) {
+        setState(() {
+          _loading = false;
+          _loadError = 'Missing worker profile id.';
+        });
+      }
+      return;
+    }
+
+    try {
+      final profile = await _api.fetchProfile(widget.profileId);
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _profile = profile;
+        _loading = false;
+        _loadError = null;
+      });
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _loading = false;
+        _loadError = error.toString();
+      });
+    }
   }
 
   Future<void> _runMutation(Future<WorkerReviewProfile> Function() action) async {
@@ -178,13 +216,23 @@ class _WorkerReviewDetailPageState extends ConsumerState<WorkerReviewDetailPage>
     final profile = _profile;
 
     if (profile == null) {
+      if (_loading) {
+        return Scaffold(
+          appBar: AppBar(title: const Text('Worker review')),
+          body: const Center(child: CircularProgressIndicator()),
+        );
+      }
+
       return Scaffold(
         appBar: AppBar(title: const Text('Worker review')),
-        body: const Center(
+        body: Center(
           child: PremiumEmptyState(
             icon: Icons.badge_rounded,
             title: 'Review details unavailable',
-            subtitle: 'Open this page from the worker review queue so the profile can be loaded.',
+            subtitle: _loadError ??
+                'Open this page from the worker review queue or refresh to try again.',
+            actionLabel: 'Retry',
+            onAction: _loadProfile,
           ),
         ),
       );

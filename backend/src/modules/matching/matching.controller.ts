@@ -13,27 +13,27 @@ import {
 
 function handleMatchingError(response: Response, error: unknown): boolean {
   if (error instanceof DispatchNotFoundError) {
-    response.status(404).json({ message: error.message });
+    response.status(404).json({ message: "Dispatch not found" });
     return true;
   }
 
   if (error instanceof DispatchConflictError) {
-    response.status(409).json({ message: error.message });
+    response.status(409).json({ message: "Booking cannot be dispatched right now" });
     return true;
   }
 
   if (error instanceof OfferAuthorizationError) {
-    response.status(403).json({ message: error.message });
+    response.status(403).json({ message: "You are not authorized to respond to this offer" });
     return true;
   }
 
   if (error instanceof OfferExpiredError) {
-    response.status(410).json({ message: error.message });
+    response.status(410).json({ message: "This offer has expired" });
     return true;
   }
 
   if (error instanceof Error) {
-    response.status(400).json({ message: error.message });
+    response.status(400).json({ message: "Unable to process job action" });
     return true;
   }
 

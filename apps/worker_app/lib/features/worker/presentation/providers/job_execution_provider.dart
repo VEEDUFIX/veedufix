@@ -61,6 +61,54 @@ class JobExecutionBooking {
   final Color accentColor;
 }
 
+final jobExecutionBookingProvider =
+    FutureProvider.autoDispose.family<JobExecutionBooking?, String>((ref, bookingId) async {
+  final acceptedJobs = await ref.watch(workerJobsProvider('accepted').future);
+  final activeJobs = await ref.watch(workerJobsProvider('active').future);
+  final dashboardStats = await ref.watch(workerDashboardStatsProvider.future);
+
+  final allJobs = <WorkerJob>[
+    ...acceptedJobs,
+    ...activeJobs,
+    ...dashboardStats.todayJobs,
+  ];
+
+  for (final job in allJobs) {
+    if (job.bookingId != bookingId) {
+      continue;
+    }
+
+    final serviceId = job.serviceId;
+    if (serviceId == null || serviceId.trim().isEmpty) {
+      return null;
+    }
+
+    return JobExecutionBooking(
+      bookingId: job.bookingId,
+      bookingCode: job.code,
+      serviceId: serviceId,
+      serviceName: job.serviceName,
+      customerName: job.customerName ?? 'Customer',
+      locationLabel: job.addressLabel ?? job.cityName ?? 'Assigned location',
+      earningsLabel: '₹${job.totalAmount.toStringAsFixed(0)}',
+      summary: '${job.serviceName} for ${job.customerName ?? 'the customer'}',
+      accentColor: _accentForJob(job.status),
+    );
+  }
+
+  return null;
+});
+
+Color _accentForJob(String status) {
+  return switch (status.toUpperCase()) {
+    'WORKER_ASSIGNED' || 'ACCEPTED' => const Color(0xFF38BDF8),
+    'EN_ROUTE' || 'ARRIVED' || 'IN_PROGRESS' => const Color(0xFFF59E0B),
+    'COMPLETED' => const Color(0xFF10B981),
+    'PENDING' => const Color(0xFFC2A15E),
+    _ => const Color(0xFF6366F1),
+  };
+}
+
 class JobExecutionChecklistItem {
   const JobExecutionChecklistItem({
     required this.id,

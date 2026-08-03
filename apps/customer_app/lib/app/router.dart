@@ -30,6 +30,7 @@ import '../features/profile/presentation/pages/settings_page.dart';
 import '../features/wallet/presentation/pages/wallet_page.dart';
 import '../features/booking/presentation/pages/booking_detail_page.dart';
 import '../features/booking/presentation/pages/booking_invoice_page.dart';
+import '../features/cart/presentation/providers/cart_providers.dart';
 
 final routerProvider = Provider<GoRouter>((ref) {
   final refresh = _RouterRefreshNotifier(ref);
@@ -147,11 +148,26 @@ final routerProvider = Provider<GoRouter>((ref) {
                 .toList();
             return CheckoutPage(cityId: cityId, items: items);
           }
-          // Fallback: go back if no items provided
-          return const CheckoutPage(
-            cityId: '',
-            items: [],
-          );
+
+          final cartItems = ref.read(cartProvider);
+          if (cartItems.isEmpty) {
+            return const CartPage();
+          }
+
+          final session = ref.read(authControllerProvider).valueOrNull;
+          final cityId = session?.user.cityId ?? 'city_kochi';
+          final items = cartItems
+              .map(
+                (item) => CheckoutItem(
+                  serviceId: item.service.id,
+                  serviceName: item.service.name,
+                  price: item.service.startingPrice,
+                  quantity: item.quantity,
+                ),
+              )
+              .toList(growable: false);
+
+          return CheckoutPage(cityId: cityId, items: items);
         },
       ),
       GoRoute(

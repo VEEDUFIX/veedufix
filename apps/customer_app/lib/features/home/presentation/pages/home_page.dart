@@ -101,7 +101,7 @@ class HomePage extends ConsumerWidget {
               title: 'Trusted Professionals',
               subtitle: 'Book verified experts near you.',
               actionLabel: 'Book Now',
-              onAction: () {},
+              onAction: () => context.push('/search'),
             ),
             const SizedBox(height: 20),
             const _SectionLabel(
@@ -326,7 +326,7 @@ class _LocationChip extends StatelessWidget {
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     return TapScale(
-      onTap: () {},
+      onTap: () => context.push('/map-picker'),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
@@ -460,7 +460,25 @@ class _CategoryChip extends StatelessWidget {
     return SizedBox(
       width: 108,
       child: TapScale(
-        onTap: () {},
+        onTap: () {
+          if (category is CatalogCategory) {
+            final catalogCategory = category as CatalogCategory;
+            context.push(
+              Uri(
+                path: '/search',
+                queryParameters: {'categorySlug': catalogCategory.slug},
+              ).toString(),
+            );
+            return;
+          }
+
+          context.push(
+            Uri(
+              path: '/search',
+              queryParameters: {'q': _title},
+            ).toString(),
+          );
+        },
         child: Column(
           children: [
             Hero(
@@ -525,7 +543,12 @@ class _SubcategoryChip extends StatelessWidget {
     return SizedBox(
       width: 168,
       child: TapScale(
-        onTap: () => context.push('/search'),
+        onTap: () => context.push(
+          Uri(
+            path: '/search',
+            queryParameters: {'subcategorySlug': subcategory.slug},
+          ).toString(),
+        ),
         child: Container(
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
@@ -648,7 +671,12 @@ class _ServiceCard extends StatelessWidget {
         if (service is CatalogService) {
           context.push('/service?id=${(service as CatalogService).slug}');
         } else {
-          context.push('/service');
+          context.push(
+            Uri(
+              path: '/search',
+              queryParameters: {'q': _title},
+            ).toString(),
+          );
         }
       },
       child: Padding(
@@ -742,7 +770,12 @@ class _ProfessionalCard extends StatelessWidget {
     return SizedBox(
       width: 240,
       child: PremiumCard(
-        onTap: () {},
+        onTap: () => context.push(
+          Uri(
+            path: '/search',
+            queryParameters: {'q': professional.name},
+          ).toString(),
+        ),
         child: Padding(
           padding: const EdgeInsets.all(14),
           child: Column(
@@ -830,7 +863,12 @@ class _TopRatedCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     return PremiumCard(
-      onTap: () {},
+      onTap: () => context.push(
+        Uri(
+          path: '/search',
+          queryParameters: {'q': professional.name},
+        ).toString(),
+      ),
       child: ListTile(
         contentPadding: const EdgeInsets.all(16),
         leading: CircleAvatar(
