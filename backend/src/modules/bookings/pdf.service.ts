@@ -22,9 +22,9 @@ export async function generateInvoicePdf(booking: BookingWithDetails): Promise<B
     const doc = new PDFDocument({ margin: 50 });
     const buffers: Buffer[] = [];
 
-    doc.on("data", (buffer) => buffers.push(buffer));
+    doc.on("data", (buffer: Buffer) => buffers.push(buffer));
     doc.on("end", () => resolve(Buffer.concat(buffers)));
-    doc.on("error", (err) => reject(err));
+    doc.on("error", (err: Error) => reject(err));
 
     const primary = "#4F46E5";
     const textDark = "#1E293B";
