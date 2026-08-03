@@ -4,6 +4,9 @@ declare module "pdfkit" {
   export default class PDFDocument extends Writable {
     constructor(options?: any);
 
+    y: number;
+    x: number;
+
     on(event: "data", listener: (buffer: Buffer) => void): this;
     on(event: "end", listener: () => void): this;
     on(event: "error", listener: (error: Error) => void): this;
