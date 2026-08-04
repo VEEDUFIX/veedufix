@@ -45,6 +45,9 @@ class JobExecutionBooking {
     required this.serviceName,
     required this.customerName,
     required this.locationLabel,
+    required this.destinationQuery,
+    this.destinationLatitude,
+    this.destinationLongitude,
     required this.earningsLabel,
     required this.summary,
     required this.accentColor,
@@ -56,6 +59,9 @@ class JobExecutionBooking {
   final String serviceName;
   final String customerName;
   final String locationLabel;
+  final String destinationQuery;
+  final double? destinationLatitude;
+  final double? destinationLongitude;
   final String earningsLabel;
   final String summary;
   final Color accentColor;
@@ -63,6 +69,12 @@ class JobExecutionBooking {
 
 final jobExecutionBookingProvider =
     FutureProvider.autoDispose.family<JobExecutionBooking?, String>((ref, bookingId) async {
+  BookingSummary? bookingSummary;
+  try {
+    bookingSummary = await ref.watch(bookingDetailProvider(bookingId).future);
+  } catch (_) {
+    bookingSummary = null;
+  }
   final acceptedJobs = await ref.watch(workerJobsProvider('accepted').future);
   final activeJobs = await ref.watch(workerJobsProvider('active').future);
   final dashboardStats = await ref.watch(workerDashboardStatsProvider.future);
@@ -89,7 +101,10 @@ final jobExecutionBookingProvider =
       serviceId: serviceId,
       serviceName: job.serviceName,
       customerName: job.customerName ?? 'Customer',
-      locationLabel: job.addressLabel ?? job.cityName ?? 'Assigned location',
+      locationLabel: job.addressLabel ?? bookingSummary?.addressLabel ?? job.cityName ?? bookingSummary?.cityName ?? 'Assigned location',
+      destinationQuery: _destinationQueryFor(job, bookingSummary),
+      destinationLatitude: job.destinationLatitude ?? bookingSummary?.destinationLatitude,
+      destinationLongitude: job.destinationLongitude ?? bookingSummary?.destinationLongitude,
       earningsLabel: '₹${job.totalAmount.toStringAsFixed(0)}',
       summary: '${job.serviceName} for ${job.customerName ?? 'the customer'}',
       accentColor: _accentForJob(job.status),
@@ -107,6 +122,20 @@ Color _accentForJob(String status) {
     'PENDING' => const Color(0xFFC2A15E),
     _ => const Color(0xFF6366F1),
   };
+}
+
+String _destinationQueryFor(WorkerJob job, BookingSummary? bookingSummary) {
+  final parts = <String>[
+    job.addressLabel?.trim() ?? '',
+    bookingSummary?.addressLabel?.trim() ?? '',
+    job.cityName?.trim() ?? '',
+    bookingSummary?.cityName?.trim() ?? '',
+    bookingSummary?.destinationQuery?.trim() ?? '',
+  ].where((part) => part.isNotEmpty).toList(growable: false);
+  if (parts.isNotEmpty) {
+    return parts.first;
+  }
+  return job.customerName?.trim().isNotEmpty == true ? job.customerName!.trim() : 'Customer location';
 }
 
 class JobExecutionChecklistItem {

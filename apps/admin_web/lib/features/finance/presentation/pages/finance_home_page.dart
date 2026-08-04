@@ -77,6 +77,15 @@ class _FinanceHomePageState extends ConsumerState<FinanceHomePage> {
           final refundItems = data.refunds.items;
           final failedPayouts = payoutItems.where((item) => item.status.toLowerCase().contains('fail')).length;
           final failedRefunds = refundItems.where((item) => item.status.toLowerCase().contains('fail')).length;
+          final openPayouts = payoutItems.where((item) {
+            final status = item.status.toLowerCase();
+            return status.contains('pending') || status.contains('processing');
+          }).length;
+          final openRefunds = refundItems.where((item) {
+            final status = item.status.toLowerCase();
+            return status.contains('pending') || status.contains('processing');
+          }).length;
+          final attentionCount = failedPayouts + failedRefunds + openPayouts + openRefunds;
 
           return ListView(
             padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
@@ -113,14 +122,14 @@ class _FinanceHomePageState extends ConsumerState<FinanceHomePage> {
                 spacing: 12,
                 runSpacing: 12,
                 children: [
-                  _MetricTile(
+                  const _MetricTile(
                     label: 'Payout queue',
                     value: payoutItems.length.toString(),
                     subtitle: '$failedPayouts failing',
                     color: const Color(0xFF0F766E),
                     icon: Icons.payments_rounded,
                   ),
-                  _MetricTile(
+                  const _MetricTile(
                     label: 'Refund queue',
                     value: refundItems.length.toString(),
                     subtitle: '$failedRefunds failing',
@@ -134,7 +143,89 @@ class _FinanceHomePageState extends ConsumerState<FinanceHomePage> {
                     color: const Color(0xFFF59E0B),
                     icon: Icons.account_balance_wallet_rounded,
                   ),
+                  _MetricTile(
+                    label: 'Tax summary',
+                    value: 'Open',
+                    subtitle: 'GST + revenue view',
+                    color: const Color(0xFF3B82F6),
+                    icon: Icons.request_quote_rounded,
+                  ),
                 ],
+              ),
+              const SizedBox(height: 16),
+              const AdminSurfacePanel(
+                child: Padding(
+                  padding: EdgeInsets.all(18),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Automation coverage',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w800,
+                          color: kAdminInk,
+                        ),
+                      ),
+                      SizedBox(height: 10),
+                      Text(
+                        'Worker payouts trigger after completion OTP, refunds flow through Razorpay refund webhooks, and failed transfers stay visible in the ledgers.',
+                        style: TextStyle(
+                          color: kAdminMuted,
+                          height: 1.45,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Wrap(
+                spacing: 12,
+                runSpacing: 12,
+                children: [
+                  _MetricTile(
+                    label: 'Attention queue',
+                    value: attentionCount.toString(),
+                    subtitle: 'Open or failed payout/refund items',
+                    color: const Color(0xFF7C3AED),
+                    icon: Icons.admin_panel_settings_rounded,
+                  ),
+                  _MetricTile(
+                    label: 'Webhook route',
+                    value: '2',
+                    subtitle: 'Payment + refund callbacks',
+                    color: const Color(0xFF2563EB),
+                    icon: Icons.cable_rounded,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              const AdminSurfacePanel(
+                child: Padding(
+                  padding: EdgeInsets.all(18),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Webhook & reconciliation',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w800,
+                          color: kAdminInk,
+                        ),
+                      ),
+                      SizedBox(height: 10),
+                      Text(
+                        'Payment webhook: /api/webhooks/razorpay. Refund webhook: /api/webhooks/razorpay. Review any open or failed payouts and refunds here if the callback lagged.',
+                        style: TextStyle(
+                          color: kAdminMuted,
+                          height: 1.45,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               ),
               const SizedBox(height: 16),
               Wrap(
@@ -196,6 +287,32 @@ class _FinanceHomePageState extends ConsumerState<FinanceHomePage> {
                         ),
                         trailing: TextButton(
                           onPressed: () => context.go('/finance/refunds'),
+                          child: const Text('Open'),
+                        ),
+                      ),
+                    ),
+                  ),
+                  SizedBox(
+                    width: 360,
+                    child: AdminSurfacePanel(
+                      child: ListTile(
+                        contentPadding: const EdgeInsets.all(16),
+                        leading: Container(
+                          height: 42,
+                          width: 42,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF3B82F6).withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                          child: const Icon(Icons.request_quote_rounded, color: Color(0xFF3B82F6)),
+                        ),
+                        title: const Text(
+                          'Tax summary',
+                          style: TextStyle(fontWeight: FontWeight.w800),
+                        ),
+                        subtitle: const Text('GST and revenue view for CA prep.'),
+                        trailing: TextButton(
+                          onPressed: () => context.go('/finance/tax-summary'),
                           child: const Text('Open'),
                         ),
                       ),

@@ -79,6 +79,7 @@ declare module "@prisma/client" {
     export type PayoutGetPayload<T = any> = any;
     export type PayoutUpdateInput = Record<string, any>;
     export type PayoutWhereInput = any;
+    export type PaymentGetPayload<T = any> = any;
     export type InvoiceGetPayload<T = any> = any;
     export type WorkerProfileGetPayload<T = any> = any;
     export type WorkerProfileWhereInput = any;

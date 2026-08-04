@@ -162,6 +162,35 @@ class _PayoutsLedgerPageState extends ConsumerState<PayoutsLedgerPage> {
   }
 
   Future<void> _bulkRetry() async {
+    final failedCount = _items.where((item) => item.status == 'failed').length;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('Retry failed payouts?'),
+          content: Text(
+            failedCount == 0
+                ? 'There are no failed payouts in the current list.'
+                : 'This will retry $failedCount failed payout attempts from the current queue.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: failedCount == 0 ? null : () => Navigator.of(dialogContext).pop(true),
+              child: const Text('Retry failed'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirmed != true) {
+      return;
+    }
+
     setState(() => _busy = true);
     try {
       final result = await _api.bulkRetryPayouts();
@@ -291,6 +320,18 @@ class _PayoutsLedgerPageState extends ConsumerState<PayoutsLedgerPage> {
                             value: _selectedStatus == 'all' ? 'All' : _selectedStatus,
                             icon: Icons.filter_alt_rounded,
                             accentColor: const Color(0xFF0F766E),
+                          ),
+                          PremiumStatCard(
+                            label: 'Failed',
+                            value: '${_items.where((item) => item.status == 'failed').length}',
+                            icon: Icons.warning_rounded,
+                            accentColor: const Color(0xFFEF4444),
+                          ),
+                          PremiumStatCard(
+                            label: 'Success',
+                            value: '${_items.where((item) => item.status == 'success').length}',
+                            icon: Icons.check_circle_rounded,
+                            accentColor: const Color(0xFF10B981),
                           ),
                         ],
                       ),

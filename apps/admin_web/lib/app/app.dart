@@ -71,8 +71,7 @@ class _AppBootstrapState extends ConsumerState<AppBootstrap> {
       debugShowCheckedModeBanner: false,
       title: appTitleForMode(AppMode.admin),
       theme: buildLightTheme(),
-      darkTheme: buildDarkTheme(),
-      themeMode: ThemeMode.system,
+      themeMode: ThemeMode.light,
       builder: (context, child) => AppBackdrop(
         variant: AppBackdropVariant.admin,
         child: child ?? const SizedBox.shrink(),

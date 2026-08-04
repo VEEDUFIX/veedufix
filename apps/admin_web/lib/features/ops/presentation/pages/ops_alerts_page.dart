@@ -17,6 +17,7 @@ class _OpsAlertsPageState extends ConsumerState<OpsAlertsPage> {
   late final OpsApi _api;
   late Future<OpsOverviewSnapshot> _snapshotFuture;
   bool _busy = false;
+  String _selectedQueue = 'all';
 
   @override
   void initState() {
@@ -83,6 +84,31 @@ class _OpsAlertsPageState extends ConsumerState<OpsAlertsPage> {
     }
   }
 
+  String _queueLabel(String queue) {
+    return switch (queue) {
+      'all' => 'All queues',
+      'dispatch' => 'Dispatch',
+      'reconciliation' => 'Reconciliation',
+      'disputes' => 'Disputes',
+      'support' => 'Support SLA',
+      _ => 'All queues',
+    };
+  }
+
+  bool _matchesQueue(OpsAlert alert) {
+    return switch (_selectedQueue) {
+      'dispatch' => alert.isDispatchFailure,
+      'reconciliation' => alert.isFinanceException,
+      'disputes' => alert.isDisputeEscalation,
+      'support' => alert.isSupportEscalation,
+      _ => true,
+    };
+  }
+
+  List<OpsAlert> _visibleAlerts(List<OpsAlert> alerts) {
+    return alerts.where(_matchesQueue).toList(growable: false);
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -125,6 +151,7 @@ class _OpsAlertsPageState extends ConsumerState<OpsAlertsPage> {
           }
 
           final alerts = snapshot.data?.alerts ?? const <OpsAlert>[];
+          final visibleAlerts = _visibleAlerts(alerts);
 
           return RefreshIndicator(
             onRefresh: _reload,
@@ -152,7 +179,7 @@ class _OpsAlertsPageState extends ConsumerState<OpsAlertsPage> {
                           ),
                           const SizedBox(height: 8),
                           Text(
-                            'Handle failed dispatches, refunds, payouts, and payment mismatches from one queue.',
+                            'Handle dispatch failures, finance exceptions, and SLA escalations from one queue.',
                             style: GoogleFonts.inter(
                               color: Colors.black54,
                               fontSize: 16,
@@ -178,6 +205,47 @@ class _OpsAlertsPageState extends ConsumerState<OpsAlertsPage> {
                   ),
                   const SizedBox(height: 32),
                   Wrap(
+                    spacing: 10,
+                    runSpacing: 10,
+                    children: [
+                      FilterChip(
+                        selected: _selectedQueue == 'all',
+                        onSelected: (_) => setState(() => _selectedQueue = 'all'),
+                        label: Text('All (${alerts.length})'),
+                      ),
+                      FilterChip(
+                        selected: _selectedQueue == 'dispatch',
+                        onSelected: (_) => setState(() => _selectedQueue = 'dispatch'),
+                        label: Text('Dispatch (${alerts.where((alert) => alert.isDispatchFailure).length})'),
+                      ),
+                      FilterChip(
+                        selected: _selectedQueue == 'reconciliation',
+                        onSelected: (_) => setState(() => _selectedQueue = 'reconciliation'),
+                        label: Text('Reconciliation (${alerts.where((alert) => alert.isFinanceException).length})'),
+                      ),
+                      FilterChip(
+                        selected: _selectedQueue == 'disputes',
+                        onSelected: (_) => setState(() => _selectedQueue = 'disputes'),
+                        label: Text('Disputes (${alerts.where((alert) => alert.isDisputeEscalation).length})'),
+                      ),
+                      FilterChip(
+                        selected: _selectedQueue == 'support',
+                        onSelected: (_) => setState(() => _selectedQueue = 'support'),
+                        label: Text('Support SLA (${alerts.where((alert) => alert.isSupportEscalation).length})'),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    'Showing ${_queueLabel(_selectedQueue)}',
+                    style: GoogleFonts.inter(
+                      color: Colors.black54,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  Wrap(
                     spacing: 12,
                     runSpacing: 12,
                     children: [
@@ -193,10 +261,16 @@ class _OpsAlertsPageState extends ConsumerState<OpsAlertsPage> {
                       _InfoChip(
                           label:
                               '${alerts.where((alert) => alert.isPaymentMismatch).length} payment mismatches'),
+                      _InfoChip(
+                          label:
+                              '${alerts.where((alert) => alert.isSupportEscalation).length} support escalations'),
+                      _InfoChip(
+                          label:
+                              '${alerts.where((alert) => alert.isDisputeEscalation).length} dispute escalations'),
                     ],
                   ),
                   const SizedBox(height: 32),
-                  if (alerts.isEmpty)
+                  if (visibleAlerts.isEmpty)
                     const _SurfacePanel(
                       child: Padding(
                         padding: EdgeInsets.all(22),
@@ -204,7 +278,7 @@ class _OpsAlertsPageState extends ConsumerState<OpsAlertsPage> {
                           icon: Icons.check_circle_outline_rounded,
                           title: 'Nothing needs attention',
                           subtitle:
-                              'Dispatch failures, payout retries, and refund retries will appear here when they happen.',
+                              'Dispatch failures, payouts, refunds, support tickets, and disputes will appear here when they need action.',
                         ),
                       ),
                     )
@@ -212,10 +286,10 @@ class _OpsAlertsPageState extends ConsumerState<OpsAlertsPage> {
                     ListView.separated(
                       shrinkWrap: true,
                       physics: const NeverScrollableScrollPhysics(),
-                      itemCount: alerts.length,
+                      itemCount: visibleAlerts.length,
                       separatorBuilder: (_, __) => const SizedBox(height: 12),
                       itemBuilder: (context, index) {
-                        final alert = alerts[index];
+                        final alert = visibleAlerts[index];
                         return _SurfacePanel(
                           child: Padding(
                             padding: const EdgeInsets.all(16),
@@ -555,6 +629,8 @@ class _AlertIcon extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color = switch (kind) {
+      'support_escalation' => const Color(0xFF2563EB),
+      'dispute_escalation' => const Color(0xFF7C3AED),
       'payout_failure' => const Color(0xFF0F766E),
       'refund_failure' => const Color(0xFF8B5CF6),
       'payment_mismatch' => const Color(0xFFF59E0B),
@@ -562,6 +638,8 @@ class _AlertIcon extends StatelessWidget {
     };
 
     final icon = switch (kind) {
+      'support_escalation' => Icons.support_agent_rounded,
+      'dispute_escalation' => Icons.gavel_rounded,
       'payout_failure' => Icons.payments_rounded,
       'refund_failure' => Icons.undo_rounded,
       'payment_mismatch' => Icons.currency_rupee_rounded,
@@ -588,6 +666,8 @@ class _RetryBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final label = switch (kind) {
+      'support_escalation' => 'Review ticket',
+      'dispute_escalation' => 'Review dispute',
       'payout_failure' => 'Retry payout',
       'refund_failure' => 'Retry refund',
       'payment_mismatch' => 'Investigate',

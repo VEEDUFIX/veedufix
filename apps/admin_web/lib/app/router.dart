@@ -12,6 +12,7 @@ import '../features/service_areas/presentation/pages/service_area_manager_page.d
 import '../features/finance/presentation/pages/finance_home_page.dart';
 import '../features/finance/presentation/pages/payouts_ledger_page.dart';
 import '../features/finance/presentation/pages/refunds_ledger_page.dart';
+import '../features/finance/presentation/pages/tax_summary_page.dart';
 import '../features/finance/data/finance_api.dart';
 import '../features/ops/presentation/pages/ops_alerts_page.dart';
 import '../features/ops/data/ops_api.dart';
@@ -158,6 +159,10 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/finance/refunds',
             builder: (context, state) => const RefundsLedgerPage(),
+          ),
+          GoRoute(
+            path: '/finance/tax-summary',
+            builder: (context, state) => const TaxSummaryPage(),
           ),
           GoRoute(
             path: '/finance/refunds/:refundId',

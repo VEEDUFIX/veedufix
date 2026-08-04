@@ -39,6 +39,7 @@ type VerifyPaymentInput = {
 
 type PaymentOrderResult = {
   keyId: string;
+  webhookUrl: string;
   bookingId: string;
   bookingCode: string;
   orderId: string;
@@ -95,6 +96,14 @@ type ResolvedBookingItem = {
 
 const MINIMUM_ORDER_AMOUNT_PAISE = 100;
 const razorpay = createRazorpayClient();
+
+function getRazorpayWebhookUrl(): string {
+  if (!env.RAZORPAY_WEBHOOK_URL || env.RAZORPAY_WEBHOOK_URL.trim().length === 0) {
+    throw new Error("Razorpay webhook URL is not configured");
+  }
+
+  return env.RAZORPAY_WEBHOOK_URL.trim();
+}
 
 function createRazorpayClient(): Razorpay {
   if (!env.RAZORPAY_KEY_ID || !env.RAZORPAY_KEY_SECRET) {
@@ -675,6 +684,7 @@ export async function createPaymentOrder(
 
     return {
       keyId: env.RAZORPAY_KEY_ID ?? "",
+      webhookUrl: getRazorpayWebhookUrl(),
       bookingId: booking.id,
       bookingCode: booking.code,
       orderId: order.id,

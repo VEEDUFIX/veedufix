@@ -203,8 +203,7 @@ class _AppBootstrapState extends ConsumerState<AppBootstrap> {
       debugShowCheckedModeBanner: false,
       title: appTitleForMode(AppMode.customer),
       theme: buildLightTheme(),
-      darkTheme: buildDarkTheme(),
-      themeMode: ThemeMode.system,
+      themeMode: ThemeMode.light,
       scaffoldMessengerKey: _messengerKey,
       builder: (context, child) => AppBackdrop(
         variant: AppBackdropVariant.customer,

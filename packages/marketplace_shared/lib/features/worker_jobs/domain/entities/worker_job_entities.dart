@@ -10,6 +10,9 @@ class WorkerJob {
     this.serviceIcon,
     this.addressLabel,
     this.cityName,
+    this.destinationQuery,
+    this.destinationLatitude,
+    this.destinationLongitude,
     this.customerName,
     this.customerAvatarUrl,
     // For incoming jobs only:
@@ -27,6 +30,9 @@ class WorkerJob {
   final String? serviceIcon;
   final String? addressLabel;
   final String? cityName;
+  final String? destinationQuery;
+  final double? destinationLatitude;
+  final double? destinationLongitude;
   final String? customerName;
   final String? customerAvatarUrl;
   final String? offerId;
@@ -43,6 +49,18 @@ class WorkerJob {
         serviceIcon: json['serviceIcon'] as String?,
         addressLabel: json['addressLabel'] as String?,
         cityName: json['cityName'] as String?,
+        destinationQuery: json['destinationQuery'] as String?,
+        destinationLatitude: _doubleValue([
+          json['destinationLatitude'],
+          json['addressLatitude'],
+          json['lat'],
+        ]),
+        destinationLongitude: _doubleValue([
+          json['destinationLongitude'],
+          json['addressLongitude'],
+          json['lng'],
+          json['lon'],
+        ]),
         customerName: json['customerName'] as String?,
         customerAvatarUrl: json['customerAvatarUrl'] as String?,
         offerId: json['offerId'] as String?,
@@ -50,6 +68,19 @@ class WorkerJob {
             ? DateTime.tryParse(json['expiresAt'] as String)
             : null,
       );
+}
+
+double? _doubleValue(Iterable<dynamic> values) {
+  for (final value in values) {
+    if (value is num) {
+      return value.toDouble();
+    }
+    if (value is String) {
+      final parsed = double.tryParse(value.trim());
+      if (parsed != null) return parsed;
+    }
+  }
+  return null;
 }
 
 class WorkerDashboardStats {

@@ -34,12 +34,13 @@ class _GodModeMapPageState extends ConsumerState<GodModeMapPage> {
     final markers = <Marker>{};
 
     for (final job in data.liveJobs) {
-      // For demonstration, adding a slight offset since actual coords are not fully mocked in OpsLiveJob yet.
-      // In a real app, OpsLiveJob would have lat/lng.
+      if (job.workerLat == null || job.workerLng == null) {
+        continue;
+      }
       markers.add(
         Marker(
           markerId: MarkerId('job_${job.bookingId}'),
-          position: const LatLng(10.0261, 76.3125),
+          position: LatLng(job.workerLat!, job.workerLng!),
           infoWindow: InfoWindow(
             title: '${job.bookingCode} - ${job.customerName}',
             snippet: job.statusLabel,

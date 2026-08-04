@@ -48,6 +48,7 @@ import { deviceTokenRouter } from "./modules/device-token/device-token.routes.js
 import { invoiceRouter } from "./modules/invoice/invoice.routes.js";
 import { adminServiceAreaRouter, serviceAreaRouter } from "./modules/service-area/service-area.routes.js";
 import { adminPlatformSettingsRouter } from "./modules/platform-settings/platform-settings.routes.js";
+import { taxSummaryRouter } from "./modules/tax-summary/tax-summary.routes.js";
 
 export function createApp() {
   const app = express();
@@ -121,6 +122,7 @@ export function createApp() {
   app.use("/api/admin/bookings", adminBookingsRouter);
   app.use("/api/admin/coupons", adminCouponsRouter);
   app.use("/api/admin/reports", adminReportsRouter);
+  app.use("/api/admin/tax-summary", taxSummaryRouter);
   app.use("/api/admin", adminServiceAreaRouter);
   app.use("/api/admin/platform-settings", adminPlatformSettingsRouter);
   app.use("/api/admin", adminSearchRouter);

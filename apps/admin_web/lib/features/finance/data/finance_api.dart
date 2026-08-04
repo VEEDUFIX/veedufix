@@ -138,6 +138,118 @@ class FinanceRefundItem {
   }
 }
 
+class TaxGstBreakdownItem {
+  const TaxGstBreakdownItem({
+    required this.sacCode,
+    required this.taxableValue,
+    required this.gstAmount,
+    required this.invoiceCount,
+  });
+
+  final String sacCode;
+  final double taxableValue;
+  final double gstAmount;
+  final int invoiceCount;
+
+  factory TaxGstBreakdownItem.fromJson(Map<String, dynamic> json) {
+    return TaxGstBreakdownItem(
+      sacCode: json['sacCode'] as String? ?? 'PENDING',
+      taxableValue: (json['taxableValue'] as num?)?.toDouble() ?? 0,
+      gstAmount: (json['gstAmount'] as num?)?.toDouble() ?? 0,
+      invoiceCount: (json['invoiceCount'] as num?)?.toInt() ?? 0,
+    );
+  }
+}
+
+class TaxGstSummary {
+  const TaxGstSummary({
+    required this.startDate,
+    required this.endDate,
+    required this.invoiceCount,
+    required this.totalTaxableValue,
+    required this.totalGstCollected,
+    required this.breakdown,
+  });
+
+  final DateTime? startDate;
+  final DateTime? endDate;
+  final int invoiceCount;
+  final double totalTaxableValue;
+  final double totalGstCollected;
+  final List<TaxGstBreakdownItem> breakdown;
+
+  factory TaxGstSummary.fromJson(Map<String, dynamic> json) {
+    return TaxGstSummary(
+      startDate: _parseDateTime(json['startDate']),
+      endDate: _parseDateTime(json['endDate']),
+      invoiceCount: (json['invoiceCount'] as num?)?.toInt() ?? 0,
+      totalTaxableValue: (json['totalTaxableValue'] as num?)?.toDouble() ?? 0,
+      totalGstCollected: (json['totalGstCollected'] as num?)?.toDouble() ?? 0,
+      breakdown: (json['breakdown'] as List? ?? const [])
+          .whereType<Map<String, dynamic>>()
+          .map(TaxGstBreakdownItem.fromJson)
+          .toList(growable: false),
+    );
+  }
+}
+
+class TaxRevenueSummary {
+  const TaxRevenueSummary({
+    required this.startDate,
+    required this.endDate,
+    required this.platformCommissionEarned,
+    required this.totalGstLiability,
+    required this.totalWorkerPayouts,
+    required this.payoutCount,
+  });
+
+  final DateTime? startDate;
+  final DateTime? endDate;
+  final double platformCommissionEarned;
+  final double totalGstLiability;
+  final double totalWorkerPayouts;
+  final int payoutCount;
+
+  factory TaxRevenueSummary.fromJson(Map<String, dynamic> json) {
+    return TaxRevenueSummary(
+      startDate: _parseDateTime(json['startDate']),
+      endDate: _parseDateTime(json['endDate']),
+      platformCommissionEarned: (json['platformCommissionEarned'] as num?)?.toDouble() ?? 0,
+      totalGstLiability: (json['totalGstLiability'] as num?)?.toDouble() ?? 0,
+      totalWorkerPayouts: (json['totalWorkerPayouts'] as num?)?.toDouble() ?? 0,
+      payoutCount: (json['payoutCount'] as num?)?.toInt() ?? 0,
+    );
+  }
+}
+
+class TaxAnnualSummary {
+  const TaxAnnualSummary({
+    required this.financialYear,
+    required this.periodStart,
+    required this.periodEnd,
+    required this.gstSummary,
+    required this.revenueSummary,
+  });
+
+  final String financialYear;
+  final DateTime? periodStart;
+  final DateTime? periodEnd;
+  final TaxGstSummary gstSummary;
+  final TaxRevenueSummary revenueSummary;
+
+  factory TaxAnnualSummary.fromJson(Map<String, dynamic> json) {
+    final gstSummary = (json['gstSummary'] as Map?)?.cast<String, dynamic>() ?? const <String, dynamic>{};
+    final revenueSummary = (json['revenueSummary'] as Map?)?.cast<String, dynamic>() ?? const <String, dynamic>{};
+    return TaxAnnualSummary(
+      financialYear: json['financialYear'] as String? ?? '',
+      periodStart: _parseDateTime(json['periodStart']),
+      periodEnd: _parseDateTime(json['periodEnd']),
+      gstSummary: TaxGstSummary.fromJson(gstSummary),
+      revenueSummary: TaxRevenueSummary.fromJson(revenueSummary),
+    );
+  }
+}
+
 class FinanceApi {
   FinanceApi(this._dio);
 
@@ -209,6 +321,47 @@ class FinanceApi {
     };
   }
 
+  Future<TaxGstSummary> fetchTaxGstSummary({
+    required DateTime startDate,
+    required DateTime endDate,
+  }) async {
+    final response = await _dio.get<Map<String, dynamic>>(
+      '/admin/tax-summary/gst',
+      queryParameters: {
+        'startDate': _formatDate(startDate),
+        'endDate': _formatDate(endDate),
+      },
+    );
+    final data = response.data ?? const <String, dynamic>{};
+    return TaxGstSummary.fromJson((data['gstSummary'] as Map?)?.cast<String, dynamic>() ?? data);
+  }
+
+  Future<TaxRevenueSummary> fetchTaxRevenueSummary({
+    required DateTime startDate,
+    required DateTime endDate,
+  }) async {
+    final response = await _dio.get<Map<String, dynamic>>(
+      '/admin/tax-summary/revenue',
+      queryParameters: {
+        'startDate': _formatDate(startDate),
+        'endDate': _formatDate(endDate),
+      },
+    );
+    final data = response.data ?? const <String, dynamic>{};
+    return TaxRevenueSummary.fromJson((data['revenueSummary'] as Map?)?.cast<String, dynamic>() ?? data);
+  }
+
+  Future<TaxAnnualSummary> fetchTaxAnnualSummary(String financialYear) async {
+    final response = await _dio.get<Map<String, dynamic>>(
+      '/admin/tax-summary/annual',
+      queryParameters: {
+        'financialYear': financialYear,
+      },
+    );
+    final data = response.data ?? const <String, dynamic>{};
+    return TaxAnnualSummary.fromJson((data['annualSummary'] as Map?)?.cast<String, dynamic>() ?? data);
+  }
+
   /// Returns the full URL to download a CSV of payouts.
   /// The admin panel opens this URL in a new tab via url_launcher.
   String payoutsCsvUrl({String? status}) {
@@ -225,6 +378,14 @@ class FinanceApi {
         ? '?status=$status'
         : '';
     return '$base/api/admin/refunds/export/csv$query';
+  }
+
+  String taxSummaryCsvUrl({
+    required DateTime startDate,
+    required DateTime endDate,
+  }) {
+    final base = _dio.options.baseUrl.replaceAll(RegExp(r'/$'), '');
+    return '$base/api/admin/tax-summary/export/csv?startDate=${_formatDate(startDate)}&endDate=${_formatDate(endDate)}';
   }
 }
 
@@ -247,4 +408,12 @@ DateTime? _parseDateTime(dynamic value) {
     return DateTime.tryParse(value);
   }
   return null;
+}
+
+String _formatDate(DateTime date) {
+  final local = DateTime(date.year, date.month, date.day);
+  final year = local.year.toString().padLeft(4, '0');
+  final month = local.month.toString().padLeft(2, '0');
+  final day = local.day.toString().padLeft(2, '0');
+  return '$year-$month-$day';
 }

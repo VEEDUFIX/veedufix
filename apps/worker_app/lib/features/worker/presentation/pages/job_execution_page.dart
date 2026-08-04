@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:go_router/go_router.dart';
 import 'package:marketplace_shared/marketplace_shared.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../providers/job_execution_provider.dart';
 import '../providers/worker_availability_provider.dart';
@@ -70,6 +71,36 @@ class _JobExecutionPageState extends ConsumerState<JobExecutionPage> {
     // Stop location broadcasting when job page closes
     ref.read(locationBroadcasterProvider.notifier).stop();
     super.dispose();
+  }
+
+  Future<void> _openNavigation(String destinationQuery) async {
+    final booking = ref.read(jobExecutionProvider).booking;
+    final lat = booking?.destinationLatitude;
+    final lng = booking?.destinationLongitude;
+    final query = destinationQuery.trim();
+    if (lat != null && lng != null) {
+      final uri = Uri.parse(
+        'https://www.google.com/maps/dir/?api=1&destination=$lat,$lng',
+      );
+      final launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
+      if (!launched && mounted) {
+        _showSnackBar('Could not open Google Maps.');
+      }
+      return;
+    }
+
+    if (query.isEmpty) {
+      _showSnackBar('No destination available for this job.');
+      return;
+    }
+
+    final uri = Uri.parse(
+      'https://www.google.com/maps/dir/?api=1&destination=${Uri.encodeComponent(query)}',
+    );
+    final launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (!launched && mounted) {
+      _showSnackBar('Could not open Google Maps.');
+    }
   }
 
   @override
@@ -144,12 +175,12 @@ class _JobExecutionPageState extends ConsumerState<JobExecutionPage> {
                                     ),
                               ),
                               const SizedBox(height: 4),
-                              Text(
-                                '${booking.customerName} • ${booking.locationLabel}',
-                                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                                    ),
-                              ),
+                    Text(
+                      '${booking.customerName} • ${booking.locationLabel}',
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                            color: Theme.of(context).colorScheme.onSurfaceVariant,
+                          ),
+                    ),
                             ],
                           ),
                         ),
@@ -286,6 +317,7 @@ class _JobExecutionPageState extends ConsumerState<JobExecutionPage> {
   Widget _buildArrivalStep(BuildContext context, JobExecutionState state) {
     final error = state.errorFor(JobExecutionStep.arrival);
     final notifier = ref.read(jobExecutionProvider.notifier);
+    final destinationQuery = state.booking?.destinationQuery ?? '';
     final locationLabel = state.currentPosition == null
         ? 'Location will be captured when you mark arrival.'
         : 'GPS captured at ${state.currentPosition!.latitude.toStringAsFixed(5)}, ${state.currentPosition!.longitude.toStringAsFixed(5)}';
@@ -306,10 +338,16 @@ class _JobExecutionPageState extends ConsumerState<JobExecutionPage> {
         ],
         if (state.isLoading(JobExecutionStep.arrival))
           const LinearProgressIndicator(minHeight: 4),
-        const SizedBox(height: 12),
-        Row(
-          children: [
-            Expanded(
+                    const SizedBox(height: 12),
+                    FilledButton.tonalIcon(
+                      onPressed: () => _openNavigation(destinationQuery),
+                      icon: const Icon(Icons.navigation_rounded),
+                      label: const Text('Navigate to customer'),
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Expanded(
               child: FilledButton(
                 onPressed: state.isLoading(JobExecutionStep.arrival)
                     ? null

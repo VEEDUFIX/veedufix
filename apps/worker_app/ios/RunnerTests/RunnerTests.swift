@@ -10,7 +10,7 @@ import XCTest
 
 @testable import {{pluginProjectName}}
 
-// This demonstrates a simple unit test of the Swift portion of this plugin's implementation.
+// Example unit test for the Swift portion of this plugin's implementation.
 //
 // See https://developer.apple.com/documentation/xctest for more information about using XCTest.
 {{/withPlatformChannelPluginHook}}

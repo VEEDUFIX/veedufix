@@ -3,13 +3,7 @@ import { prisma } from "../../lib/prisma.js";
 import { publishNotificationEvent } from "../../lib/realtime.js";
 
 const ACTIVE_JOB_EXECUTION_STATUSES = ["assigned", "arrived", "in_progress"] as const;
-const DEFAULT_ALERT_PAGE_SIZE = 25;
-const ALERT_KIND_BY_TYPE = {
-  dispatch_failure: "dispatch_failure",
-  payout_failure: "payout_failure",
-  refund_failure: "refund_failure",
-  payment_mismatch: "payment_mismatch"
-} as const;
+const DEFAULT_ALERT_PAGE_SIZE = 50;
 
 export type OpsSummaryCounts = {
   activeJobsCount: number;
@@ -56,7 +50,13 @@ export type OpsLiveJob = {
   updatedAt: Date;
 };
 
-export type OpsAlertKind = "dispatch_failure" | "payout_failure" | "refund_failure" | "payment_mismatch";
+export type OpsAlertKind =
+  | "dispatch_failure"
+  | "payout_failure"
+  | "refund_failure"
+  | "payment_mismatch"
+  | "support_escalation"
+  | "dispute_escalation";
 
 export type OpsAlert = {
   id: string;
@@ -249,6 +249,8 @@ function resolveAlertKind(type: string): OpsAlertKind {
     case "payout_failure":
     case "refund_failure":
     case "payment_mismatch":
+    case "support_escalation":
+    case "dispute_escalation":
       return type;
     default:
       return "dispatch_failure";
@@ -257,7 +259,10 @@ function resolveAlertKind(type: string): OpsAlertKind {
 
 function mapOpsAlert(alert: OpsAlertRecord): OpsAlert {
   const metadata = parseAlertMetadata(alert.metadata);
-  const retryAvailable = typeof metadata.retryAvailable === "boolean" ? metadata.retryAvailable : alert.type !== "payment_mismatch";
+  const retryAvailable =
+    typeof metadata.retryAvailable === "boolean"
+      ? metadata.retryAvailable
+      : !["payment_mismatch", "support_escalation", "dispute_escalation"].includes(alert.type);
 
   return {
     id: alert.id,

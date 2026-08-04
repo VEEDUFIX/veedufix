@@ -143,8 +143,7 @@ class _AppBootstrapState extends ConsumerState<AppBootstrap> with WidgetsBinding
       debugShowCheckedModeBanner: false,
       title: appTitleForMode(AppMode.worker),
       theme: buildLightTheme(),
-      darkTheme: buildDarkTheme(),
-      themeMode: ThemeMode.system,
+      themeMode: ThemeMode.light,
       scaffoldMessengerKey: _messengerKey,
       builder: (context, child) => AppBackdrop(
         variant: AppBackdropVariant.worker,

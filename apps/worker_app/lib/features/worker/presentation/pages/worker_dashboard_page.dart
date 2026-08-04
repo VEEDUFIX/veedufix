@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:marketplace_shared/marketplace_shared.dart';
 import 'package:intl/intl.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
 import '../../../../core/widgets/worker_logo.dart';
@@ -220,19 +221,46 @@ class _WorkerDashboardPageState extends ConsumerState<WorkerDashboardPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    'You are fully booked for today.',
-                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                          fontWeight: FontWeight.w900,
-                        ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Stay on top of jobs, keep customers updated, and track earnings in real time.',
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.74),
-                          height: 1.45,
-                        ),
+                  statsAsync.when(
+                    data: (stats) {
+                      final headline = stats.todayJobs.isEmpty
+                          ? 'No jobs scheduled for today.'
+                          : 'You have ${stats.todayJobs.length} jobs scheduled today.';
+                      final subtitle = stats.todayJobs.isEmpty
+                          ? 'Stay available to receive new bookings and keep live updates flowing.'
+                          : 'Stay on top of jobs, keep customers updated, and track earnings in real time.';
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            headline,
+                            style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                                  fontWeight: FontWeight.w900,
+                                ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            subtitle,
+                            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                  color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.74),
+                                  height: 1.45,
+                                ),
+                          ),
+                        ],
+                      );
+                    },
+                    loading: () => Text(
+                      'Loading today\'s schedule...',
+                      style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                            fontWeight: FontWeight.w900,
+                          ),
+                    ),
+                    error: (_, __) => Text(
+                      'Your day at a glance.',
+                      style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                            fontWeight: FontWeight.w900,
+                          ),
+                    ),
                   ),
                   const SizedBox(height: 14),
                   Row(
@@ -265,7 +293,7 @@ class _WorkerDashboardPageState extends ConsumerState<WorkerDashboardPage> {
                   children: [
                     Expanded(
                       child: PremiumStatCard(
-                        label: 'Completed',
+                        label: 'Today',
                         value: '${stats.todayJobs.length} jobs today',
                         icon: Icons.work_history_rounded,
                         accentColor: const Color(0xFF0F766E),
@@ -306,8 +334,8 @@ class _WorkerDashboardPageState extends ConsumerState<WorkerDashboardPage> {
                 padding: const EdgeInsets.all(18),
                 child: Text(
                   isSignedIn
-                      ? 'Sign in to receive live updates.'
-                      : 'No live events yet. New notifications and booking changes will appear here.',
+                      ? 'No live events yet. New notifications and booking changes will appear here.'
+                      : 'Sign in to receive live updates.',
                   style: Theme.of(context).textTheme.bodyMedium,
                 ),
               ),
@@ -343,6 +371,7 @@ class _WorkerDashboardPageState extends ConsumerState<WorkerDashboardPage> {
                       status: job.status,
                       time: '${DateFormat('h:mm a').format(job.scheduledAt)} • ${job.addressLabel ?? 'No address'}',
                       onTap: () => context.push(route),
+                      job: job,
                     ),
                   );
                 }).toList(),
@@ -496,13 +525,39 @@ class _JobCard extends StatelessWidget {
     required this.title,
     required this.status,
     required this.time,
+    required this.job,
     this.onTap,
   });
 
   final String title;
   final String status;
   final String time;
+  final WorkerJob job;
   final VoidCallback? onTap;
+
+  Future<void> _openNavigation() async {
+    final lat = job.destinationLatitude;
+    final lng = job.destinationLongitude;
+    if (lat != null && lng != null) {
+      final uri = Uri.parse('https://www.google.com/maps/dir/?api=1&destination=$lat,$lng');
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+      return;
+    }
+
+    final query = [
+      job.addressLabel?.trim(),
+      job.cityName?.trim(),
+      job.destinationQuery?.trim(),
+    ].where((part) => part != null && part.isNotEmpty).cast<String>().join(', ');
+    if (query.isEmpty) {
+      return;
+    }
+
+    final uri = Uri.parse(
+      'https://www.google.com/maps/dir/?api=1&destination=${Uri.encodeComponent(query)}',
+    );
+    await launchUrl(uri, mode: LaunchMode.externalApplication);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -510,28 +565,36 @@ class _JobCard extends StatelessWidget {
     final isEnRoute = status == 'En route';
     final accent = isEnRoute ? const Color(0xFF14B8A6) : cs.primary;
 
-    return TapScale(
-      onTap: onTap ?? () {},
-      child: PremiumGlassCard(
-        child: ListTile(
-          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-          title: Text(title, style: const TextStyle(fontWeight: FontWeight.w700)),
-          subtitle: Text(time),
-          trailing: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            decoration: BoxDecoration(
-              color: accent.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(AbzioTheme.cardRadius),
+    return PremiumGlassCard(
+      child: ListTile(
+        onTap: onTap,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+        title: Text(title, style: const TextStyle(fontWeight: FontWeight.w700)),
+        subtitle: Text(time),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            IconButton(
+              tooltip: 'Navigate',
+              onPressed: _openNavigation,
+              icon: Icon(Icons.navigation_rounded, color: accent),
             ),
-            child: Text(
-              status,
-              style: TextStyle(
-                color: accent,
-                fontWeight: FontWeight.w700,
-                fontSize: 12,
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: accent.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(AbzioTheme.cardRadius),
+              ),
+              child: Text(
+                status,
+                style: TextStyle(
+                  color: accent,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 12,
+                ),
               ),
             ),
-          ),
+          ],
         ),
       ),
     );

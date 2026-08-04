@@ -151,6 +151,65 @@ class _SupportTicketsPageState extends ConsumerState<SupportTicketsPage> {
     ref.invalidate(adminSupportTicketsProvider((search: _search, status: _status)));
   }
 
+  Future<void> _escalate(AdminSupportTicket ticket) async {
+    final noteController = TextEditingController(text: 'Escalated by admin for urgent review.');
+    final accepted = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: Text('Escalate ${ticket.subject}'),
+          content: TextField(
+            controller: noteController,
+            maxLines: 4,
+            decoration: const InputDecoration(
+              labelText: 'Internal escalation note',
+              hintText: 'Describe why this ticket needs attention',
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: const Text('Escalate'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (accepted != true) {
+      noteController.dispose();
+      return;
+    }
+
+    try {
+      final api = ref.read(apiClientProvider);
+      final adminId = ref.read(authControllerProvider).valueOrNull?.user.id;
+      if (adminId != null && ticket.assignedToName == null) {
+        await api.patch('/admin/support/tickets/${ticket.id}/assignment', data: {'assignedToUserId': adminId});
+      }
+      await api.post(
+        '/admin/support/tickets/${ticket.id}/replies',
+        data: {
+          'message': noteController.text.trim(),
+          'isInternal': true,
+        },
+      );
+      await api.patch('/admin/support/tickets/${ticket.id}/status', data: {'status': 'IN_PROGRESS'});
+      ref.invalidate(adminSupportTicketsProvider((search: _search, status: _status)));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Ticket escalated')),
+        );
+      }
+    } finally {
+      noteController.dispose();
+    }
+  }
+
   Future<void> _openTicketDetails(AdminSupportTicket ticket) async {
     await context.push('/support-tickets/${ticket.id}');
     if (mounted) {
@@ -229,7 +288,12 @@ class _SupportTicketsPageState extends ConsumerState<SupportTicketsPage> {
                   );
                 }
 
+                final openCount = tickets.where((ticket) => ticket.status == 'OPEN').length;
+                final inProgressCount = tickets.where((ticket) => ticket.status == 'IN_PROGRESS').length;
+                final resolvedCount = tickets.where((ticket) => ticket.status == 'RESOLVED').length;
+
                 return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: tickets.map((ticket) {
                     final statusColor = switch (ticket.status) {
                       'RESOLVED' => const Color(0xFF10B981),
@@ -301,6 +365,10 @@ class _SupportTicketsPageState extends ConsumerState<SupportTicketsPage> {
                                   child: const Text('Take'),
                                 ),
                                 TextButton(
+                                  onPressed: ticket.status == 'CLOSED' ? null : () => _escalate(ticket),
+                                  child: const Text('Escalate'),
+                                ),
+                                TextButton(
                                   onPressed: ticket.status == 'RESOLVED'
                                       ? null
                                       : () => _setStatus(ticket.id, 'RESOLVED'),
@@ -318,7 +386,22 @@ class _SupportTicketsPageState extends ConsumerState<SupportTicketsPage> {
                         ),
                       ),
                     );
-                  }).toList(),
+                  }).toList()
+                    ..insert(
+                      0,
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: Wrap(
+                          spacing: 12,
+                          runSpacing: 12,
+                          children: [
+                            _MetaPill(label: 'Open: $openCount'),
+                            _MetaPill(label: 'In progress: $inProgressCount'),
+                            _MetaPill(label: 'Resolved: $resolvedCount'),
+                          ],
+                        ),
+                      ),
+                    ),
                 );
               },
             ),
@@ -397,6 +480,63 @@ class _SupportTicketDetailPageState extends ConsumerState<SupportTicketDetailPag
     ref.invalidate(adminSupportTicketThreadProvider(ticketId));
   }
 
+  Future<void> _escalate(AdminSupportTicket ticket) async {
+    final noteController = TextEditingController(text: 'Escalated for urgent review.');
+    final accepted = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('Escalate ticket'),
+          content: TextField(
+            controller: noteController,
+            maxLines: 4,
+            decoration: const InputDecoration(
+              labelText: 'Internal note',
+              hintText: 'Add the reason for escalation',
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: const Text('Escalate'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (accepted != true) {
+      noteController.dispose();
+      return;
+    }
+
+    try {
+      if (ticket.assignedToName == null) {
+        await _assignToMe(ticket.id);
+      }
+      final api = ref.read(apiClientProvider);
+      await api.post(
+        '/admin/support/tickets/${ticket.id}/replies',
+        data: {
+          'message': noteController.text.trim(),
+          'isInternal': true,
+        },
+      );
+      await _setStatus(ticket.id, 'IN_PROGRESS');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Ticket escalated')),
+        );
+      }
+    } finally {
+      noteController.dispose();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
@@ -442,6 +582,7 @@ class _SupportTicketDetailPageState extends ConsumerState<SupportTicketDetailPag
                       _MetaPill(label: 'Status: ${ticket.status.replaceAll('_', ' ')}'),
                       _MetaPill(label: ticket.assignedToName == null ? 'Unassigned' : 'Assigned to ${ticket.assignedToName}'),
                       _MetaPill(label: '${thread.replies.length} replies'),
+                      _MetaPill(label: ticket.userPhone ?? 'No phone'),
                     ],
                   ),
                   const SizedBox(height: 12),
@@ -470,6 +611,10 @@ class _SupportTicketDetailPageState extends ConsumerState<SupportTicketDetailPag
                       TextButton(
                         onPressed: ticket.status == 'CLOSED' ? null : () => _setStatus(ticket.id, 'CLOSED'),
                         child: const Text('Close'),
+                      ),
+                      TextButton(
+                        onPressed: ticket.status == 'CLOSED' ? null : () => _escalate(ticket),
+                        child: const Text('Escalate'),
                       ),
                     ],
                   ),

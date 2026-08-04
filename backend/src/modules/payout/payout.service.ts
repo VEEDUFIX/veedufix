@@ -55,7 +55,7 @@ function roundToTwo(value: number): number {
   return Math.round((value + Number.EPSILON) * 100) / 100;
 }
 
-function getCommissionPercent(): number {
+export function getCommissionPercent(): number {
   return env.PLATFORM_COMMISSION_PERCENT ?? 20;
 }
 

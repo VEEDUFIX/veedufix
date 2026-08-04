@@ -338,7 +338,7 @@ class _SupportPageState extends ConsumerState<SupportPage> {
           _SupportOption(
             icon: Icons.receipt_long_rounded,
             label: 'Issue with a booking',
-            accent: Color(0xFFF59E0B),
+            accent: const Color(0xFFF59E0B),
             onTap: _SupportAction.bookingIssue,
             bookingId: bookingIdLabel,
             bookingCode: widget.bookingCode,

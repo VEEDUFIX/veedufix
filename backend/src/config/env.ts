@@ -36,6 +36,7 @@ const envSchema = z.object({
   RAZORPAY_KEY_ID: z.string().optional(),
   RAZORPAY_KEY_SECRET: z.string().optional(),
   RAZORPAY_ACCOUNT_NUMBER: z.string().optional(),
+  RAZORPAY_WEBHOOK_URL: z.string().url().optional(),
   RAZORPAY_WEBHOOK_SECRET: z.string().optional(),
   PLATFORM_COMMISSION_PERCENT: z.preprocess(
     (value) => (value === "" || value === undefined ? undefined : value),
@@ -58,6 +59,7 @@ const envSchema = z.object({
     "JWT_REFRESH_SECRET",
     "RAZORPAY_KEY_ID",
     "RAZORPAY_KEY_SECRET",
+    "RAZORPAY_WEBHOOK_URL",
     "RAZORPAY_WEBHOOK_SECRET",
     "REDIS_URL",
     "CLOUDINARY_CLOUD_NAME",

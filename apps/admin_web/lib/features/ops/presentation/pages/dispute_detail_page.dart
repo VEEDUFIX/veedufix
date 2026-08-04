@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:marketplace_shared/marketplace_shared.dart';
@@ -143,6 +144,14 @@ class _DisputeDetailPageState extends ConsumerState<DisputeDetailPage> {
     );
   }
 
+  Future<void> _copyToClipboard(String value, String label) async {
+    await Clipboard.setData(ClipboardData(text: value));
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('$label copied')),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -226,6 +235,23 @@ class _DisputeDetailPageState extends ConsumerState<DisputeDetailPage> {
                               _Chip(
                                   label: MaterialLocalizations.of(context)
                                       .formatMediumDate(dispute.createdAt)),
+                            ],
+                          ),
+                          const SizedBox(height: 10),
+                          Wrap(
+                            spacing: 10,
+                            runSpacing: 10,
+                            children: [
+                              OutlinedButton.icon(
+                                onPressed: () => _copyToClipboard(booking.code, 'Booking code'),
+                                icon: const Icon(Icons.copy_rounded),
+                                label: const Text('Copy booking code'),
+                              ),
+                              OutlinedButton.icon(
+                                onPressed: () => _copyToClipboard(dispute.id, 'Dispute ID'),
+                                icon: const Icon(Icons.copy_rounded),
+                                label: const Text('Copy dispute ID'),
+                              ),
                             ],
                           ),
                         ],

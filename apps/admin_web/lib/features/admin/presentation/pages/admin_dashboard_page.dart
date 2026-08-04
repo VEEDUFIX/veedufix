@@ -364,6 +364,13 @@ class _AdminDashboardPageState extends ConsumerState<AdminDashboardPage> {
                   onTap: () => context.go('/finance'),
                 ),
                 _ActionCard(
+                  title: 'Tax Summary',
+                  subtitle: 'GST and revenue export for CA review',
+                  icon: Icons.request_quote_rounded,
+                  color: const Color(0xFFF59E0B),
+                  onTap: () => context.go('/finance/tax-summary'),
+                ),
+                _ActionCard(
                   title: 'Platform Settings',
                   subtitle: 'GSTIN, invoice sequence, commission rules',
                   icon: Icons.tune_rounded,

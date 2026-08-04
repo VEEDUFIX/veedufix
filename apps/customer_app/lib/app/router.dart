@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:marketplace_shared/marketplace_shared.dart';
 
 import '../features/auth/presentation/pages/login_page.dart';
@@ -252,7 +253,12 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/map-picker',
-        builder: (context, state) => const MapLocationPickerPage(),
+        builder: (context, state) {
+          final lat = double.tryParse(state.uri.queryParameters['lat'] ?? '');
+          final lng = double.tryParse(state.uri.queryParameters['lng'] ?? '');
+          final initialPosition = (lat != null && lng != null) ? LatLng(lat, lng) : null;
+          return MapLocationPickerPage(initialPosition: initialPosition);
+        },
       ),
       ShellRoute(
         builder: (context, state, child) => AppShellPage(child: child),

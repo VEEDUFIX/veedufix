@@ -114,6 +114,7 @@ Set<String> allowedRoutesForMode(AppMode mode) {
         '/finance',
         '/finance/payouts',
         '/finance/refunds',
+        '/finance/tax-summary',
         '/reports',
         '/push',
         '/platform-settings',

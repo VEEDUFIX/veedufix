@@ -15,6 +15,7 @@ class AppEnvironment {
     required this.razorpayKeyId,
     required this.isProduction,
     required this.googleServerClientId,
+    required this.googleMapsApiKey,
   });
 
   factory AppEnvironment.fromDartDefines() {
@@ -67,6 +68,10 @@ class AppEnvironment {
       'GOOGLE_SERVER_CLIENT_ID',
       defaultValue: '',
     );
+    const googleMapsApiKey = String.fromEnvironment(
+      'GOOGLE_MAPS_API_KEY',
+      defaultValue: '',
+    );
 
     return AppEnvironment(
       apiBaseUrl: apiBaseUrl,
@@ -81,6 +86,7 @@ class AppEnvironment {
       razorpayKeyId: razorpayKeyId,
       isProduction: isProduction,
       googleServerClientId: googleServerClientId,
+      googleMapsApiKey: googleMapsApiKey,
     );
   }
 
@@ -96,6 +102,7 @@ class AppEnvironment {
   final String razorpayKeyId;
   final bool isProduction;
   final String googleServerClientId;
+  final String googleMapsApiKey;
 
   bool get hasFirebaseConfig =>
       firebaseProjectId.isNotEmpty &&

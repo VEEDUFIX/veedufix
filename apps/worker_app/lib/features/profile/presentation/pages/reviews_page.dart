@@ -39,6 +39,9 @@ class ReviewsPage extends ConsumerWidget {
           ),
           body: profileAsync.when(
             data: (profile) {
+              final reviews = profile.reviews.toList(growable: false)
+                ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+
               return RefreshIndicator(
                 onRefresh: () async => ref.refresh(workerProfileProvider(workerId).future),
                 child: SingleChildScrollView(
@@ -52,11 +55,11 @@ class ReviewsPage extends ConsumerWidget {
                         const SizedBox(height: 32),
                         Text('Badges Earned', style: tt.titleMedium?.copyWith(fontWeight: FontWeight.bold, color: cs.onSurface)),
                         const SizedBox(height: 16),
-                        _buildBadgesScroll(cs, tt, profile),
+                        _buildBadgesScroll(cs, tt, profile, reviews),
                         const SizedBox(height: 32),
                         Text('Recent Reviews', style: tt.titleMedium?.copyWith(fontWeight: FontWeight.bold, color: cs.onSurface)),
                         const SizedBox(height: 16),
-                        if (profile.reviews.isEmpty)
+                        if (reviews.isEmpty)
                           const PremiumEmptyState(
                             icon: Icons.star_border,
                             title: 'No reviews yet',
@@ -66,10 +69,10 @@ class ReviewsPage extends ConsumerWidget {
                           ListView.separated(
                             shrinkWrap: true,
                             physics: const NeverScrollableScrollPhysics(),
-                            itemCount: profile.reviews.length,
+                            itemCount: reviews.length,
                             separatorBuilder: (_, __) => const SizedBox(height: 16),
                             itemBuilder: (context, index) {
-                              final review = profile.reviews[index];
+                              final review = reviews[index];
                               return _buildReviewItem(
                                 cs: cs,
                                 tt: tt,
@@ -185,7 +188,7 @@ class ReviewsPage extends ConsumerWidget {
     );
   }
 
-  Widget _buildBadgesScroll(ColorScheme cs, TextTheme tt, WorkerPublicProfile profile) {
+  Widget _buildBadgesScroll(ColorScheme cs, TextTheme tt, WorkerPublicProfile profile, List<WorkerPublicProfileReview> reviews) {
     final List<Widget> badges = [];
 
     // Derive badges based on real data
@@ -194,8 +197,9 @@ class ReviewsPage extends ConsumerWidget {
       badges.add(const SizedBox(width: 12));
     }
     
-    // 5-star streak (if last 3 reviews are 5 star)
-    if (profile.reviews.length >= 3 && profile.reviews.take(3).every((r) => r.rating == 5.0)) {
+    // 5-star streak on the latest 3 reviews
+    final latestReviews = reviews.take(3).toList(growable: false);
+    if (latestReviews.length == 3 && latestReviews.every((r) => r.rating == 5.0)) {
       badges.add(_buildBadgeItem('5-Star Streak', Icons.star, const Color(0xFFF59E0B), cs, tt));
       badges.add(const SizedBox(width: 12));
     }

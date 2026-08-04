@@ -116,6 +116,7 @@ Set these variables in Render for `backend`:
 - `GOOGLE_SERVER_CLIENT_ID=<Google OAuth web client ID>`
 - `RAZORPAY_KEY_ID=<Razorpay key id>`
 - `RAZORPAY_KEY_SECRET=<Razorpay key secret>`
+- `RAZORPAY_WEBHOOK_URL=https://veedufix-backend.onrender.com/api/webhooks/razorpay`
 - `RAZORPAY_WEBHOOK_SECRET=<Razorpay webhook secret>`
 - `CLOUDINARY_CLOUD_NAME=<Cloudinary cloud name>`
 - `CLOUDINARY_API_KEY=<Cloudinary api key>`
@@ -176,12 +177,13 @@ Customer and worker apps default to `http://localhost:4000/api`, but you can ove
 
 ```powershell
 cd apps/customer_app
-flutter run -d chrome --dart-define=API_BASE_URL=http://localhost:4000/api
+flutter run -d chrome --dart-define=API_BASE_URL=http://localhost:4000/api --dart-define=GOOGLE_MAPS_API_KEY=your_google_maps_key
 ```
 
 ```powershell
 cd apps/worker_app
-flutter run -d chrome --dart-define=API_BASE_URL=http://localhost:4000/api
+flutter run -d chrome --dart-define=API_BASE_URL=http://localhost:4000/api --dart-define=GOOGLE_MAPS_API_KEY=your_google_maps_key
 ```
 
 If Firebase is enabled for a Flutter target, pass the same build-time values through `--dart-define` or your IDE run configuration.
+For Google Maps on the customer app, enable `Maps SDK for Android`, `Maps SDK for iOS`, `Places API`, and `Geocoding API` in the same Google Cloud project, then pass the API key as `GOOGLE_MAPS_API_KEY`.

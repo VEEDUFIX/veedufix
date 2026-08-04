@@ -16,8 +16,7 @@ class AppBootstrap extends ConsumerWidget {
       debugShowCheckedModeBanner: false,
       title: 'Marketplace App',
       theme: buildLightTheme(),
-      darkTheme: buildDarkTheme(),
-      themeMode: ThemeMode.system,
+      themeMode: ThemeMode.light,
       routerConfig: router,
       builder: (context, child) {
         final textTheme = GoogleFonts.plusJakartaSansTextTheme(Theme.of(context).textTheme);

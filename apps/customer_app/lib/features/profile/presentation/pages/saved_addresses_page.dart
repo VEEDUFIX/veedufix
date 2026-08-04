@@ -1,9 +1,12 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:marketplace_shared/marketplace_shared.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../data/saved_addresses_api.dart';
 
@@ -276,6 +279,17 @@ class _AddressCard extends StatelessWidget {
   final VoidCallback onDelete;
   final VoidCallback? onMakeDefault;
 
+  Future<void> _openInMaps(BuildContext context) async {
+    final uri = Uri.parse(
+      'https://www.google.com/maps/dir/?api=1&destination=${address.lat},${address.lng}',
+    );
+    if (!await launchUrl(uri, mode: LaunchMode.externalApplication) && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not open Google Maps')),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return PremiumGlassCard(
@@ -321,6 +335,11 @@ class _AddressCard extends StatelessWidget {
                   onPressed: onDelete,
                   icon: const Icon(Icons.delete_outline_rounded),
                   label: const Text('Delete'),
+                ),
+                OutlinedButton.icon(
+                  onPressed: () => _openInMaps(context),
+                  icon: const Icon(Icons.navigation_rounded),
+                  label: const Text('Open in Maps'),
                 ),
                 if (onMakeDefault != null)
                   FilledButton.tonalIcon(
@@ -459,6 +478,77 @@ class _SavedAddressEditorSheetState extends State<_SavedAddressEditorSheet> {
     super.dispose();
   }
 
+  Future<void> _useCurrentLocation() async {
+    try {
+      final serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Turn on location services to use your current position.')),
+        );
+        return;
+      }
+
+      var permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+      }
+
+      if (permission == LocationPermission.denied || permission == LocationPermission.deniedForever) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Location permission is required to use your current position.')),
+        );
+        return;
+      }
+
+      final pos = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(accuracy: LocationAccuracy.high),
+      );
+      if (!mounted) return;
+
+      final picked = await context.push<LatLng>(
+        '/map-picker?lat=${pos.latitude}&lng=${pos.longitude}',
+      );
+      if (picked == null || !mounted) return;
+
+      setState(() {
+        _latController.text = picked.latitude.toStringAsFixed(6);
+        _lngController.text = picked.longitude.toStringAsFixed(6);
+      });
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Unable to use current location: $error')),
+      );
+    }
+  }
+
+  Future<void> _pickOnMap() async {
+    try {
+      final lat = double.tryParse(_latController.text.trim());
+      final lng = double.tryParse(_lngController.text.trim());
+      final initial = (lat != null && lng != null)
+          ? LatLng(lat, lng)
+          : const LatLng(10.0261, 76.3125);
+
+      final picked = await context.push<LatLng>(
+        '/map-picker?lat=${initial.latitude}&lng=${initial.longitude}',
+      );
+      if (picked == null || !mounted) return;
+
+      setState(() {
+        _latController.text = picked.latitude.toStringAsFixed(6);
+        _lngController.text = picked.longitude.toStringAsFixed(6);
+      });
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Unable to open map picker: $error')),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final bottomInset = MediaQuery.of(context).viewInsets.bottom;
@@ -540,6 +630,24 @@ class _SavedAddressEditorSheetState extends State<_SavedAddressEditorSheet> {
                     ),
                   ],
                 ),
+                const SizedBox(height: 4),
+                Wrap(
+                  spacing: 12,
+                  runSpacing: 12,
+                  children: [
+                    FilledButton.tonalIcon(
+                      onPressed: _useCurrentLocation,
+                      icon: const Icon(Icons.my_location_rounded),
+                      label: const Text('Use current location'),
+                    ),
+                    OutlinedButton.icon(
+                      onPressed: _pickOnMap,
+                      icon: const Icon(Icons.map_rounded),
+                      label: const Text('Pick on map'),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
                   value: _isDefault,

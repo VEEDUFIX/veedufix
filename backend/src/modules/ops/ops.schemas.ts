@@ -1,6 +1,13 @@
 import { z } from "zod";
 
-const alertKindSchema = z.enum(["dispatch_failure", "payout_failure", "refund_failure", "payment_mismatch"]);
+const alertKindSchema = z.enum([
+  "dispatch_failure",
+  "payout_failure",
+  "refund_failure",
+  "payment_mismatch",
+  "support_escalation",
+  "dispute_escalation"
+]);
 const alertSeveritySchema = z.enum(["low", "medium", "high", "critical"]);
 const alertStatusSchema = z.enum(["open", "acknowledged", "resolved"]);
 

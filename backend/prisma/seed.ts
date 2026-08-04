@@ -494,11 +494,11 @@ async function seedApprovedWorkers() {
       update: {
         onboardingStatus: "approved",
         fullName: workerSeed.name,
-        addressLine1: "12 Sample Street",
+        addressLine1: "12 Anna Salai",
         city: workerSeed.cityName,
         pincode: "600001",
         aadhaarNumber: "XXXX-XXXX-1234",
-        aadhaarDocUrl: "https://res.cloudinary.com/demo/image/upload/sample-aadhaar.jpg",
+        aadhaarDocUrl: null,
         bankAccountNumber: "123456789012",
         bankIfsc: "SBIN0000001",
         upiId: `${workerSeed.email.split("@")[0]}@upi`,
@@ -515,11 +515,11 @@ async function seedApprovedWorkers() {
         userId: user.id,
         onboardingStatus: "approved",
         fullName: workerSeed.name,
-        addressLine1: "12 Sample Street",
+        addressLine1: "12 Anna Salai",
         city: workerSeed.cityName,
         pincode: "600001",
         aadhaarNumber: "XXXX-XXXX-1234",
-        aadhaarDocUrl: "https://res.cloudinary.com/demo/image/upload/sample-aadhaar.jpg",
+        aadhaarDocUrl: null,
         bankAccountNumber: "123456789012",
         bankIfsc: "SBIN0000001",
         upiId: `${workerSeed.email.split("@")[0]}@upi`,
@@ -551,7 +551,7 @@ async function seedApprovedWorkers() {
           yearsExperience: skill.yearsExperience,
           isPrimary: skill.isPrimary,
           verifiedByAdmin: true,
-          certificationDocUrl: `https://res.cloudinary.com/demo/image/upload/${skill.categorySlug}.jpg`
+          certificationDocUrl: null
         };
       })
       .filter((value): value is NonNullable<typeof value> => value !== null);

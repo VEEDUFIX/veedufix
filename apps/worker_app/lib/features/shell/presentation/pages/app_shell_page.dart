@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'dart:ui';
+import 'package:marketplace_shared/marketplace_shared.dart';
 
-class AppShellPage extends StatelessWidget {
+class AppShellPage extends ConsumerWidget {
   const AppShellPage({
     super.key,
     required this.child,
@@ -11,9 +13,19 @@ class AppShellPage extends StatelessWidget {
   final Widget child;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final location = GoRouterState.of(context).matchedLocation;
-    final destinations = const ['/worker', '/schedule', '/jobs', '/earnings', '/profile'];
+    final statsAsync = ref.watch(workerDashboardStatsProvider);
+    final unreadNotifications =
+        ref.watch(notificationsUnreadCountProvider).valueOrNull ?? 0;
+    final todayJobsCount = statsAsync.valueOrNull?.todayJobs.length ?? 0;
+    final destinations = const [
+      '/worker',
+      '/schedule',
+      '/jobs',
+      '/earnings',
+      '/profile'
+    ];
 
     final matchedIndex = destinations.indexWhere((path) => path == location);
     final index = matchedIndex < 0 ? 0 : matchedIndex;
@@ -29,9 +41,16 @@ class AppShellPage extends StatelessWidget {
             filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
             child: Container(
               decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.9),
+                color: Theme.of(context)
+                    .colorScheme
+                    .surface
+                    .withValues(alpha: 0.9),
                 borderRadius: BorderRadius.circular(28),
-                border: Border.all(color: Theme.of(context).colorScheme.outlineVariant.withValues(alpha: 0.35)),
+                border: Border.all(
+                    color: Theme.of(context)
+                        .colorScheme
+                        .outlineVariant
+                        .withValues(alpha: 0.35)),
                 boxShadow: [
                   BoxShadow(
                     color: Colors.black.withValues(alpha: 0.08),
@@ -48,14 +67,14 @@ class AppShellPage extends StatelessWidget {
                   context.go(destinations[selected]);
                 },
                 destinations: [
-                  const NavigationDestination(
-                    icon: Badge(
-                      label: Text('2'),
-                      child: Icon(Icons.work_outline_rounded),
+                  NavigationDestination(
+                    icon: _BadgeIcon(
+                      icon: Icons.work_outline_rounded,
+                      count: unreadNotifications,
                     ),
-                    selectedIcon: Badge(
-                      label: Text('2'),
-                      child: Icon(Icons.work_rounded),
+                    selectedIcon: _BadgeIcon(
+                      icon: Icons.work_rounded,
+                      count: unreadNotifications,
                     ),
                     label: 'Dashboard',
                   ),
@@ -64,12 +83,14 @@ class AppShellPage extends StatelessWidget {
                     selectedIcon: Icon(Icons.calendar_month_rounded),
                     label: 'Schedule',
                   ),
-                  const NavigationDestination(
-                    icon: Badge(
-                      child: Icon(Icons.assignment_outlined),
+                  NavigationDestination(
+                    icon: _BadgeIcon(
+                      icon: Icons.assignment_outlined,
+                      count: todayJobsCount,
                     ),
-                    selectedIcon: Badge(
-                      child: Icon(Icons.assignment_rounded),
+                    selectedIcon: _BadgeIcon(
+                      icon: Icons.assignment_rounded,
+                      count: todayJobsCount,
                     ),
                     label: 'Jobs',
                   ),
@@ -89,6 +110,25 @@ class AppShellPage extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+class _BadgeIcon extends StatelessWidget {
+  const _BadgeIcon({
+    required this.icon,
+    required this.count,
+  });
+
+  final IconData icon;
+  final int count;
+
+  @override
+  Widget build(BuildContext context) {
+    return Badge(
+      isLabelVisible: count > 0,
+      label: count > 0 ? Text(count > 99 ? '99+' : '$count') : null,
+      child: Icon(icon),
     );
   }
 }

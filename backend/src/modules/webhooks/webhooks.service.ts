@@ -13,6 +13,15 @@ import { dispatchBookingAfterPayment } from "../matching/matching.service.js";
 type RazorpayWebhookEvent = {
   event?: string;
   payload?: {
+    refund?: {
+      entity?: {
+        id?: string;
+        payment_id?: string;
+        amount?: number;
+        currency?: string;
+        status?: string;
+      };
+    };
     payment?: {
       entity?: {
         id?: string;
@@ -32,6 +41,10 @@ type RazorpayWebhookEvent = {
     };
   };
 };
+
+type PaymentWithBooking = Prisma.PaymentGetPayload<{
+  include: { booking: true };
+}>;
 
 function verifyWebhookSignature(rawBody: string, signature: string): boolean {
   if (!env.RAZORPAY_WEBHOOK_SECRET) {
@@ -80,6 +93,38 @@ async function notifyUser(userId: string, title: string, body: string, data?: Re
     type: "PAYMENT",
     data: data ?? null
   });
+}
+
+function getPaymentNotes(payment: PaymentWithBooking): Record<string, unknown> {
+  if (payment.notes && typeof payment.notes === "object") {
+    return payment.notes as Record<string, unknown>;
+  }
+
+  return {};
+}
+
+async function findPaymentForRazorpayPaymentId(paymentId: string): Promise<PaymentWithBooking | null> {
+  const payments = await prisma.payment.findMany({
+    where: {
+      provider: "RAZORPAY"
+    },
+    include: {
+      booking: true
+    }
+  });
+
+  for (const payment of payments) {
+    if (payment.providerRef === paymentId) {
+      return payment;
+    }
+
+    const notes = getPaymentNotes(payment);
+    if (String(notes.paymentId ?? "") === paymentId) {
+      return payment;
+    }
+  }
+
+  return null;
 }
 
 export async function updatePaymentForWebhook(
@@ -242,6 +287,87 @@ export async function updatePaymentForWebhook(
   return updatedPayment;
 }
 
+async function updatePaymentForRefundWebhook(
+  paymentId: string,
+  status: PaymentStatus,
+  notes: Record<string, unknown>
+) {
+  const payment = await findPaymentForRazorpayPaymentId(paymentId);
+
+  if (!payment) {
+    logger.warn({ paymentId, status }, "Refund webhook received for unknown payment");
+    return null;
+  }
+
+  const updatedPayment = await prisma.payment.update({
+    where: { id: payment.id },
+    data: {
+      status,
+      notes: {
+        ...getPaymentNotes(payment),
+        ...compactNotes(notes)
+      } as Prisma.InputJsonValue
+    },
+    include: {
+      booking: true
+    }
+  });
+
+  if (status === PaymentStatus.REFUNDED) {
+    await prisma.booking.update({
+      where: { id: payment.bookingId },
+      data: {
+        status: BookingStatus.REFUNDED
+      }
+    });
+
+    void recordBookingTimelineEvent({
+      bookingId: payment.bookingId,
+      status: BookingStatus.REFUNDED,
+      title: "Payment refunded",
+      description: "The payment was refunded by the provider."
+    });
+
+    await publishTrackingEvent({
+      bookingId: payment.bookingId,
+      bookingCode: payment.booking.code,
+      status: "PAYMENT_REFUNDED",
+      message: "Payment refunded",
+      paymentId
+    });
+
+    await notifyUser(
+      payment.booking.customerId,
+      "Payment refunded",
+      `Refund completed for booking ${payment.booking.code}.`,
+      {
+        bookingId: payment.bookingId,
+        paymentId
+      }
+    );
+  } else if (status === PaymentStatus.FAILED) {
+    await publishTrackingEvent({
+      bookingId: payment.bookingId,
+      bookingCode: payment.booking.code,
+      status: "PAYMENT_FAILED",
+      message: "Refund failed",
+      paymentId
+    });
+
+    await notifyUser(
+      payment.booking.customerId,
+      "Refund failed",
+      `We could not complete a refund for booking ${payment.booking.code}.`,
+      {
+        bookingId: payment.bookingId,
+        paymentId
+      }
+    );
+  }
+
+  return updatedPayment;
+}
+
 export async function handleRazorpayWebhook(
   rawBody: string,
   signature: string | undefined,
@@ -256,9 +382,40 @@ export async function handleRazorpayWebhook(
   }
 
   const event = body.event ?? "unknown";
+  const refundEntity = body.payload?.refund?.entity;
   const paymentEntity = body.payload?.payment?.entity;
   const orderEntity = body.payload?.order?.entity;
   const orderId = paymentEntity?.order_id ?? orderEntity?.id;
+
+  if (event.startsWith("refund.")) {
+    const refundPaymentId = refundEntity?.payment_id;
+    if (!refundPaymentId) {
+      logger.warn({ event }, "Refund webhook payload missing payment identifier");
+      return { ok: true };
+    }
+
+    if (event === "refund.processed") {
+      await updatePaymentForRefundWebhook(refundPaymentId, PaymentStatus.REFUNDED, {
+        webhookEvent: event,
+        refundId: refundEntity?.id,
+        refundStatus: refundEntity?.status,
+        paymentId: refundPaymentId,
+        refundAmount: refundEntity?.amount
+      });
+    } else if (event === "refund.failed") {
+      await updatePaymentForRefundWebhook(refundPaymentId, PaymentStatus.FAILED, {
+        webhookEvent: event,
+        refundId: refundEntity?.id,
+        refundStatus: refundEntity?.status,
+        paymentId: refundPaymentId,
+        refundAmount: refundEntity?.amount
+      });
+    } else {
+      logger.info({ event, refundPaymentId }, "Ignored refund lifecycle event");
+    }
+
+    return { ok: true };
+  }
 
   if (!orderId) {
     logger.warn({ event }, "Webhook payload missing order identifier");
@@ -273,12 +430,6 @@ export async function handleRazorpayWebhook(
     }, paymentEntity?.amount);
   } else if (event === "payment.failed") {
     await updatePaymentForWebhook(orderId, PaymentStatus.FAILED, {
-      webhookEvent: event,
-      paymentId: paymentEntity?.id,
-      paymentStatus: paymentEntity?.status
-    });
-  } else if (event === "payment.refunded") {
-    await updatePaymentForWebhook(orderId, PaymentStatus.REFUNDED, {
       webhookEvent: event,
       paymentId: paymentEntity?.id,
       paymentStatus: paymentEntity?.status

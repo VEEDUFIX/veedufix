@@ -19,7 +19,8 @@ export type AuditAction =
   | "catalog.category_created"
   | "catalog.category_updated"
   | "catalog.subcategory_created"
-  | "catalog.subcategory_updated";
+  | "catalog.subcategory_updated"
+  | "tax_summary.exported";
 
 export type AuditTargetType =
   | "worker_profile"
@@ -29,7 +30,8 @@ export type AuditTargetType =
   | "platform_settings"
   | "commission_rule"
   | "catalog_category"
-  | "catalog_subcategory";
+  | "catalog_subcategory"
+  | "tax_summary";
 
 export async function writeAuditLog({
   adminId,

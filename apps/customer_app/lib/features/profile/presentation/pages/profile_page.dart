@@ -162,10 +162,10 @@ class ProfilePage extends ConsumerWidget {
             onTap: () => context.push('/referral'),
           ),
           _ProfileTile(
-            icon: Icons.payment_rounded,
-            title: 'Payments',
-            subtitle: 'Cards, UPI, and payment history',
-            onTap: () => context.push('/wallet'),
+            icon: Icons.home_outlined,
+            title: 'Saved addresses',
+            subtitle: 'Manage delivery and service locations',
+            onTap: () => context.push('/addresses'),
           ),
           _ProfileTile(
             icon: Icons.bookmark_outline_rounded,

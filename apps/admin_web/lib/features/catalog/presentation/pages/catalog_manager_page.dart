@@ -19,6 +19,7 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
   late Future<_CatalogSnapshot> _snapshotFuture;
   final TextEditingController _searchController = TextEditingController();
   String _catalogQuery = '';
+  _CatalogFilter _catalogFilter = _CatalogFilter.all;
 
   @override
   void initState() {
@@ -152,6 +153,48 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
       await _showMessage('Service disabled');
     } catch (error) {
       await _showMessage('Unable to disable service: $error');
+    }
+  }
+
+  Future<void> _bulkUpdateCategories(Iterable<_AdminCategory> categories, {required bool isActive}) async {
+    final items = categories.toList(growable: false);
+    if (items.isEmpty) return;
+    try {
+      for (final category in items) {
+        await _api.updateCategory(category.id, {'isActive': isActive});
+      }
+      await _reload();
+      await _showMessage('${items.length} categories ${isActive ? 'enabled' : 'disabled'}');
+    } catch (error) {
+      await _showMessage('Unable to update categories: $error');
+    }
+  }
+
+  Future<void> _bulkUpdateSubcategories(Iterable<_AdminSubcategory> subcategories, {required bool isActive}) async {
+    final items = subcategories.toList(growable: false);
+    if (items.isEmpty) return;
+    try {
+      for (final subcategory in items) {
+        await _api.updateSubcategory(subcategory.id, {'isActive': isActive});
+      }
+      await _reload();
+      await _showMessage('${items.length} subcategories ${isActive ? 'enabled' : 'disabled'}');
+    } catch (error) {
+      await _showMessage('Unable to update subcategories: $error');
+    }
+  }
+
+  Future<void> _bulkUpdateServices(Iterable<_AdminService> services, {required bool isActive}) async {
+    final items = services.toList(growable: false);
+    if (items.isEmpty) return;
+    try {
+      for (final service in items) {
+        await _api.updateService(service.id, {'isActive': isActive});
+      }
+      await _reload();
+      await _showMessage('${items.length} services ${isActive ? 'enabled' : 'disabled'}');
+    } catch (error) {
+      await _showMessage('Unable to update services: $error');
     }
   }
 
@@ -800,7 +843,7 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
       builder: (dialogContext) {
         return StatefulBuilder(
           builder: (context, setState) {
-    final subcategories = snapshot.subcategoriesForCategory(selectedCategoryId.value);
+            final subcategories = snapshot.subcategoriesForCategory(selectedCategoryId.value);
             if (selectedSubcategoryId.value.isEmpty && subcategories.isNotEmpty) {
               selectedSubcategoryId.value = subcategories.first.id;
             }
@@ -1088,6 +1131,9 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
             builder: (context, snapshot) {
               final loading = snapshot.connectionState == ConnectionState.waiting;
               final data = snapshot.data;
+              final visibleCategories = data == null ? const <_AdminCategory>[] : _filteredCategories(data, _catalogQuery, _catalogFilter);
+              final visibleSubcategories = data == null ? const <_AdminSubcategory>[] : _filteredSubcategories(data, _catalogQuery, _catalogFilter);
+              final visibleServices = data == null ? const <_AdminService>[] : _filteredServices(data, _catalogQuery, _catalogFilter);
 
               return Column(
                 children: [
@@ -1141,6 +1187,20 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
                           onChanged: (value) => setState(() => _catalogQuery = value.trim()),
                         ),
                         const SizedBox(height: 12),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: _CatalogFilter.values
+                              .map(
+                                (filter) => ChoiceChip(
+                                  label: Text(filter.label),
+                                  selected: _catalogFilter == filter,
+                                  onSelected: (_) => setState(() => _catalogFilter = filter),
+                                ),
+                              )
+                              .toList(growable: false),
+                        ),
+                        const SizedBox(height: 12),
                         if (!loading && data != null) _OverviewMetrics(snapshot: data),
                         const SizedBox(height: 18),
                         const TabBar(
@@ -1167,31 +1227,44 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
                                   _CategoriesTab(
                                     snapshot: data,
                                     query: _catalogQuery,
+                                    filter: _catalogFilter,
+                                    visibleCount: visibleCategories.length,
                                     onCreate: _createCategory,
                                     onEdit: _editCategory,
                                     onDisable: _toggleCategory,
                                     onReorder: () => _reorderCategories(data),
+                                    onBulkEnable: () => _bulkUpdateCategories(visibleCategories, isActive: true),
+                                    onBulkDisable: () => _bulkUpdateCategories(visibleCategories, isActive: false),
                                   ),
                                   _SubcategoriesTab(
                                     snapshot: data,
                                     query: _catalogQuery,
+                                    filter: _catalogFilter,
+                                    visibleCount: visibleSubcategories.length,
                                     onCreate: () => _createSubcategory(data),
                                     onEdit: (subcategory) => _editSubcategory(data, subcategory),
                                     onDisable: _toggleSubcategory,
                                     onReorder: () => _reorderSubcategories(data),
+                                    onBulkEnable: () => _bulkUpdateSubcategories(visibleSubcategories, isActive: true),
+                                    onBulkDisable: () => _bulkUpdateSubcategories(visibleSubcategories, isActive: false),
                                   ),
                                   _ServicesTab(
                                     snapshot: data,
                                     query: _catalogQuery,
+                                    filter: _catalogFilter,
+                                    visibleCount: visibleServices.length,
                                     onCreate: () => _createService(data),
                                     onEdit: (service) => _editService(data, service),
                                     onDisable: _toggleService,
                                     onPricingRule: _addPricingRule,
                                     onReorder: () => _reorderServices(data),
+                                    onBulkEnable: () => _bulkUpdateServices(visibleServices, isActive: true),
+                                    onBulkDisable: () => _bulkUpdateServices(visibleServices, isActive: false),
                                   ),
                                   _PricingTab(
                                     snapshot: data,
                                     query: _catalogQuery,
+                                    filter: _catalogFilter,
                                     onPricingRule: _addPricingRule,
                                   ),
                                   _ImportExportTab(
@@ -1347,22 +1420,118 @@ bool _matchesQuery(Iterable<String> fields, String query) {
   return fields.any((field) => field.toLowerCase().contains(needle));
 }
 
+bool _matchesCatalogFilter({
+  required bool isActive,
+  required bool featured,
+  required bool popular,
+  required _CatalogFilter filter,
+}) {
+  return switch (filter) {
+    _CatalogFilter.all => true,
+    _CatalogFilter.active => isActive,
+    _CatalogFilter.inactive => !isActive,
+    _CatalogFilter.featured => featured,
+    _CatalogFilter.popular => popular,
+  };
+}
+
+List<_AdminCategory> _filteredCategories(_CatalogSnapshot snapshot, String query, _CatalogFilter filter) {
+  return snapshot.categories.where((category) {
+    return _matchesCatalogFilter(
+          isActive: category.isActive,
+          featured: category.featured,
+          popular: category.popular,
+          filter: filter,
+        ) &&
+        _matchesQuery([
+          category.name,
+          category.slug,
+          category.description ?? '',
+          ...category.subcategories.expand((subcategory) => [
+                subcategory.name,
+                subcategory.slug,
+                subcategory.description ?? '',
+                ...subcategory.services.map((service) => service.name),
+              ]),
+        ], query);
+  }).toList(growable: false);
+}
+
+List<_AdminSubcategory> _filteredSubcategories(_CatalogSnapshot snapshot, String query, _CatalogFilter filter) {
+  return snapshot.subcategories.where((subcategory) {
+    return _matchesCatalogFilter(
+          isActive: subcategory.isActive,
+          featured: false,
+          popular: false,
+          filter: filter,
+        ) &&
+        _matchesQuery([
+          subcategory.name,
+          subcategory.slug,
+          subcategory.description ?? '',
+          snapshot.categoryById(subcategory.categoryId)?.name ?? '',
+        ], query);
+  }).toList(growable: false);
+}
+
+List<_AdminService> _filteredServices(_CatalogSnapshot snapshot, String query, _CatalogFilter filter) {
+  return snapshot.services.where((service) {
+    final category = snapshot.categoryById(service.categoryId);
+    final subcategory = snapshot.subcategoryById(service.subcategoryId);
+    return _matchesCatalogFilter(
+          isActive: service.isActive,
+          featured: service.featured,
+          popular: service.popular,
+          filter: filter,
+        ) &&
+        _matchesQuery([
+          service.name,
+          service.slug,
+          service.code ?? '',
+          service.description ?? '',
+          service.shortDescription ?? '',
+          category?.name ?? '',
+          subcategory?.name ?? '',
+        ], query);
+  }).toList(growable: false);
+}
+
+enum _CatalogFilter {
+  all('All'),
+  active('Active'),
+  inactive('Inactive'),
+  featured('Featured'),
+  popular('Popular');
+
+  const _CatalogFilter(this.label);
+
+  final String label;
+}
+
 class _CategoriesTab extends StatelessWidget {
   const _CategoriesTab({
     required this.snapshot,
     required this.query,
+    required this.filter,
+    required this.visibleCount,
     required this.onCreate,
     required this.onEdit,
     required this.onDisable,
     required this.onReorder,
+    required this.onBulkEnable,
+    required this.onBulkDisable,
   });
 
   final _CatalogSnapshot snapshot;
   final String query;
+  final _CatalogFilter filter;
+  final int visibleCount;
   final VoidCallback onCreate;
   final ValueChanged<_AdminCategory> onEdit;
   final ValueChanged<_AdminCategory> onDisable;
   final VoidCallback onReorder;
+  final VoidCallback onBulkEnable;
+  final VoidCallback onBulkDisable;
 
   @override
   Widget build(BuildContext context) {
@@ -1403,20 +1572,36 @@ class _CategoriesTab extends StatelessWidget {
               onPressed: onReorder,
               child: const Text('Reorder'),
             ),
+            OutlinedButton(
+              onPressed: visibleCount == 0 ? null : onBulkEnable,
+              child: Text('Enable filtered ($visibleCount)'),
+            ),
+            OutlinedButton(
+              onPressed: visibleCount == 0 ? null : onBulkDisable,
+              child: Text('Disable filtered ($visibleCount)'),
+            ),
           ],
         ),
         const SizedBox(height: 16),
-        ...snapshot.categories.where((category) => _matchesQuery([
-              category.name,
-              category.slug,
-              category.description ?? '',
-              ...category.subcategories.expand((subcategory) => [
-                    subcategory.name,
-                    subcategory.slug,
-                    subcategory.description ?? '',
-                    ...subcategory.services.map((service) => service.name),
-                  ]),
-            ], query)).map(
+        ...snapshot.categories.where((category) {
+          return _matchesCatalogFilter(
+                isActive: category.isActive,
+                featured: category.featured,
+                popular: category.popular,
+                filter: filter,
+              ) &&
+              _matchesQuery([
+                category.name,
+                category.slug,
+                category.description ?? '',
+                ...category.subcategories.expand((subcategory) => [
+                      subcategory.name,
+                      subcategory.slug,
+                      subcategory.description ?? '',
+                      ...subcategory.services.map((service) => service.name),
+                    ]),
+              ], query);
+        }).map(
           (category) => _CatalogCard(
             title: category.name,
             subtitle:
@@ -1437,18 +1622,26 @@ class _SubcategoriesTab extends StatelessWidget {
   const _SubcategoriesTab({
     required this.snapshot,
     required this.query,
+    required this.filter,
+    required this.visibleCount,
     required this.onCreate,
     required this.onEdit,
     required this.onDisable,
     required this.onReorder,
+    required this.onBulkEnable,
+    required this.onBulkDisable,
   });
 
   final _CatalogSnapshot snapshot;
   final String query;
+  final _CatalogFilter filter;
+  final int visibleCount;
   final VoidCallback onCreate;
   final ValueChanged<_AdminSubcategory> onEdit;
   final ValueChanged<_AdminSubcategory> onDisable;
   final VoidCallback onReorder;
+  final VoidCallback onBulkEnable;
+  final VoidCallback onBulkDisable;
 
   @override
   Widget build(BuildContext context) {
@@ -1487,13 +1680,36 @@ class _SubcategoriesTab extends StatelessWidget {
           icon: const Icon(Icons.swap_vert_rounded),
           label: const Text('Reorder subcategories'),
         ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 10,
+          runSpacing: 10,
+          children: [
+            OutlinedButton(
+              onPressed: visibleCount == 0 ? null : onBulkEnable,
+              child: Text('Enable filtered ($visibleCount)'),
+            ),
+            OutlinedButton(
+              onPressed: visibleCount == 0 ? null : onBulkDisable,
+              child: Text('Disable filtered ($visibleCount)'),
+            ),
+          ],
+        ),
         const SizedBox(height: 16),
-        ...snapshot.subcategories.where((subcategory) => _matchesQuery([
-              subcategory.name,
-              subcategory.slug,
-              subcategory.description ?? '',
-              snapshot.categoryById(subcategory.categoryId)?.name ?? '',
-            ], query)).map(
+        ...snapshot.subcategories.where((subcategory) {
+          return _matchesCatalogFilter(
+                isActive: subcategory.isActive,
+                featured: false,
+                popular: false,
+                filter: filter,
+              ) &&
+              _matchesQuery([
+                subcategory.name,
+                subcategory.slug,
+                subcategory.description ?? '',
+                snapshot.categoryById(subcategory.categoryId)?.name ?? '',
+              ], query);
+        }).map(
           (subcategory) {
             final category = snapshot.categoryById(subcategory.categoryId);
             return _CatalogCard(
@@ -1517,20 +1733,28 @@ class _ServicesTab extends StatelessWidget {
   const _ServicesTab({
     required this.snapshot,
     required this.query,
+    required this.filter,
+    required this.visibleCount,
     required this.onCreate,
     required this.onEdit,
     required this.onDisable,
     required this.onPricingRule,
     required this.onReorder,
+    required this.onBulkEnable,
+    required this.onBulkDisable,
   });
 
   final _CatalogSnapshot snapshot;
   final String query;
+  final _CatalogFilter filter;
+  final int visibleCount;
   final VoidCallback onCreate;
   final ValueChanged<_AdminService> onEdit;
   final ValueChanged<_AdminService> onDisable;
   final ValueChanged<_AdminService> onPricingRule;
   final VoidCallback onReorder;
+  final VoidCallback onBulkEnable;
+  final VoidCallback onBulkDisable;
 
   @override
   Widget build(BuildContext context) {
@@ -1569,19 +1793,40 @@ class _ServicesTab extends StatelessWidget {
           icon: const Icon(Icons.swap_vert_rounded),
           label: const Text('Reorder services'),
         ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 10,
+          runSpacing: 10,
+          children: [
+            OutlinedButton(
+              onPressed: visibleCount == 0 ? null : onBulkEnable,
+              child: Text('Enable filtered ($visibleCount)'),
+            ),
+            OutlinedButton(
+              onPressed: visibleCount == 0 ? null : onBulkDisable,
+              child: Text('Disable filtered ($visibleCount)'),
+            ),
+          ],
+        ),
         const SizedBox(height: 16),
         ...snapshot.services.where((service) {
           final category = snapshot.categoryById(service.categoryId);
           final subcategory = snapshot.subcategoryById(service.subcategoryId);
-          return _matchesQuery([
-            service.name,
-            service.slug,
-            service.code ?? '',
-            service.description ?? '',
-            service.shortDescription ?? '',
-            category?.name ?? '',
-            subcategory?.name ?? '',
-          ], query);
+          return _matchesCatalogFilter(
+                isActive: service.isActive,
+                featured: service.featured,
+                popular: service.popular,
+                filter: filter,
+              ) &&
+              _matchesQuery([
+                service.name,
+                service.slug,
+                service.code ?? '',
+                service.description ?? '',
+                service.shortDescription ?? '',
+                category?.name ?? '',
+                subcategory?.name ?? '',
+              ], query);
         }).map(
           (service) {
             final category = snapshot.categoryById(service.categoryId);
@@ -1627,11 +1872,13 @@ class _PricingTab extends StatelessWidget {
   const _PricingTab({
     required this.snapshot,
     required this.query,
+    required this.filter,
     required this.onPricingRule,
   });
 
   final _CatalogSnapshot snapshot;
   final String query;
+  final _CatalogFilter filter;
   final ValueChanged<_AdminService> onPricingRule;
 
   @override
@@ -1661,11 +1908,19 @@ class _PricingTab extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 12),
-        ...snapshot.services.where((service) => _matchesQuery([
-              service.name,
-              service.slug,
-              snapshot.subcategoryById(service.subcategoryId)?.name ?? '',
-            ], query)).map(
+        ...snapshot.services.where((service) {
+          return _matchesCatalogFilter(
+                isActive: service.isActive,
+                featured: service.featured,
+                popular: service.popular,
+                filter: filter,
+              ) &&
+              _matchesQuery([
+                service.name,
+                service.slug,
+                snapshot.subcategoryById(service.subcategoryId)?.name ?? '',
+              ], query);
+        }).map(
           (service) => _CatalogCard(
             title: service.name,
             subtitle:
@@ -1909,6 +2164,127 @@ class _CategoryDetailPageState extends ConsumerState<CategoryDetailPage> {
     await _future;
   }
 
+  Future<void> _showMessage(String message) async {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  Future<Map<String, dynamic>?> _showCategoryEditor(_AdminCategory existing) {
+    final formKey = GlobalKey<FormState>();
+    final nameController = TextEditingController(text: existing.name);
+    final slugController = TextEditingController(text: existing.slug);
+    final descriptionController = TextEditingController(text: existing.description ?? '');
+    final sortOrderController = TextEditingController(text: existing.sortOrder.toString());
+    var featured = existing.featured;
+    var popular = existing.popular;
+    var isActive = existing.isActive;
+
+    return showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              title: Text('Edit ${existing.name}'),
+              content: Form(
+                key: formKey,
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      TextFormField(
+                        controller: nameController,
+                        decoration: const InputDecoration(labelText: 'Name'),
+                        validator: (value) => (value ?? '').trim().length < 2 ? 'Enter a category name' : null,
+                      ),
+                      TextFormField(
+                        controller: slugController,
+                        decoration: const InputDecoration(labelText: 'Slug'),
+                      ),
+                      TextFormField(
+                        controller: descriptionController,
+                        decoration: const InputDecoration(labelText: 'Description'),
+                        maxLines: 3,
+                      ),
+                      TextFormField(
+                        controller: sortOrderController,
+                        decoration: const InputDecoration(labelText: 'Sort order'),
+                        keyboardType: TextInputType.number,
+                      ),
+                      SwitchListTile(
+                        value: featured,
+                        onChanged: (value) => setState(() => featured = value),
+                        title: const Text('Featured'),
+                      ),
+                      SwitchListTile(
+                        value: popular,
+                        onChanged: (value) => setState(() => popular = value),
+                        title: const Text('Popular'),
+                      ),
+                      SwitchListTile(
+                        value: isActive,
+                        onChanged: (value) => setState(() => isActive = value),
+                        title: const Text('Active'),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(),
+                  child: const Text('Cancel'),
+                ),
+                FilledButton(
+                  onPressed: () {
+                    if (!formKey.currentState!.validate()) return;
+                    Navigator.of(dialogContext).pop({
+                      'name': nameController.text.trim(),
+                      'slug': slugController.text.trim().isEmpty ? _slugify(nameController.text) : slugController.text.trim(),
+                      'description': descriptionController.text.trim().isEmpty ? null : descriptionController.text.trim(),
+                      'sortOrder': int.tryParse(sortOrderController.text.trim()) ?? 0,
+                      'featured': featured,
+                      'popular': popular,
+                      'isActive': isActive,
+                    });
+                  },
+                  child: const Text('Save'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    ).whenComplete(() {
+      nameController.dispose();
+      slugController.dispose();
+      descriptionController.dispose();
+      sortOrderController.dispose();
+    });
+  }
+
+  Future<void> _editCategory(_AdminCategory category) async {
+    final payload = await _showCategoryEditor(category);
+    if (payload == null) return;
+    try {
+      await _api.updateCategory(category.id, payload);
+      await _reload();
+      await _showMessage('Category updated');
+    } catch (error) {
+      await _showMessage('Unable to update category: $error');
+    }
+  }
+
+  Future<void> _toggleCategory(_AdminCategory category) async {
+    try {
+      await _api.updateCategory(category.id, {'isActive': !category.isActive});
+      await _reload();
+      await _showMessage(category.isActive ? 'Category disabled' : 'Category enabled');
+    } catch (error) {
+      await _showMessage('Unable to update category status: $error');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
@@ -1922,9 +2298,7 @@ class _CategoryDetailPageState extends ConsumerState<CategoryDetailPage> {
           icon: const Icon(Icons.arrow_back_ios_new_rounded),
           onPressed: () => context.pop(),
         ),
-        actions: [
-          IconButton(onPressed: _reload, icon: const Icon(Icons.refresh_rounded)),
-        ],
+        actions: [IconButton(onPressed: _reload, icon: const Icon(Icons.refresh_rounded))],
       ),
       body: FutureBuilder<({_CatalogSnapshot snapshot, _AdminCategory category})?>(
         future: _future,
@@ -1987,6 +2361,23 @@ class _CategoryDetailPageState extends ConsumerState<CategoryDetailPage> {
                     ),
                   ),
                   if (!category.isActive) const _DetailBadge(label: 'Disabled'),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Wrap(
+                spacing: 12,
+                runSpacing: 12,
+                children: [
+                  FilledButton.icon(
+                    onPressed: () => _editCategory(category),
+                    icon: const Icon(Icons.edit_rounded),
+                    label: const Text('Edit category'),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: () => _toggleCategory(category),
+                    icon: Icon(category.isActive ? Icons.visibility_off_rounded : Icons.visibility_rounded),
+                    label: Text(category.isActive ? 'Disable' : 'Enable'),
+                  ),
                 ],
               ),
               const SizedBox(height: 18),
@@ -2075,6 +2466,138 @@ class _SubcategoryDetailPageState extends ConsumerState<SubcategoryDetailPage> {
     await _future;
   }
 
+  Future<void> _showMessage(String message) async {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  Future<Map<String, dynamic>?> _showSubcategoryEditor(_CatalogSnapshot snapshot, _AdminSubcategory existing) {
+    final formKey = GlobalKey<FormState>();
+    final categoryIdController = ValueNotifier<String>(existing.categoryId);
+    final nameController = TextEditingController(text: existing.name);
+    final slugController = TextEditingController(text: existing.slug);
+    final descriptionController = TextEditingController(text: existing.description ?? '');
+    final basePriceController = TextEditingController(text: existing.basePrice.toStringAsFixed(0));
+    final sortOrderController = TextEditingController(text: existing.sortOrder.toString());
+    var isActive = existing.isActive;
+
+    return showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              title: Text('Edit ${existing.name}'),
+              content: Form(
+                key: formKey,
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      DropdownButtonFormField<String>(
+                        initialValue: categoryIdController.value.isEmpty ? null : categoryIdController.value,
+                        decoration: const InputDecoration(labelText: 'Category'),
+                        items: snapshot.categories
+                            .map(
+                              (category) => DropdownMenuItem(
+                                value: category.id,
+                                child: Text(category.name),
+                              ),
+                            )
+                            .toList(growable: false),
+                        onChanged: (value) => setState(() => categoryIdController.value = value ?? ''),
+                        validator: (value) => (value ?? '').isEmpty ? 'Select a category' : null,
+                      ),
+                      TextFormField(
+                        controller: nameController,
+                        decoration: const InputDecoration(labelText: 'Name'),
+                        validator: (value) => (value ?? '').trim().length < 2 ? 'Enter a subcategory name' : null,
+                      ),
+                      TextFormField(
+                        controller: slugController,
+                        decoration: const InputDecoration(labelText: 'Slug'),
+                      ),
+                      TextFormField(
+                        controller: descriptionController,
+                        decoration: const InputDecoration(labelText: 'Description'),
+                        maxLines: 3,
+                      ),
+                      TextFormField(
+                        controller: basePriceController,
+                        decoration: const InputDecoration(labelText: 'Base price'),
+                        keyboardType: TextInputType.number,
+                      ),
+                      TextFormField(
+                        controller: sortOrderController,
+                        decoration: const InputDecoration(labelText: 'Sort order'),
+                        keyboardType: TextInputType.number,
+                      ),
+                      SwitchListTile(
+                        value: isActive,
+                        onChanged: (value) => setState(() => isActive = value),
+                        title: const Text('Active'),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(),
+                  child: const Text('Cancel'),
+                ),
+                FilledButton(
+                  onPressed: () {
+                    if (!formKey.currentState!.validate()) return;
+                    Navigator.of(dialogContext).pop({
+                      'categoryId': categoryIdController.value,
+                      'name': nameController.text.trim(),
+                      'slug': slugController.text.trim().isEmpty ? _slugify(nameController.text) : slugController.text.trim(),
+                      'description': descriptionController.text.trim().isEmpty ? null : descriptionController.text.trim(),
+                      'basePrice': double.tryParse(basePriceController.text.trim()) ?? 0,
+                      'sortOrder': int.tryParse(sortOrderController.text.trim()) ?? 0,
+                      'isActive': isActive,
+                    });
+                  },
+                  child: const Text('Save'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    ).whenComplete(() {
+      categoryIdController.dispose();
+      nameController.dispose();
+      slugController.dispose();
+      descriptionController.dispose();
+      basePriceController.dispose();
+      sortOrderController.dispose();
+    });
+  }
+
+  Future<void> _editSubcategory(_CatalogSnapshot snapshot, _AdminSubcategory subcategory) async {
+    final payload = await _showSubcategoryEditor(snapshot, subcategory);
+    if (payload == null) return;
+    try {
+      await _api.updateSubcategory(subcategory.id, payload);
+      await _reload();
+      await _showMessage('Subcategory updated');
+    } catch (error) {
+      await _showMessage('Unable to update subcategory: $error');
+    }
+  }
+
+  Future<void> _toggleSubcategory(_AdminSubcategory subcategory) async {
+    try {
+      await _api.updateSubcategory(subcategory.id, {'isActive': !subcategory.isActive});
+      await _reload();
+      await _showMessage(subcategory.isActive ? 'Subcategory disabled' : 'Subcategory enabled');
+    } catch (error) {
+      await _showMessage('Unable to update subcategory status: $error');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
@@ -2154,6 +2677,23 @@ class _SubcategoryDetailPageState extends ConsumerState<SubcategoryDetailPage> {
                     ),
                   ),
                   if (!subcategory.isActive) const _DetailBadge(label: 'Disabled'),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Wrap(
+                spacing: 12,
+                runSpacing: 12,
+                children: [
+                  FilledButton.icon(
+                    onPressed: () => _editSubcategory(data.snapshot, subcategory),
+                    icon: const Icon(Icons.edit_rounded),
+                    label: const Text('Edit subcategory'),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: () => _toggleSubcategory(subcategory),
+                    icon: Icon(subcategory.isActive ? Icons.visibility_off_rounded : Icons.visibility_rounded),
+                    label: Text(subcategory.isActive ? 'Disable' : 'Enable'),
+                  ),
                 ],
               ),
               const SizedBox(height: 18),
@@ -2241,6 +2781,239 @@ class _ServiceDetailPageState extends ConsumerState<ServiceDetailPage> {
       _future = _load();
     });
     await _future;
+  }
+
+  Future<void> _showMessage(String message) async {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  Future<Map<String, dynamic>?> _showServiceEditor(_CatalogSnapshot snapshot, _AdminService existing) {
+    final formKey = GlobalKey<FormState>();
+    final selectedCategoryId = ValueNotifier<String>(existing.categoryId);
+    final selectedSubcategoryId = ValueNotifier<String>(existing.subcategoryId);
+    final nameController = TextEditingController(text: existing.name);
+    final slugController = TextEditingController(text: existing.slug);
+    final codeController = TextEditingController(text: existing.code ?? '');
+    final descriptionController = TextEditingController(text: existing.description ?? '');
+    final shortDescriptionController = TextEditingController(text: existing.shortDescription ?? '');
+    final startingPriceController = TextEditingController(text: existing.startingPrice.toStringAsFixed(0));
+    final gstRateController = TextEditingController(text: existing.gstRate.toStringAsFixed(2));
+    final sacCodeController = TextEditingController(text: existing.sacCode);
+    final durationController = TextEditingController(text: existing.estimatedDurationMins.toString());
+    final warrantyController = TextEditingController(text: existing.warrantyDays.toString());
+    final iconController = TextEditingController(text: existing.iconUrl ?? '');
+    var featured = existing.featured;
+    var popular = existing.popular;
+    var emergency = existing.emergencyAvailable;
+    var homeVisit = existing.homeVisit;
+    var isActive = existing.isActive;
+
+    return showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setState) {
+            final subcategories = snapshot.subcategoriesForCategory(selectedCategoryId.value);
+            if (subcategories.isNotEmpty && !subcategories.any((item) => item.id == selectedSubcategoryId.value)) {
+              selectedSubcategoryId.value = subcategories.first.id;
+            }
+
+            return AlertDialog(
+              title: Text('Edit ${existing.name}'),
+              content: Form(
+                key: formKey,
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      DropdownButtonFormField<String>(
+                        initialValue: selectedCategoryId.value.isEmpty ? null : selectedCategoryId.value,
+                        decoration: const InputDecoration(labelText: 'Category'),
+                        items: snapshot.categories
+                            .map(
+                              (category) => DropdownMenuItem(
+                                value: category.id,
+                                child: Text(category.name),
+                              ),
+                            )
+                            .toList(growable: false),
+                        onChanged: (value) {
+                          setState(() {
+                            selectedCategoryId.value = value ?? '';
+                            final next = snapshot.subcategoriesForCategory(selectedCategoryId.value);
+                            selectedSubcategoryId.value = next.firstOrNull?.id ?? '';
+                          });
+                        },
+                        validator: (value) => (value ?? '').isEmpty ? 'Select a category' : null,
+                      ),
+                      DropdownButtonFormField<String>(
+                        initialValue: selectedSubcategoryId.value.isEmpty ? null : selectedSubcategoryId.value,
+                        decoration: const InputDecoration(labelText: 'Subcategory'),
+                        items: subcategories
+                            .map(
+                              (subcategory) => DropdownMenuItem(
+                                value: subcategory.id,
+                                child: Text(subcategory.name),
+                              ),
+                            )
+                            .toList(growable: false),
+                        onChanged: (value) => setState(() => selectedSubcategoryId.value = value ?? ''),
+                        validator: (value) => (value ?? '').isEmpty ? 'Select a subcategory' : null,
+                      ),
+                      TextFormField(
+                        controller: nameController,
+                        decoration: const InputDecoration(labelText: 'Name'),
+                        validator: (value) => (value ?? '').trim().length < 2 ? 'Enter a service name' : null,
+                      ),
+                      TextFormField(
+                        controller: slugController,
+                        decoration: const InputDecoration(labelText: 'Slug'),
+                      ),
+                      TextFormField(
+                        controller: codeController,
+                        decoration: const InputDecoration(labelText: 'Code'),
+                      ),
+                      TextFormField(
+                        controller: descriptionController,
+                        decoration: const InputDecoration(labelText: 'Description'),
+                        maxLines: 3,
+                      ),
+                      TextFormField(
+                        controller: shortDescriptionController,
+                        decoration: const InputDecoration(labelText: 'Short description'),
+                        maxLines: 2,
+                      ),
+                      TextFormField(
+                        controller: startingPriceController,
+                        decoration: const InputDecoration(labelText: 'Starting price'),
+                        keyboardType: TextInputType.number,
+                      ),
+                      TextFormField(
+                        controller: gstRateController,
+                        decoration: const InputDecoration(labelText: 'GST rate'),
+                        keyboardType: TextInputType.number,
+                      ),
+                      TextFormField(
+                        controller: sacCodeController,
+                        decoration: const InputDecoration(labelText: 'SAC code'),
+                      ),
+                      TextFormField(
+                        controller: durationController,
+                        decoration: const InputDecoration(labelText: 'Duration (mins)'),
+                        keyboardType: TextInputType.number,
+                      ),
+                      TextFormField(
+                        controller: warrantyController,
+                        decoration: const InputDecoration(labelText: 'Warranty days'),
+                        keyboardType: TextInputType.number,
+                      ),
+                      TextFormField(
+                        controller: iconController,
+                        decoration: const InputDecoration(labelText: 'Icon URL'),
+                      ),
+                      SwitchListTile(
+                        value: featured,
+                        onChanged: (value) => setState(() => featured = value),
+                        title: const Text('Featured'),
+                      ),
+                      SwitchListTile(
+                        value: popular,
+                        onChanged: (value) => setState(() => popular = value),
+                        title: const Text('Popular'),
+                      ),
+                      SwitchListTile(
+                        value: emergency,
+                        onChanged: (value) => setState(() => emergency = value),
+                        title: const Text('Emergency available'),
+                      ),
+                      SwitchListTile(
+                        value: homeVisit,
+                        onChanged: (value) => setState(() => homeVisit = value),
+                        title: const Text('Home visit'),
+                      ),
+                      SwitchListTile(
+                        value: isActive,
+                        onChanged: (value) => setState(() => isActive = value),
+                        title: const Text('Active'),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(),
+                  child: const Text('Cancel'),
+                ),
+                FilledButton(
+                  onPressed: () {
+                    if (!formKey.currentState!.validate()) return;
+                    Navigator.of(dialogContext).pop({
+                      'categoryId': selectedCategoryId.value,
+                      'subcategoryId': selectedSubcategoryId.value,
+                      'name': nameController.text.trim(),
+                      'slug': slugController.text.trim().isEmpty ? _slugify(nameController.text) : slugController.text.trim(),
+                      'code': codeController.text.trim().isEmpty ? null : codeController.text.trim(),
+                      'description': descriptionController.text.trim().isEmpty ? null : descriptionController.text.trim(),
+                      'shortDescription': shortDescriptionController.text.trim().isEmpty ? null : shortDescriptionController.text.trim(),
+                      'startingPrice': double.tryParse(startingPriceController.text.trim()) ?? 0,
+                      'gstRate': double.tryParse(gstRateController.text.trim()) ?? 0,
+                      'sacCode': sacCodeController.text.trim().isEmpty ? null : sacCodeController.text.trim(),
+                      'estimatedDurationMins': int.tryParse(durationController.text.trim()) ?? 0,
+                      'warrantyDays': int.tryParse(warrantyController.text.trim()) ?? 0,
+                      'iconUrl': iconController.text.trim().isEmpty ? null : iconController.text.trim(),
+                      'featured': featured,
+                      'popular': popular,
+                      'emergencyAvailable': emergency,
+                      'homeVisit': homeVisit,
+                      'isActive': isActive,
+                    });
+                  },
+                  child: const Text('Save'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    ).whenComplete(() {
+      selectedCategoryId.dispose();
+      selectedSubcategoryId.dispose();
+      nameController.dispose();
+      slugController.dispose();
+      codeController.dispose();
+      descriptionController.dispose();
+      shortDescriptionController.dispose();
+      startingPriceController.dispose();
+      gstRateController.dispose();
+      sacCodeController.dispose();
+      durationController.dispose();
+      warrantyController.dispose();
+      iconController.dispose();
+    });
+  }
+
+  Future<void> _editService(_CatalogSnapshot snapshot, _AdminService service) async {
+    final payload = await _showServiceEditor(snapshot, service);
+    if (payload == null) return;
+    try {
+      await _api.updateService(service.id, payload);
+      await _reload();
+      await _showMessage('Service updated');
+    } catch (error) {
+      await _showMessage('Unable to update service: $error');
+    }
+  }
+
+  Future<void> _toggleService(_AdminService service) async {
+    try {
+      await _api.updateService(service.id, {'isActive': !service.isActive});
+      await _reload();
+      await _showMessage(service.isActive ? 'Service disabled' : 'Service enabled');
+    } catch (error) {
+      await _showMessage('Unable to update service status: $error');
+    }
   }
 
   @override
@@ -2338,6 +3111,23 @@ class _ServiceDetailPageState extends ConsumerState<ServiceDetailPage> {
                   _DetailChip(label: 'GST ${service.gstRate.toStringAsFixed(2)}%'),
                   _DetailChip(label: 'SAC ${service.sacCode}'),
                   _DetailChip(label: service.isActive ? 'Active' : 'Disabled'),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Wrap(
+                spacing: 12,
+                runSpacing: 12,
+                children: [
+                  FilledButton.icon(
+                    onPressed: () => _editService(data.snapshot, service),
+                    icon: const Icon(Icons.edit_rounded),
+                    label: const Text('Edit service'),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: () => _toggleService(service),
+                    icon: Icon(service.isActive ? Icons.visibility_off_rounded : Icons.visibility_rounded),
+                    label: Text(service.isActive ? 'Disable' : 'Enable'),
+                  ),
                 ],
               ),
               const SizedBox(height: 18),

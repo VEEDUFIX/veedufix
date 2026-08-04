@@ -10,6 +10,11 @@ import '../providers/earnings_provider.dart';
 import '../../../../core/widgets/liquid_refresh.dart';
 import '../../../../core/widgets/metallic_card.dart';
 
+final workerPayoutProfileProvider = FutureProvider.autoDispose<Map<String, dynamic>>((ref) async {
+  final api = ref.watch(apiClientProvider);
+  return api.get('/users/me');
+});
+
 class EarningsPage extends ConsumerStatefulWidget {
   const EarningsPage({super.key});
 
@@ -130,6 +135,7 @@ class _EarningsPageState extends ConsumerState<EarningsPage> {
 
   @override
   Widget build(BuildContext context) {
+    final payoutProfileAsync = ref.watch(workerPayoutProfileProvider);
     if (_loadingInitial && _transactions.isEmpty) {
       return Scaffold(
         body: LiquidRefresh(
@@ -172,6 +178,21 @@ class _EarningsPageState extends ConsumerState<EarningsPage> {
     if (summary == null) {
       return const Scaffold(body: SizedBox.shrink());
     }
+    final payoutProfile = payoutProfileAsync.valueOrNull ?? const <String, dynamic>{};
+    final userMap = (payoutProfile['user'] as Map<String, dynamic>?) ?? const <String, dynamic>{};
+    final workerProfile = (userMap['workerProfile'] as Map<String, dynamic>?) ?? const <String, dynamic>{};
+    final hasUpi = _nonEmpty(workerProfile['upiId']) != null;
+    final hasBank = _nonEmpty(workerProfile['bankAccountNumber']) != null &&
+        _nonEmpty(workerProfile['bankIfsc']) != null;
+    final payoutSetupLabel = hasUpi || hasBank ? 'Ready for payout' : 'Add UPI or bank details';
+    final payoutSetupSubtitle = hasUpi
+        ? 'UPI is set for RazorpayX payouts.'
+        : hasBank
+            ? 'Bank transfer details are ready for RazorpayX payouts.'
+            : 'Complete onboarding to enable worker payouts.';
+    final latestStatus = _transactions.isNotEmpty ? _transactions.first.status : 'pending';
+    final recentPayouts = _transactions.where((entry) => entry.status == 'success' || entry.status == 'processing').take(4).toList(growable: false);
+    final recentFailures = _transactions.where((entry) => entry.status == 'failed').take(2).toList(growable: false);
 
     return Scaffold(
       body: LiquidRefresh(
@@ -239,6 +260,182 @@ class _EarningsPageState extends ConsumerState<EarningsPage> {
                       icon: Icons.payments_rounded,
                       accentColor: const Color(0xFF38BDF8),
                     ),
+                    const SizedBox(height: 18),
+                    const PremiumSectionHeader(
+                      title: 'Payout setup',
+                      subtitle: 'Make sure the worker can receive automatic payouts.',
+                    ),
+                    const SizedBox(height: 12),
+                    PremiumGlassCard(
+                      child: Padding(
+                        padding: const EdgeInsets.all(18),
+                        child: Row(
+                          children: [
+                            Container(
+                              width: 52,
+                              height: 52,
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF10B981).withValues(alpha: 0.12),
+                                borderRadius: BorderRadius.circular(16),
+                              ),
+                              child: Icon(
+                                hasUpi || hasBank ? Icons.verified_rounded : Icons.warning_rounded,
+                                color: hasUpi || hasBank ? const Color(0xFF10B981) : const Color(0xFFF59E0B),
+                              ),
+                            ),
+                            const SizedBox(width: 14),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    payoutSetupLabel,
+                                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                          fontWeight: FontWeight.w800,
+                                        ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    payoutSetupSubtitle,
+                                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                        ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _MiniMetric(
+                            title: 'Payout ready',
+                            value: hasUpi || hasBank ? 'Yes' : 'No',
+                            icon: Icons.account_balance_wallet_rounded,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: _MiniMetric(
+                            title: 'Latest status',
+                            value: _formatStatusLabel(latestStatus),
+                            icon: Icons.history_rounded,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 18),
+                    const PremiumSectionHeader(
+                      title: 'Recent payouts',
+                      subtitle: 'Track the most recent settlements and payout attempts.',
+                    ),
+                    const SizedBox(height: 12),
+                    PremiumGlassCard(
+                      child: Padding(
+                        padding: const EdgeInsets.all(18),
+                        child: recentPayouts.isEmpty
+                            ? Text(
+                                'No successful or processing payouts yet.',
+                                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                    ),
+                              )
+                            : Column(
+                                children: recentPayouts.map((entry) {
+                                  final accent = entry.status == 'success'
+                                      ? const Color(0xFF10B981)
+                                      : const Color(0xFFF59E0B);
+                                  return Padding(
+                                    padding: const EdgeInsets.only(bottom: 12),
+                                    child: TapScale(
+                                      onTap: () => _showTransactionDetails(context, entry),
+                                      child: Container(
+                                        padding: const EdgeInsets.all(14),
+                                        decoration: BoxDecoration(
+                                          color: Theme.of(context).colorScheme.surface,
+                                          borderRadius: BorderRadius.circular(16),
+                                        ),
+                                        child: Row(
+                                          children: [
+                                            Container(
+                                              height: 42,
+                                              width: 42,
+                                              decoration: BoxDecoration(
+                                                color: accent.withValues(alpha: 0.12),
+                                                borderRadius: BorderRadius.circular(14),
+                                              ),
+                                              child: Icon(
+                                                entry.status == 'success'
+                                                    ? Icons.check_circle_outline_rounded
+                                                    : Icons.schedule_rounded,
+                                                color: accent,
+                                                size: 20,
+                                              ),
+                                            ),
+                                            const SizedBox(width: 12),
+                                            Expanded(
+                                              child: Column(
+                                                crossAxisAlignment: CrossAxisAlignment.start,
+                                                children: [
+                                                  Text(
+                                                    entry.bookingCode?.isNotEmpty == true
+                                                        ? 'Booking ${entry.bookingCode}'
+                                                        : entry.serviceName,
+                                                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                                                          fontWeight: FontWeight.w800,
+                                                        ),
+                                                  ),
+                                                  const SizedBox(height: 4),
+                                                  Text(
+                                                    '${_formatMoney(entry.amount)} · ${_formatStatusLabel(entry.status)}',
+                                                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                                        ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                            Icon(Icons.chevron_right_rounded, color: Theme.of(context).colorScheme.onSurfaceVariant),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                  );
+                                }).toList(growable: false),
+                              ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    if (recentFailures.isNotEmpty)
+                      PremiumGlassCard(
+                        child: Padding(
+                          padding: const EdgeInsets.all(18),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Payout issues',
+                                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                      fontWeight: FontWeight.w800,
+                                    ),
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                recentFailures.first.status == 'failed'
+                                    ? 'A payout attempt needs attention.'
+                                    : recentFailures.first.status,
+                                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                    ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
                     const SizedBox(height: 18),
                     const PremiumSectionHeader(
                       title: 'Performance snapshot',
@@ -385,6 +582,16 @@ class _EarningsPageState extends ConsumerState<EarningsPage> {
       ),
     );
   }
+}
+
+String? _nonEmpty(dynamic value) {
+  if (value is String) {
+    final trimmed = value.trim();
+    if (trimmed.isNotEmpty) {
+      return trimmed;
+    }
+  }
+  return null;
 }
 
 String _formatMoney(double value) {

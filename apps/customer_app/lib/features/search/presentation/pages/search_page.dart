@@ -74,15 +74,6 @@ class _SearchPageState extends ConsumerState<SearchPage> {
   // Session-scoped recent searches — mutable so clear/add works live
   final List<String> _recent = [];
 
-  static const List<_SearchItem> _fallbackTrending = [
-    _SearchItem(title: 'AC Gas Refill', icon: Icons.ac_unit_rounded, accent: Color(0xFF38BDF8)),
-    _SearchItem(title: 'Deep Cleaning', icon: Icons.cleaning_services_rounded, accent: Color(0xFF10B981)),
-    _SearchItem(title: 'Pest Control', icon: Icons.bug_report_rounded, accent: Color(0xFFF59E0B)),
-    _SearchItem(title: 'Plumbing', icon: Icons.plumbing_rounded, accent: Color(0xFF8B5CF6)),
-    _SearchItem(title: 'Painting', icon: Icons.format_paint_rounded, accent: Color(0xFFEF4444)),
-    _SearchItem(title: 'Carpentry', icon: Icons.handyman_rounded, accent: Color(0xFFC2A15E)),
-  ];
-
   static const List<Color> _accentCycle = [
     Color(0xFFC2A15E), Color(0xFF10B981), Color(0xFF60A5FA),
     Color(0xFFF59E0B), Color(0xFF38BDF8), Color(0xFFEF4444),
@@ -177,39 +168,37 @@ class _SearchPageState extends ConsumerState<SearchPage> {
     final catalogAsync = ref.watch(homeCatalogProvider);
     final catalogCategories = catalogAsync.valueOrNull?.categories ?? const <CatalogCategory>[];
     final catalogSubcategories = catalogCategories.expand((category) => category.subcategories).toList(growable: false);
+    final categorySlugById = <String, String>{
+      for (final category in catalogCategories) category.id: category.slug,
+    };
     final showResults = _query.trim().isNotEmpty || _hasBrowseSelection;
     final browseLabel = _browseLabel(catalogCategories);
 
-    // Build trending items: real categories and subcategories from API when available, else fallback.
-    final trendingItems = catalogAsync.maybeWhen(
-      data: (data) => data.categories.isEmpty
-          ? _fallbackTrending
-          : [
-              ...data.categories.take(6).toList().asMap().entries.map((e) {
-                final cat = e.value;
-                final color = _accentCycle[e.key % _accentCycle.length];
-                return _SearchItem(
-                  title: cat.name,
-                  subtitle: '${cat.subcategories.length} subcategories',
-                  icon: Icons.home_repair_service_rounded,
-                  accent: color,
-                  slug: cat.slug,
-                );
-              }),
-              ...catalogSubcategories.take(6).toList().asMap().entries.map((e) {
-                final subcategory = e.value;
-                final color = _accentCycle[(e.key + 3) % _accentCycle.length];
-                return _SearchItem(
-                  title: subcategory.name,
-                  subtitle: '${subcategory.serviceCount} services',
-                  icon: Icons.view_module_rounded,
-                  accent: color,
-                  slug: subcategory.slug,
-                );
-              }),
-            ],
-      orElse: () => _fallbackTrending,
-    );
+    final trendingItems = [
+      ...catalogCategories.take(6).toList().asMap().entries.map((e) {
+        final cat = e.value;
+        final color = _accentCycle[e.key % _accentCycle.length];
+        return _SearchItem(
+          title: cat.name,
+          subtitle: '${cat.subcategories.length} subcategories',
+          icon: Icons.home_repair_service_rounded,
+          accent: color,
+          categorySlug: cat.slug,
+        );
+      }),
+      ...catalogSubcategories.take(6).toList().asMap().entries.map((e) {
+        final subcategory = e.value;
+        final color = _accentCycle[(e.key + 3) % _accentCycle.length];
+        return _SearchItem(
+          title: subcategory.name,
+          subtitle: '${subcategory.serviceCount} services',
+          icon: Icons.view_module_rounded,
+          accent: color,
+          categorySlug: categorySlugById[subcategory.categoryId],
+          subcategorySlug: subcategory.slug,
+        );
+      }),
+    ];
 
     return Scaffold(
       backgroundColor: cs.surface,
@@ -281,6 +270,10 @@ class _SearchPageState extends ConsumerState<SearchPage> {
                 categorySlug: categorySlug,
                 subcategorySlug: _selectedSubcategorySlug == subcategorySlug ? null : subcategorySlug,
               ),
+              onTrendingTap: (item) => _goToSearch(
+                categorySlug: item.categorySlug,
+                subcategorySlug: item.subcategorySlug,
+              ),
               onQueryTap: _setQuery,
               onClearRecent: () => setState(() => _recent.clear()),
             )
@@ -317,6 +310,7 @@ class _SearchHome extends StatelessWidget {
     required this.selectedSubcategorySlug,
     required this.onCategoryTap,
     required this.onSubcategoryTap,
+    required this.onTrendingTap,
     required this.onQueryTap,
     required this.onClearRecent,
   });
@@ -327,6 +321,7 @@ class _SearchHome extends StatelessWidget {
   final String? selectedSubcategorySlug;
   final ValueChanged<String> onCategoryTap;
   final void Function(String categorySlug, String subcategorySlug) onSubcategoryTap;
+  final ValueChanged<_SearchItem> onTrendingTap;
   final ValueChanged<String> onQueryTap;
   final VoidCallback onClearRecent;
 
@@ -435,66 +430,72 @@ class _SearchHome extends StatelessWidget {
           ),
           const SizedBox(height: 32),
         ],
-        Text('Trending Now',
-            style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
+        Text('Trending Now', style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
         const SizedBox(height: 16),
-        GridView.builder(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 3,
-            mainAxisSpacing: 12,
-            crossAxisSpacing: 12,
-            childAspectRatio: 0.95,
-          ),
-          itemCount: trending.length,
-          itemBuilder: (context, i) {
-            final item = trending[i];
-            return TapScale(
-              onTap: () => onQueryTap(item.title),
-              child: PremiumCard(
-                child: Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Container(
-                        height: 48,
-                        width: 48,
-                        decoration: BoxDecoration(
-                          color: item.accent.withValues(alpha: 0.12),
-                          borderRadius: BorderRadius.circular(AbzioTheme.buttonRadius),
+        if (trending.isEmpty)
+          const PremiumEmptyState(
+            icon: Icons.trending_up_rounded,
+            title: 'No trending services yet',
+            subtitle: 'We’ll surface popular searches here once the catalog has enough activity.',
+          )
+        else
+          GridView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 3,
+              mainAxisSpacing: 12,
+              crossAxisSpacing: 12,
+              childAspectRatio: 0.95,
+            ),
+            itemCount: trending.length,
+            itemBuilder: (context, i) {
+              final item = trending[i];
+              return TapScale(
+                onTap: () => onTrendingTap(item),
+                child: PremiumCard(
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Container(
+                          height: 48,
+                          width: 48,
+                          decoration: BoxDecoration(
+                            color: item.accent.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(AbzioTheme.buttonRadius),
+                          ),
+                          child: Icon(item.icon, color: item.accent),
                         ),
-                        child: Icon(item.icon, color: item.accent),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        item.title,
-                        textAlign: TextAlign.center,
-                        maxLines: 2,
-                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                              fontWeight: FontWeight.w700,
-                            ),
-                      ),
-                      if (item.subtitle != null) ...[
-                        const SizedBox(height: 4),
+                        const SizedBox(height: 8),
                         Text(
-                          item.subtitle!,
+                          item.title,
                           textAlign: TextAlign.center,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
+                          maxLines: 2,
                           style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                                color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                fontWeight: FontWeight.w700,
                               ),
                         ),
+                        if (item.subtitle != null) ...[
+                          const SizedBox(height: 4),
+                          Text(
+                            item.subtitle!,
+                            textAlign: TextAlign.center,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                ),
+                          ),
+                        ],
                       ],
-                    ],
+                    ),
                   ),
                 ),
-              ),
-            );
-          },
-        ),
+              );
+            },
+          ),
       ],
     );
   }
@@ -600,13 +601,15 @@ class _SearchItem {
     required this.icon,
     required this.accent,
     this.subtitle,
-    this.slug,
+    this.categorySlug,
+    this.subcategorySlug,
   });
   final String title;
   final IconData icon;
   final Color accent;
   final String? subtitle;
-  final String? slug;
+  final String? categorySlug;
+  final String? subcategorySlug;
 }
 
 extension _IterableFirstOrNull<T> on Iterable<T> {

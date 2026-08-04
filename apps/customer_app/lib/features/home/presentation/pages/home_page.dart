@@ -13,14 +13,18 @@ class HomePage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final userName = ref.watch(authControllerProvider.select((s) => s.valueOrNull?.user.name)) ?? 'Abdul';
-    final firstName = userName.trim().split(RegExp(r'\s+')).first;
+    final session = ref.watch(authControllerProvider).valueOrNull;
+    final firstName = _firstName(session?.user.name);
     final colorScheme = Theme.of(context).colorScheme;
+    final locationLabel = _locationLabel(session);
 
     final catalogAsync = ref.watch(homeCatalogProvider);
     final professionalsAsync = ref.watch(homeProfessionalsProvider);
-    final catalogCategories = catalogAsync.valueOrNull?.categories ?? const <CatalogCategory>[];
-    final catalogSubcategories = catalogCategories.expand((category) => category.subcategories).toList(growable: false);
+    final catalogCategories =
+        catalogAsync.valueOrNull?.categories ?? const <CatalogCategory>[];
+    final catalogSubcategories = catalogCategories
+        .expand((category) => category.subcategories)
+        .toList(growable: false);
 
     return Scaffold(
       body: LiquidRefresh(
@@ -36,7 +40,7 @@ class HomePage extends ConsumerWidget {
             _HomeHeader(
               greeting: _greeting(),
               name: firstName,
-              location: 'Anna Nagar, Chennai',
+              location: locationLabel,
             ),
             const SizedBox(height: 18),
             _SearchBar(
@@ -58,26 +62,29 @@ class HomePage extends ConsumerWidget {
                       separatorBuilder: (_, __) => const SizedBox(width: 12),
                       itemBuilder: (context, index) => const Column(
                         children: [
-                          ShimmerPlaceholder(width: 72, height: 72, borderRadius: 28),
+                          ShimmerPlaceholder(
+                              width: 72, height: 72, borderRadius: 28),
                           SizedBox(height: 10),
-                          ShimmerPlaceholder(width: 60, height: 12, borderRadius: 6),
+                          ShimmerPlaceholder(
+                              width: 60, height: 12, borderRadius: 6),
                         ],
                       ),
                     )
-                  : ListView.separated(
-                      scrollDirection: Axis.horizontal,
-                      itemCount: catalogCategories.isNotEmpty ? catalogCategories.length : _categories.length,
-                      separatorBuilder: (_, __) => const SizedBox(width: 12),
-                      itemBuilder: (context, index) {
-                        final hasData = catalogCategories.isNotEmpty;
-                        final category = hasData
-                            ? catalogCategories[index]
-                            : _categories[index];
-                        return _CategoryChip(
-                          category: category,
-                        );
-                      },
-                    ),
+                  : catalogCategories.isNotEmpty
+                      ? ListView.separated(
+                          scrollDirection: Axis.horizontal,
+                          itemCount: catalogCategories.length,
+                          separatorBuilder: (_, __) =>
+                              const SizedBox(width: 12),
+                          itemBuilder: (context, index) =>
+                              _CategoryChip(category: catalogCategories[index]),
+                        )
+                      : const PremiumEmptyState(
+                          icon: Icons.category_rounded,
+                          title: 'No featured categories right now',
+                          subtitle:
+                              'Check back soon for fresh service groups in your area.',
+                        ),
             ),
             if (catalogSubcategories.isNotEmpty) ...[
               const SizedBox(height: 20),
@@ -92,7 +99,8 @@ class HomePage extends ConsumerWidget {
                   scrollDirection: Axis.horizontal,
                   itemCount: catalogSubcategories.length,
                   separatorBuilder: (_, __) => const SizedBox(width: 12),
-                  itemBuilder: (context, index) => _SubcategoryChip(subcategory: catalogSubcategories[index]),
+                  itemBuilder: (context, index) => _SubcategoryChip(
+                      subcategory: catalogSubcategories[index]),
                 ),
               ),
             ],
@@ -114,7 +122,8 @@ class HomePage extends ConsumerWidget {
                     shrinkWrap: true,
                     physics: const NeverScrollableScrollPhysics(),
                     itemCount: 4,
-                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                    gridDelegate:
+                        const SliverGridDelegateWithFixedCrossAxisCount(
                       crossAxisCount: 2,
                       mainAxisSpacing: 12,
                       crossAxisSpacing: 12,
@@ -131,21 +140,24 @@ class HomePage extends ConsumerWidget {
                         shrinkWrap: true,
                         physics: const NeverScrollableScrollPhysics(),
                         itemCount: catalogAsync.valueOrNull!.trending.length,
-                        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                        gridDelegate:
+                            const SliverGridDelegateWithFixedCrossAxisCount(
                           crossAxisCount: 2,
                           mainAxisSpacing: 12,
                           crossAxisSpacing: 12,
                           childAspectRatio: 0.88,
                         ),
                         itemBuilder: (context, index) {
-                          final service = catalogAsync.valueOrNull!.trending[index];
+                          final service =
+                              catalogAsync.valueOrNull!.trending[index];
                           return _ServiceCard(service: service);
                         },
                       )
                     : const PremiumEmptyState(
                         icon: Icons.design_services_rounded,
                         title: 'No featured services right now',
-                        subtitle: 'Check back soon for fresh recommendations and offers.',
+                        subtitle:
+                            'Check back soon for fresh recommendations and offers.',
                       ),
             const SizedBox(height: 20),
             const _SectionLabel(
@@ -166,7 +178,9 @@ class HomePage extends ConsumerWidget {
                         borderRadius: 24,
                       ),
                     )
-                  : (professionalsAsync.valueOrNull ?? const <HomeProfessional>[]).isEmpty
+                  : (professionalsAsync.valueOrNull ??
+                              const <HomeProfessional>[])
+                          .isEmpty
                       ? const Center(
                           child: Text(
                             'No professionals available right now.',
@@ -176,10 +190,12 @@ class HomePage extends ConsumerWidget {
                       : ListView.separated(
                           scrollDirection: Axis.horizontal,
                           itemCount: professionalsAsync.valueOrNull!.length,
-                          separatorBuilder: (_, __) => const SizedBox(width: 12),
+                          separatorBuilder: (_, __) =>
+                              const SizedBox(width: 12),
                           itemBuilder: (context, index) {
                             return _ProfessionalCard(
-                              professional: professionalsAsync.valueOrNull![index],
+                              professional:
+                                  professionalsAsync.valueOrNull![index],
                             );
                           },
                         ),
@@ -206,7 +222,9 @@ class HomePage extends ConsumerWidget {
               ListView.separated(
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
-                itemCount: (professionalsAsync.valueOrNull ?? const <HomeProfessional>[]).length,
+                itemCount: (professionalsAsync.valueOrNull ??
+                        const <HomeProfessional>[])
+                    .length,
                 separatorBuilder: (_, __) => const SizedBox(height: 12),
                 itemBuilder: (context, index) {
                   final professional = professionalsAsync.valueOrNull![index];
@@ -247,6 +265,22 @@ class HomePage extends ConsumerWidget {
       return 'Good Afternoon,';
     }
     return 'Good Evening,';
+  }
+
+  String _firstName(String? name) {
+    final trimmed = name?.trim() ?? '';
+    if (trimmed.isEmpty) {
+      return 'there';
+    }
+    return trimmed.split(RegExp(r'\s+')).first;
+  }
+
+  String _locationLabel(AuthSession? session) {
+    final cityId = session?.user.cityId?.trim() ?? '';
+    if (cityId.isNotEmpty) {
+      return 'Your selected service area';
+    }
+    return 'Set your location for local pricing';
   }
 }
 
@@ -324,31 +358,32 @@ class _LocationChip extends StatelessWidget {
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     return TapScale(
-      onTap: () => context.push('/map-picker'),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-      decoration: BoxDecoration(
-        color: colorScheme.surface,
-        borderRadius: BorderRadius.circular(AbzioTheme.buttonRadius),
-        boxShadow: AbzioTheme.eliteShadow,
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.my_location_rounded, size: 16, color: colorScheme.primary),
-          const SizedBox(width: 8),
-          Flexible(
-            child: Text(
-              location,
-              overflow: TextOverflow.ellipsis,
-              style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                    fontWeight: FontWeight.w700,
-                  ),
-            ),
+        onTap: () => context.push('/map-picker'),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          decoration: BoxDecoration(
+            color: colorScheme.surface,
+            borderRadius: BorderRadius.circular(AbzioTheme.buttonRadius),
+            boxShadow: AbzioTheme.eliteShadow,
           ),
-        ],
-      ),
-    ));
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.my_location_rounded,
+                  size: 16, color: colorScheme.primary),
+              const SizedBox(width: 8),
+              Flexible(
+                child: Text(
+                  location,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                ),
+              ),
+            ],
+          ),
+        ));
   }
 }
 
@@ -365,44 +400,46 @@ class _SearchBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     return TapScale(
-      onTap: () => context.push('/search'),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      decoration: BoxDecoration(
-        color: colorScheme.surface,
-        borderRadius: BorderRadius.circular(AbzioTheme.cardRadius),
-        boxShadow: AbzioTheme.eliteShadow,
-      ),
-      child: Row(
-        children: [
-          Icon(Icons.search_rounded, color: colorScheme.onSurfaceVariant),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              hint,
-              style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                    color: colorScheme.onSurfaceVariant,
-                    fontWeight: FontWeight.w600,
-                  ),
-            ),
+        onTap: () => context.push('/search'),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          decoration: BoxDecoration(
+            color: colorScheme.surface,
+            borderRadius: BorderRadius.circular(AbzioTheme.cardRadius),
+            boxShadow: AbzioTheme.eliteShadow,
           ),
-          const SizedBox(width: 8),
-          InkWell(
-            onTap: onVoiceTap,
-            borderRadius: BorderRadius.circular(AbzioTheme.buttonRadius),
-            child: Container(
-              height: 40,
-              width: 40,
-              decoration: BoxDecoration(
-                color: colorScheme.primaryContainer.withValues(alpha: 0.8),
-                borderRadius: BorderRadius.circular(AbzioTheme.buttonRadius),
+          child: Row(
+            children: [
+              Icon(Icons.search_rounded, color: colorScheme.onSurfaceVariant),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  hint,
+                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                        color: colorScheme.onSurfaceVariant,
+                        fontWeight: FontWeight.w600,
+                      ),
+                ),
               ),
-              child: Icon(Icons.mic_none_rounded, color: colorScheme.primary),
-            ),
+              const SizedBox(width: 8),
+              InkWell(
+                onTap: onVoiceTap,
+                borderRadius: BorderRadius.circular(AbzioTheme.buttonRadius),
+                child: Container(
+                  height: 40,
+                  width: 40,
+                  decoration: BoxDecoration(
+                    color: colorScheme.primaryContainer.withValues(alpha: 0.8),
+                    borderRadius:
+                        BorderRadius.circular(AbzioTheme.buttonRadius),
+                  ),
+                  child:
+                      Icon(Icons.mic_none_rounded, color: colorScheme.primary),
+                ),
+              ),
+            ],
           ),
-        ],
-      ),
-    ));
+        ));
   }
 }
 
@@ -424,33 +461,15 @@ class _SectionLabel extends StatelessWidget {
   }
 }
 
-class _Category {
-  const _Category({
-    required this.title,
-    required this.icon,
-    required this.accent,
-  });
-
-  final String title;
-  final IconData icon;
-  final Color accent;
-}
-
 class _CategoryChip extends StatelessWidget {
   const _CategoryChip({required this.category});
 
-  final Object category;
+  final CatalogCategory category;
 
-  String get _title => category is CatalogCategory ? (category as CatalogCategory).name : (category as _Category).title;
-  IconData get _icon => category is CatalogCategory ? Icons.home_repair_service_rounded : (category as _Category).icon;
-  Color get _accent => category is CatalogCategory ? const Color(0xFF6366F1) : (category as _Category).accent;
-  String get _subtitle {
-    if (category is CatalogCategory) {
-      final catalogCategory = category as CatalogCategory;
-      return '${catalogCategory.subcategories.length} subcategories';
-    }
-    return 'Popular pick';
-  }
+  String get _title => category.name;
+  IconData get _icon => Icons.home_repair_service_rounded;
+  Color get _accent => const Color(0xFF6366F1);
+  String get _subtitle => '${category.subcategories.length} subcategories';
 
   @override
   Widget build(BuildContext context) {
@@ -459,28 +478,17 @@ class _CategoryChip extends StatelessWidget {
       width: 108,
       child: TapScale(
         onTap: () {
-          if (category is CatalogCategory) {
-            final catalogCategory = category as CatalogCategory;
-            context.push(
-              Uri(
-                path: '/search',
-                queryParameters: {'categorySlug': catalogCategory.slug},
-              ).toString(),
-            );
-            return;
-          }
-
           context.push(
             Uri(
               path: '/search',
-              queryParameters: {'q': _title},
+              queryParameters: {'categorySlug': category.slug},
             ).toString(),
           );
         },
         child: Column(
           children: [
             Hero(
-              tag: 'category_${category is CatalogCategory ? (category as CatalogCategory).id : (category as _Category).title}',
+              tag: 'category_${category.id}',
               child: Container(
                 height: 72,
                 width: 72,
@@ -495,7 +503,8 @@ class _CategoryChip extends StatelessWidget {
                     width: 52,
                     decoration: BoxDecoration(
                       color: _accent.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(AbzioTheme.cardRadius),
+                      borderRadius:
+                          BorderRadius.circular(AbzioTheme.cardRadius),
                     ),
                     child: Icon(_icon, color: _accent),
                   ),
@@ -553,7 +562,8 @@ class _SubcategoryChip extends StatelessWidget {
             color: colorScheme.surface,
             borderRadius: BorderRadius.circular(AbzioTheme.cardRadius),
             boxShadow: AbzioTheme.eliteShadow,
-            border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.45)),
+            border: Border.all(
+                color: colorScheme.outlineVariant.withValues(alpha: 0.45)),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -565,9 +575,11 @@ class _SubcategoryChip extends StatelessWidget {
                     width: 38,
                     decoration: BoxDecoration(
                       color: colorScheme.primary.withValues(alpha: 0.08),
-                      borderRadius: BorderRadius.circular(AbzioTheme.buttonRadius),
+                      borderRadius:
+                          BorderRadius.circular(AbzioTheme.buttonRadius),
                     ),
-                    child: Icon(Icons.view_module_rounded, color: colorScheme.primary, size: 20),
+                    child: Icon(Icons.view_module_rounded,
+                        color: colorScheme.primary, size: 20),
                   ),
                   const Spacer(),
                   _SmallBadge(label: '${subcategory.serviceCount} services'),
@@ -582,7 +594,8 @@ class _SubcategoryChip extends StatelessWidget {
                       fontWeight: FontWeight.w800,
                     ),
               ),
-              if (subcategory.description != null && subcategory.description!.trim().isNotEmpty) ...[
+              if (subcategory.description != null &&
+                  subcategory.description!.trim().isNotEmpty) ...[
                 const SizedBox(height: 6),
                 Text(
                   subcategory.description!,
@@ -626,56 +639,27 @@ class _SmallBadge extends StatelessWidget {
   }
 }
 
-class _Service {
-  const _Service({
-    required this.title,
-    required this.price,
-    required this.rating,
-    required this.jobs,
-    required this.icon,
-    required this.accent,
-  });
-
-  final String title;
-  final String price;
-  final double rating;
-  final String jobs;
-  final IconData icon;
-  final Color accent;
-}
-
 class _ServiceCard extends StatelessWidget {
   const _ServiceCard({required this.service});
 
-  final Object service;
+  final CatalogService service;
 
-  String get _title => service is CatalogService ? (service as CatalogService).name : (service as _Service).title;
-  String get _price => service is CatalogService ? 'Rs ${(service as CatalogService).startingPrice.toInt()}' : (service as _Service).price;
-  double get _rating => service is CatalogService ? (service as CatalogService).rating : (service as _Service).rating;
-  String get _jobs => service is CatalogService ? '${(service as CatalogService).reviewCount} reviews' : (service as _Service).jobs;
-  IconData get _icon => service is CatalogService ? Icons.design_services_rounded : (service as _Service).icon;
-  Color get _accent => service is CatalogService ? const Color(0xFF6366F1) : (service as _Service).accent;
-  String get _subtitle => service is CatalogService
-      ? ((service as CatalogService).hierarchyLabel.isNotEmpty
-          ? (service as CatalogService).hierarchyLabel
-          : ((service as CatalogService).shortDescription ?? 'Premium service'))
-      : (service as _Service).jobs;
+  String get _title => service.name;
+  String get _price => 'Rs ${service.startingPrice.toInt()}';
+  double get _rating => service.rating;
+  String get _jobs => '${service.reviewCount} reviews';
+  IconData get _icon => Icons.design_services_rounded;
+  Color get _accent => const Color(0xFF6366F1);
+  String get _subtitle => service.hierarchyLabel.isNotEmpty
+      ? service.hierarchyLabel
+      : (service.shortDescription ?? 'Premium service');
 
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     return PremiumCard(
       onTap: () {
-        if (service is CatalogService) {
-          context.push('/service?id=${(service as CatalogService).slug}');
-        } else {
-          context.push(
-            Uri(
-              path: '/search',
-              queryParameters: {'q': _title},
-            ).toString(),
-          );
-        }
+        context.push('/service?id=${service.slug}');
       },
       child: Padding(
         padding: const EdgeInsets.all(14),
@@ -683,7 +667,7 @@ class _ServiceCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Hero(
-              tag: 'service_${service is CatalogService ? (service as CatalogService).slug : (service as _Service).title}',
+              tag: 'service_${service.slug}',
               child: Container(
                 height: 96,
                 width: double.infinity,
@@ -732,10 +716,11 @@ class _ServiceCard extends StatelessWidget {
                 ),
                 Row(
                   children: [
-                    const Icon(Icons.star_rounded, size: 16, color: Color(0xFFF59E0B)),
+                    const Icon(Icons.star_rounded,
+                        size: 16, color: Color(0xFFF59E0B)),
                     const SizedBox(width: 4),
                     Text(
-                    _rating.toStringAsFixed(1),
+                      _rating.toStringAsFixed(1),
                       style: Theme.of(context).textTheme.labelMedium?.copyWith(
                             fontWeight: FontWeight.w700,
                           ),
@@ -821,7 +806,8 @@ class _ProfessionalCard extends StatelessWidget {
                   if (professional.verified)
                     const Padding(
                       padding: EdgeInsets.only(left: 6),
-                      child: Icon(Icons.verified_rounded, size: 18, color: Color(0xFF10B981)),
+                      child: Icon(Icons.verified_rounded,
+                          size: 18, color: Color(0xFF10B981)),
                     ),
                 ],
               ),
@@ -833,11 +819,14 @@ class _ProfessionalCard extends StatelessWidget {
                     ),
               ),
               const SizedBox(height: 10),
-              _CompactMetric(icon: Icons.workspace_premium_rounded, label: professional.experience),
+              _CompactMetric(
+                  icon: Icons.workspace_premium_rounded,
+                  label: professional.experience),
               const SizedBox(height: 8),
               _CompactMetric(
                 icon: Icons.star_rounded,
-                label: '${professional.rating.toStringAsFixed(1)} · ${professional.distance}',
+                label:
+                    '${professional.rating.toStringAsFixed(1)} · ${professional.distance}',
               ),
               const SizedBox(height: 8),
               _CompactMetric(
@@ -891,7 +880,8 @@ class _TopRatedCard extends StatelessWidget {
               ),
             ),
             if (professional.verified)
-              Icon(Icons.verified_rounded, size: 18, color: colorScheme.secondary),
+              Icon(Icons.verified_rounded,
+                  size: 18, color: colorScheme.secondary),
           ],
         ),
         subtitle: Padding(
@@ -918,7 +908,8 @@ class _TopRatedCard extends StatelessWidget {
             Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(Icons.star_rounded, size: 16, color: Color(0xFFF59E0B)),
+                const Icon(Icons.star_rounded,
+                    size: 16, color: Color(0xFFF59E0B)),
                 const SizedBox(width: 4),
                 Text(
                   professional.rating.toStringAsFixed(1),
@@ -1058,54 +1049,3 @@ class _FeaturedBanner extends StatelessWidget {
     );
   }
 }
-
-
-
-const List<_Category> _categories = <_Category>[
-  _Category(title: 'Electrician', icon: Icons.electrical_services_rounded, accent: Color(0xFFC2A15E)),
-  _Category(title: 'Plumber', icon: Icons.plumbing_rounded, accent: Color(0xFF10B981)),
-  _Category(title: 'Cleaning', icon: Icons.cleaning_services_rounded, accent: Color(0xFF60A5FA)),
-  _Category(title: 'Carpenter', icon: Icons.handyman_rounded, accent: Color(0xFFF59E0B)),
-  _Category(title: 'AC Repair', icon: Icons.ac_unit_rounded, accent: Color(0xFF38BDF8)),
-  _Category(title: 'Painter', icon: Icons.format_paint_rounded, accent: Color(0xFFEF4444)),
-  _Category(title: 'Laptop Repair', icon: Icons.computer_rounded, accent: Color(0xFF8B5CF6)),
-  _Category(title: 'Mobile Repair', icon: Icons.phone_android_rounded, accent: Color(0xFF14B8A6)),
-  _Category(title: 'View All', icon: Icons.apps_rounded, accent: Color(0xFFC2A15E)),
-];
-
-const List<_Service> _services = <_Service>[
-  _Service(
-    title: 'Bathroom deep cleaning',
-    price: 'From ₹799',
-    rating: 4.8,
-    jobs: '1.4k bookings',
-    icon: Icons.cleaning_services_rounded,
-    accent: Color(0xFF10B981),
-  ),
-  _Service(
-    title: 'AC service and gas refill',
-    price: 'From ₹999',
-    rating: 4.9,
-    jobs: '2.1k bookings',
-    icon: Icons.ac_unit_rounded,
-    accent: Color(0xFF38BDF8),
-  ),
-  _Service(
-    title: 'Electrical wiring',
-    price: 'From ₹699',
-    rating: 4.7,
-    jobs: '980 bookings',
-    icon: Icons.electrical_services_rounded,
-    accent: Color(0xFFC2A15E),
-  ),
-  _Service(
-    title: 'Furniture and carpentry',
-    price: 'From ₹499',
-    rating: 4.8,
-    jobs: '860 bookings',
-    icon: Icons.home_repair_service_rounded,
-    accent: Color(0xFFF59E0B),
-  ),
-];
-
-

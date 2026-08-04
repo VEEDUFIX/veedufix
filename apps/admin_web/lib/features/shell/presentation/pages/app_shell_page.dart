@@ -6,6 +6,13 @@ import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:marketplace_shared/marketplace_shared.dart';
 import '../../../../core/widgets/admin_logo.dart';
+import '../../../ops/data/ops_api.dart';
+
+final adminShellOverviewProvider =
+    FutureProvider.autoDispose<OpsOverviewSnapshot>((ref) async {
+  final api = OpsApi(ref.watch(apiClientProvider).dio);
+  return api.fetchOverview();
+});
 
 class AppShellPage extends ConsumerStatefulWidget {
   const AppShellPage({
@@ -25,6 +32,11 @@ class _AppShellPageState extends ConsumerState<AppShellPage> {
   @override
   Widget build(BuildContext context) {
     final location = GoRouterState.of(context).matchedLocation;
+    final overviewAsync = ref.watch(adminShellOverviewProvider);
+    final summary = overviewAsync.valueOrNull?.summary;
+    final alertsCount = overviewAsync.valueOrNull?.alerts.length ?? 0;
+    final supportTicketsCount = summary?.openSupportTicketsCount ?? 0;
+    final workerReviewsCount = summary?.pendingWorkerReviewsCount ?? 0;
     final isDesktop = MediaQuery.of(context).size.width > 900;
     final showExpanded = isDesktop && _isSidebarExpanded;
     final sidebarWidth = showExpanded ? 260.0 : 80.0;
@@ -61,14 +73,16 @@ class _AppShellPageState extends ConsumerState<AppShellPage> {
                         28,
                       ),
                       child: Row(
-                        mainAxisAlignment:
-                            showExpanded ? MainAxisAlignment.spaceBetween : MainAxisAlignment.center,
+                        mainAxisAlignment: showExpanded
+                            ? MainAxisAlignment.spaceBetween
+                            : MainAxisAlignment.center,
                         children: [
                           if (showExpanded)
                             Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                const AdminLogo(height: 28, color: Color(0xFF0F766E)),
+                                const AdminLogo(
+                                    height: 28, color: Color(0xFF0F766E)),
                                 const SizedBox(height: 4),
                                 Text(
                                   'ADMIN PANEL',
@@ -83,11 +97,14 @@ class _AppShellPageState extends ConsumerState<AppShellPage> {
                             ),
                           IconButton(
                             icon: Icon(
-                              showExpanded ? Icons.menu_open_rounded : Icons.menu_rounded,
+                              showExpanded
+                                  ? Icons.menu_open_rounded
+                                  : Icons.menu_rounded,
                               size: showExpanded ? 20 : 24,
                               color: textMuted,
                             ),
-                            onPressed: () => setState(() => _isSidebarExpanded = !showExpanded),
+                            onPressed: () => setState(
+                                () => _isSidebarExpanded = !showExpanded),
                           ),
                         ],
                       ),
@@ -96,7 +113,8 @@ class _AppShellPageState extends ConsumerState<AppShellPage> {
                       child: ListView(
                         padding: const EdgeInsets.symmetric(horizontal: 12),
                         children: [
-                          _buildCategoryHeader('Overview', showExpanded, textMuted),
+                          _buildCategoryHeader(
+                              'Overview', showExpanded, textMuted),
                           _buildNavItem(
                             '/admin',
                             Icons.space_dashboard_outlined,
@@ -113,7 +131,8 @@ class _AppShellPageState extends ConsumerState<AppShellPage> {
                             location,
                             showExpanded,
                           ),
-                          _buildCategoryHeader('Operations', showExpanded, textMuted),
+                          _buildCategoryHeader(
+                              'Operations', showExpanded, textMuted),
                           _buildNavItem(
                             '/ops/overview',
                             Icons.monitor_heart_outlined,
@@ -137,7 +156,7 @@ class _AppShellPageState extends ConsumerState<AppShellPage> {
                             'Alerts',
                             location,
                             showExpanded,
-                            badge: '3',
+                            badge: _badgeLabel(alertsCount),
                           ),
                           _buildNavItem(
                             '/ops/disputes',
@@ -147,7 +166,8 @@ class _AppShellPageState extends ConsumerState<AppShellPage> {
                             location,
                             showExpanded,
                           ),
-                          _buildCategoryHeader('Workforce', showExpanded, textMuted),
+                          _buildCategoryHeader(
+                              'Workforce', showExpanded, textMuted),
                           _buildNavItem(
                             '/workers',
                             Icons.people_outline_rounded,
@@ -163,9 +183,19 @@ class _AppShellPageState extends ConsumerState<AppShellPage> {
                             'Review Queue',
                             location,
                             showExpanded,
-                            badge: '12',
+                            badge: _badgeLabel(workerReviewsCount),
                           ),
-                          _buildCategoryHeader('Marketplace', showExpanded, textMuted),
+                          _buildNavItem(
+                            '/support-tickets',
+                            Icons.support_agent_outlined,
+                            Icons.support_agent_rounded,
+                            'Support Tickets',
+                            location,
+                            showExpanded,
+                            badge: _badgeLabel(supportTicketsCount),
+                          ),
+                          _buildCategoryHeader(
+                              'Marketplace', showExpanded, textMuted),
                           _buildNavItem(
                             '/catalog',
                             Icons.category_outlined,
@@ -182,7 +212,8 @@ class _AppShellPageState extends ConsumerState<AppShellPage> {
                             location,
                             showExpanded,
                           ),
-                          _buildCategoryHeader('Finance', showExpanded, textMuted),
+                          _buildCategoryHeader(
+                              'Finance', showExpanded, textMuted),
                           _buildNavItem(
                             '/finance',
                             Icons.account_balance_outlined,
@@ -208,6 +239,14 @@ class _AppShellPageState extends ConsumerState<AppShellPage> {
                             showExpanded,
                           ),
                           _buildNavItem(
+                            '/finance/tax-summary',
+                            Icons.request_quote_outlined,
+                            Icons.request_quote_rounded,
+                            'Tax Summary',
+                            location,
+                            showExpanded,
+                          ),
+                          _buildNavItem(
                             '/reports',
                             Icons.download_outlined,
                             Icons.download_rounded,
@@ -215,7 +254,8 @@ class _AppShellPageState extends ConsumerState<AppShellPage> {
                             location,
                             showExpanded,
                           ),
-                          _buildCategoryHeader('Communication', showExpanded, textMuted),
+                          _buildCategoryHeader(
+                              'Communication', showExpanded, textMuted),
                           _buildNavItem(
                             '/push',
                             Icons.campaign_outlined,
@@ -232,7 +272,8 @@ class _AppShellPageState extends ConsumerState<AppShellPage> {
                             location,
                             showExpanded,
                           ),
-                          _buildCategoryHeader('Governance', showExpanded, textMuted),
+                          _buildCategoryHeader(
+                              'Governance', showExpanded, textMuted),
                           _buildNavItem(
                             '/audit-logs',
                             Icons.assignment_outlined,
@@ -280,25 +321,31 @@ class _AppShellPageState extends ConsumerState<AppShellPage> {
                             height: 42,
                             padding: const EdgeInsets.symmetric(horizontal: 16),
                             decoration: BoxDecoration(
-                              color: cs.surfaceContainerHighest.withValues(alpha: 0.82),
-                              borderRadius: BorderRadius.circular(AbzioTheme.cardRadius),
+                              color: cs.surfaceContainerHighest
+                                  .withValues(alpha: 0.82),
+                              borderRadius:
+                                  BorderRadius.circular(AbzioTheme.cardRadius),
                               border: Border.all(color: borderColor),
                             ),
                             child: Row(
                               children: [
-                                Icon(Icons.search_rounded, size: 18, color: textMuted),
+                                Icon(Icons.search_rounded,
+                                    size: 18, color: textMuted),
                                 const SizedBox(width: 8),
                                 Expanded(
                                   child: TextField(
                                     readOnly: true,
                                     onTap: () => _openQuickLauncher(context),
                                     decoration: InputDecoration(
-                                      hintText: 'Search jobs, workers, support, etc. (Ctrl+K)',
-                                      hintStyle: GoogleFonts.inter(fontSize: 13, color: textMuted),
+                                      hintText:
+                                          'Search jobs, workers, support, etc. (Ctrl+K)',
+                                      hintStyle: GoogleFonts.inter(
+                                          fontSize: 13, color: textMuted),
                                       border: InputBorder.none,
                                       isDense: true,
                                     ),
-                                    style: GoogleFonts.inter(fontSize: 14, color: textPrimary),
+                                    style: GoogleFonts.inter(
+                                        fontSize: 14, color: textPrimary),
                                   ),
                                 ),
                               ],
@@ -306,7 +353,8 @@ class _AppShellPageState extends ConsumerState<AppShellPage> {
                           ),
                           const Spacer(),
                           IconButton(
-                            icon: Icon(Icons.notifications_none_rounded, color: textMuted),
+                            icon: Icon(Icons.notifications_none_rounded,
+                                color: textMuted),
                             onPressed: () => context.go('/ops/alerts'),
                           ),
                           const SizedBox(width: 16),
@@ -318,7 +366,8 @@ class _AppShellPageState extends ConsumerState<AppShellPage> {
                               children: [
                                 CircleAvatar(
                                   radius: 16,
-                                  backgroundColor: const Color(0xFF0F766E).withValues(alpha: 0.12),
+                                  backgroundColor: const Color(0xFF0F766E)
+                                      .withValues(alpha: 0.12),
                                   child: const Text(
                                     'AD',
                                     style: TextStyle(
@@ -336,7 +385,8 @@ class _AppShellPageState extends ConsumerState<AppShellPage> {
                                     color: textPrimary,
                                   ),
                                 ),
-                                Icon(Icons.keyboard_arrow_down_rounded, size: 16, color: textMuted),
+                                Icon(Icons.keyboard_arrow_down_rounded,
+                                    size: 16, color: textMuted),
                               ],
                             ),
                           ),
@@ -363,16 +413,21 @@ class _AppShellPageState extends ConsumerState<AppShellPage> {
       _QuickAction('Global Search', '/search', Icons.search_rounded),
       _QuickAction('Dashboard', '/admin', Icons.space_dashboard_rounded),
       _QuickAction('Alerts', '/ops/alerts', Icons.warning_rounded),
-      _QuickAction('Support Tickets', '/support-tickets', Icons.support_agent_rounded),
+      _QuickAction(
+          'Support Tickets', '/support-tickets', Icons.support_agent_rounded),
       _QuickAction('Worker Review', '/worker-review', Icons.how_to_reg_rounded),
       _QuickAction('Workers', '/workers', Icons.people_rounded),
       _QuickAction('Catalog', '/catalog', Icons.category_rounded),
-      _QuickAction('Service Areas', '/service-areas', Icons.my_location_rounded),
+      _QuickAction(
+          'Service Areas', '/service-areas', Icons.my_location_rounded),
       _QuickAction('Finance', '/finance', Icons.account_balance_rounded),
+      _QuickAction(
+          'Tax Summary', '/finance/tax-summary', Icons.request_quote_rounded),
       _QuickAction('Reports', '/reports', Icons.download_rounded),
       _QuickAction('Broadcasts', '/push', Icons.campaign_rounded),
       _QuickAction('Audit Logs', '/audit-logs', Icons.assignment_rounded),
-      _QuickAction('Platform Settings', '/platform-settings', Icons.tune_rounded),
+      _QuickAction(
+          'Platform Settings', '/platform-settings', Icons.tune_rounded),
     ];
 
     showDialog<void>(
@@ -410,7 +465,8 @@ class _AppShellPageState extends ConsumerState<AppShellPage> {
     );
   }
 
-  Widget _buildCategoryHeader(String title, bool showExpanded, Color textMuted) {
+  Widget _buildCategoryHeader(
+      String title, bool showExpanded, Color textMuted) {
     if (!showExpanded) {
       return Padding(
         padding: const EdgeInsets.symmetric(vertical: 8.0),
@@ -441,7 +497,8 @@ class _AppShellPageState extends ConsumerState<AppShellPage> {
     bool showExpanded, {
     String? badge,
   }) {
-    final isSelected = location == path || (path != '/admin' && location.startsWith('$path/'));
+    final isSelected =
+        location == path || (path != '/admin' && location.startsWith('$path/'));
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 4),
@@ -449,12 +506,16 @@ class _AppShellPageState extends ConsumerState<AppShellPage> {
         onTap: () => context.go(path),
         borderRadius: BorderRadius.circular(14),
         child: Container(
-          padding: EdgeInsets.symmetric(horizontal: showExpanded ? 16 : 0, vertical: 12),
+          padding: EdgeInsets.symmetric(
+              horizontal: showExpanded ? 16 : 0, vertical: 12),
           decoration: BoxDecoration(
-            color: isSelected ? const Color(0xFF0F766E).withValues(alpha: 0.08) : Colors.transparent,
+            color: isSelected
+                ? const Color(0xFF0F766E).withValues(alpha: 0.08)
+                : Colors.transparent,
             borderRadius: BorderRadius.circular(14),
             border: isSelected && !showExpanded
-                ? const Border(left: BorderSide(color: Color(0xFF0F766E), width: 3))
+                ? const Border(
+                    left: BorderSide(color: Color(0xFF0F766E), width: 3))
                 : null,
           ),
           child: showExpanded
@@ -462,7 +523,9 @@ class _AppShellPageState extends ConsumerState<AppShellPage> {
                   children: [
                     Icon(
                       isSelected ? activeIcon : icon,
-                      color: isSelected ? const Color(0xFF0F766E) : Theme.of(context).colorScheme.onSurfaceVariant,
+                      color: isSelected
+                          ? const Color(0xFF0F766E)
+                          : Theme.of(context).colorScheme.onSurfaceVariant,
                       size: 20,
                     ),
                     const SizedBox(width: 12),
@@ -473,14 +536,16 @@ class _AppShellPageState extends ConsumerState<AppShellPage> {
                           color: isSelected
                               ? const Color(0xFF0F766E)
                               : Theme.of(context).colorScheme.onSurface,
-                          fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                          fontWeight:
+                              isSelected ? FontWeight.w700 : FontWeight.w500,
                           fontSize: 14,
                         ),
                       ),
                     ),
                     if (badge != null)
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 6, vertical: 2),
                         decoration: BoxDecoration(
                           color: const Color(0xFFEF4444),
                           borderRadius: BorderRadius.circular(10),
@@ -502,7 +567,9 @@ class _AppShellPageState extends ConsumerState<AppShellPage> {
                     label: badge != null ? Text(badge) : null,
                     child: Icon(
                       isSelected ? activeIcon : icon,
-                      color: isSelected ? const Color(0xFF0F766E) : Theme.of(context).colorScheme.onSurfaceVariant,
+                      color: isSelected
+                          ? const Color(0xFF0F766E)
+                          : Theme.of(context).colorScheme.onSurfaceVariant,
                       size: 24,
                     ),
                   ),
@@ -510,6 +577,13 @@ class _AppShellPageState extends ConsumerState<AppShellPage> {
         ),
       ),
     );
+  }
+
+  String? _badgeLabel(int count) {
+    if (count <= 0) {
+      return null;
+    }
+    return count > 99 ? '99+' : '$count';
   }
 }
 

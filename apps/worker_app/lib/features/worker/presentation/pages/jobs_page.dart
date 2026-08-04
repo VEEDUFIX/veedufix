@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:marketplace_shared/marketplace_shared.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class JobsPage extends ConsumerStatefulWidget {
   const JobsPage({super.key});
@@ -132,6 +133,31 @@ class _JobCard extends ConsumerWidget {
   const _JobCard({required this.job, required this.tab});
   final WorkerJob job;
   final String tab;
+
+  Future<void> _openNavigation(WorkerJob job) async {
+    final lat = job.destinationLatitude;
+    final lng = job.destinationLongitude;
+    if (lat != null && lng != null) {
+      final uri = Uri.parse(
+        'https://www.google.com/maps/dir/?api=1&destination=$lat,$lng',
+      );
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+      return;
+    }
+
+    final query = [
+      job.addressLabel?.trim(),
+      job.cityName?.trim(),
+      job.destinationQuery?.trim(),
+    ].where((part) => part != null && part.isNotEmpty).cast<String>().join(', ');
+    if (query.isEmpty) {
+      return;
+    }
+    final uri = Uri.parse(
+      'https://www.google.com/maps/dir/?api=1&destination=${Uri.encodeComponent(query)}',
+    );
+    await launchUrl(uri, mode: LaunchMode.externalApplication);
+  }
 
   Future<void> _showJobDetails(
       BuildContext context, WidgetRef ref, Color accent) {
@@ -263,27 +289,44 @@ class _JobCard extends ConsumerWidget {
                     ],
                   )
                 else if (canOpenExecution)
-                  Row(
+                  Column(
                     children: [
-                      Expanded(
-                        child: FilledButton(
+                      SizedBox(
+                        width: double.infinity,
+                        child: FilledButton.tonalIcon(
                           onPressed: () {
                             Navigator.of(sheetContext).pop();
-                            context.push(
-                                '/job-execution?bookingId=${job.bookingId}');
+                            _openNavigation(job);
                           },
-                          child: const Text('Open Execution'),
+                          icon: const Icon(Icons.navigation_rounded),
+                          label: const Text('Navigate'),
                         ),
                       ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: OutlinedButton(
-                          onPressed: () {
-                            Navigator.of(sheetContext).pop();
-                            context.push('/chat?bookingId=${job.bookingId}');
-                          },
-                          child: const Text('Chat'),
-                        ),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: FilledButton(
+                              onPressed: () {
+                                Navigator.of(sheetContext).pop();
+                                context.push(
+                                  '/job-execution?bookingId=${job.bookingId}',
+                                );
+                              },
+                              child: const Text('Open Execution'),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: OutlinedButton(
+                              onPressed: () {
+                                Navigator.of(sheetContext).pop();
+                                context.push('/chat?bookingId=${job.bookingId}');
+                              },
+                              child: const Text('Chat'),
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   )

@@ -1,12 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:marketplace_shared/marketplace_shared.dart';
 import 'package:razorpay_flutter/razorpay_flutter.dart';
 import '../../../cart/presentation/providers/cart_providers.dart';
 import '../../../profile/data/saved_addresses_api.dart';
 
-final savedAddressesProvider = FutureProvider.autoDispose<List<SavedAddressItem>>((ref) async {
+final savedAddressesProvider =
+    FutureProvider.autoDispose<List<SavedAddressItem>>((ref) async {
   final apiClient = ref.watch(apiClientProvider);
   final dio = apiClient.dio;
   final api = SavedAddressesApi(dio);
@@ -38,9 +41,15 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
 
   String? _appliedCoupon;
   SavedAddressItem? _selectedAddress;
+  LatLng? _selectedGeoPoint;
 
   final List<String> _slots = const [
-    '08:00 AM', '10:00 AM', '12:00 PM', '02:00 PM', '04:00 PM', '06:00 PM',
+    '08:00 AM',
+    '10:00 AM',
+    '12:00 PM',
+    '02:00 PM',
+    '04:00 PM',
+    '06:00 PM',
   ];
 
   late final List<DateTime> _dateObjects;
@@ -59,7 +68,8 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
     _razorpay.on(Razorpay.EVENT_PAYMENT_ERROR, _handlePaymentError);
     _razorpay.on(Razorpay.EVENT_EXTERNAL_WALLET, _handleExternalWallet);
 
-    _dateObjects = List.generate(5, (i) => DateTime.now().add(Duration(days: i)));
+    _dateObjects =
+        List.generate(5, (i) => DateTime.now().add(Duration(days: i)));
     _dates = _dateObjects.map(_formatDate).toList();
   }
 
@@ -68,10 +78,10 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
     final dateOnly = DateTime(dt.year, dt.month, dt.day);
     final nowOnly = DateTime(now.year, now.month, now.day);
     final diff = dateOnly.difference(nowOnly).inDays;
-    
+
     if (diff == 0) return 'Today';
     if (diff == 1) return 'Tomorrow';
-    
+
     final weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
     return '${weekdays[dt.weekday - 1]} ${dt.day}';
   }
@@ -93,13 +103,80 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
     super.dispose();
   }
 
+  String _selectedLocationSummary() {
+    final address = _selectedAddress;
+    if (address != null) {
+      return address.displayAddress;
+    }
+
+    final point = _selectedGeoPoint;
+    if (point != null) {
+      return 'Pinned location: ${point.latitude.toStringAsFixed(5)}, ${point.longitude.toStringAsFixed(5)}';
+    }
+
+    return 'No address selected';
+  }
+
+  Future<void> _useCurrentLocation() async {
+    try {
+      final serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+              content: Text(
+                  'Turn on location services to use your current position.')),
+        );
+        return;
+      }
+
+      var permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+      }
+
+      if (permission == LocationPermission.denied ||
+          permission == LocationPermission.deniedForever) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+              content: Text(
+                  'Location permission is required to use your current position.')),
+        );
+        return;
+      }
+
+      final position = await Geolocator.getCurrentPosition(
+        locationSettings:
+            const LocationSettings(accuracy: LocationAccuracy.high),
+      );
+      if (!mounted) return;
+
+      final picked = await context.push<LatLng>(
+        '/map-picker?lat=${position.latitude}&lng=${position.longitude}',
+      );
+      if (picked != null && mounted) {
+        setState(() {
+          _selectedGeoPoint = picked;
+          _selectedAddress = null;
+        });
+      }
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Unable to use current location: $error')),
+      );
+    }
+  }
+
   Future<void> _handlePaymentSuccess(PaymentSuccessResponse response) async {
     final bookingId = _pendingBookingId;
     final orderId = _pendingOrderId;
-    
+
     if (bookingId == null || orderId == null) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Payment Successful but booking details missing.')));
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('Payment Successful but booking details missing.')));
       }
       return;
     }
@@ -118,11 +195,13 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
       ref.read(cartProvider.notifier).clearCart();
 
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Payment Verified & Booking Confirmed!')));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Payment Verified & Booking Confirmed!')));
       context.pushReplacement('/tracking?bookingId=$bookingId');
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Verification Failed: $e')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('Verification Failed: $e')));
     } finally {
       if (mounted) setState(() => _isProcessing = false);
     }
@@ -131,13 +210,15 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
   void _handlePaymentError(PaymentFailureResponse response) {
     if (!mounted) return;
     setState(() => _isProcessing = false);
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Payment Failed: ${response.message}')));
+    ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Payment Failed: ${response.message}')));
   }
 
   void _handleExternalWallet(ExternalWalletResponse response) {
     if (!mounted) return;
     setState(() => _isProcessing = false);
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('External Wallet: ${response.walletName}')));
+    ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('External Wallet: ${response.walletName}')));
   }
 
   Future<void> _openCheckout(String finalServiceId, double amount) async {
@@ -145,14 +226,18 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
 
     final session = ref.read(authControllerProvider).valueOrNull;
     final user = session?.user;
+    final cityId = user?.cityId?.trim() ?? '';
+    final phone = user?.phone?.trim() ?? '';
+    final email = user?.email?.trim() ?? '';
 
     try {
       setState(() => _isProcessing = true);
       final repo = ref.read(paymentRepositoryProvider);
-      
-      final session = ref.read(authControllerProvider).valueOrNull;
-      // App is only for Chennai — use user's cityId from auth session (parsed from JWT/me response)
-      final cityId = session?.user.cityId ?? 'city_kochi';
+
+      if (cityId.isEmpty) {
+        throw StateError(
+            'Your city is missing from your profile. Please update your profile and try again.');
+      }
 
       final orderData = await repo.createOrder(
         cityId: cityId,
@@ -173,17 +258,19 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
         'name': 'Veedufix',
         'description': 'Booking ${_pendingBookingId ?? ""}',
         'order_id': orderData['orderId'],
-        'prefill': {
-          'contact': user?.phone ?? '9876543210',
-          'email': user?.email ?? 'customer@veedufix.com'
-        }
+        if (phone.isNotEmpty || email.isNotEmpty)
+          'prefill': {
+            if (phone.isNotEmpty) 'contact': phone,
+            if (email.isNotEmpty) 'email': email,
+          }
       };
-      
+
       _razorpay.open(options);
     } catch (e) {
       if (!mounted) return;
       setState(() => _isProcessing = false);
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error initializing payment: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error initializing payment: $e')));
     }
   }
 
@@ -198,7 +285,9 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
     double resolvedServicePrice = 0.0;
     bool isLoadingService = false;
 
-    if (widget.serviceId != null && widget.serviceName != null && widget.servicePrice != null) {
+    if (widget.serviceId != null &&
+        widget.serviceName != null &&
+        widget.servicePrice != null) {
       resolvedServiceId = widget.serviceId!;
       resolvedServiceName = widget.serviceName!;
       resolvedServicePrice = widget.servicePrice!;
@@ -209,7 +298,8 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
         resolvedServiceName = cart.first.service.name;
         resolvedServicePrice = cart.first.service.startingPrice;
       } else if (widget.serviceId != null) {
-        final serviceAsync = ref.watch(serviceDetailProvider(widget.serviceId!));
+        final serviceAsync =
+            ref.watch(serviceDetailProvider(widget.serviceId!));
         serviceAsync.when(
           data: (service) {
             resolvedServiceId = service.id;
@@ -255,7 +345,8 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
               children: [
                 // ─── Progress stepper ────────────────────────────────────────
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
                   child: _Stepper(currentStep: _step),
                 ),
                 const Divider(height: 1),
@@ -280,11 +371,14 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
                         0 => _StepAddress(
                             key: const ValueKey(0),
                             selectedAddress: _selectedAddress,
+                            hasGeoSelection: _selectedGeoPoint != null,
                             onAddressSelected: (address) {
                               setState(() {
                                 _selectedAddress = address;
+                                _selectedGeoPoint = null;
                               });
                             },
+                            onUseCurrentLocation: _useCurrentLocation,
                             onChangeAddress: () => context.push('/addresses'),
                           ),
                         1 => _StepDateTime(
@@ -293,13 +387,15 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
                             slots: _slots,
                             selectedDate: _selectedDate,
                             selectedSlot: _selectedSlot,
-                            onDateSelected: (i) => setState(() => _selectedDate = i),
-                            onSlotSelected: (i) => setState(() => _selectedSlot = i),
+                            onDateSelected: (i) =>
+                                setState(() => _selectedDate = i),
+                            onSlotSelected: (i) =>
+                                setState(() => _selectedSlot = i),
                           ),
                         2 => _StepSummary(
                             key: const ValueKey(2),
                             serviceName: resolvedServiceName,
-                            address: _selectedAddress?.displayAddress ?? 'No address selected',
+                            address: _selectedLocationSummary(),
                             date: _dates[_selectedDate],
                             slot: _slots[_selectedSlot],
                             basePrice: resolvedServicePrice,
@@ -330,9 +426,13 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
                   child: SafeArea(
                     child: TapScale(
                       onTap: () {
-                        if (_step == 0 && _selectedAddress == null) {
+                        if (_step == 0 &&
+                            _selectedAddress == null &&
+                            _selectedGeoPoint == null) {
                           ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Please select an address')),
+                            const SnackBar(
+                                content: Text(
+                                    'Please select an address or use current location')),
                           );
                           return;
                         }
@@ -349,12 +449,13 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
                         padding: const EdgeInsets.symmetric(vertical: 18),
                         decoration: BoxDecoration(
                           color: cs.primary,
-                          borderRadius: BorderRadius.circular(AbzioTheme.buttonRadius),
+                          borderRadius:
+                              BorderRadius.circular(AbzioTheme.buttonRadius),
                           boxShadow: AbzioTheme.eliteShadow,
                         ),
                         child: Text(
-                          _step < 2 
-                              ? 'Continue' 
+                          _step < 2
+                              ? 'Continue'
                               : _isProcessing
                                   ? 'Processing...'
                                   : 'Confirm & Pay  ₹${totalAmount.toStringAsFixed(0)}',
@@ -434,11 +535,15 @@ class _StepAddress extends ConsumerWidget {
   const _StepAddress({
     super.key,
     required this.selectedAddress,
+    required this.hasGeoSelection,
     required this.onAddressSelected,
+    required this.onUseCurrentLocation,
     required this.onChangeAddress,
   });
   final SavedAddressItem? selectedAddress;
+  final bool hasGeoSelection;
   final ValueChanged<SavedAddressItem> onAddressSelected;
+  final Future<void> Function() onUseCurrentLocation;
   final VoidCallback onChangeAddress;
 
   @override
@@ -450,24 +555,27 @@ class _StepAddress extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Service Address', style: tt.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
+        Text('Service Address',
+            style: tt.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
         const SizedBox(height: 6),
-        Text('Where should the professional go?', style: tt.bodyMedium?.copyWith(color: cs.onSurfaceVariant)),
+        Text('Where should the professional go?',
+            style: tt.bodyMedium?.copyWith(color: cs.onSurfaceVariant)),
         const SizedBox(height: 24),
-        
         addressesAsync.when(
           data: (addresses) {
             if (addresses.isEmpty) {
               return Padding(
                 padding: const EdgeInsets.only(bottom: 16),
-                child: Text('No saved addresses found. Please add one.', 
-                  style: tt.bodyMedium?.copyWith(color: cs.error)),
+                child: Text('No saved addresses found. Please add one.',
+                    style: tt.bodyMedium?.copyWith(color: cs.error)),
               );
             }
 
             // Auto-select first address if none selected
             WidgetsBinding.instance.addPostFrameCallback((_) {
-              if (selectedAddress == null && addresses.isNotEmpty) {
+              if (selectedAddress == null &&
+                  !hasGeoSelection &&
+                  addresses.isNotEmpty) {
                 onAddressSelected(addresses.first);
               }
             });
@@ -483,37 +591,53 @@ class _StepAddress extends ConsumerWidget {
                       child: Container(
                         padding: const EdgeInsets.all(18),
                         decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(AbzioTheme.cardRadius),
-                          border: isSelected ? Border.all(color: cs.primary, width: 2) : Border.all(color: Colors.transparent, width: 2),
+                          borderRadius:
+                              BorderRadius.circular(AbzioTheme.cardRadius),
+                          border: isSelected
+                              ? Border.all(color: cs.primary, width: 2)
+                              : Border.all(color: Colors.transparent, width: 2),
                         ),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Row(
                               children: [
-                                Icon(address.label.toLowerCase() == 'home' ? Icons.home_rounded : Icons.location_on_rounded, color: cs.primary),
+                                Icon(
+                                    address.label.toLowerCase() == 'home'
+                                        ? Icons.home_rounded
+                                        : Icons.location_on_rounded,
+                                    color: cs.primary),
                                 const SizedBox(width: 10),
-                                Text(address.label.isNotEmpty ? address.label : 'Saved Address',
-                                    style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
+                                Text(
+                                    address.label.isNotEmpty
+                                        ? address.label
+                                        : 'Saved Address',
+                                    style: tt.titleMedium?.copyWith(
+                                        fontWeight: FontWeight.w700)),
                                 const Spacer(),
                                 if (address.isDefault)
                                   Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 10, vertical: 4),
                                     decoration: BoxDecoration(
                                       color: cs.primary.withValues(alpha: 0.1),
                                       borderRadius: BorderRadius.circular(8),
                                     ),
                                     child: Text('Default',
-                                        style: tt.labelSmall?.copyWith(color: cs.primary, fontWeight: FontWeight.w700)),
+                                        style: tt.labelSmall?.copyWith(
+                                            color: cs.primary,
+                                            fontWeight: FontWeight.w700)),
                                   ),
                                 if (isSelected)
-                                  Icon(Icons.check_circle_rounded, color: cs.primary, size: 20),
+                                  Icon(Icons.check_circle_rounded,
+                                      color: cs.primary, size: 20),
                               ],
                             ),
                             const SizedBox(height: 10),
                             Text(
                               address.displayAddress,
-                              style: tt.bodyMedium?.copyWith(color: cs.onSurfaceVariant, height: 1.5),
+                              style: tt.bodyMedium?.copyWith(
+                                  color: cs.onSurfaceVariant, height: 1.5),
                             ),
                           ],
                         ),
@@ -530,16 +654,13 @@ class _StepAddress extends ConsumerWidget {
           ),
           error: (err, stack) => Padding(
             padding: const EdgeInsets.only(bottom: 16),
-            child: Text('Failed to load addresses: $err', style: tt.bodyMedium?.copyWith(color: cs.error)),
+            child: Text('Failed to load addresses: $err',
+                style: tt.bodyMedium?.copyWith(color: cs.error)),
           ),
         ),
-        
         const SizedBox(height: 16),
         TapScale(
-          onTap: () {
-            // Placeholder for current location logic
-            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Locating...')));
-          },
+          onTap: () => onUseCurrentLocation(),
           child: Container(
             padding: const EdgeInsets.all(18),
             decoration: BoxDecoration(
@@ -550,7 +671,9 @@ class _StepAddress extends ConsumerWidget {
               children: [
                 Icon(Icons.my_location_rounded, color: cs.primary),
                 const SizedBox(width: 12),
-                Text('Use current location', style: tt.bodyLarge?.copyWith(color: cs.primary, fontWeight: FontWeight.w600)),
+                Text('Use current location',
+                    style: tt.bodyLarge?.copyWith(
+                        color: cs.primary, fontWeight: FontWeight.w600)),
               ],
             ),
           ),
@@ -561,14 +684,17 @@ class _StepAddress extends ConsumerWidget {
           child: Container(
             padding: const EdgeInsets.all(18),
             decoration: BoxDecoration(
-              border: Border.all(color: cs.outlineVariant, style: BorderStyle.solid),
+              border: Border.all(
+                  color: cs.outlineVariant, style: BorderStyle.solid),
               borderRadius: BorderRadius.circular(AbzioTheme.cardRadius),
             ),
             child: Row(
               children: [
                 Icon(Icons.add_location_alt_rounded, color: cs.primary),
                 const SizedBox(width: 12),
-                Text('Add or manage addresses', style: tt.bodyLarge?.copyWith(color: cs.primary, fontWeight: FontWeight.w600)),
+                Text('Add or manage addresses',
+                    style: tt.bodyLarge?.copyWith(
+                        color: cs.primary, fontWeight: FontWeight.w600)),
               ],
             ),
           ),
@@ -604,7 +730,8 @@ class _StepDateTime extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Choose Date', style: tt.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
+        Text('Choose Date',
+            style: tt.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
         const SizedBox(height: 16),
         SizedBox(
           height: 72,
@@ -621,7 +748,8 @@ class _StepDateTime extends StatelessWidget {
                   width: 76,
                   decoration: BoxDecoration(
                     color: selected ? cs.primary : cs.surface,
-                    borderRadius: BorderRadius.circular(AbzioTheme.buttonRadius),
+                    borderRadius:
+                        BorderRadius.circular(AbzioTheme.buttonRadius),
                     boxShadow: AbzioTheme.eliteShadow,
                   ),
                   child: Center(
@@ -640,7 +768,8 @@ class _StepDateTime extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 32),
-        Text('Choose Time Slot', style: tt.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
+        Text('Choose Time Slot',
+            style: tt.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
         const SizedBox(height: 16),
         GridView.builder(
           shrinkWrap: true,
@@ -663,7 +792,8 @@ class _StepDateTime extends StatelessWidget {
                   borderRadius: BorderRadius.circular(14),
                   border: selected
                       ? null
-                      : Border.all(color: cs.outlineVariant.withValues(alpha: 0.6)),
+                      : Border.all(
+                          color: cs.outlineVariant.withValues(alpha: 0.6)),
                   boxShadow: selected
                       ? [
                           BoxShadow(
@@ -722,26 +852,40 @@ class _StepSummary extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Order Summary', style: tt.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
+        Text('Order Summary',
+            style: tt.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
         const SizedBox(height: 20),
         PremiumCard(
           child: Padding(
             padding: const EdgeInsets.all(18),
             child: Column(
               children: [
-                _SummaryRow(icon: Icons.cleaning_services_rounded, label: 'Service', value: serviceName),
+                _SummaryRow(
+                    icon: Icons.cleaning_services_rounded,
+                    label: 'Service',
+                    value: serviceName),
                 const Divider(height: 24),
-                _SummaryRow(icon: Icons.location_on_rounded, label: 'Address', value: address),
+                _SummaryRow(
+                    icon: Icons.location_on_rounded,
+                    label: 'Address',
+                    value: address),
                 const Divider(height: 24),
-                _SummaryRow(icon: Icons.calendar_today_rounded, label: 'Date', value: date),
+                _SummaryRow(
+                    icon: Icons.calendar_today_rounded,
+                    label: 'Date',
+                    value: date),
                 const Divider(height: 24),
-                _SummaryRow(icon: Icons.access_time_rounded, label: 'Time Slot', value: slot),
+                _SummaryRow(
+                    icon: Icons.access_time_rounded,
+                    label: 'Time Slot',
+                    value: slot),
               ],
             ),
           ),
         ),
         const SizedBox(height: 24),
-        Text('Bill Details', style: tt.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
+        Text('Bill Details',
+            style: tt.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
         const SizedBox(height: 16),
         PremiumCard(
           child: Padding(
@@ -757,11 +901,19 @@ class _StepSummary extends StatelessWidget {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Text('Discount ($couponCode)',
-                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                              color: const Color(0xFF10B981), fontWeight: FontWeight.w600)),
+                          style: Theme.of(context)
+                              .textTheme
+                              .bodyMedium
+                              ?.copyWith(
+                                  color: const Color(0xFF10B981),
+                                  fontWeight: FontWeight.w600)),
                       Text('-₹100',
-                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                              color: const Color(0xFF10B981), fontWeight: FontWeight.w800)),
+                          style: Theme.of(context)
+                              .textTheme
+                              .bodyMedium
+                              ?.copyWith(
+                                  color: const Color(0xFF10B981),
+                                  fontWeight: FontWeight.w800)),
                     ],
                   ),
                 ],
@@ -770,7 +922,9 @@ class _StepSummary extends StatelessWidget {
                 const SizedBox(height: 12),
                 _BillRow(
                   label: 'Total',
-                  amount: couponCode != null ? (basePrice + gst - 100) : (basePrice + gst),
+                  amount: couponCode != null
+                      ? (basePrice + gst - 100)
+                      : (basePrice + gst),
                   isBold: true,
                 ),
               ],
@@ -783,25 +937,36 @@ class _StepSummary extends StatelessWidget {
           child: Container(
             padding: const EdgeInsets.all(18),
             decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
-              border: Border.all(color: Theme.of(context).colorScheme.outlineVariant, style: BorderStyle.solid),
+              color: Theme.of(context)
+                  .colorScheme
+                  .surfaceContainerHighest
+                  .withValues(alpha: 0.3),
+              border: Border.all(
+                  color: Theme.of(context).colorScheme.outlineVariant,
+                  style: BorderStyle.solid),
               borderRadius: BorderRadius.circular(AbzioTheme.cardRadius),
             ),
             child: Row(
               children: [
-                Icon(Icons.local_offer_rounded, color: Theme.of(context).colorScheme.primary),
+                Icon(Icons.local_offer_rounded,
+                    color: Theme.of(context).colorScheme.primary),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Text(
-                    couponCode != null ? 'Coupon $couponCode applied!' : 'View offers and coupons',
+                    couponCode != null
+                        ? 'Coupon $couponCode applied!'
+                        : 'View offers and coupons',
                     style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                        color: Theme.of(context).colorScheme.primary, fontWeight: FontWeight.w600),
+                        color: Theme.of(context).colorScheme.primary,
+                        fontWeight: FontWeight.w600),
                   ),
                 ),
                 if (couponCode == null)
-                  Icon(Icons.arrow_forward_ios_rounded, size: 16, color: Theme.of(context).colorScheme.primary),
+                  Icon(Icons.arrow_forward_ios_rounded,
+                      size: 16, color: Theme.of(context).colorScheme.primary),
                 if (couponCode != null)
-                  const Icon(Icons.check_circle_rounded, color: Color(0xFF10B981)),
+                  const Icon(Icons.check_circle_rounded,
+                      color: Color(0xFF10B981)),
               ],
             ),
           ),
@@ -810,11 +975,13 @@ class _StepSummary extends StatelessWidget {
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.security_rounded, color: Theme.of(context).colorScheme.primary, size: 20),
+            Icon(Icons.security_rounded,
+                color: Theme.of(context).colorScheme.primary, size: 20),
             const SizedBox(width: 8),
             Text('Protected by Veedufix Guarantee',
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant, fontWeight: FontWeight.w600)),
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    fontWeight: FontWeight.w600)),
           ],
         ),
         const SizedBox(height: 16),
@@ -846,9 +1013,11 @@ class _SummaryRow extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(label, style: tt.labelMedium?.copyWith(color: cs.onSurfaceVariant)),
+              Text(label,
+                  style: tt.labelMedium?.copyWith(color: cs.onSurfaceVariant)),
               const SizedBox(height: 2),
-              Text(value, style: tt.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
+              Text(value,
+                  style: tt.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
             ],
           ),
         ),

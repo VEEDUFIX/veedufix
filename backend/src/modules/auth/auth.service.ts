@@ -237,7 +237,7 @@ export async function signInWithGoogle(input: {
   const googleClaims = await verifyGoogleIdToken(input.idToken);
   const email =
     googleClaims.email?.toLowerCase() ??
-    `google-${googleClaims.sub}@placeholder.local`;
+    `google-${googleClaims.sub}@veedufix.local`;
   const name = googleClaims.name ?? "Google User";
   const avatarUrl = googleClaims.picture ?? null;
   const providerId = `google:${googleClaims.sub}`;
