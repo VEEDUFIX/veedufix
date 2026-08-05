@@ -33,6 +33,9 @@ class _AppShellPageState extends ConsumerState<AppShellPage> {
   Widget build(BuildContext context) {
     final location = GoRouterState.of(context).matchedLocation;
     final overviewAsync = ref.watch(adminShellOverviewProvider);
+    final session = ref.watch(authControllerProvider).valueOrNull;
+    final adminName = session?.user.name ?? 'Admin';
+    final adminInitial = adminName.isNotEmpty ? adminName[0].toUpperCase() : 'A';
     final summary = overviewAsync.valueOrNull?.summary;
     final alertsCount = overviewAsync.valueOrNull?.alerts.length ?? 0;
     final supportTicketsCount = summary?.openSupportTicketsCount ?? 0;
@@ -368,9 +371,9 @@ class _AppShellPageState extends ConsumerState<AppShellPage> {
                                   radius: 16,
                                   backgroundColor: const Color(0xFF0F766E)
                                       .withValues(alpha: 0.12),
-                                  child: const Text(
-                                    'AD',
-                                    style: TextStyle(
+                                  child: Text(
+                                    adminInitial,
+                                    style: const TextStyle(
                                       color: Color(0xFF0F766E),
                                       fontSize: 12,
                                       fontWeight: FontWeight.bold,
@@ -379,7 +382,7 @@ class _AppShellPageState extends ConsumerState<AppShellPage> {
                                 ),
                                 const SizedBox(width: 8),
                                 Text(
-                                  'Admin',
+                                  adminName,
                                   style: GoogleFonts.inter(
                                     fontWeight: FontWeight.w600,
                                     color: textPrimary,

@@ -9,6 +9,7 @@ import { validateChecklistCompletion } from "../checklist/checklist.service.js";
 import { releaseWorkerPayout } from "../payout/payout.service.js";
 import { isWorkerEligible } from "../worker-onboarding/worker-onboarding.service.js";
 import { recordBookingTimelineEvent } from "../../lib/booking-timeline.js";
+import { AppError } from "../../lib/app-error.js";
 
 export class UnauthorizedError extends Error {
   constructor(message = "Unauthorized") {
@@ -151,7 +152,7 @@ async function getBookingWithExecution(bookingId: string) {
   });
 
   if (!booking) {
-    throw new Error("Booking not found");
+    throw AppError.notFound("Booking not found");
   }
 
   return booking;
@@ -201,7 +202,7 @@ async function requireCustomerBooking(bookingId: string, customerId: string) {
 function resolveServiceId(booking: Awaited<ReturnType<typeof getBookingWithExecution>>): string {
   const serviceId = booking.services.find((item: any) => item.serviceId)?.serviceId;
   if (!serviceId) {
-    throw new Error("Service not found for booking");
+    throw AppError.notFound("Service not found for booking");
   }
 
   return serviceId;

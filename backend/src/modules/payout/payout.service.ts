@@ -4,6 +4,7 @@ import { env } from "../../config/env.js";
 import { prisma } from "../../lib/prisma.js";
 import { logger } from "../../lib/logger.js";
 import { maskWorkerFinancialFields } from "../../lib/mask-worker.js";
+import { AppError } from "../../lib/app-error.js";
 
 type PayoutStatus = "pending" | "processing" | "success" | "failed";
 
@@ -61,7 +62,7 @@ export function getCommissionPercent(): number {
 
 function getRazorpayAuthHeader(): string {
   if (!env.RAZORPAY_KEY_ID || !env.RAZORPAY_KEY_SECRET) {
-    throw new Error("Razorpay credentials are not configured");
+    throw new AppError(500, "Razorpay credentials are not configured");
   }
 
   return `Basic ${Buffer.from(`${env.RAZORPAY_KEY_ID}:${env.RAZORPAY_KEY_SECRET}`).toString("base64")}`;
@@ -69,7 +70,7 @@ function getRazorpayAuthHeader(): string {
 
 function getRazorpayAccountNumber(): string {
   if (!env.RAZORPAY_ACCOUNT_NUMBER || env.RAZORPAY_ACCOUNT_NUMBER.trim().length === 0) {
-    throw new Error("RAZORPAY_ACCOUNT_NUMBER is not configured");
+    throw new AppError(500, "RAZORPAY_ACCOUNT_NUMBER is not configured");
   }
 
   return env.RAZORPAY_ACCOUNT_NUMBER.trim();
@@ -175,7 +176,7 @@ function resolveWorkerPhone(payout: PayoutRecordWithBooking): string | null {
 function buildAttemptContext(payout: PayoutRecordWithBooking): PayoutAttemptContext {
   const worker = payout.booking.worker;
   if (!worker) {
-    throw new Error("Assigned worker not found for payout");
+    throw AppError.notFound("Assigned worker not found for payout");
   }
 
   const totalAmount = toNumber(payout.booking.totalAmount);
@@ -184,7 +185,7 @@ function buildAttemptContext(payout: PayoutRecordWithBooking): PayoutAttemptCont
   const amount = roundToTwo(totalAmount - commissionAmount);
 
   if (amount <= 0) {
-    throw new Error("Payout amount must be greater than zero");
+    throw AppError.badRequest("Payout amount must be greater than zero");
   }
 
   const workerName = resolveWorkerName(payout);
@@ -192,7 +193,7 @@ function buildAttemptContext(payout: PayoutRecordWithBooking): PayoutAttemptCont
   const workerEmail = worker.user.email ?? undefined;
 
   if (!workerPhone) {
-    throw new Error("Worker phone number is required for payout");
+    throw AppError.badRequest("Worker phone number is required for payout");
   }
 
   const commonContact = {
@@ -230,7 +231,7 @@ function buildAttemptContext(payout: PayoutRecordWithBooking): PayoutAttemptCont
     const bankAccountNumber = worker.bankAccountNumber?.trim();
     const bankIfsc = worker.bankIfsc?.trim();
     if (!bankAccountNumber || !bankIfsc) {
-      throw new Error("Worker bank account details are incomplete");
+      throw AppError.badRequest("Worker bank account details are incomplete");
     }
   }
 
@@ -274,11 +275,11 @@ async function callRazorpayPayout(context: PayoutAttemptContext): Promise<Razorp
   const payload = (await response.json().catch(() => null)) as RazorpayPayoutResponse | { error?: unknown } | null;
 
   if (!response.ok) {
-    throw new Error(extractFailureReason(payload, `Razorpay payout request failed with status ${response.status}`));
+    throw new AppError(502, extractFailureReason(payload, `Razorpay payout request failed with status ${response.status}`));
   }
 
   if (!payload || typeof payload !== "object" || !("id" in payload)) {
-    throw new Error("Razorpay payout response was malformed");
+    throw new AppError(502, "Razorpay payout response was malformed");
   }
 
   return payload as RazorpayPayoutResponse;

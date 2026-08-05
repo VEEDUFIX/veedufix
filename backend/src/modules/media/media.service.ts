@@ -1,5 +1,6 @@
 import { prisma } from "../../lib/prisma.js";
 import { uploadBufferToCloudinary } from "../../lib/cloudinary.js";
+import { AppError } from "../../lib/app-error.js";
 
 type UploadedFile = Express.Multer.File;
 
@@ -24,7 +25,7 @@ async function ensureWorkerProfile(userId: string) {
   });
 
   if (!workerProfile) {
-    throw new Error("Worker profile not found");
+    throw AppError.notFound("Worker profile not found");
   }
 
   return workerProfile;

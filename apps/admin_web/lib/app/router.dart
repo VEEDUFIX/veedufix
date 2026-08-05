@@ -63,6 +63,12 @@ final routerProvider = Provider<GoRouter>((ref) {
         return isAuthRoute ? null : '/login';
       }
 
+      // Enforce ADMIN role — an authenticated CUSTOMER or WORKER must not
+      // access admin routes even if they hold a valid token.
+      if (session.user.role != 'ADMIN') {
+        return '/login';
+      }
+
       if (location == '/login' || location == '/otp' || location == '/splash') {
         return homeRoute;
       }

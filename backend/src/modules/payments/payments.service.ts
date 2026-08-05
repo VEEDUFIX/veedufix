@@ -1,4 +1,5 @@
 import { BookingStatus, CouponType, PaymentStatus, Prisma } from "@prisma/client";
+import { AppError } from "../../lib/app-error.js";
 import { createHmac, randomBytes } from "crypto";
 import Razorpay from "razorpay";
 import { env } from "../../config/env.js";
@@ -99,7 +100,7 @@ const razorpay = createRazorpayClient();
 
 function getRazorpayWebhookUrl(): string {
   if (!env.RAZORPAY_WEBHOOK_URL || env.RAZORPAY_WEBHOOK_URL.trim().length === 0) {
-    throw new Error("Razorpay webhook URL is not configured");
+    throw new AppError(500, "Razorpay webhook URL is not configured");
   }
 
   return env.RAZORPAY_WEBHOOK_URL.trim();
@@ -107,7 +108,7 @@ function getRazorpayWebhookUrl(): string {
 
 function createRazorpayClient(): Razorpay {
   if (!env.RAZORPAY_KEY_ID || !env.RAZORPAY_KEY_SECRET) {
-    throw new Error("Razorpay credentials are not configured");
+    throw new AppError(500, "Razorpay credentials are not configured");
   }
 
   return new Razorpay({
@@ -171,7 +172,7 @@ async function ensureCity(cityId: string): Promise<void> {
   });
 
   if (!city) {
-    throw new Error("City not found");
+    throw AppError.notFound("City not found");
   }
 }
 
@@ -185,7 +186,7 @@ async function ensureBookingAddress(userId: string, cityId: string): Promise<str
     return existing.id;
   }
 
-  throw new Error("Please add a valid saved address before placing a booking");
+  throw AppError.badRequest("Please add a valid saved address before placing a booking");
 }
 
 async function resolveCustomerContext(
@@ -213,11 +214,11 @@ async function resolveCustomerContext(
   ]);
 
   if (!user) {
-    throw new Error("User not found");
+    throw AppError.notFound("User not found");
   }
 
   if (!bookingCity) {
-    throw new Error("City not found");
+    throw AppError.notFound("City not found");
   }
 
   if (!user.cityId) {
@@ -234,7 +235,7 @@ async function resolveCustomerContext(
   });
 
   if (!address) {
-    throw new Error("Please add a valid saved address before placing a booking");
+    throw AppError.badRequest("Please add a valid saved address before placing a booking");
   }
 
   await assertServiceablePincode({
@@ -264,7 +265,7 @@ async function resolveBookingItems(input: {
   const uniqueServiceIds = [...new Set(input.items.map((item) => item.serviceId))];
 
   if (uniqueServiceIds.length === 0) {
-    throw new Error("At least one service must be selected");
+    throw AppError.badRequest("At least one service must be selected");
   }
 
   const services = (await prisma.service.findMany({
@@ -290,7 +291,7 @@ async function resolveBookingItems(input: {
   })) as ServicePricingRecord[];
 
   if (services.length !== uniqueServiceIds.length) {
-    throw new Error("One or more selected services were not found");
+    throw AppError.notFound("One or more selected services were not found");
   }
 
   const serviceById = new Map(services.map((service) => [service.id, service] as const));
@@ -300,12 +301,12 @@ async function resolveBookingItems(input: {
     const service = serviceById.get(item.serviceId);
 
     if (!service) {
-      throw new Error("One or more selected services were not found");
+      throw AppError.notFound("One or more selected services were not found");
     }
 
     const quantity = item.quantity ?? 1;
     if (!Number.isInteger(quantity) || quantity <= 0) {
-      throw new Error("Quantity must be a positive integer");
+      throw AppError.badRequest("Quantity must be a positive integer");
     }
 
     const unitPrice = resolveServiceUnitPrice(service, input.cityId, at);
@@ -361,20 +362,20 @@ async function resolveCouponDiscount(input: {
   });
 
   if (!coupon) {
-    throw new Error("Invalid coupon code");
+    throw AppError.badRequest("Invalid coupon code");
   }
 
   const at = now();
   if (coupon.startsAt && coupon.startsAt.getTime() > at.getTime()) {
-    throw new Error("Coupon is not active yet");
+    throw AppError.badRequest("Coupon is not active yet");
   }
 
   if (coupon.endsAt && coupon.endsAt.getTime() < at.getTime()) {
-    throw new Error("Coupon has expired");
+    throw AppError.gone("Coupon has expired");
   }
 
   if (coupon.minOrderAmount && input.subtotalAmount.lt(coupon.minOrderAmount)) {
-    throw new Error("Order does not meet the minimum amount for this coupon");
+    throw AppError.badRequest("Order does not meet the minimum amount for this coupon");
   }
 
   let discountAmount = new Prisma.Decimal(0);
@@ -384,7 +385,7 @@ async function resolveCouponDiscount(input: {
   } else if (coupon.type === CouponType.FIXED) {
     discountAmount = coupon.value;
   } else {
-    throw new Error("Unsupported coupon type");
+    throw AppError.badRequest("Unsupported coupon type");
   }
 
   if (coupon.maxDiscount && discountAmount.gt(coupon.maxDiscount)) {
@@ -479,7 +480,7 @@ function verifyRazorpaySignature(input: {
   signature: string;
 }): boolean {
   if (!env.RAZORPAY_KEY_SECRET) {
-    throw new Error("Razorpay credentials are not configured");
+    throw new AppError(500, "Razorpay credentials are not configured");
   }
 
   const expected = createHmac("sha256", env.RAZORPAY_KEY_SECRET)
@@ -563,7 +564,7 @@ export async function createPaymentOrder(
   const totalAmountPaise = toPaise(totalAmount);
 
   if (totalAmountPaise < MINIMUM_ORDER_AMOUNT_PAISE) {
-    throw new Error("Final amount is below the minimum payable amount");
+    throw AppError.badRequest("Final amount is below the minimum payable amount");
   }
 
   const bookingSummary = items.map((item) => `${item.serviceName} x${item.quantity}`).join(", ");
@@ -735,11 +736,11 @@ export async function verifyPayment(
   });
 
   if (!payment) {
-    throw new Error("Payment not found");
+    throw AppError.notFound("Payment not found");
   }
 
   if (payment.booking.customerId !== input.userId) {
-    throw new Error("Payment does not belong to this user");
+    throw AppError.forbidden("Payment does not belong to this user");
   }
 
   if (!verifyRazorpaySignature({
@@ -747,7 +748,7 @@ export async function verifyPayment(
     paymentId: input.razorpayPaymentId,
     signature: input.razorpaySignature
   })) {
-    throw new Error("Invalid payment signature");
+    throw AppError.badRequest("Invalid payment signature");
   }
 
   const expectedAmountPaise = toPaise(payment.booking.totalAmount);
@@ -767,7 +768,7 @@ export async function verifyPayment(
       existingNotes: payment.notes
     });
 
-    throw new Error("Payment amount mismatch");
+    throw AppError.conflict("Payment amount mismatch");
   }
 
   const razorpayPayment = await fetchRazorpayPayment(input.razorpayPaymentId);
@@ -786,11 +787,11 @@ export async function verifyPayment(
       existingNotes: payment.notes
     });
 
-    throw new Error("Payment order does not match the Razorpay payment");
+    throw AppError.conflict("Payment order does not match the Razorpay payment");
   }
 
   if (razorpayPayment.status !== "captured") {
-    throw new Error("Payment has not been captured by Razorpay");
+    throw AppError.conflict("Payment has not been captured by Razorpay");
   }
 
   const razorpayAmountPaise = typeof razorpayPayment.amount === "number" ? razorpayPayment.amount : 0;
@@ -809,7 +810,7 @@ export async function verifyPayment(
       existingNotes: payment.notes
     });
 
-    throw new Error("Payment amount mismatch");
+    throw AppError.conflict("Payment amount mismatch");
   }
 
   if (payment.status === PaymentStatus.CAPTURED) {

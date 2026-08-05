@@ -196,7 +196,7 @@ class _FinanceHomePageState extends ConsumerState<FinanceHomePage> {
                     label: 'Webhook route',
                     value: '2',
                     subtitle: 'Payment + refund callbacks',
-                    color: const Color(0xFF2563EB),
+                    color: Color(0xFF2563EB),
                     icon: Icons.cable_rounded,
                   ),
                 ],

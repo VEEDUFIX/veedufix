@@ -1,30 +1,9 @@
-import 'package:web_socket_channel/web_socket_channel.dart';
-
-Uri buildRealtimeUri({
-  required String apiBaseUrl,
-  required String path,
-  Map<String, String>? queryParameters,
-}) {
-  final baseUri = Uri.parse(apiBaseUrl);
-  final normalizedPath = path.startsWith('/') ? path : '/$path';
-  return baseUri.replace(
-    scheme: baseUri.scheme == 'https' ? 'wss' : 'ws',
-    path: '${baseUri.path}$normalizedPath',
-    queryParameters: queryParameters,
-  );
-}
-
-WebSocketChannel connectNotificationSocket({
-  required String apiBaseUrl,
-  required String token,
-}) {
-  return WebSocketChannel.connect(
-    buildRealtimeUri(
-      apiBaseUrl: apiBaseUrl,
-      path: '/notifications/ws',
-      queryParameters: {
-        'token': token,
-      },
-    ),
-  );
-}
+// This file is intentionally empty.
+//
+// The WebSocket connection helpers it previously contained have been
+// superseded by RealtimeService in package:marketplace_shared.
+//
+// File kept to avoid breaking any stale imports during the transition;
+// it can be safely deleted once all imports are cleaned up.
+@Deprecated('Use RealtimeService from marketplace_shared instead.')
+library;

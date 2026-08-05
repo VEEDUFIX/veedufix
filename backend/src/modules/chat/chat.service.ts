@@ -1,5 +1,6 @@
 import { UserRole } from "@prisma/client";
 import { prisma as db } from "../../lib/prisma.js";
+import { AppError } from "../../lib/app-error.js";
 
 export async function getOrCreateChatRoom(bookingId: string, userId: string, role: UserRole) {
   const booking = await db.booking.findUnique({
@@ -7,15 +8,15 @@ export async function getOrCreateChatRoom(bookingId: string, userId: string, rol
   });
 
   if (!booking) {
-    throw new Error("Booking not found");
+    throw AppError.notFound("Booking not found");
   }
 
   if (role === "CUSTOMER" && booking.customerId !== userId) {
-    throw new Error("Unauthorized");
+    throw AppError.forbidden("Unauthorized");
   }
 
   if (role === "WORKER" && booking.workerId !== userId) {
-    throw new Error("Unauthorized");
+    throw AppError.forbidden("Unauthorized");
   }
 
   let chatRoom = await db.chatRoom.findUnique({
@@ -55,7 +56,7 @@ export async function saveMessage(
   });
 
   if (!chatRoom) {
-    throw new Error("Chat room not found");
+    throw AppError.notFound("Chat room not found");
   }
 
   const message = await db.message.create({
@@ -77,7 +78,7 @@ export async function markMessagesAsRead(bookingId: string, userId: string) {
   });
 
   if (!chatRoom) {
-    throw new Error("Chat room not found");
+    throw AppError.notFound("Chat room not found");
   }
 
   await db.message.updateMany({

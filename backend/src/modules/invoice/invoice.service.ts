@@ -1,6 +1,7 @@
 import { BookingStatus, PaymentStatus, Prisma } from "@prisma/client";
 import { prisma } from "../../lib/prisma.js";
 import { allocateProportionalShares, reverseInclusiveTax, roundMoney } from "../../lib/gst.js";
+import { AppError } from "../../lib/app-error.js";
 
 export type InvoiceLineItemDto = {
   description: string;
@@ -100,12 +101,12 @@ export async function generateInvoiceForBooking(bookingId: string): Promise<Invo
   });
 
   if (!booking) {
-    throw new Error("Booking not found");
+    throw AppError.notFound("Booking not found");
   }
 
   const hasCapturedPayment = booking.payments.some((payment: any) => payment.status === PaymentStatus.CAPTURED);
   if (!hasCapturedPayment) {
-    throw new Error("Invoice can only be generated after payment capture");
+    throw AppError.conflict("Invoice can only be generated after payment capture");
   }
 
   const nonBillableStatuses: BookingStatus[] = [
@@ -117,7 +118,7 @@ export async function generateInvoiceForBooking(bookingId: string): Promise<Invo
   ];
 
   if (nonBillableStatuses.includes(booking.status)) {
-    throw new Error("Booking is not eligible for invoicing");
+    throw AppError.conflict("Booking is not eligible for invoicing");
   }
 
   const platformConfig = await prisma.platformConfig.findUnique({
@@ -125,7 +126,7 @@ export async function generateInvoiceForBooking(bookingId: string): Promise<Invo
   });
 
   if (!platformConfig?.gstin || !platformConfig.legalBusinessName || !platformConfig.registeredAddress) {
-    throw new Error("Platform GST configuration is incomplete");
+    throw new AppError(500, "Platform GST configuration is incomplete");
   }
 
   const platformGstin = platformConfig.gstin;
@@ -146,7 +147,7 @@ export async function generateInvoiceForBooking(bookingId: string): Promise<Invo
   }
 
   if (booking.services.length === 0) {
-    throw new Error("Booking has no services to invoice");
+    throw AppError.conflict("Booking has no services to invoice");
   }
 
   const subtotalAmount = roundMoney(booking.subtotalAmount);
@@ -239,7 +240,7 @@ export async function generateInvoiceForBooking(bookingId: string): Promise<Invo
   });
 
   if (!invoice) {
-    throw new Error("Invoice creation failed");
+    throw new AppError(500, "Invoice creation failed");
   }
 
   return serializeInvoice({

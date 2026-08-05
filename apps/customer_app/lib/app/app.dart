@@ -196,7 +196,14 @@ class _AppBootstrapState extends ConsumerState<AppBootstrap> {
   @override
   Widget build(BuildContext context) {
     ref.listen<AsyncValue<AuthSession?>>(authControllerProvider, _syncNotificationSocket);
-    _tryHandlePendingNotificationTap();
+    // Handle pending notification taps when a session becomes available.
+    // This must be a separate listener — not called in build() directly —
+    // to avoid triggering navigation mid-rebuild.
+    ref.listen<AsyncValue<AuthSession?>>(authControllerProvider, (_, next) {
+      if (next.valueOrNull != null) {
+        _tryHandlePendingNotificationTap();
+      }
+    });
     final router = ref.watch(routerProvider);
 
     return MaterialApp.router(

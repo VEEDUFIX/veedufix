@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:dio/dio.dart';
 
 import '../config/environment.dart';
@@ -33,9 +35,33 @@ class ApiClient {
         onError: (error, handler) async {
           if (error.response?.statusCode == 401 &&
               error.requestOptions.extra['skipAuth'] != true) {
-            final refreshToken = await _secureStore.readRefreshToken();
-            if (refreshToken != null && refreshToken.isNotEmpty) {
-              try {
+            // ── Mutex: only one refresh in-flight at a time ──────────────────
+            // If a refresh is already running, wait for it to complete and
+            // reuse the token it resolved with instead of starting a second
+            // concurrent refresh (which would use a rotated refresh token and
+            // sign the user out).
+            if (_refreshCompleter != null) {
+              final newToken = await _refreshCompleter!.future;
+              if (newToken != null) {
+                final request = error.requestOptions;
+                request.headers['Authorization'] = 'Bearer $newToken';
+                request.extra['skipAuth'] = true;
+                try {
+                  final retryResponse = await dio.fetch(request);
+                  handler.resolve(retryResponse);
+                  return;
+                } catch (_) {
+                  // Fall through to reject.
+                }
+              }
+              handler.next(error);
+              return;
+            }
+
+            _refreshCompleter = Completer<String?>();
+            try {
+              final refreshToken = await _secureStore.readRefreshToken();
+              if (refreshToken != null && refreshToken.isNotEmpty) {
                 final response = await dio.post<Map<String, dynamic>>(
                   '/auth/refresh',
                   data: {'refreshToken': refreshToken},
@@ -49,6 +75,9 @@ class ApiClient {
                     accessToken: nextAccessToken,
                     refreshToken: nextRefreshToken,
                   );
+                  _refreshCompleter!.complete(nextAccessToken);
+                  _refreshCompleter = null;
+
                   final request = error.requestOptions;
                   request.headers['Authorization'] = 'Bearer $nextAccessToken';
                   request.extra['skipAuth'] = true;
@@ -56,9 +85,15 @@ class ApiClient {
                   handler.resolve(retryResponse);
                   return;
                 }
-              } catch (_) {
-                await _secureStore.clearTokens();
               }
+              // Refresh failed — clear tokens and reject.
+              await _secureStore.clearTokens();
+              _refreshCompleter!.complete(null);
+              _refreshCompleter = null;
+            } catch (_) {
+              await _secureStore.clearTokens();
+              _refreshCompleter?.complete(null);
+              _refreshCompleter = null;
             }
           }
           handler.next(error);
@@ -69,6 +104,10 @@ class ApiClient {
 
   final SecureStore _secureStore;
   final Dio dio;
+
+  /// Non-null while a token refresh is in-flight.  Concurrent 401s wait on
+  /// this Completer rather than starting a parallel refresh request.
+  Completer<String?>? _refreshCompleter;
 
   Future<Map<String, dynamic>> get(String path, {Map<String, dynamic>? queryParameters, Options? options}) async {
     final res = await dio.get<Map<String, dynamic>>(path, queryParameters: queryParameters, options: options);
@@ -90,3 +129,4 @@ class ApiClient {
     return res.data ?? <String, dynamic>{};
   }
 }
+

@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -7,10 +6,8 @@ import 'package:go_router/go_router.dart';
 import 'package:marketplace_shared/marketplace_shared.dart';
 import '../../../../core/widgets/metallic_card.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:web_socket_channel/web_socket_channel.dart';
 
 import '../../../../core/widgets/worker_logo.dart';
-import '../../../../core/realtime/realtime_socket_service.dart';
 import '../providers/worker_availability_provider.dart';
 
 class WorkerDashboardPage extends ConsumerStatefulWidget {
@@ -21,123 +18,70 @@ class WorkerDashboardPage extends ConsumerStatefulWidget {
 }
 
 class _WorkerDashboardPageState extends ConsumerState<WorkerDashboardPage> {
-  WebSocketChannel? _notificationChannel;
-  StreamSubscription? _notificationSubscription;
+  StreamSubscription<Map<String, dynamic>>? _notificationSubscription;
   final List<_LiveUpdateItem> _liveUpdates = <_LiveUpdateItem>[];
-  String? _activeUserId;
   bool _connected = false;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _syncSocket();
+      _connectSocket();
     });
   }
 
   @override
   void dispose() {
-    _disposeSocket();
+    _notificationSubscription?.cancel();
+    ref.read(realtimeServiceProvider).disconnectNotifications();
     super.dispose();
   }
 
-  void _disposeSocket() {
-    _notificationSubscription?.cancel();
-    _notificationSubscription = null;
-    _notificationChannel?.sink.close();
-    _notificationChannel = null;
-    _activeUserId = null;
-    _connected = false;
-  }
-
-  void _syncSocket() {
+  Future<void> _connectSocket() async {
     final session = ref.read(authControllerProvider).valueOrNull;
-    final userId = session?.user.id;
+    if (session == null) return;
 
-    if (userId == _activeUserId) {
-      return;
-    }
+    final service = ref.read(realtimeServiceProvider);
+    await service.connectNotifications();
 
-    _disposeSocket();
+    _notificationSubscription = service.notificationStream.listen(
+      (payload) {
+        final title = payload['title'] as String? ??
+            payload['bookingCode'] as String? ??
+            'Live update';
+        final body = payload['body'] as String? ??
+            payload['message'] as String? ??
+            'Something changed on your account.';
+        final channel = payload['channel'] as String? ?? 'live';
 
-    if (session == null) {
-      return;
-    }
-
-    final environment = ref.read(environmentProvider);
-    _notificationChannel = connectNotificationSocket(
-      apiBaseUrl: environment.apiBaseUrl,
-      token: session.accessToken,
-    );
-    _activeUserId = userId;
-
-    _notificationSubscription = _notificationChannel!.stream.listen(
-      (message) {
-        try {
-          final decoded = jsonDecode(message as String) as Map<String, dynamic>;
-          final type = decoded['type'] as String?;
-          final payload = decoded['payload'] as Map<String, dynamic>? ?? <String, dynamic>{};
-
-          if (type == 'connected') {
-            if (!mounted) {
-              return;
-            }
-            setState(() {
-              _connected = true;
-            });
-            return;
+        if (!mounted) return;
+        setState(() {
+          _connected = true;
+          _liveUpdates.insert(
+            0,
+            _LiveUpdateItem(
+              channel: channel,
+              title: title,
+              body: body,
+              timestamp: DateTime.now(),
+            ),
+          );
+          if (_liveUpdates.length > 5) {
+            _liveUpdates.removeRange(5, _liveUpdates.length);
           }
-
-          if (type == 'notification.event' || type == 'tracking.event') {
-            final title = payload['title'] as String? ??
-                payload['bookingCode'] as String? ??
-                'Live update';
-            final body = payload['body'] as String? ??
-                payload['message'] as String? ??
-                'Something changed on your account.';
-            final channel = decoded['channel'] as String? ?? 'live';
-
-            if (!mounted) {
-              return;
-            }
-            setState(() {
-              _connected = true;
-              _liveUpdates.insert(
-                0,
-                _LiveUpdateItem(
-                  channel: channel,
-                  title: title,
-                  body: body,
-                  timestamp: DateTime.now(),
-                ),
-              );
-              if (_liveUpdates.length > 5) {
-                _liveUpdates.removeRange(5, _liveUpdates.length);
-              }
-            });
-          }
-        } catch (_) {
-          // Ignore malformed server messages.
-        }
+        });
       },
       onError: (_) {
-        if (!mounted) {
-          return;
-        }
-        setState(() {
-          _connected = false;
-        });
-        _disposeSocket();
+        if (!mounted) return;
+        setState(() => _connected = false);
       },
       onDone: () {
-        if (!mounted) {
-          return;
-        }
-        setState(() {
-          _connected = false;
-        });
+        if (!mounted) return;
+        setState(() => _connected = false);
       },
     );
+
+    if (mounted) setState(() => _connected = true);
   }
 
   String _relativeLabel(DateTime timestamp) {
@@ -174,7 +118,7 @@ class _WorkerDashboardPageState extends ConsumerState<WorkerDashboardPage> {
   Widget build(BuildContext context) {
     ref.listen<AsyncValue<AuthSession?>>(authControllerProvider, (_, next) {
       if (next.hasValue || next.hasError || !next.isLoading) {
-        _syncSocket();
+        _connectSocket();
       }
     });
 

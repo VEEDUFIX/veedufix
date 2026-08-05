@@ -109,8 +109,6 @@ export function createApp() {
   app.use("/api/uploads", uploadRouter);
   app.use("/uploads", uploadRouter);
   app.use("/api/payments", paymentsRouter);
-  app.use("/api/orders", paymentsRouter);
-  app.use("/api/payment", paymentsRouter);
   app.use("/api", addressRouter);
   app.use("/api", serviceAreaRouter);
   app.use("/api", availabilityRouter);

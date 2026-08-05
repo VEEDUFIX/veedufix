@@ -1,6 +1,7 @@
 import { Prisma, PriceRuleType } from "@prisma/client";
 import { prisma } from "../../lib/prisma.js";
 import { logger } from "../../lib/logger.js";
+import { AppError } from "../../lib/app-error.js";
 import { redis } from "../../lib/redis.js";
 
 type LocaleInput = {
@@ -609,7 +610,7 @@ async function createCategory(data: {
 async function updateCategory(id: string, data: Record<string, unknown>) {
   const existing = await prisma.serviceCategory.findUnique({ where: { id } });
   if (!existing) {
-    throw new Error("Category not found");
+    throw AppError.notFound("Category not found");
   }
 
   const nextSlug = typeof data.slug === "string" ? await ensureUniqueSlug((candidate) => prisma.serviceCategory.findFirst({ where: { slug: candidate, NOT: { id } } }), data.slug) : existing.slug;
@@ -731,7 +732,7 @@ async function createSubcategory(data: {
 async function updateSubcategory(id: string, data: Record<string, unknown>) {
   const existing = await prisma.serviceSubcategory.findUnique({ where: { id } });
   if (!existing) {
-    throw new Error("Subcategory not found");
+    throw AppError.notFound("Subcategory not found");
   }
 
   const nextSlug = typeof data.slug === "string" ? await ensureUniqueSlug((candidate) => prisma.serviceSubcategory.findFirst({ where: { slug: candidate, NOT: { id } } }), data.slug) : existing.slug;
@@ -914,7 +915,7 @@ async function createService(data: {
 async function updateService(id: string, data: Record<string, unknown>) {
   const existing = await prisma.service.findUnique({ where: { id } });
   if (!existing) {
-    throw new Error("Service not found");
+    throw AppError.notFound("Service not found");
   }
 
   const nextSlug = typeof data.slug === "string" ? await ensureUniqueSlug((candidate) => prisma.service.findFirst({ where: { slug: candidate, NOT: { id } } }), data.slug) : existing.slug;

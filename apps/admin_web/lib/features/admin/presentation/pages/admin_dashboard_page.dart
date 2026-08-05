@@ -141,8 +141,6 @@ class _AdminDashboardPageState extends ConsumerState<AdminDashboardPage> {
                       value: '₹${_snapshot!.summary.totalRevenue.toStringAsFixed(0)}',
                       icon: Icons.payments_rounded,
                       color: const Color(0xFF0F766E),
-                      trend: '+12.5% vs last week',
-                      trendUp: true,
                     ),
                   ),
                   _metricBox(context, isCompact,
@@ -151,8 +149,6 @@ class _AdminDashboardPageState extends ConsumerState<AdminDashboardPage> {
                       value: '${_snapshot!.summary.totalBookings}',
                       icon: Icons.event_available_rounded,
                       color: const Color(0xFF2563EB),
-                      trend: '+5.2% vs last week',
-                      trendUp: true,
                     ),
                   ),
                   _metricBox(context, isCompact,
@@ -162,8 +158,6 @@ class _AdminDashboardPageState extends ConsumerState<AdminDashboardPage> {
                       icon: Icons.event_busy_rounded,
                       color: const Color(0xFFEF4444),
                       subtitle: 'Cancelled or refunded',
-                      trend: 'Watch refunds closely',
-                      trendUp: false,
                     ),
                   ),
                   _metricBox(context, isCompact,
@@ -173,8 +167,6 @@ class _AdminDashboardPageState extends ConsumerState<AdminDashboardPage> {
                       icon: Icons.badge_rounded,
                       color: const Color(0xFF8B5CF6),
                       subtitle: 'Verified and approved',
-                      trend: 'Active workforce',
-                      trendUp: true,
                     ),
                   ),
                   _metricBox(context, isCompact,
@@ -184,8 +176,6 @@ class _AdminDashboardPageState extends ConsumerState<AdminDashboardPage> {
                       icon: Icons.support_agent_rounded,
                       color: const Color(0xFFF59E0B),
                       subtitle: 'Open tickets',
-                      trend: 'Needs attention',
-                      trendUp: false,
                     ),
                   ),
                   _metricBox(context, isCompact,
@@ -195,8 +185,6 @@ class _AdminDashboardPageState extends ConsumerState<AdminDashboardPage> {
                       icon: Icons.verified_user_rounded,
                       color: const Color(0xFF0F766E),
                       subtitle: 'Pending review',
-                      trend: '-2 since yesterday',
-                      trendUp: false,
                     ),
                   ),
                 ],
@@ -825,8 +813,6 @@ class _MetricCard extends StatelessWidget {
     required this.icon,
     required this.color,
     this.subtitle,
-    this.trend,
-    this.trendUp = true,
   });
 
   final String title;
@@ -834,8 +820,6 @@ class _MetricCard extends StatelessWidget {
   final IconData icon;
   final Color color;
   final String? subtitle;
-  final String? trend;
-  final bool trendUp;
 
   @override
   Widget build(BuildContext context) {
@@ -883,27 +867,6 @@ class _MetricCard extends StatelessWidget {
                 fontWeight: FontWeight.w500,
                 fontSize: 13,
               ),
-            ),
-          ],
-          if (trend != null) ...[
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Icon(
-                  trendUp ? Icons.arrow_upward_rounded : Icons.arrow_downward_rounded,
-                  size: 16,
-                  color: trendUp ? const Color(0xFF10B981) : const Color(0xFFEF4444),
-                ),
-                const SizedBox(width: 4),
-                Text(
-                  trend!,
-                  style: GoogleFonts.inter(
-                    color: trendUp ? const Color(0xFF10B981) : const Color(0xFFEF4444),
-                    fontWeight: FontWeight.w600,
-                    fontSize: 13,
-                  ),
-                ),
-              ],
             ),
           ],
         ],

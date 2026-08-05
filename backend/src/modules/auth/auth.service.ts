@@ -1,4 +1,5 @@
 import bcrypt from "bcryptjs";
+import { AppError } from "../../lib/app-error.js";
 import { createHash, randomInt } from "crypto";
 import { env } from "../../config/env.js";
 import { prisma } from "../../lib/prisma.js";
@@ -39,6 +40,16 @@ function normalizeIdentifier(identifier: string, channel: LoginChannel): string 
 
 function otpKey(channel: LoginChannel, identifier: string): string {
   return `otp:${channel}:${normalizeIdentifier(identifier, channel)}`;
+}
+
+/** Tracks how many wrong OTP guesses have been made for an identifier. */
+function otpAttemptsKey(channel: LoginChannel, identifier: string): string {
+  return `otp:attempts:${channel}:${normalizeIdentifier(identifier, channel)}`;
+}
+
+/** Set when the identifier is locked out after too many failed attempts. */
+function otpLockKey(channel: LoginChannel, identifier: string): string {
+  return `otp:locked:${channel}:${normalizeIdentifier(identifier, channel)}`;
 }
 
 function refreshTokenHash(token: string): string {
@@ -105,6 +116,10 @@ export async function requestOtp(
 
   await redis.set(key, hash, "EX", 300);
 
+  // Reset any previous brute-force counters so a fresh OTP starts clean.
+  await redis.del(otpAttemptsKey(channel, normalized));
+  await redis.del(otpLockKey(channel, normalized));
+
   if (env.NODE_ENV !== "production") {
     logger.info({ channel, identifier: normalized, otp }, "Development OTP issued");
   }
@@ -123,18 +138,42 @@ export async function verifyOtp(input: {
 }): Promise<AuthResult> {
   const normalized = normalizeIdentifier(input.identifier, input.channel);
   const key = otpKey(input.channel, normalized);
+  const attemptsKey = otpAttemptsKey(input.channel, normalized);
+  const lockKey = otpLockKey(input.channel, normalized);
+
+  // Reject immediately if the identifier is locked out.
+  const isLocked = await redis.get(lockKey);
+  if (isLocked) {
+    throw new AppError(429, "Too many failed OTP attempts. Please request a new OTP after 15 minutes.");
+  }
+
   const hash = await redis.get(key);
 
   if (!hash) {
-    throw new Error("OTP expired or missing");
+    throw AppError.gone("OTP expired or missing");
   }
 
   const verified = await bcrypt.compare(input.otp, hash);
   if (!verified) {
-    throw new Error("Invalid OTP");
+    // Increment attempt counter (TTL matches OTP window so it auto-expires).
+    const attempts = await redis.incr(attemptsKey);
+    await redis.expire(attemptsKey, 300);
+
+    if (attempts >= 5) {
+      // Invalidate the OTP and apply a 15-minute lockout.
+      await redis.del(key);
+      await redis.del(attemptsKey);
+      await redis.set(lockKey, "1", "EX", 900);
+      throw new AppError(429, "Too many failed OTP attempts. Please request a new OTP after 15 minutes.");
+    }
+
+    const remaining = 5 - attempts;
+    throw AppError.badRequest(`Invalid OTP. ${remaining} attempt${remaining === 1 ? "" : "s"} remaining.`);
   }
 
+  // Success — clear the OTP and all brute-force counters.
   await redis.del(key);
+  await redis.del(attemptsKey);
 
   const baseData =
     input.channel === "EMAIL"
@@ -197,7 +236,7 @@ export async function refreshSession(refreshToken: string): Promise<AuthResult> 
   });
 
   if (!stored || stored.revokedAt) {
-    throw new Error("Refresh token revoked");
+    throw AppError.unauthorized("Refresh token revoked");
   }
 
   const sessionId = payload.sessionId;

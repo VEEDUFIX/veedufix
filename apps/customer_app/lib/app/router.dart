@@ -59,7 +59,7 @@ final routerProvider = Provider<GoRouter>((ref) {
         return homeRoute;
       }
 
-      if (!allowedRoutesForMode(AppMode.customer).contains(location)) {
+      if (!_isAllowedLocation(AppMode.customer, location)) {
         return homeRoute;
       }
 
@@ -287,4 +287,10 @@ class _RouterRefreshNotifier extends ChangeNotifier {
   }
 
   final Ref ref;
+}
+
+bool _isAllowedLocation(AppMode mode, String location) {
+  final allowedRoutes = allowedRoutesForMode(mode);
+  return allowedRoutes
+      .any((route) => location == route || location.startsWith('$route/'));
 }
