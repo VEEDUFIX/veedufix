@@ -8,6 +8,7 @@ import 'package:go_router/go_router.dart';
 import 'package:marketplace_shared/marketplace_shared.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../../../core/offline/connectivity_service.dart';
 import '../providers/job_execution_provider.dart';
 import '../providers/worker_availability_provider.dart';
 
@@ -489,10 +490,56 @@ class _JobExecutionPageState extends ConsumerState<JobExecutionPage> {
     final notifier = ref.read(jobExecutionProvider.notifier);
     final canUpload = isBefore || state.allRequiredChecklistComplete;
     final preparing = items.any((draft) => draft.uploading && !draft.isUploaded && draft.errorMessage == null);
+    final queuedCount = items.where((d) => d.isQueued).length;
+    final isOnline = ref.watch(connectivityProvider).valueOrNull ?? true;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        // ── Offline / queued banner ──────────────────────────────────────
+        if (!isOnline || queuedCount > 0)
+          AnimatedContainer(
+            duration: const Duration(milliseconds: 350),
+            curve: Curves.easeInOut,
+            width: double.infinity,
+            margin: const EdgeInsets.only(bottom: 12),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: BoxDecoration(
+              color: isOnline
+                  ? const Color(0xFFF59E0B).withValues(alpha: 0.12)
+                  : const Color(0xFF6B7280).withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(AbzioTheme.buttonRadius),
+              border: Border.all(
+                color: isOnline
+                    ? const Color(0xFFF59E0B).withValues(alpha: 0.3)
+                    : const Color(0xFF6B7280).withValues(alpha: 0.3),
+              ),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  isOnline ? Icons.cloud_sync_rounded : Icons.wifi_off_rounded,
+                  size: 18,
+                  color: isOnline ? const Color(0xFFF59E0B) : const Color(0xFF6B7280),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    isOnline
+                        ? '$queuedCount photo${queuedCount == 1 ? '' : 's'} uploading now…'
+                        : queuedCount > 0
+                            ? 'Offline — $queuedCount photo${queuedCount == 1 ? '' : 's'} will upload when you reconnect.'
+                            : 'You\'re offline — photos will queue automatically.',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          fontWeight: FontWeight.w600,
+                          color: isOnline ? const Color(0xFFF59E0B) : const Color(0xFF6B7280),
+                        ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
         if (!canUpload && !isBefore)
           Container(
             width: double.infinity,
@@ -1068,15 +1115,17 @@ class _PhotoDraftTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final borderColor = draft.hasFailed
+        ? Theme.of(context).colorScheme.error.withValues(alpha: 0.2)
+        : draft.isQueued
+            ? const Color(0xFFF59E0B).withValues(alpha: 0.35)
+            : accentColor.withValues(alpha: 0.16);
+
     return Container(
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.68),
         borderRadius: BorderRadius.circular(AbzioTheme.cardRadius),
-        border: Border.all(
-          color: draft.hasFailed
-              ? Theme.of(context).colorScheme.error.withValues(alpha: 0.2)
-              : accentColor.withValues(alpha: 0.16),
-        ),
+        border: Border.all(color: borderColor),
       ),
       child: ListTile(
         contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -1104,9 +1153,11 @@ class _PhotoDraftTile extends StatelessWidget {
               ? draft.errorMessage ?? 'Upload failed'
               : draft.isUploaded
                   ? 'Uploaded successfully'
-                  : draft.uploading
-                      ? 'Preparing photo...'
-                      : 'Waiting to upload',
+                  : draft.isQueued
+                      ? 'Queued — will upload when back online'
+                      : draft.uploading
+                          ? 'Preparing photo…'
+                          : 'Waiting to upload',
           maxLines: 2,
           overflow: TextOverflow.ellipsis,
         ),
@@ -1117,13 +1168,18 @@ class _PhotoDraftTile extends StatelessWidget {
               )
             : draft.isUploaded
                 ? const Icon(Icons.check_circle_rounded, color: Color(0xFF10B981))
-                : draft.uploading
-                    ? const SizedBox(
-                        height: 18,
-                        width: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2),
+                : draft.isQueued
+                    ? const Icon(
+                        Icons.schedule_rounded,
+                        color: Color(0xFFF59E0B),
                       )
-                    : const Icon(Icons.pending_outlined),
+                    : draft.uploading
+                        ? const SizedBox(
+                            height: 18,
+                            width: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.pending_outlined),
       ),
     );
   }

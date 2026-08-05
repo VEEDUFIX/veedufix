@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:math';
 import 'dart:ui' as ui;
 
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -10,6 +11,8 @@ import 'package:geolocator/geolocator.dart';
 import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:marketplace_shared/marketplace_shared.dart';
+
+import '../../../../core/offline/offline_upload_queue.dart';
 
 enum JobExecutionStep {
   arrival,
@@ -192,6 +195,7 @@ class JobExecutionPhotoDraft {
     this.remoteUrl,
     this.uploading = false,
     this.errorMessage,
+    this.isQueued = false,
   });
 
   final String id;
@@ -199,9 +203,12 @@ class JobExecutionPhotoDraft {
   final String? remoteUrl;
   final bool uploading;
   final String? errorMessage;
+  /// True when the upload failed due to no connectivity and has been
+  /// persisted to the offline queue — it will retry automatically.
+  final bool isQueued;
 
-  bool get isUploaded => remoteUrl != null && errorMessage == null;
-  bool get hasFailed => errorMessage != null;
+  bool get isUploaded => remoteUrl != null && errorMessage == null && !isQueued;
+  bool get hasFailed => errorMessage != null && !isQueued;
 
   JobExecutionPhotoDraft copyWith({
     String? id,
@@ -209,6 +216,7 @@ class JobExecutionPhotoDraft {
     String? remoteUrl,
     bool? uploading,
     String? errorMessage,
+    bool? isQueued,
     bool clearRemoteUrl = false,
     bool clearErrorMessage = false,
   }) {
@@ -218,6 +226,7 @@ class JobExecutionPhotoDraft {
       remoteUrl: clearRemoteUrl ? null : remoteUrl ?? this.remoteUrl,
       uploading: uploading ?? this.uploading,
       errorMessage: clearErrorMessage ? null : errorMessage ?? this.errorMessage,
+      isQueued: isQueued ?? this.isQueued,
     );
   }
 }
@@ -337,7 +346,61 @@ final jobExecutionProvider =
 
 class JobExecutionNotifier extends StateNotifier<JobExecutionState> {
   JobExecutionNotifier(this.ref) : super(const JobExecutionState()) {
-    ref.onDispose(_cancelTracking);
+    ref.onDispose(_dispose);
+    _listenForConnectivity();
+  }
+
+  StreamSubscription<List<ConnectivityResult>>? _connectivitySub;
+
+  void _listenForConnectivity() {
+    _connectivitySub = Connectivity().onConnectivityChanged.listen(
+      (results) {
+        final isOnline = results.any(
+          (r) =>
+              r == ConnectivityResult.mobile ||
+              r == ConnectivityResult.wifi ||
+              r == ConnectivityResult.ethernet,
+        );
+        if (isOnline) {
+          _drainQueue();
+        }
+      },
+    );
+  }
+
+  void _dispose() {
+    _connectivitySub?.cancel();
+    _cancelTracking();
+  }
+
+  /// Retries every photo that was queued while offline.
+  Future<void> _drainQueue() async {
+    final booking = state.booking;
+    if (booking == null) return;
+
+    final queue = OfflineUploadQueueService.instance;
+    final pending = await queue.pendingItems();
+    final relevant = pending.where((item) => item.bookingId == booking.bookingId).toList();
+    if (relevant.isEmpty) return;
+
+    for (final item in relevant) {
+      final type = item.photoType == 'before'
+          ? JobExecutionPhotoType.before
+          : JobExecutionPhotoType.after;
+
+      // Mark as uploading in state (no longer queued)
+      final currentPhotos =
+          type == JobExecutionPhotoType.before ? state.beforePhotos : state.afterPhotos;
+      final updated = currentPhotos
+          .map((d) => d.id == item.draftId
+              ? d.copyWith(uploading: true, isQueued: false, clearErrorMessage: true)
+              : d)
+          .toList(growable: false);
+      state = _replaceDrafts(type, updated);
+
+      // Attempt upload — on success dequeue, on failure re-queue silently
+      await _uploadPhotos(type, {item.draftId}, booking);
+    }
   }
 
   final Ref ref;
@@ -742,12 +805,15 @@ class JobExecutionNotifier extends StateNotifier<JobExecutionState> {
             file: draft.file,
           );
           successfulUrls.add(uploaded);
+          // Dequeue from offline store on success
+          await OfflineUploadQueueService.instance.dequeue(draft.id);
           nextPhotos = nextPhotos
               .map(
                 (item) => item.id == draft.id
                     ? item.copyWith(
                         remoteUrl: uploaded,
                         uploading: false,
+                        isQueued: false,
                         clearErrorMessage: true,
                       )
                     : item,
@@ -755,25 +821,56 @@ class JobExecutionNotifier extends StateNotifier<JobExecutionState> {
               .toList(growable: false);
           state = _replaceDrafts(type, nextPhotos);
         } catch (error) {
-          final message = _readErrorMessage(error);
-          nextPhotos = nextPhotos
-              .map(
-                (item) => item.id == draft.id
-                    ? item.copyWith(
-                        uploading: false,
-                        errorMessage: message,
-                      )
-                    : item,
-              )
-              .toList(growable: false);
-          state = _replaceDrafts(type, nextPhotos);
-          _setStepError(
-            step,
-            JobExecutionStepError(
-              kind: JobExecutionErrorKind.network,
-              message: message,
-            ),
-          );
+          final isNetworkError = error is DioException &&
+              (error.type == DioExceptionType.connectionError ||
+                  error.type == DioExceptionType.connectionTimeout ||
+                  error.type == DioExceptionType.sendTimeout ||
+                  error.type == DioExceptionType.receiveTimeout);
+
+          if (isNetworkError) {
+            // Queue for later — mark as queued, not failed
+            await OfflineUploadQueueService.instance.enqueue(
+              OfflineQueueItem(
+                draftId: draft.id,
+                bookingId: booking.bookingId,
+                filePath: draft.file.path,
+                photoType: type.name,
+                enqueuedAt: DateTime.now(),
+              ),
+            );
+            nextPhotos = nextPhotos
+                .map(
+                  (item) => item.id == draft.id
+                      ? item.copyWith(
+                          uploading: false,
+                          isQueued: true,
+                          clearErrorMessage: true,
+                        )
+                      : item,
+                )
+                .toList(growable: false);
+            state = _replaceDrafts(type, nextPhotos);
+          } else {
+            final message = _readErrorMessage(error);
+            nextPhotos = nextPhotos
+                .map(
+                  (item) => item.id == draft.id
+                      ? item.copyWith(
+                          uploading: false,
+                          errorMessage: message,
+                        )
+                      : item,
+                )
+                .toList(growable: false);
+            state = _replaceDrafts(type, nextPhotos);
+            _setStepError(
+              step,
+              JobExecutionStepError(
+                kind: JobExecutionErrorKind.network,
+                message: message,
+              ),
+            );
+          }
         }
       }
 
