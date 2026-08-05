@@ -79,9 +79,13 @@ class _JobExecutionPageState extends ConsumerState<JobExecutionPage> {
     final lng = booking?.destinationLongitude;
     final query = destinationQuery.trim();
     if (lat != null && lng != null) {
-      final uri = Uri.parse(
-        'https://www.google.com/maps/dir/?api=1&destination=$lat,$lng',
-      );
+      final uri = Uri.https('www.google.com', '/maps/dir/', {
+        'api': '1',
+        'origin': 'Current+Location',
+        'destination': '$lat,$lng',
+        'travelmode': 'driving',
+        'dir_action': 'navigate',
+      });
       final launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
       if (!launched && mounted) {
         _showSnackBar('Could not open Google Maps.');
@@ -94,9 +98,13 @@ class _JobExecutionPageState extends ConsumerState<JobExecutionPage> {
       return;
     }
 
-    final uri = Uri.parse(
-      'https://www.google.com/maps/dir/?api=1&destination=${Uri.encodeComponent(query)}',
-    );
+    final uri = Uri.https('www.google.com', '/maps/dir/', {
+      'api': '1',
+      'origin': 'Current+Location',
+      'destination': query,
+      'travelmode': 'driving',
+      'dir_action': 'navigate',
+    });
     final launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
     if (!launched && mounted) {
       _showSnackBar('Could not open Google Maps.');
@@ -318,9 +326,10 @@ class _JobExecutionPageState extends ConsumerState<JobExecutionPage> {
     final error = state.errorFor(JobExecutionStep.arrival);
     final notifier = ref.read(jobExecutionProvider.notifier);
     final destinationQuery = state.booking?.destinationQuery ?? '';
-    final locationLabel = state.currentPosition == null
-        ? 'Location will be captured when you mark arrival.'
-        : 'GPS captured at ${state.currentPosition!.latitude.toStringAsFixed(5)}, ${state.currentPosition!.longitude.toStringAsFixed(5)}';
+    final hasLiveLocation = state.currentPosition != null;
+    final locationLabel = hasLiveLocation
+        ? 'Live GPS fix at ${state.currentPosition!.latitude.toStringAsFixed(5)}, ${state.currentPosition!.longitude.toStringAsFixed(5)}'
+        : 'Location will be captured automatically while you are on the way.';
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -331,6 +340,21 @@ class _JobExecutionPageState extends ConsumerState<JobExecutionPage> {
                 color: Theme.of(context).colorScheme.onSurfaceVariant,
               ),
         ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            _StatusChip(
+              icon: hasLiveLocation ? Icons.gps_fixed_rounded : Icons.gps_not_fixed_rounded,
+              label: hasLiveLocation ? 'GPS active' : 'GPS waiting',
+            ),
+            _StatusChip(
+              icon: Icons.navigation_rounded,
+              label: destinationQuery.trim().isEmpty ? 'No route set' : 'Route ready',
+            ),
+          ],
+        ),
         const SizedBox(height: 12),
         if (error != null) ...[
           _ErrorBanner(error: error),
@@ -338,16 +362,16 @@ class _JobExecutionPageState extends ConsumerState<JobExecutionPage> {
         ],
         if (state.isLoading(JobExecutionStep.arrival))
           const LinearProgressIndicator(minHeight: 4),
-                    const SizedBox(height: 12),
-                    FilledButton.tonalIcon(
-                      onPressed: () => _openNavigation(destinationQuery),
-                      icon: const Icon(Icons.navigation_rounded),
-                      label: const Text('Navigate to customer'),
-                    ),
-                    const SizedBox(height: 12),
-                    Row(
-                      children: [
-                        Expanded(
+        const SizedBox(height: 12),
+        FilledButton.tonalIcon(
+          onPressed: () => _openNavigation(destinationQuery),
+          icon: const Icon(Icons.navigation_rounded),
+          label: const Text('Navigate to customer'),
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
               child: FilledButton(
                 onPressed: state.isLoading(JobExecutionStep.arrival)
                     ? null
@@ -867,6 +891,42 @@ class _JobExecutionPageState extends ConsumerState<JobExecutionPage> {
   void _showSnackBar(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(message)),
+    );
+  }
+}
+
+class _StatusChip extends StatelessWidget {
+  const _StatusChip({
+    required this.icon,
+    required this.label,
+  });
+
+  final IconData icon;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: cs.surfaceContainerHighest.withValues(alpha: 0.55),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: cs.onSurfaceVariant),
+          const SizedBox(width: 6),
+          Text(
+            label,
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                  fontWeight: FontWeight.w700,
+                  color: cs.onSurfaceVariant,
+                ),
+          ),
+        ],
+      ),
     );
   }
 }

@@ -1146,7 +1146,7 @@ class _OnboardingFlowPageState extends ConsumerState<OnboardingFlowPage> {
                                           size: 18,
                                         ),
                                         label: Text(
-                                          '${service.name} - Rs ${service.startingPrice.toInt()}',
+                                          '${service.name} - ₹${service.startingPrice.toInt()}',
                                           overflow: TextOverflow.ellipsis,
                                         ),
                                         onSelected: (value) {

@@ -5,7 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:marketplace_shared/marketplace_shared.dart';
-import 'package:intl/intl.dart';
+import '../../../../core/widgets/metallic_card.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
@@ -151,6 +151,25 @@ class _WorkerDashboardPageState extends ConsumerState<WorkerDashboardPage> {
     return '${diff.inHours}h ago';
   }
 
+  String _firstName(String? name) {
+    final trimmed = name?.trim() ?? '';
+    if (trimmed.isEmpty) {
+      return 'there';
+    }
+    return trimmed.split(RegExp(r'\s+')).first;
+  }
+
+  String _timeOfDay() {
+    final hour = DateTime.now().hour;
+    if (hour < 12) {
+      return 'Morning';
+    }
+    if (hour < 17) {
+      return 'Afternoon';
+    }
+    return 'Evening';
+  }
+
   @override
   Widget build(BuildContext context) {
     ref.listen<AsyncValue<AuthSession?>>(authControllerProvider, (_, next) {
@@ -160,9 +179,11 @@ class _WorkerDashboardPageState extends ConsumerState<WorkerDashboardPage> {
     });
 
     final isSignedIn = ref.watch(authControllerProvider.select((s) => s.valueOrNull?.user.id)) != null;
+    final session = ref.watch(authControllerProvider).valueOrNull;
     final statsAsync = ref.watch(workerDashboardStatsProvider);
     final unreadNotifications = ref.watch(notificationsUnreadCountProvider).valueOrNull ?? 0;
-
+    final displayName = _firstName(session?.user.name);
+    final todayJobsCount = statsAsync.valueOrNull?.todayJobs.length ?? 0;
     return Scaffold(
       appBar: AppBar(
         title: Row(
@@ -212,7 +233,33 @@ class _WorkerDashboardPageState extends ConsumerState<WorkerDashboardPage> {
       body: ListView(
         padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
         children: [
-          // ── Online/Offline Toggle ────────────────────────────────────
+          MetallicCard(
+            title: 'Good ${_timeOfDay()}, $displayName',
+            subtitle: '$todayJobsCount jobs waiting today${_connected ? ' and live updates are active.' : '.'}',
+            icon: Icons.work_history_rounded,
+            baseColor: const Color(0xFF0F766E),
+          ),
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              Expanded(
+                child: FilledButton.tonalIcon(
+                  onPressed: () => context.go('/jobs'),
+                  icon: const Icon(Icons.assignment_rounded),
+                  label: const Text('Open jobs'),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: () => context.go('/schedule'),
+                  icon: const Icon(Icons.calendar_month_rounded),
+                  label: const Text('Schedule'),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
           const _AvailabilityToggleCard(),
           const SizedBox(height: 16),
           PremiumGlassCard(
@@ -369,7 +416,7 @@ class _WorkerDashboardPageState extends ConsumerState<WorkerDashboardPage> {
                     child: _JobCard(
                       title: job.serviceName,
                       status: job.status,
-                      time: '${DateFormat('h:mm a').format(job.scheduledAt)} • ${job.addressLabel ?? 'No address'}',
+                      time: ' - ',
                       onTap: () => context.push(route),
                       job: job,
                     ),
@@ -381,7 +428,7 @@ class _WorkerDashboardPageState extends ConsumerState<WorkerDashboardPage> {
             error: (e, s) => Center(child: Text('Error: $e')),
           ),
           const SizedBox(height: 24),
-          // ── Quick Actions ────────────────────────────────────────────
+          // â”€â”€ Quick Actions â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
           const PremiumSectionHeader(
             title: 'Quick actions',
             subtitle: 'Common tasks at your fingertips.',
@@ -539,7 +586,13 @@ class _JobCard extends StatelessWidget {
     final lat = job.destinationLatitude;
     final lng = job.destinationLongitude;
     if (lat != null && lng != null) {
-      final uri = Uri.parse('https://www.google.com/maps/dir/?api=1&destination=$lat,$lng');
+      final uri = Uri.https('www.google.com', '/maps/dir/', {
+        'api': '1',
+        'origin': 'Current+Location',
+        'destination': '$lat,$lng',
+        'travelmode': 'driving',
+        'dir_action': 'navigate',
+      });
       await launchUrl(uri, mode: LaunchMode.externalApplication);
       return;
     }
@@ -553,9 +606,13 @@ class _JobCard extends StatelessWidget {
       return;
     }
 
-    final uri = Uri.parse(
-      'https://www.google.com/maps/dir/?api=1&destination=${Uri.encodeComponent(query)}',
-    );
+    final uri = Uri.https('www.google.com', '/maps/dir/', {
+      'api': '1',
+      'origin': 'Current+Location',
+      'destination': query,
+      'travelmode': 'driving',
+      'dir_action': 'navigate',
+    });
     await launchUrl(uri, mode: LaunchMode.externalApplication);
   }
 

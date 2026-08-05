@@ -464,7 +464,7 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
                               child: Text('${index + 1}'),
                             ),
                             title: Text(item.name),
-                            subtitle: Text('Rs ${item.startingPrice.toStringAsFixed(0)} - ${item.estimatedDurationMins} mins'),
+                            subtitle: Text('₹${item.startingPrice.toStringAsFixed(0)} - ${item.estimatedDurationMins} mins'),
                             trailing: Wrap(
                               spacing: 4,
                               children: [
@@ -832,6 +832,12 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
     final durationController = TextEditingController(text: (existing?.estimatedDurationMins ?? 0).toString());
     final warrantyController = TextEditingController(text: (existing?.warrantyDays ?? 0).toString());
     final iconController = TextEditingController(text: existing?.iconUrl ?? '');
+    final seoTitleController = TextEditingController(text: existing?.seoTitle ?? '');
+    final seoDescriptionController = TextEditingController(text: existing?.seoDescription ?? '');
+    final seoKeywordsController = TextEditingController(text: existing?.seoKeywords ?? '');
+    final cancellationPolicyController = TextEditingController(text: existing?.cancellationPolicy ?? '');
+    final ratingController = TextEditingController(text: existing == null ? '0' : existing.rating.toStringAsFixed(2));
+    final reviewCountController = TextEditingController(text: existing == null ? '0' : existing.reviewCount.toString());
     bool featured = existing?.featured ?? false;
     bool popular = existing?.popular ?? false;
     bool emergency = existing?.emergencyAvailable ?? false;
@@ -940,6 +946,34 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
                         controller: iconController,
                         decoration: const InputDecoration(labelText: 'Icon URL'),
                       ),
+                      TextFormField(
+                        controller: seoTitleController,
+                        decoration: const InputDecoration(labelText: 'SEO title'),
+                      ),
+                      TextFormField(
+                        controller: seoDescriptionController,
+                        decoration: const InputDecoration(labelText: 'SEO description'),
+                        maxLines: 2,
+                      ),
+                      TextFormField(
+                        controller: seoKeywordsController,
+                        decoration: const InputDecoration(labelText: 'SEO keywords'),
+                      ),
+                      TextFormField(
+                        controller: cancellationPolicyController,
+                        decoration: const InputDecoration(labelText: 'Cancellation policy'),
+                        maxLines: 3,
+                      ),
+                      TextFormField(
+                        controller: ratingController,
+                        decoration: const InputDecoration(labelText: 'Rating'),
+                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      ),
+                      TextFormField(
+                        controller: reviewCountController,
+                        decoration: const InputDecoration(labelText: 'Review count'),
+                        keyboardType: TextInputType.number,
+                      ),
                       SwitchListTile(
                         value: featured,
                         onChanged: (value) => setState(() => featured = value),
@@ -993,6 +1027,16 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
                       'estimatedDurationMins': int.tryParse(durationController.text.trim()) ?? 0,
                       'warrantyDays': int.tryParse(warrantyController.text.trim()) ?? 0,
                       'iconUrl': iconController.text.trim().isEmpty ? null : iconController.text.trim(),
+                      'seoTitle': seoTitleController.text.trim().isEmpty ? null : seoTitleController.text.trim(),
+                      'seoDescription': seoDescriptionController.text.trim().isEmpty
+                          ? null
+                          : seoDescriptionController.text.trim(),
+                      'seoKeywords': seoKeywordsController.text.trim().isEmpty ? null : seoKeywordsController.text.trim(),
+                      'cancellationPolicy': cancellationPolicyController.text.trim().isEmpty
+                          ? null
+                          : cancellationPolicyController.text.trim(),
+                      'rating': double.tryParse(ratingController.text.trim()) ?? 0,
+                      'reviewCount': int.tryParse(reviewCountController.text.trim()) ?? 0,
                       'featured': featured,
                       'popular': popular,
                       'emergencyAvailable': emergency,
@@ -1021,6 +1065,12 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
       durationController.dispose();
       warrantyController.dispose();
       iconController.dispose();
+      seoTitleController.dispose();
+      seoDescriptionController.dispose();
+      seoKeywordsController.dispose();
+      cancellationPolicyController.dispose();
+      ratingController.dispose();
+      reviewCountController.dispose();
     });
   }
 
@@ -1715,7 +1765,7 @@ class _SubcategoriesTab extends StatelessWidget {
             return _CatalogCard(
               title: subcategory.name,
               subtitle:
-                  '${category?.name ?? 'Category'} - ${subcategory.serviceCount} services - Rs ${subcategory.basePrice.toStringAsFixed(0)} base',
+                  '${category?.name ?? 'Category'} - ${subcategory.serviceCount} services - ₹${subcategory.basePrice.toStringAsFixed(0)} base',
               tag: subcategory.isActive ? 'Active' : 'Disabled',
               accent: const Color(0xFF38BDF8),
               onTap: () => context.push('/catalog/subcategories/${subcategory.id}'),
@@ -1834,7 +1884,7 @@ class _ServicesTab extends StatelessWidget {
             return _CatalogCard(
               title: service.name,
               subtitle:
-                  '${category?.name ?? 'Category'} / ${subcategory?.name ?? 'Subcategory'} - Rs ${service.startingPrice.toStringAsFixed(0)} - GST ${service.gstRate.toStringAsFixed(2)}% - SAC ${service.sacCode} - ${service.estimatedDurationMins} mins',
+                  '${category?.name ?? 'Category'} / ${subcategory?.name ?? 'Subcategory'} - ₹${service.startingPrice.toStringAsFixed(0)} - GST ${service.gstRate.toStringAsFixed(2)}% - SAC ${service.sacCode} - ${service.estimatedDurationMins} mins',
               tag: service.isActive ? 'Active' : 'Disabled',
               accent: service.featured ? const Color(0xFFC2A15E) : const Color(0xFF10B981),
               onTap: () => context.push('/catalog/services/${service.id}'),
@@ -1924,7 +1974,7 @@ class _PricingTab extends StatelessWidget {
           (service) => _CatalogCard(
             title: service.name,
             subtitle:
-                'Base price Rs ${service.startingPrice.toStringAsFixed(0)} - GST ${service.gstRate.toStringAsFixed(2)}% - SAC ${service.sacCode} - ${service.pricingRules.length} rules',
+                'Base price ₹${service.startingPrice.toStringAsFixed(0)} - GST ${service.gstRate.toStringAsFixed(2)}% - SAC ${service.sacCode} - ${service.pricingRules.length} rules',
             tag: 'Pricing',
             accent: const Color(0xFFF59E0B),
             onTap: () => context.push('/catalog/services/${service.id}'),
@@ -2174,6 +2224,9 @@ class _CategoryDetailPageState extends ConsumerState<CategoryDetailPage> {
     final nameController = TextEditingController(text: existing.name);
     final slugController = TextEditingController(text: existing.slug);
     final descriptionController = TextEditingController(text: existing.description ?? '');
+    final iconUrlController = TextEditingController(text: existing.iconUrl ?? '');
+    final seoTitleController = TextEditingController(text: existing.seoTitle ?? '');
+    final seoDescriptionController = TextEditingController(text: existing.seoDescription ?? '');
     final sortOrderController = TextEditingController(text: existing.sortOrder.toString());
     var featured = existing.featured;
     var popular = existing.popular;
@@ -2205,6 +2258,19 @@ class _CategoryDetailPageState extends ConsumerState<CategoryDetailPage> {
                         controller: descriptionController,
                         decoration: const InputDecoration(labelText: 'Description'),
                         maxLines: 3,
+                      ),
+                      TextFormField(
+                        controller: iconUrlController,
+                        decoration: const InputDecoration(labelText: 'Icon URL'),
+                      ),
+                      TextFormField(
+                        controller: seoTitleController,
+                        decoration: const InputDecoration(labelText: 'SEO title'),
+                      ),
+                      TextFormField(
+                        controller: seoDescriptionController,
+                        decoration: const InputDecoration(labelText: 'SEO description'),
+                        maxLines: 2,
                       ),
                       TextFormField(
                         controller: sortOrderController,
@@ -2242,6 +2308,9 @@ class _CategoryDetailPageState extends ConsumerState<CategoryDetailPage> {
                       'name': nameController.text.trim(),
                       'slug': slugController.text.trim().isEmpty ? _slugify(nameController.text) : slugController.text.trim(),
                       'description': descriptionController.text.trim().isEmpty ? null : descriptionController.text.trim(),
+                      'iconUrl': iconUrlController.text.trim().isEmpty ? null : iconUrlController.text.trim(),
+                      'seoTitle': seoTitleController.text.trim().isEmpty ? null : seoTitleController.text.trim(),
+                      'seoDescription': seoDescriptionController.text.trim().isEmpty ? null : seoDescriptionController.text.trim(),
                       'sortOrder': int.tryParse(sortOrderController.text.trim()) ?? 0,
                       'featured': featured,
                       'popular': popular,
@@ -2259,6 +2328,9 @@ class _CategoryDetailPageState extends ConsumerState<CategoryDetailPage> {
       nameController.dispose();
       slugController.dispose();
       descriptionController.dispose();
+      iconUrlController.dispose();
+      seoTitleController.dispose();
+      seoDescriptionController.dispose();
       sortOrderController.dispose();
     });
   }
@@ -2398,6 +2470,18 @@ class _CategoryDetailPageState extends ConsumerState<CategoryDetailPage> {
                 Text(category.description!.trim()),
                 const SizedBox(height: 18),
               ],
+              if ((category.iconUrl ?? '').trim().isNotEmpty) ...[
+                _DetailLine(label: 'Icon URL', value: category.iconUrl!.trim()),
+                const SizedBox(height: 8),
+              ],
+              if ((category.seoTitle ?? '').trim().isNotEmpty) ...[
+                _DetailLine(label: 'SEO title', value: category.seoTitle!.trim()),
+                const SizedBox(height: 8),
+              ],
+              if ((category.seoDescription ?? '').trim().isNotEmpty) ...[
+                _DetailLine(label: 'SEO description', value: category.seoDescription!.trim()),
+                const SizedBox(height: 8),
+              ],
               _DetailLine(label: 'Category ID', value: category.id),
               _DetailLine(label: 'Slug', value: category.slug),
               _DetailLine(label: 'Status', value: category.isActive ? 'Active' : 'Disabled'),
@@ -2412,7 +2496,7 @@ class _CategoryDetailPageState extends ConsumerState<CategoryDetailPage> {
                     tileColor: const Color(0xFFF8FAFC),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                     title: Text(subcategory.name),
-                    subtitle: Text('${subcategory.services.length} services - Rs ${subcategory.basePrice.toStringAsFixed(0)} base'),
+                    subtitle: Text('${subcategory.services.length} services - ₹${subcategory.basePrice.toStringAsFixed(0)} base'),
                     trailing: const Icon(Icons.chevron_right_rounded),
                     onTap: () => context.push('/catalog/subcategories/${subcategory.id}'),
                   ),
@@ -2477,8 +2561,13 @@ class _SubcategoryDetailPageState extends ConsumerState<SubcategoryDetailPage> {
     final nameController = TextEditingController(text: existing.name);
     final slugController = TextEditingController(text: existing.slug);
     final descriptionController = TextEditingController(text: existing.description ?? '');
+    final iconUrlController = TextEditingController(text: existing.iconUrl ?? '');
+    final seoTitleController = TextEditingController(text: existing.seoTitle ?? '');
+    final seoDescriptionController = TextEditingController(text: existing.seoDescription ?? '');
     final basePriceController = TextEditingController(text: existing.basePrice.toStringAsFixed(0));
     final sortOrderController = TextEditingController(text: existing.sortOrder.toString());
+    final ratingController = TextEditingController(text: existing.rating.toStringAsFixed(1));
+    final reviewCountController = TextEditingController(text: existing.reviewCount.toString());
     var isActive = existing.isActive;
 
     return showDialog<Map<String, dynamic>>(
@@ -2523,6 +2612,19 @@ class _SubcategoryDetailPageState extends ConsumerState<SubcategoryDetailPage> {
                         maxLines: 3,
                       ),
                       TextFormField(
+                        controller: iconUrlController,
+                        decoration: const InputDecoration(labelText: 'Icon URL'),
+                      ),
+                      TextFormField(
+                        controller: seoTitleController,
+                        decoration: const InputDecoration(labelText: 'SEO title'),
+                      ),
+                      TextFormField(
+                        controller: seoDescriptionController,
+                        decoration: const InputDecoration(labelText: 'SEO description'),
+                        maxLines: 2,
+                      ),
+                      TextFormField(
                         controller: basePriceController,
                         decoration: const InputDecoration(labelText: 'Base price'),
                         keyboardType: TextInputType.number,
@@ -2530,6 +2632,16 @@ class _SubcategoryDetailPageState extends ConsumerState<SubcategoryDetailPage> {
                       TextFormField(
                         controller: sortOrderController,
                         decoration: const InputDecoration(labelText: 'Sort order'),
+                        keyboardType: TextInputType.number,
+                      ),
+                      TextFormField(
+                        controller: ratingController,
+                        decoration: const InputDecoration(labelText: 'Rating'),
+                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      ),
+                      TextFormField(
+                        controller: reviewCountController,
+                        decoration: const InputDecoration(labelText: 'Review count'),
                         keyboardType: TextInputType.number,
                       ),
                       SwitchListTile(
@@ -2554,8 +2666,13 @@ class _SubcategoryDetailPageState extends ConsumerState<SubcategoryDetailPage> {
                       'name': nameController.text.trim(),
                       'slug': slugController.text.trim().isEmpty ? _slugify(nameController.text) : slugController.text.trim(),
                       'description': descriptionController.text.trim().isEmpty ? null : descriptionController.text.trim(),
+                      'iconUrl': iconUrlController.text.trim().isEmpty ? null : iconUrlController.text.trim(),
+                      'seoTitle': seoTitleController.text.trim().isEmpty ? null : seoTitleController.text.trim(),
+                      'seoDescription': seoDescriptionController.text.trim().isEmpty ? null : seoDescriptionController.text.trim(),
                       'basePrice': double.tryParse(basePriceController.text.trim()) ?? 0,
                       'sortOrder': int.tryParse(sortOrderController.text.trim()) ?? 0,
+                      'rating': double.tryParse(ratingController.text.trim()) ?? 0,
+                      'reviewCount': int.tryParse(reviewCountController.text.trim()) ?? 0,
                       'isActive': isActive,
                     });
                   },
@@ -2571,8 +2688,13 @@ class _SubcategoryDetailPageState extends ConsumerState<SubcategoryDetailPage> {
       nameController.dispose();
       slugController.dispose();
       descriptionController.dispose();
+      iconUrlController.dispose();
+      seoTitleController.dispose();
+      seoDescriptionController.dispose();
       basePriceController.dispose();
       sortOrderController.dispose();
+      ratingController.dispose();
+      reviewCountController.dispose();
     });
   }
 
@@ -2702,7 +2824,9 @@ class _SubcategoryDetailPageState extends ConsumerState<SubcategoryDetailPage> {
                 runSpacing: 8,
                 children: [
                   _DetailChip(label: '${subcategory.services.length} services'),
-                  _DetailChip(label: 'Rs ${subcategory.basePrice.toStringAsFixed(0)} base'),
+                  _DetailChip(label: '₹${subcategory.basePrice.toStringAsFixed(0)} base'),
+                  _DetailChip(label: 'Rating ${subcategory.rating.toStringAsFixed(1)}'),
+                  _DetailChip(label: '${subcategory.reviewCount} reviews'),
                   _DetailChip(label: subcategory.isActive ? 'Active' : 'Disabled'),
                 ],
               ),
@@ -2713,10 +2837,24 @@ class _SubcategoryDetailPageState extends ConsumerState<SubcategoryDetailPage> {
                 Text(subcategory.description!.trim()),
                 const SizedBox(height: 18),
               ],
+              if ((subcategory.iconUrl ?? '').trim().isNotEmpty) ...[
+                _DetailLine(label: 'Icon URL', value: subcategory.iconUrl!.trim()),
+                const SizedBox(height: 8),
+              ],
+              if ((subcategory.seoTitle ?? '').trim().isNotEmpty) ...[
+                _DetailLine(label: 'SEO title', value: subcategory.seoTitle!.trim()),
+                const SizedBox(height: 8),
+              ],
+              if ((subcategory.seoDescription ?? '').trim().isNotEmpty) ...[
+                _DetailLine(label: 'SEO description', value: subcategory.seoDescription!.trim()),
+                const SizedBox(height: 8),
+              ],
+              _DetailLine(label: 'Rating', value: subcategory.rating.toStringAsFixed(1)),
+              _DetailLine(label: 'Review count', value: '${subcategory.reviewCount}'),
               _DetailLine(label: 'Subcategory ID', value: subcategory.id),
               _DetailLine(label: 'Category', value: category?.name ?? 'Unknown'),
               _DetailLine(label: 'Slug', value: subcategory.slug),
-              _DetailLine(label: 'Base price', value: 'Rs ${subcategory.basePrice.toStringAsFixed(0)}'),
+              _DetailLine(label: 'Base price', value: '₹${subcategory.basePrice.toStringAsFixed(0)}'),
               _DetailLine(label: 'Status', value: subcategory.isActive ? 'Active' : 'Disabled'),
               _DetailLine(label: 'Sort order', value: '${subcategory.sortOrder}'),
               const SizedBox(height: 18),
@@ -2729,7 +2867,7 @@ class _SubcategoryDetailPageState extends ConsumerState<SubcategoryDetailPage> {
                     tileColor: const Color(0xFFF8FAFC),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                     title: Text(service.name),
-                    subtitle: Text('Rs ${service.startingPrice.toStringAsFixed(0)} - ${service.estimatedDurationMins} mins'),
+                    subtitle: Text('₹${service.startingPrice.toStringAsFixed(0)} - ${service.estimatedDurationMins} mins'),
                     trailing: const Icon(Icons.chevron_right_rounded),
                     onTap: () => context.push('/catalog/services/${service.id}'),
                   ),
@@ -2803,6 +2941,12 @@ class _ServiceDetailPageState extends ConsumerState<ServiceDetailPage> {
     final durationController = TextEditingController(text: existing.estimatedDurationMins.toString());
     final warrantyController = TextEditingController(text: existing.warrantyDays.toString());
     final iconController = TextEditingController(text: existing.iconUrl ?? '');
+    final seoTitleController = TextEditingController(text: existing.seoTitle ?? '');
+    final seoDescriptionController = TextEditingController(text: existing.seoDescription ?? '');
+    final seoKeywordsController = TextEditingController(text: existing.seoKeywords ?? '');
+    final cancellationPolicyController = TextEditingController(text: existing.cancellationPolicy ?? '');
+    final ratingController = TextEditingController(text: existing.rating.toStringAsFixed(2));
+    final reviewCountController = TextEditingController(text: existing.reviewCount.toString());
     var featured = existing.featured;
     var popular = existing.popular;
     var emergency = existing.emergencyAvailable;
@@ -2912,6 +3056,34 @@ class _ServiceDetailPageState extends ConsumerState<ServiceDetailPage> {
                         controller: iconController,
                         decoration: const InputDecoration(labelText: 'Icon URL'),
                       ),
+                      TextFormField(
+                        controller: seoTitleController,
+                        decoration: const InputDecoration(labelText: 'SEO title'),
+                      ),
+                      TextFormField(
+                        controller: seoDescriptionController,
+                        decoration: const InputDecoration(labelText: 'SEO description'),
+                        maxLines: 2,
+                      ),
+                      TextFormField(
+                        controller: seoKeywordsController,
+                        decoration: const InputDecoration(labelText: 'SEO keywords'),
+                      ),
+                      TextFormField(
+                        controller: cancellationPolicyController,
+                        decoration: const InputDecoration(labelText: 'Cancellation policy'),
+                        maxLines: 3,
+                      ),
+                      TextFormField(
+                        controller: ratingController,
+                        decoration: const InputDecoration(labelText: 'Rating'),
+                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      ),
+                      TextFormField(
+                        controller: reviewCountController,
+                        decoration: const InputDecoration(labelText: 'Review count'),
+                        keyboardType: TextInputType.number,
+                      ),
                       SwitchListTile(
                         value: featured,
                         onChanged: (value) => setState(() => featured = value),
@@ -2963,6 +3135,16 @@ class _ServiceDetailPageState extends ConsumerState<ServiceDetailPage> {
                       'estimatedDurationMins': int.tryParse(durationController.text.trim()) ?? 0,
                       'warrantyDays': int.tryParse(warrantyController.text.trim()) ?? 0,
                       'iconUrl': iconController.text.trim().isEmpty ? null : iconController.text.trim(),
+                      'seoTitle': seoTitleController.text.trim().isEmpty ? null : seoTitleController.text.trim(),
+                      'seoDescription': seoDescriptionController.text.trim().isEmpty
+                          ? null
+                          : seoDescriptionController.text.trim(),
+                      'seoKeywords': seoKeywordsController.text.trim().isEmpty ? null : seoKeywordsController.text.trim(),
+                      'cancellationPolicy': cancellationPolicyController.text.trim().isEmpty
+                          ? null
+                          : cancellationPolicyController.text.trim(),
+                      'rating': double.tryParse(ratingController.text.trim()) ?? 0,
+                      'reviewCount': int.tryParse(reviewCountController.text.trim()) ?? 0,
                       'featured': featured,
                       'popular': popular,
                       'emergencyAvailable': emergency,
@@ -2991,6 +3173,12 @@ class _ServiceDetailPageState extends ConsumerState<ServiceDetailPage> {
       durationController.dispose();
       warrantyController.dispose();
       iconController.dispose();
+      seoTitleController.dispose();
+      seoDescriptionController.dispose();
+      seoKeywordsController.dispose();
+      cancellationPolicyController.dispose();
+      ratingController.dispose();
+      reviewCountController.dispose();
     });
   }
 
@@ -3106,10 +3294,12 @@ class _ServiceDetailPageState extends ConsumerState<ServiceDetailPage> {
                 spacing: 8,
                 runSpacing: 8,
                 children: [
-                  _DetailChip(label: 'Rs ${service.startingPrice.toStringAsFixed(0)}'),
+                  _DetailChip(label: '₹${service.startingPrice.toStringAsFixed(0)}'),
                   _DetailChip(label: '${service.estimatedDurationMins} mins'),
                   _DetailChip(label: 'GST ${service.gstRate.toStringAsFixed(2)}%'),
                   _DetailChip(label: 'SAC ${service.sacCode}'),
+                  _DetailChip(label: 'Rating ${service.rating.toStringAsFixed(1)}'),
+                  _DetailChip(label: '${service.reviewCount} reviews'),
                   _DetailChip(label: service.isActive ? 'Active' : 'Disabled'),
                 ],
               ),
@@ -3143,6 +3333,28 @@ class _ServiceDetailPageState extends ConsumerState<ServiceDetailPage> {
                 Text(service.shortDescription!.trim()),
                 const SizedBox(height: 18),
               ],
+              if ((service.iconUrl ?? '').trim().isNotEmpty) ...[
+                _DetailLine(label: 'Icon URL', value: service.iconUrl!.trim()),
+                const SizedBox(height: 8),
+              ],
+              if ((service.seoTitle ?? '').trim().isNotEmpty) ...[
+                _DetailLine(label: 'SEO title', value: service.seoTitle!.trim()),
+                const SizedBox(height: 8),
+              ],
+              if ((service.seoDescription ?? '').trim().isNotEmpty) ...[
+                _DetailLine(label: 'SEO description', value: service.seoDescription!.trim()),
+                const SizedBox(height: 8),
+              ],
+              if ((service.seoKeywords ?? '').trim().isNotEmpty) ...[
+                _DetailLine(label: 'SEO keywords', value: service.seoKeywords!.trim()),
+                const SizedBox(height: 8),
+              ],
+              if ((service.cancellationPolicy ?? '').trim().isNotEmpty) ...[
+                _DetailLine(label: 'Cancellation policy', value: service.cancellationPolicy!.trim()),
+                const SizedBox(height: 8),
+              ],
+              _DetailLine(label: 'Rating', value: service.rating.toStringAsFixed(1)),
+              _DetailLine(label: 'Review count', value: '${service.reviewCount}'),
               _DetailLine(label: 'Service ID', value: service.id),
               _DetailLine(label: 'Category', value: category?.name ?? 'Unknown'),
               _DetailLine(label: 'Subcategory', value: subcategory?.name ?? 'Unknown'),
@@ -3180,7 +3392,7 @@ class _ServiceDetailPageState extends ConsumerState<ServiceDetailPage> {
                             ],
                           ),
                           const SizedBox(height: 6),
-                          Text('Rs ${rule.price.toStringAsFixed(0)}'),
+                          Text('₹${rule.price.toStringAsFixed(0)}'),
                           const SizedBox(height: 4),
                           Text('Currency: ${rule.currency}'),
                           const SizedBox(height: 4),
@@ -3444,6 +3656,9 @@ class _AdminCategory {
     required this.popular,
     required this.sortOrder,
     required this.description,
+    required this.iconUrl,
+    required this.seoTitle,
+    required this.seoDescription,
     required this.subcategories,
   });
 
@@ -3455,6 +3670,9 @@ class _AdminCategory {
   final bool popular;
   final int sortOrder;
   final String? description;
+  final String? iconUrl;
+  final String? seoTitle;
+  final String? seoDescription;
   final List<_AdminSubcategory> subcategories;
 
   int get serviceCount => subcategories.fold<int>(0, (sum, subcategory) => sum + subcategory.serviceCount);
@@ -3469,6 +3687,9 @@ class _AdminCategory {
       popular: json['popular'] as bool? ?? false,
       sortOrder: (json['sortOrder'] as num?)?.toInt() ?? 0,
       description: json['description'] as String?,
+      iconUrl: json['iconUrl'] as String?,
+      seoTitle: json['seoTitle'] as String?,
+      seoDescription: json['seoDescription'] as String?,
       subcategories: const [],
     );
   }
@@ -3487,6 +3708,9 @@ class _AdminCategory {
       popular: json['popular'] as bool? ?? fallback?.popular ?? false,
       sortOrder: (json['sortOrder'] as num?)?.toInt() ?? fallback?.sortOrder ?? 0,
       description: json['description'] as String? ?? fallback?.description,
+      iconUrl: json['iconUrl'] as String? ?? fallback?.iconUrl,
+      seoTitle: json['seoTitle'] as String? ?? fallback?.seoTitle,
+      seoDescription: json['seoDescription'] as String? ?? fallback?.seoDescription,
       subcategories: subcategories,
     );
   }
@@ -3502,6 +3726,11 @@ class _AdminSubcategory {
     required this.isActive,
     required this.sortOrder,
     required this.description,
+    required this.iconUrl,
+    required this.seoTitle,
+    required this.seoDescription,
+    required this.rating,
+    required this.reviewCount,
     required this.services,
   });
 
@@ -3513,6 +3742,11 @@ class _AdminSubcategory {
   final bool isActive;
   final int sortOrder;
   final String? description;
+  final String? iconUrl;
+  final String? seoTitle;
+  final String? seoDescription;
+  final double rating;
+  final int reviewCount;
   final List<_AdminService> services;
 
   int get serviceCount => services.length;
@@ -3528,6 +3762,11 @@ class _AdminSubcategory {
       isActive: json['isActive'] as bool? ?? true,
       sortOrder: (json['sortOrder'] as num?)?.toInt() ?? 0,
       description: json['description'] as String?,
+      iconUrl: json['iconUrl'] as String?,
+      seoTitle: json['seoTitle'] as String?,
+      seoDescription: json['seoDescription'] as String?,
+      rating: _toDouble(json['rating']),
+      reviewCount: (json['reviewCount'] as num?)?.toInt() ?? 0,
       services: servicesJson.whereType<Map<String, dynamic>>().map(_AdminService.fromJson).toList(growable: false),
     );
   }
@@ -3554,6 +3793,12 @@ class _AdminService {
     required this.description,
     required this.shortDescription,
     required this.iconUrl,
+    required this.seoTitle,
+    required this.seoDescription,
+    required this.seoKeywords,
+    required this.cancellationPolicy,
+    required this.rating,
+    required this.reviewCount,
     required this.pricingRules,
   });
 
@@ -3576,6 +3821,12 @@ class _AdminService {
   final String? description;
   final String? shortDescription;
   final String? iconUrl;
+  final String? seoTitle;
+  final String? seoDescription;
+  final String? seoKeywords;
+  final String? cancellationPolicy;
+  final double rating;
+  final int reviewCount;
   final List<_AdminPricingRule> pricingRules;
 
   factory _AdminService.fromJson(Map<String, dynamic> json) {
@@ -3599,6 +3850,12 @@ class _AdminService {
       description: json['description'] as String?,
       shortDescription: json['shortDescription'] as String?,
       iconUrl: json['iconUrl'] as String?,
+      seoTitle: json['seoTitle'] as String?,
+      seoDescription: json['seoDescription'] as String?,
+      seoKeywords: json['seoKeywords'] as String?,
+      cancellationPolicy: json['cancellationPolicy'] as String?,
+      rating: _toDouble(json['rating']),
+      reviewCount: (json['reviewCount'] as num?)?.toInt() ?? 0,
       pricingRules: (json['pricingRules'] as List? ?? const [])
           .whereType<Map<String, dynamic>>()
           .map(_AdminPricingRule.fromJson)

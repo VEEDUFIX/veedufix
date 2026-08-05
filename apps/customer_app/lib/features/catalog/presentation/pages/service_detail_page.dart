@@ -206,7 +206,7 @@ class _ServiceDetailView extends ConsumerWidget {
                     spacing: 8,
                     runSpacing: 8,
                     children: [
-                      _MetaChip(icon: Icons.payments_rounded, label: 'Rs ${price.toInt()}'),
+                      _MetaChip(icon: Icons.payments_rounded, label: '₹${price.toInt()}'),
                       _MetaChip(icon: Icons.timer_rounded, label: '${service.estimatedDurationMins} mins'),
                       _MetaChip(icon: Icons.verified_rounded, label: service.gstApplicable ? 'GST applies' : 'GST included'),
                       _MetaChip(icon: Icons.home_work_rounded, label: service.homeVisit ? 'Home visit' : 'On-site'),
@@ -527,7 +527,7 @@ class _BookingBottomBar extends ConsumerWidget {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  'Rs ${price.toInt()}',
+                  '₹${price.toInt()}',
                   style: textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w900),
                 ),
               ],

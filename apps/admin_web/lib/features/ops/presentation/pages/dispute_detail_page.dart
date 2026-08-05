@@ -62,7 +62,7 @@ class _DisputeDetailPageState extends ConsumerState<DisputeDetailPage> {
                 if (resolution == 'refund')
                   _InfoLine(
                     label: 'Refund amount',
-                    value: 'Rs. ${amount.toStringAsFixed(2)}',
+                    value: '₹${amount.toStringAsFixed(2)}',
                   ),
                 const SizedBox(height: 12),
                 TextField(
@@ -231,7 +231,7 @@ class _DisputeDetailPageState extends ConsumerState<DisputeDetailPage> {
                                       'Worker unavailable'),
                               _Chip(
                                   label:
-                                      'Rs. ${booking.totalAmount.toStringAsFixed(2)}'),
+                                      '₹${booking.totalAmount.toStringAsFixed(2)}'),
                               _Chip(
                                   label: MaterialLocalizations.of(context)
                                       .formatMediumDate(dispute.createdAt)),

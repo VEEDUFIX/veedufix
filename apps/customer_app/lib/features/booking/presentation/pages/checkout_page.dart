@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
@@ -7,6 +7,7 @@ import 'package:marketplace_shared/marketplace_shared.dart';
 import 'package:razorpay_flutter/razorpay_flutter.dart';
 import '../../../cart/presentation/providers/cart_providers.dart';
 import '../../../profile/data/saved_addresses_api.dart';
+import '../../../profile/presentation/pages/map_location_picker_page.dart';
 
 final savedAddressesProvider =
     FutureProvider.autoDispose<List<SavedAddressItem>>((ref) async {
@@ -35,13 +36,14 @@ class CheckoutPage extends ConsumerStatefulWidget {
 class _CheckoutPageState extends ConsumerState<CheckoutPage> {
   int _step = 0; // 0: Address, 1: DateTime, 2: Summary
 
-  // ── State ────────────────────────────────────────────────────────────────
+  // â”€â”€ State â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   int _selectedDate = 0;
   int _selectedSlot = 2;
 
   String? _appliedCoupon;
   SavedAddressItem? _selectedAddress;
   LatLng? _selectedGeoPoint;
+  String? _selectedGeoLabel;
 
   final List<String> _slots = const [
     '08:00 AM',
@@ -111,6 +113,9 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
 
     final point = _selectedGeoPoint;
     if (point != null) {
+      if ((_selectedGeoLabel ?? '').trim().isNotEmpty) {
+        return _selectedGeoLabel!.trim();
+      }
       return 'Pinned location: ${point.latitude.toStringAsFixed(5)}, ${point.longitude.toStringAsFixed(5)}';
     }
 
@@ -152,12 +157,13 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
       );
       if (!mounted) return;
 
-      final picked = await context.push<LatLng>(
+      final picked = await context.push<MapLocationSelection>(
         '/map-picker?lat=${position.latitude}&lng=${position.longitude}',
       );
       if (picked != null && mounted) {
         setState(() {
-          _selectedGeoPoint = picked;
+          _selectedGeoPoint = picked.location;
+          _selectedGeoLabel = picked.label;
           _selectedAddress = null;
         });
       }
@@ -343,7 +349,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
           ? const Center(child: CircularProgressIndicator())
           : Column(
               children: [
-                // ─── Progress stepper ────────────────────────────────────────
+                // â”€â”€â”€ Progress stepper â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                 Padding(
                   padding:
                       const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
@@ -351,7 +357,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
                 ),
                 const Divider(height: 1),
 
-                // ─── Step content ────────────────────────────────────────────
+                // â”€â”€â”€ Step content â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                 Expanded(
                   child: SingleChildScrollView(
                     padding: const EdgeInsets.all(24),
@@ -372,12 +378,13 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
                             key: const ValueKey(0),
                             selectedAddress: _selectedAddress,
                             hasGeoSelection: _selectedGeoPoint != null,
-                            onAddressSelected: (address) {
-                              setState(() {
-                                _selectedAddress = address;
-                                _selectedGeoPoint = null;
-                              });
-                            },
+                              onAddressSelected: (address) {
+                                setState(() {
+                                  _selectedAddress = address;
+                                  _selectedGeoPoint = null;
+                                  _selectedGeoLabel = null;
+                                });
+                              },
                             onUseCurrentLocation: _useCurrentLocation,
                             onChangeAddress: () => context.push('/addresses'),
                           ),
@@ -416,7 +423,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
                   ),
                 ),
 
-                // ─── Bottom CTA ───────────────────────────────────────────────
+                // â”€â”€â”€ Bottom CTA â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                 Container(
                   padding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
                   decoration: BoxDecoration(
@@ -458,7 +465,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
                               ? 'Continue'
                               : _isProcessing
                                   ? 'Processing...'
-                                  : 'Confirm & Pay  ₹${totalAmount.toStringAsFixed(0)}',
+                                  : 'Confirm & Pay ₹${totalAmount.toStringAsFixed(0)}',
                           textAlign: TextAlign.center,
                           style: tt.titleMedium?.copyWith(
                             color: cs.onPrimary,
@@ -475,7 +482,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
   }
 }
 
-// ── Stepper ───────────────────────────────────────────────────────────────────
+// â”€â”€ Stepper â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 class _Stepper extends StatelessWidget {
   const _Stepper({required this.currentStep});
@@ -529,7 +536,7 @@ class _Stepper extends StatelessWidget {
   }
 }
 
-// ── Step 0: Address ───────────────────────────────────────────────────────────
+// â”€â”€ Step 0: Address â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 class _StepAddress extends ConsumerWidget {
   const _StepAddress({
@@ -566,8 +573,21 @@ class _StepAddress extends ConsumerWidget {
             if (addresses.isEmpty) {
               return Padding(
                 padding: const EdgeInsets.only(bottom: 16),
-                child: Text('No saved addresses found. Please add one.',
-                    style: tt.bodyMedium?.copyWith(color: cs.error)),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'No saved addresses found. Please add one.',
+                      style: tt.bodyMedium?.copyWith(color: cs.error),
+                    ),
+                    const SizedBox(height: 12),
+                    FilledButton.tonalIcon(
+                      onPressed: () => context.push('/addresses'),
+                      icon: const Icon(Icons.add_location_alt_rounded),
+                      label: const Text('Add address'),
+                    ),
+                  ],
+                ),
               );
             }
 
@@ -704,7 +724,7 @@ class _StepAddress extends ConsumerWidget {
   }
 }
 
-// ── Step 1: Date & Time ───────────────────────────────────────────────────────
+// â”€â”€ Step 1: Date & Time â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 class _StepDateTime extends StatelessWidget {
   const _StepDateTime({
@@ -822,7 +842,7 @@ class _StepDateTime extends StatelessWidget {
   }
 }
 
-// ── Step 2: Summary ───────────────────────────────────────────────────────────
+// â”€â”€ Step 2: Summary â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 class _StepSummary extends StatelessWidget {
   const _StepSummary({

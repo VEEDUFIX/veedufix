@@ -345,7 +345,7 @@ class _OpsAlertsPageState extends ConsumerState<OpsAlertsPage> {
                                     if (alert.amount != null)
                                       _InfoChip(
                                           label:
-                                              'Rs. ${alert.amount!.toStringAsFixed(2)}'),
+                                              '₹${alert.amount!.toStringAsFixed(2)}'),
                                   ],
                                 ),
                                 const SizedBox(height: 14),
@@ -584,7 +584,7 @@ class _OpsAlertDetailPageState extends ConsumerState<OpsAlertDetailPage> {
                   if (alert.bookingCode != null) _InfoChip(label: 'Booking ${alert.bookingCode}'),
                   if (alert.customerName != null) _InfoChip(label: alert.customerName!),
                   _InfoChip(label: MaterialLocalizations.of(context).formatMediumDate(alert.createdAt)),
-                  if (alert.amount != null) _InfoChip(label: 'Rs. ${alert.amount!.toStringAsFixed(2)}'),
+                  if (alert.amount != null) _InfoChip(label: '₹${alert.amount!.toStringAsFixed(2)}'),
                   _InfoChip(label: alert.kind.replaceAll('_', ' ')),
                 ],
               ),

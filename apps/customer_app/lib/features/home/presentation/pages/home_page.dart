@@ -26,27 +26,41 @@ class HomePage extends ConsumerWidget {
         .expand((category) => category.subcategories)
         .toList(growable: false);
 
+    final featuredCategoryCount = catalogCategories.length;
+    final professionalCount = professionalsAsync.valueOrNull?.length ?? 0;
+
     return Scaffold(
-      body: LiquidRefresh(
-        onRefresh: () async {
-          await Future.wait([
-            ref.refresh(homeCatalogProvider.future),
-            ref.refresh(homeProfessionalsProvider.future),
-          ]);
-        },
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(20, 16, 20, 28),
-          children: [
-            _HomeHeader(
-              greeting: _greeting(),
-              name: firstName,
-              location: locationLabel,
-            ),
-            const SizedBox(height: 18),
-            _SearchBar(
-              hint: 'What service do you need?',
-              onVoiceTap: () => showAiAssistantSheet(context),
-            ),
+      backgroundColor: Colors.transparent,
+      body: Stack(
+        children: [
+          const _HomeBackdrop(),
+          LiquidRefresh(
+            onRefresh: () async {
+              await Future.wait([
+                ref.refresh(homeCatalogProvider.future),
+                ref.refresh(homeProfessionalsProvider.future),
+              ]);
+            },
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 28),
+              children: [
+                _HomeHeader(
+                  greeting: _greeting(),
+                  name: firstName,
+                  location: locationLabel,
+                ),
+                const SizedBox(height: 16),
+                _HomeHeroCard(
+                  name: firstName,
+                  featuredCategories: featuredCategoryCount,
+                  nearbyProfessionals: professionalCount,
+                  location: locationLabel,
+                ),
+                const SizedBox(height: 18),
+                _SearchBar(
+                  hint: 'What service do you need?',
+                  onVoiceTap: () => showAiAssistantSheet(context),
+                ),
             const SizedBox(height: 18),
             const _SectionLabel(
               title: 'Quick categories',
@@ -250,8 +264,10 @@ class HomePage extends ConsumerWidget {
               icon: Icons.card_giftcard_rounded,
               baseColor: Color(0xFF10B981),
             ),
-          ],
-        ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -461,6 +477,222 @@ class _SectionLabel extends StatelessWidget {
   }
 }
 
+class _HomeBackdrop extends StatelessWidget {
+  const _HomeBackdrop();
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return IgnorePointer(
+      child: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              cs.primary.withValues(alpha: 0.07),
+              cs.surface,
+              cs.secondary.withValues(alpha: 0.05),
+            ],
+          ),
+        ),
+        child: Stack(
+          children: [
+            Positioned(
+              top: -72,
+              right: -48,
+              child: _AmbientOrb(color: cs.primary.withValues(alpha: 0.12), size: 180),
+            ),
+            Positioned(
+              top: 180,
+              left: -64,
+              child: _AmbientOrb(color: const Color(0xFF10B981).withValues(alpha: 0.10), size: 140),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _AmbientOrb extends StatelessWidget {
+  const _AmbientOrb({
+    required this.color,
+    required this.size,
+  });
+
+  final Color color;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: color,
+        boxShadow: [
+          BoxShadow(
+            color: color.withValues(alpha: 0.18),
+            blurRadius: 60,
+            spreadRadius: 10,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _HomeHeroCard extends StatelessWidget {
+  const _HomeHeroCard({
+    required this.name,
+    required this.featuredCategories,
+    required this.nearbyProfessionals,
+    required this.location,
+  });
+
+  final String name;
+  final int featuredCategories;
+  final int nearbyProfessionals;
+  final String location;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(28),
+        gradient: LinearGradient(
+          colors: [
+            cs.primary,
+            const Color(0xFF0F766E),
+            cs.primary.withValues(alpha: 0.92),
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: cs.primary.withValues(alpha: 0.22),
+            blurRadius: 28,
+            offset: const Offset(0, 16),
+          ),
+        ],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  width: 48,
+                  height: 48,
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.14),
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: const Icon(Icons.auto_awesome_rounded, color: Colors.white),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Book faster, with less friction',
+                        style: tt.titleMedium?.copyWith(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        '$name, discover trusted services near $location and keep every booking in one place.',
+                        style: tt.bodyMedium?.copyWith(
+                          color: Colors.white.withValues(alpha: 0.86),
+                          height: 1.4,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: [
+                _HeroStatPill(label: '$featuredCategories categories', icon: Icons.category_rounded),
+                _HeroStatPill(label: '$nearbyProfessionals pros nearby', icon: Icons.verified_rounded),
+                const _HeroStatPill(label: 'Live pricing', icon: Icons.payments_rounded),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: [
+                FilledButton.tonalIcon(
+                  onPressed: () => context.push('/search'),
+                  icon: const Icon(Icons.search_rounded),
+                  label: const Text('Search services'),
+                ),
+                OutlinedButton.icon(
+                  onPressed: () => context.push('/bookings'),
+                  icon: const Icon(Icons.receipt_long_rounded),
+                  label: const Text('Bookings'),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _HeroStatPill extends StatelessWidget {
+  const _HeroStatPill({
+    required this.label,
+    required this.icon,
+  });
+
+  final String label;
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.14),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.18)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 16, color: Colors.white),
+          const SizedBox(width: 8),
+          Text(
+            label,
+            style: const TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _CategoryChip extends StatelessWidget {
   const _CategoryChip({required this.category});
 
@@ -645,7 +877,7 @@ class _ServiceCard extends StatelessWidget {
   final CatalogService service;
 
   String get _title => service.name;
-  String get _price => 'Rs ${service.startingPrice.toInt()}';
+  String get _price => '₹${service.startingPrice.toInt()}';
   double get _rating => service.rating;
   String get _jobs => '${service.reviewCount} reviews';
   IconData get _icon => Icons.design_services_rounded;

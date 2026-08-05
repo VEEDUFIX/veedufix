@@ -574,7 +574,7 @@ class _SearchResults extends StatelessWidget {
                         ],
                         if (item.startingPrice > 0)
                           Text(
-                            'From Rs ${item.startingPrice.toInt()}',
+                            'From ₹${item.startingPrice.toInt()}',
                             style: Theme.of(context).textTheme.bodySmall?.copyWith(
                                   color: cs.primary,
                                   fontWeight: FontWeight.w600,

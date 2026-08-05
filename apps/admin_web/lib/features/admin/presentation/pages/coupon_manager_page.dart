@@ -518,8 +518,8 @@ class _CouponDetailPageState extends ConsumerState<CouponDetailPage> {
               _DetailLine(label: 'Value', value: coupon.displayValue),
               _DetailLine(label: 'Per-user limit', value: '${coupon.perUserLimit}'),
               _DetailLine(label: 'Usage limit', value: coupon.usageLimit?.toString() ?? 'Unlimited'),
-              _DetailLine(label: 'Minimum order', value: coupon.minOrderAmount == null ? 'None' : 'Rs. ${coupon.minOrderAmount!.toStringAsFixed(0)}'),
-              _DetailLine(label: 'Maximum discount', value: coupon.maxDiscount == null ? 'None' : 'Rs. ${coupon.maxDiscount!.toStringAsFixed(0)}'),
+              _DetailLine(label: 'Minimum order', value: coupon.minOrderAmount == null ? 'None' : '₹${coupon.minOrderAmount!.toStringAsFixed(0)}'),
+              _DetailLine(label: 'Maximum discount', value: coupon.maxDiscount == null ? 'None' : '₹${coupon.maxDiscount!.toStringAsFixed(0)}'),
               _DetailLine(label: 'Created', value: DateFormat('d MMM y, h:mm a').format(coupon.createdAt)),
               const SizedBox(height: 20),
               Wrap(

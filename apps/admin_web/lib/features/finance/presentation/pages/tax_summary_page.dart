@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
@@ -613,5 +613,6 @@ String _formatRange(DateTimeRange range) {
 }
 
 String _formatCurrency(double value) {
-  return NumberFormat.currency(locale: 'en_IN', symbol: 'Rs. ', decimalDigits: 2).format(value);
+  return NumberFormat.currency(locale: 'en_IN', symbol: '\u20B9', decimalDigits: 2).format(value);
 }
+

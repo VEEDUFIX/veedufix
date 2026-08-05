@@ -139,6 +139,25 @@ async function getPayoutById(payoutId: string) {
   });
 }
 
+async function claimRetryablePayout(payoutId: string): Promise<PayoutRecordWithBooking | null> {
+  const result = await prisma.payout.updateMany({
+    where: {
+      id: payoutId,
+      status: "failed"
+    },
+    data: {
+      status: "pending",
+      failureReason: null
+    }
+  });
+
+  if (result.count === 0) {
+    return null;
+  }
+
+  return getPayoutById(payoutId) as Promise<PayoutRecordWithBooking | null>;
+}
+
 function resolveWorkerName(payout: PayoutRecordWithBooking): string {
   const worker = payout.booking.worker;
   return worker?.fullName?.trim() || worker?.displayName?.trim() || worker?.user.name || "VeeduFix Worker";
@@ -400,7 +419,12 @@ export async function releaseWorkerPayout(bookingId: string): Promise<void> {
       return;
     }
 
-    const payout = existing ?? (await createPendingPayoutRecord(bookingId));
+    const payout = existing ? await claimRetryablePayout(existing.id) : await createPendingPayoutRecord(bookingId);
+    if (!payout) {
+      logger.info({ bookingId }, "Skipped payout release because the payout is no longer retryable");
+      return;
+    }
+
     await attemptPayout(payout);
   } catch (error) {
     logger.error(
@@ -423,24 +447,10 @@ export async function retryPayout(payoutId: string) {
     throw new Error("Only failed payouts can be retried");
   }
 
-  const updated = await prisma.payout.update({
-    where: { id: payoutId },
-    data: {
-      status: "pending",
-      failureReason: null
-    },
-    include: {
-      booking: {
-        include: {
-          worker: {
-            include: {
-              user: true
-            }
-          }
-        }
-      }
-    }
-  });
+  const updated = await claimRetryablePayout(payoutId);
+  if (!updated) {
+    throw new Error("Payout is no longer retryable");
+  }
 
   await attemptPayout(updated);
 
@@ -545,14 +555,17 @@ export async function bulkRetryFailedPayouts(): Promise<{ attempted: number; suc
 
   let succeeded = 0;
   let failed = 0;
+  let attempted = 0;
 
   for (const payout of failedPayouts) {
     try {
-      await prisma.payout.update({
-        where: { id: payout.id },
-        data: { status: "pending", failureReason: null }
-      });
-      await attemptPayout({ ...payout, status: "pending", failureReason: null });
+      const claimed = await claimRetryablePayout(payout.id);
+      if (!claimed) {
+        continue;
+      }
+
+      attempted++;
+      await attemptPayout(claimed);
 
       const result = await prisma.payout.findUnique({ where: { id: payout.id }, select: { status: true } });
       if (result?.status === "success") {
@@ -565,7 +578,7 @@ export async function bulkRetryFailedPayouts(): Promise<{ attempted: number; suc
     }
   }
 
-  return { attempted: failedPayouts.length, succeeded, failed };
+  return { attempted, succeeded, failed };
 }
 
 export async function exportPayoutsCsv(filters: PayoutFilters = {}): Promise<string> {

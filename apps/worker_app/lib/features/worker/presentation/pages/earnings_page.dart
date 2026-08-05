@@ -1,8 +1,9 @@
-import 'dart:math' as math;
+﻿import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:marketplace_shared/marketplace_shared.dart';
 
@@ -269,41 +270,56 @@ class _EarningsPageState extends ConsumerState<EarningsPage> {
                     PremiumGlassCard(
                       child: Padding(
                         padding: const EdgeInsets.all(18),
-                        child: Row(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Container(
-                              width: 52,
-                              height: 52,
-                              decoration: BoxDecoration(
-                                color: const Color(0xFF10B981).withValues(alpha: 0.12),
-                                borderRadius: BorderRadius.circular(16),
-                              ),
-                              child: Icon(
-                                hasUpi || hasBank ? Icons.verified_rounded : Icons.warning_rounded,
-                                color: hasUpi || hasBank ? const Color(0xFF10B981) : const Color(0xFFF59E0B),
-                              ),
-                            ),
-                            const SizedBox(width: 14),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    payoutSetupLabel,
-                                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                          fontWeight: FontWeight.w800,
-                                        ),
+                            Row(
+                              children: [
+                                Container(
+                                  width: 52,
+                                  height: 52,
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFF10B981).withValues(alpha: 0.12),
+                                    borderRadius: BorderRadius.circular(16),
                                   ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    payoutSetupSubtitle,
-                                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                          color: Theme.of(context).colorScheme.onSurfaceVariant,
-                                        ),
+                                  child: Icon(
+                                    hasUpi || hasBank ? Icons.verified_rounded : Icons.warning_rounded,
+                                    color: hasUpi || hasBank ? const Color(0xFF10B981) : const Color(0xFFF59E0B),
                                   ),
-                                ],
-                              ),
+                                ),
+                                const SizedBox(width: 14),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        payoutSetupLabel,
+                                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                              fontWeight: FontWeight.w800,
+                                            ),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        payoutSetupSubtitle,
+                                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                              color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                            ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
                             ),
+                            if (!hasUpi && !hasBank) ...[
+                              const SizedBox(height: 14),
+                              Align(
+                                alignment: Alignment.centerRight,
+                                child: TextButton(
+                                  onPressed: () => context.push('/profile/edit'),
+                                  child: const Text('Set up payout'),
+                                ),
+                              ),
+                            ],
                           ],
                         ),
                       ),
@@ -391,7 +407,7 @@ class _EarningsPageState extends ConsumerState<EarningsPage> {
                                                   ),
                                                   const SizedBox(height: 4),
                                                   Text(
-                                                    '${_formatMoney(entry.amount)} · ${_formatStatusLabel(entry.status)}',
+                                                    '${_formatMoney(entry.amount)} - ${_formatStatusLabel(entry.status)}',
                                                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                                                           color: Theme.of(context).colorScheme.onSurfaceVariant,
                                                         ),
@@ -479,7 +495,7 @@ class _EarningsPageState extends ConsumerState<EarningsPage> {
                                     title: 'Latest payout',
                                     value: _transactions.isNotEmpty
                                         ? _formatMoney(_transactions.first.amount)
-                                        : 'Rs 0',
+                                        : '₹0',
                                     icon: Icons.schedule_rounded,
                                   ),
                                 ),
@@ -595,7 +611,7 @@ String? _nonEmpty(dynamic value) {
 }
 
 String _formatMoney(double value) {
-  return NumberFormat.currency(locale: 'en_IN', symbol: 'Rs ', decimalDigits: 0).format(value);
+  return NumberFormat.currency(locale: 'en_IN', symbol: '₹', decimalDigits: 0).format(value);
 }
 
 String _buildTransactionSubtitle(WorkerEarningsTransaction entry) {

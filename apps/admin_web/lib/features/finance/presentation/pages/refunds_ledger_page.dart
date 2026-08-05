@@ -468,7 +468,7 @@ class _RefundsLedgerPageState extends ConsumerState<RefundsLedgerPage> {
                                     ],
                                   ),
                                 ),
-                                DataCell(Text('Rs. ${refund.amount.toStringAsFixed(2)}')),
+                                DataCell(Text('₹${refund.amount.toStringAsFixed(2)}')),
                                 DataCell(_GlowingStatusBadge(status: refund.status)),
                                 DataCell(
                                   Text(MaterialLocalizations.of(context).formatMediumDate(refund.createdAt)),
@@ -666,7 +666,7 @@ class _RefundDetailPageState extends ConsumerState<RefundDetailPage> {
                 children: [
                   _DetailChip(label: refund.status),
                   _DetailChip(label: refund.customerName ?? 'Unknown customer'),
-                  _DetailChip(label: 'Rs. ${refund.amount.toStringAsFixed(2)}'),
+                  _DetailChip(label: '₹${refund.amount.toStringAsFixed(2)}'),
                   _DetailChip(label: MaterialLocalizations.of(context).formatMediumDate(refund.createdAt)),
                 ],
               ),
@@ -675,7 +675,7 @@ class _RefundDetailPageState extends ConsumerState<RefundDetailPage> {
               _DetailLine(label: 'Booking ID', value: refund.bookingId),
               _DetailLine(label: 'Booking code', value: refund.bookingCode),
               _DetailLine(label: 'Customer', value: refund.customerName ?? 'Unknown'),
-              _DetailLine(label: 'Amount', value: 'Rs. ${refund.amount.toStringAsFixed(2)}'),
+              _DetailLine(label: 'Amount', value: '₹${refund.amount.toStringAsFixed(2)}'),
               _DetailLine(label: 'Reason', value: refund.reason),
               _DetailLine(label: 'Created', value: MaterialLocalizations.of(context).formatMediumDate(refund.createdAt)),
               if ((refund.razorpayRefundId ?? '').trim().isNotEmpty)

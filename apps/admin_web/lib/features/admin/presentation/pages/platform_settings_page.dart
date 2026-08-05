@@ -1028,7 +1028,7 @@ class _CommissionCard extends StatelessWidget {
           subtitle: Padding(
             padding: const EdgeInsets.only(top: 4),
             child: Text(
-              '$subtitle · ${entry.rate.toStringAsFixed(2)}% + Rs ${entry.fixedFee.toStringAsFixed(2)}',
+              '$subtitle · ${entry.rate.toStringAsFixed(2)}% + ₹${entry.fixedFee.toStringAsFixed(2)}',
             ),
           ),
           trailing: Wrap(
@@ -1229,7 +1229,7 @@ class _CommissionDetailPageState extends ConsumerState<CommissionDetailPage> {
                 children: [
                   _DetailChip(label: commission.isGlobal ? 'Global' : 'City specific'),
                   _DetailChip(label: '${commission.rate.toStringAsFixed(2)}%'),
-                  _DetailChip(label: 'Rs ${commission.fixedFee.toStringAsFixed(2)} fixed'),
+                  _DetailChip(label: '₹${commission.fixedFee.toStringAsFixed(2)} fixed'),
                   _DetailChip(label: commission.isActive ? 'Active' : 'Inactive'),
                 ],
               ),
@@ -1239,7 +1239,7 @@ class _CommissionDetailPageState extends ConsumerState<CommissionDetailPage> {
               _DetailLine(label: 'City name', value: commission.cityName ?? 'Global default'),
               _DetailLine(label: 'City slug', value: commission.citySlug ?? 'None'),
               _DetailLine(label: 'Rate', value: '${commission.rate.toStringAsFixed(2)}%'),
-              _DetailLine(label: 'Fixed fee', value: 'Rs ${commission.fixedFee.toStringAsFixed(2)}'),
+              _DetailLine(label: 'Fixed fee', value: '₹${commission.fixedFee.toStringAsFixed(2)}'),
               _DetailLine(label: 'Status', value: commission.isActive ? 'Active' : 'Inactive'),
               _DetailLine(label: 'Available cities', value: '${snapshotData.cities.length}'),
               const SizedBox(height: 20),

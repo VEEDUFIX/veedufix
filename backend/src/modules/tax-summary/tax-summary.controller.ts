@@ -63,8 +63,8 @@ export async function exportTaxSummaryCsvHandler(
     if (adminId) {
       void writeAuditLog({
         adminId,
-        action: "platform.settings_updated",
-        targetType: "platform_settings",
+        action: "tax_summary.exported",
+        targetType: "tax_summary",
         targetId: "invoices",
         note: "Tax summary CSV export",
         metadata: {

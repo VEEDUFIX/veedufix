@@ -103,6 +103,13 @@ function getPaymentNotes(payment: PaymentWithBooking): Record<string, unknown> {
   return {};
 }
 
+function mergePaymentNotes(payment: PaymentWithBooking, notes: Record<string, unknown>): Prisma.InputJsonValue {
+  return {
+    ...getPaymentNotes(payment),
+    ...compactNotes(notes)
+  } as Prisma.InputJsonValue;
+}
+
 async function findPaymentForRazorpayPaymentId(paymentId: string): Promise<PaymentWithBooking | null> {
   const payments = await prisma.payment.findMany({
     where: {
@@ -146,6 +153,7 @@ export async function updatePaymentForWebhook(
   const expectedAmountPaise = toPaise(payment.booking.totalAmount);
   const recordedAmountPaise = toPaise(payment.amount);
   const razorpayAmountPaise = capturedAmountPaise ?? recordedAmountPaise;
+  const isDuplicateFinalState = payment.status === status;
 
   if (status === PaymentStatus.CAPTURED) {
     if (recordedAmountPaise !== expectedAmountPaise || razorpayAmountPaise !== expectedAmountPaise) {
@@ -154,7 +162,7 @@ export async function updatePaymentForWebhook(
         data: {
           status: PaymentStatus.FAILED,
           notes: {
-            ...(payment.notes && typeof payment.notes === "object" ? (payment.notes as Record<string, unknown>) : {}),
+            ...getPaymentNotes(payment),
             ...compactNotes(notes),
             amountMismatch: true,
             expectedAmountPaise,
@@ -195,10 +203,7 @@ export async function updatePaymentForWebhook(
     where: { id: payment.id },
     data: {
       status,
-      notes: {
-        ...(payment.notes && typeof payment.notes === "object" ? (payment.notes as Record<string, unknown>) : {}),
-        ...compactNotes(notes)
-      } as Prisma.InputJsonValue
+      notes: mergePaymentNotes(payment, notes)
     },
     include: {
       booking: true
@@ -206,45 +211,52 @@ export async function updatePaymentForWebhook(
   });
 
   if (status === PaymentStatus.CAPTURED) {
-    await prisma.booking.update({
-      where: { id: payment.bookingId },
-      data: {
-        status: BookingStatus.ACCEPTED
-      }
-    });
-    void recordBookingTimelineEvent({
-      bookingId: payment.bookingId,
-      status: BookingStatus.ACCEPTED,
-      title: "Payment captured",
-      description: "The payment webhook confirmed this booking."
-    });
+    const shouldApplyCapturedSideEffects = payment.status !== PaymentStatus.CAPTURED || payment.booking.status !== BookingStatus.ACCEPTED;
+    if (shouldApplyCapturedSideEffects) {
+      await prisma.booking.update({
+        where: { id: payment.bookingId },
+        data: {
+          status: BookingStatus.ACCEPTED
+        }
+      });
+      void recordBookingTimelineEvent({
+        bookingId: payment.bookingId,
+        status: BookingStatus.ACCEPTED,
+        title: "Payment captured",
+        description: "The payment webhook confirmed this booking."
+      });
 
-    void dispatchBookingAfterPayment(payment.bookingId).catch((error) => {
-      logger.error(
-        {
-          error,
-          bookingId: payment.bookingId,
-          bookingCode: payment.booking.code,
-          orderId
-        },
-        "Automatic dispatch failed after payment webhook confirmation"
-      );
-    });
+      void dispatchBookingAfterPayment(payment.bookingId).catch((error) => {
+        logger.error(
+          {
+            error,
+            bookingId: payment.bookingId,
+            bookingCode: payment.booking.code,
+            orderId
+          },
+          "Automatic dispatch failed after payment webhook confirmation"
+        );
+      });
 
-    await publishTrackingEvent({
-      bookingId: payment.bookingId,
-      bookingCode: payment.booking.code,
-      status: "PAYMENT_CAPTURED",
-      message: "Payment captured by webhook",
-      paymentId: String(notes.paymentId ?? payment.id)
-    });
-    await notifyUser(payment.booking.customerId, "Payment received", `Payment captured for booking ${payment.booking.code}.`, {
-      bookingId: payment.bookingId,
-      paymentId: String(notes.paymentId ?? payment.id)
-    });
+      await publishTrackingEvent({
+        bookingId: payment.bookingId,
+        bookingCode: payment.booking.code,
+        status: "PAYMENT_CAPTURED",
+        message: "Payment captured by webhook",
+        paymentId: String(notes.paymentId ?? payment.id)
+      });
+      await notifyUser(payment.booking.customerId, "Payment received", `Payment captured for booking ${payment.booking.code}.`, {
+        bookingId: payment.bookingId,
+        paymentId: String(notes.paymentId ?? payment.id)
+      });
+    }
   }
 
   if (status === PaymentStatus.FAILED) {
+    if (isDuplicateFinalState) {
+      return updatedPayment;
+    }
+
     await publishTrackingEvent({
       bookingId: payment.bookingId,
       bookingCode: payment.booking.code,
@@ -259,29 +271,32 @@ export async function updatePaymentForWebhook(
   }
 
   if (status === PaymentStatus.REFUNDED) {
-    await prisma.booking.update({
-      where: { id: payment.bookingId },
-      data: {
-        status: BookingStatus.REFUNDED
-      }
-    });
-    void recordBookingTimelineEvent({
-      bookingId: payment.bookingId,
-      status: BookingStatus.REFUNDED,
-      title: "Payment refunded",
-      description: "The payment was refunded by the provider."
-    });
-    await publishTrackingEvent({
-      bookingId: payment.bookingId,
-      bookingCode: payment.booking.code,
-      status: "PAYMENT_REFUNDED",
-      message: "Payment refunded",
-      paymentId: String(notes.paymentId ?? payment.id)
-    });
-    await notifyUser(payment.booking.customerId, "Payment refunded", `Refund completed for booking ${payment.booking.code}.`, {
-      bookingId: payment.bookingId,
-      orderId
-    });
+    const shouldApplyRefundSideEffects = payment.status !== PaymentStatus.REFUNDED || payment.booking.status !== BookingStatus.REFUNDED;
+    if (shouldApplyRefundSideEffects) {
+      await prisma.booking.update({
+        where: { id: payment.bookingId },
+        data: {
+          status: BookingStatus.REFUNDED
+        }
+      });
+      void recordBookingTimelineEvent({
+        bookingId: payment.bookingId,
+        status: BookingStatus.REFUNDED,
+        title: "Payment refunded",
+        description: "The payment was refunded by the provider."
+      });
+      await publishTrackingEvent({
+        bookingId: payment.bookingId,
+        bookingCode: payment.booking.code,
+        status: "PAYMENT_REFUNDED",
+        message: "Payment refunded",
+        paymentId: String(notes.paymentId ?? payment.id)
+      });
+      await notifyUser(payment.booking.customerId, "Payment refunded", `Refund completed for booking ${payment.booking.code}.`, {
+        bookingId: payment.bookingId,
+        orderId
+      });
+    }
   }
 
   return updatedPayment;

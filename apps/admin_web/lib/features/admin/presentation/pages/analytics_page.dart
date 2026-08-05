@@ -199,7 +199,7 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
     final maxY = trends.map((t) => t.revenue).fold<double>(0, (m, v) => v > m ? v : m);
     
     return _ChartCard(
-      title: 'Revenue Trend (Rs.)',
+      title: 'Revenue Trend (₹)',
       chart: LineChart(
         LineChartData(
           gridData: FlGridData(
@@ -413,7 +413,7 @@ class _AnalyticsSummaryRow extends StatelessWidget {
       children: [
         _MetricCard(
           label: 'Total revenue',
-          value: 'Rs ${NumberFormat.compact().format(totalRevenue)}',
+          value: '₹${NumberFormat.compact().format(totalRevenue)}',
           sublabel: '${trends.length} days tracked',
           icon: Icons.payments_rounded,
           color: const Color(0xFF0F766E),
@@ -434,7 +434,7 @@ class _AnalyticsSummaryRow extends StatelessWidget {
         ),
         _MetricCard(
           label: 'Best revenue day',
-          value: topRevenueDay == null ? 'N/A' : 'Rs ${NumberFormat.compact().format(topRevenueDay.revenue)}',
+          value: topRevenueDay == null ? 'N/A' : '₹${NumberFormat.compact().format(topRevenueDay.revenue)}',
           sublabel: topRevenueDay == null ? 'No data' : DateFormat('MMM d').format(DateTime.parse(topRevenueDay.date)),
           icon: Icons.trending_up_rounded,
           color: const Color(0xFF8B5CF6),
@@ -627,7 +627,7 @@ class _BreakdownRow extends StatelessWidget {
             ),
           ),
           Text(
-            'Rs ${NumberFormat.compact().format(item.revenue)}',
+            '₹${NumberFormat.compact().format(item.revenue)}',
             style: tt.titleSmall?.copyWith(fontWeight: FontWeight.w800),
           ),
         ],

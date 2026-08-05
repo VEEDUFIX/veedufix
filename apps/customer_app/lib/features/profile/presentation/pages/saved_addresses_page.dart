@@ -9,6 +9,7 @@ import 'package:marketplace_shared/marketplace_shared.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../data/saved_addresses_api.dart';
+import 'map_location_picker_page.dart';
 
 class SavedAddressesPage extends ConsumerStatefulWidget {
   const SavedAddressesPage({super.key});
@@ -507,7 +508,7 @@ class _SavedAddressEditorSheetState extends State<_SavedAddressEditorSheet> {
       );
       if (!mounted) return;
 
-      final picked = await context.push<LatLng>(
+      final picked = await context.push<MapLocationSelection>(
         '/map-picker?lat=${pos.latitude}&lng=${pos.longitude}',
       );
       if (picked == null || !mounted) return;
@@ -515,6 +516,9 @@ class _SavedAddressEditorSheetState extends State<_SavedAddressEditorSheet> {
       setState(() {
         _latController.text = picked.latitude.toStringAsFixed(6);
         _lngController.text = picked.longitude.toStringAsFixed(6);
+        if ((picked.label ?? '').trim().isNotEmpty && _addressLine1Controller.text.trim().isEmpty) {
+          _addressLine1Controller.text = picked.label!.trim();
+        }
       });
     } catch (error) {
       if (!mounted) return;
@@ -532,7 +536,7 @@ class _SavedAddressEditorSheetState extends State<_SavedAddressEditorSheet> {
           ? LatLng(lat, lng)
           : const LatLng(10.0261, 76.3125);
 
-      final picked = await context.push<LatLng>(
+      final picked = await context.push<MapLocationSelection>(
         '/map-picker?lat=${initial.latitude}&lng=${initial.longitude}',
       );
       if (picked == null || !mounted) return;
@@ -540,6 +544,9 @@ class _SavedAddressEditorSheetState extends State<_SavedAddressEditorSheet> {
       setState(() {
         _latController.text = picked.latitude.toStringAsFixed(6);
         _lngController.text = picked.longitude.toStringAsFixed(6);
+        if ((picked.label ?? '').trim().isNotEmpty && _addressLine1Controller.text.trim().isEmpty) {
+          _addressLine1Controller.text = picked.label!.trim();
+        }
       });
     } catch (error) {
       if (!mounted) return;

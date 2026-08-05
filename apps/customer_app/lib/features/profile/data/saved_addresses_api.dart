@@ -61,7 +61,7 @@ class SavedAddressItem {
       buffer.write(', ${addressLine2!.trim()}');
     }
     if ((landmark ?? '').trim().isNotEmpty) {
-      buffer.write(' • ${landmark!.trim()}');
+      buffer.write(' - ${landmark!.trim()}');
     }
     buffer.write(', $city $pincode');
     return buffer.toString();

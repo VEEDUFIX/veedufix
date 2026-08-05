@@ -368,22 +368,23 @@ class JobExecutionNotifier extends StateNotifier<JobExecutionState> {
   }
 
   Future<void> _startLiveTracking(String bookingId) async {
-    final realtime = ref.read(realtimeServiceProvider);
-    await realtime.connectTracking(bookingId);
-
     // Stop existing streams if any
     _cancelTracking();
 
     final hasPermission = await _ensureLocationPermission();
     if (!hasPermission) return;
 
+    final realtime = ref.read(realtimeServiceProvider);
+    await realtime.connectTracking(bookingId);
+
     _positionStream = Geolocator.getPositionStream(
       locationSettings: const LocationSettings(
-        accuracy: LocationAccuracy.high,
-        distanceFilter: 10, // Update every 10 meters
+        accuracy: LocationAccuracy.bestForNavigation,
+        distanceFilter: 5,
       ),
     ).listen((position) {
-      if (state.currentStep == 1) { // Only send when en-route (Step 1)
+      if (state.currentStep == 1) {
+        state = state.copyWith(currentPosition: position);
         realtime.sendLocationUpdate(position.latitude, position.longitude);
       }
     });

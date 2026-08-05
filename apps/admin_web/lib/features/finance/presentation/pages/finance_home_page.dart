@@ -122,14 +122,14 @@ class _FinanceHomePageState extends ConsumerState<FinanceHomePage> {
                 spacing: 12,
                 runSpacing: 12,
                 children: [
-                  const _MetricTile(
+                  _MetricTile(
                     label: 'Payout queue',
                     value: payoutItems.length.toString(),
                     subtitle: '$failedPayouts failing',
                     color: const Color(0xFF0F766E),
                     icon: Icons.payments_rounded,
                   ),
-                  const _MetricTile(
+                  _MetricTile(
                     label: 'Refund queue',
                     value: refundItems.length.toString(),
                     subtitle: '$failedRefunds failing',
@@ -149,6 +149,7 @@ class _FinanceHomePageState extends ConsumerState<FinanceHomePage> {
                     subtitle: 'GST + revenue view',
                     color: const Color(0xFF3B82F6),
                     icon: Icons.request_quote_rounded,
+                    onTap: () => context.go('/finance/tax-summary'),
                   ),
                 ],
               ),
@@ -191,7 +192,7 @@ class _FinanceHomePageState extends ConsumerState<FinanceHomePage> {
                     color: const Color(0xFF7C3AED),
                     icon: Icons.admin_panel_settings_rounded,
                   ),
-                  _MetricTile(
+                  const _MetricTile(
                     label: 'Webhook route',
                     value: '2',
                     subtitle: 'Payment + refund callbacks',
@@ -372,6 +373,7 @@ class _MetricTile extends StatelessWidget {
     required this.subtitle,
     required this.color,
     required this.icon,
+    this.onTap,
   });
 
   final String label;
@@ -379,35 +381,43 @@ class _MetricTile extends StatelessWidget {
   final String subtitle;
   final Color color;
   final IconData icon;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     return SizedBox(
       width: 260,
-      child: AdminSurfacePanel(
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Row(
-            children: [
-              Container(
-                width: 44,
-                height: 44,
-                decoration: BoxDecoration(
-                  color: color.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(14),
-                ),
-                child: Icon(icon, color: color),
-              ),
-              const SizedBox(width: 12),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(20),
+          onTap: onTap,
+          child: AdminSurfacePanel(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(
                 children: [
-                  Text(label, style: const TextStyle(fontSize: 12, color: kAdminMuted)),
-                  Text(value, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w700)),
-                  Text(subtitle, style: const TextStyle(fontSize: 12, color: kAdminMuted)),
+                  Container(
+                    width: 44,
+                    height: 44,
+                    decoration: BoxDecoration(
+                      color: color.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: Icon(icon, color: color),
+                  ),
+                  const SizedBox(width: 12),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(label, style: const TextStyle(fontSize: 12, color: kAdminMuted)),
+                      Text(value, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w700)),
+                      Text(subtitle, style: const TextStyle(fontSize: 12, color: kAdminMuted)),
+                    ],
+                  ),
                 ],
               ),
-            ],
+            ),
           ),
         ),
       ),
@@ -456,7 +466,7 @@ class _LatestFailureCard extends StatelessWidget {
                       (item) => Padding(
                         padding: const EdgeInsets.only(bottom: 10),
                         child: Text(
-                          '${item.bookingCode.isEmpty ? item.id : item.bookingCode} · ${item.failureReason ?? item.status}',
+                          '${item.bookingCode.isEmpty ? item.id : item.bookingCode} - ${item.failureReason ?? item.status}',
                           style: tt.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
                         ),
                       ),

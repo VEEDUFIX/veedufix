@@ -700,7 +700,12 @@ class _MapLocationPickerPageState extends State<MapLocationPickerPage>
                   ),
                   const SizedBox(height: 20),
                   TapScale(
-                    onTap: () => context.pop(_currentCenter),
+                    onTap: () => context.pop(
+                      MapLocationSelection(
+                        location: _currentCenter,
+                        label: _locationLabel,
+                      ),
+                    ),
                     child: Container(
                       width: double.infinity,
                       height: 56,
@@ -740,4 +745,18 @@ class _LocationSuggestion {
   final String placeId;
   final String label;
   final String? secondaryLabel;
+}
+
+class MapLocationSelection {
+  const MapLocationSelection({
+    required this.location,
+    this.label,
+  });
+
+  final LatLng location;
+  final String? label;
+
+  double get latitude => location.latitude;
+
+  double get longitude => location.longitude;
 }

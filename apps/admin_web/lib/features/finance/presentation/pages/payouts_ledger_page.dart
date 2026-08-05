@@ -472,8 +472,8 @@ class _PayoutsLedgerPageState extends ConsumerState<PayoutsLedgerPage> {
                                     ],
                                   ),
                                 ),
-                                DataCell(Text('Rs. ${payout.amount.toStringAsFixed(2)}')),
-                                DataCell(Text('Rs. ${payout.commissionAmount.toStringAsFixed(2)}')),
+                                DataCell(Text('₹${payout.amount.toStringAsFixed(2)}')),
+                                DataCell(Text('₹${payout.commissionAmount.toStringAsFixed(2)}')),
                                 DataCell(_GlowingStatusBadge(status: payout.status)),
                                 DataCell(
                                   Text(MaterialLocalizations.of(context).formatMediumDate(payout.createdAt)),
@@ -662,8 +662,8 @@ class _PayoutDetailPageState extends ConsumerState<PayoutDetailPage> {
                 children: [
                   _DetailChip(label: payout.status),
                   _DetailChip(label: payout.workerName ?? 'Unknown worker'),
-                  _DetailChip(label: 'Rs. ${payout.amount.toStringAsFixed(2)}'),
-                  _DetailChip(label: 'Commission Rs. ${payout.commissionAmount.toStringAsFixed(2)}'),
+                  _DetailChip(label: '₹${payout.amount.toStringAsFixed(2)}'),
+                  _DetailChip(label: 'Commission ₹${payout.commissionAmount.toStringAsFixed(2)}'),
                   _DetailChip(label: MaterialLocalizations.of(context).formatMediumDate(payout.createdAt)),
                 ],
               ),
@@ -672,8 +672,8 @@ class _PayoutDetailPageState extends ConsumerState<PayoutDetailPage> {
               _DetailLine(label: 'Booking ID', value: payout.bookingId),
               _DetailLine(label: 'Booking code', value: payout.bookingCode),
               _DetailLine(label: 'Worker', value: payout.workerName ?? 'Unknown'),
-              _DetailLine(label: 'Amount', value: 'Rs. ${payout.amount.toStringAsFixed(2)}'),
-              _DetailLine(label: 'Commission', value: 'Rs. ${payout.commissionAmount.toStringAsFixed(2)}'),
+              _DetailLine(label: 'Amount', value: '₹${payout.amount.toStringAsFixed(2)}'),
+              _DetailLine(label: 'Commission', value: '₹${payout.commissionAmount.toStringAsFixed(2)}'),
               _DetailLine(label: 'Created', value: MaterialLocalizations.of(context).formatMediumDate(payout.createdAt)),
               if ((payout.failureReason ?? '').trim().isNotEmpty) ...[
                 const SizedBox(height: 8),

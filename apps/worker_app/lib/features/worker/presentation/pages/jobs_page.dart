@@ -138,9 +138,13 @@ class _JobCard extends ConsumerWidget {
     final lat = job.destinationLatitude;
     final lng = job.destinationLongitude;
     if (lat != null && lng != null) {
-      final uri = Uri.parse(
-        'https://www.google.com/maps/dir/?api=1&destination=$lat,$lng',
-      );
+      final uri = Uri.https('www.google.com', '/maps/dir/', {
+        'api': '1',
+        'origin': 'Current+Location',
+        'destination': '$lat,$lng',
+        'travelmode': 'driving',
+        'dir_action': 'navigate',
+      });
       await launchUrl(uri, mode: LaunchMode.externalApplication);
       return;
     }
@@ -153,9 +157,13 @@ class _JobCard extends ConsumerWidget {
     if (query.isEmpty) {
       return;
     }
-    final uri = Uri.parse(
-      'https://www.google.com/maps/dir/?api=1&destination=${Uri.encodeComponent(query)}',
-    );
+    final uri = Uri.https('www.google.com', '/maps/dir/', {
+      'api': '1',
+      'origin': 'Current+Location',
+      'destination': query,
+      'travelmode': 'driving',
+      'dir_action': 'navigate',
+    });
     await launchUrl(uri, mode: LaunchMode.externalApplication);
   }
 

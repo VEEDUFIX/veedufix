@@ -138,7 +138,7 @@ class _AdminDashboardPageState extends ConsumerState<AdminDashboardPage> {
                   _metricBox(context, isCompact,
                     child: _MetricCard(
                       title: 'Revenue',
-                      value: 'Rs. ${_snapshot!.summary.totalRevenue.toStringAsFixed(0)}',
+                      value: '₹${_snapshot!.summary.totalRevenue.toStringAsFixed(0)}',
                       icon: Icons.payments_rounded,
                       color: const Color(0xFF0F766E),
                       trend: '+12.5% vs last week',

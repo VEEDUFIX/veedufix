@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'dart:ui';
-import 'package:marketplace_shared/marketplace_shared.dart';
+import 'package:marketplace_shared/features/notifications/presentation/providers/notifications_providers.dart';
+import 'package:marketplace_shared/features/worker_jobs/presentation/providers/worker_jobs_providers.dart';
 
 class AppShellPage extends ConsumerWidget {
   const AppShellPage({

@@ -268,7 +268,7 @@ class _FavoriteServiceCard extends ConsumerWidget {
                           spacing: 8,
                           runSpacing: 8,
                           children: [
-                            _MiniPill(label: 'Rs ${price.toInt()}'),
+                            _MiniPill(label: '₹${price.toInt()}'),
                             _MiniPill(label: service.rating > 0 ? service.rating.toStringAsFixed(1) : 'New'),
                             _MiniPill(label: '${service.estimatedDurationMins} mins'),
                           ],
