@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:marketplace_shared/marketplace_shared.dart';
+import 'package:share_plus/share_plus.dart';
 
 class ReferralPage extends ConsumerWidget {
   const ReferralPage({super.key});
@@ -94,7 +95,10 @@ class ReferralPage extends ConsumerWidget {
                     children: [
                       Text('Your Referral Code', style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
                       const SizedBox(height: 4),
-                      Text('Share this code and earn ₹100 for each friend who books!', style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
+                      Text(
+                        'Share your code and both you and your friend earn ₹100 on their first booking!',
+                        style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+                      ),
                       const SizedBox(height: 16),
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
@@ -120,6 +124,22 @@ class ReferralPage extends ConsumerWidget {
                               child: Icon(Icons.copy_rounded, color: cs.primary),
                             ),
                           ],
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      SizedBox(
+                        width: double.infinity,
+                        child: FilledButton.icon(
+                          onPressed: () {
+                            Share.share(
+                              '🏠 Try VeeduFix — Chennai\'s best home services app!\n\n'
+                              'Use my referral code \'${wallet.referralCode}\' when you sign up '
+                              'and we both get ₹100 wallet credits on your first booking.\n\n'
+                              '🔗 Download: https://veedufix.app',
+                            );
+                          },
+                          icon: const Icon(Icons.share_rounded),
+                          label: const Text('Share with Friends'),
                         ),
                       ),
                     ],

@@ -12,6 +12,7 @@ import {
 } from "../../lib/jwt.js";
 import { logger } from "../../lib/logger.js";
 import { verifyGoogleIdToken } from "../../lib/firebase.js";
+import { applyReferralCode } from "../wallet/wallet.service.js";
 
 type LoginChannel = "PHONE" | "EMAIL";
 type LoginRole = "CUSTOMER" | "WORKER" | "ADMIN";
@@ -135,6 +136,7 @@ export async function verifyOtp(input: {
   identifier: string;
   otp: string;
   name?: string;
+  referralCode?: string;
 }): Promise<AuthResult> {
   const normalized = normalizeIdentifier(input.identifier, input.channel);
   const key = otpKey(input.channel, normalized);
@@ -197,6 +199,18 @@ export async function verifyOtp(input: {
       ...(input.channel === "EMAIL" ? { emailVerifiedAt: new Date() } : { phoneVerifiedAt: new Date() })
     }
   });
+
+  // Auto-apply referral code for brand-new accounts (created within the last 5 seconds).
+  const isNewUser = Date.now() - user.createdAt.getTime() < 5000;
+  if (isNewUser && input.referralCode) {
+    try {
+      await applyReferralCode(user.id, input.referralCode);
+      logger.info({ userId: user.id, referralCode: input.referralCode }, "Referral code applied on signup");
+    } catch (err) {
+      // Invalid code — don't block signup, just log it.
+      logger.warn({ userId: user.id, referralCode: input.referralCode, err }, "Referral code could not be applied on signup");
+    }
+  }
 
   const sessionId = await createSession(user.id, user.role);
   const accessToken = signAccessToken({ sub: user.id, role: user.role, sessionId });

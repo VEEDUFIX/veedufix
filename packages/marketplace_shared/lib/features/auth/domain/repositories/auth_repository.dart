@@ -12,6 +12,7 @@ abstract class AuthRepository {
     required String otp,
     required String role,
     String? name,
+    String? referralCode,
   });
 
   Future<AuthSession> signInWithGoogle({

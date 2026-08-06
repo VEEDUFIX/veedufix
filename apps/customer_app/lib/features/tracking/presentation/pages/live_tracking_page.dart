@@ -1,10 +1,10 @@
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:marketplace_shared/marketplace_shared.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:url_launcher/url_launcher.dart';
 import '../providers/tracking_providers.dart';
 
 class LiveTrackingPage extends ConsumerStatefulWidget {
@@ -200,7 +200,7 @@ class _LiveTrackingPageState extends ConsumerState<LiveTrackingPage>
                               ),
                               const SizedBox(width: 8),
                               Text(
-                                'Arriving in 8 mins',
+                                _etaString(liveWorkerLocation, _customerLatLng),
                                 style: tt.labelLarge?.copyWith(
                                   color: cs.primary,
                                   fontWeight: FontWeight.w700,
@@ -250,21 +250,6 @@ class _LiveTrackingPageState extends ConsumerState<LiveTrackingPage>
                               ],
                             ),
                           ),
-                          // Call button
-                          TapScale(
-                            onTap: () => _callSupport(context),
-                            child: Container(
-                              padding: const EdgeInsets.all(12),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFF10B981)
-                                    .withValues(alpha: 0.12),
-                                shape: BoxShape.circle,
-                              ),
-                              child: const Icon(Icons.call_rounded,
-                                  color: Color(0xFF10B981), size: 22),
-                            ),
-                          ),
-                          const SizedBox(width: 10),
                           // Chat button
                           TapScale(
                             onTap: () => context.push(
@@ -277,6 +262,22 @@ class _LiveTrackingPageState extends ConsumerState<LiveTrackingPage>
                               ),
                               child: Icon(Icons.chat_rounded,
                                   color: cs.primary, size: 22),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          // Message button (also opens chat — keeps phone numbers masked)
+                          TapScale(
+                            onTap: () => context.push(
+                                '/chat?bookingId=${widget.bookingId}'),
+                            child: Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF10B981)
+                                    .withValues(alpha: 0.12),
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Icon(Icons.message_rounded,
+                                  color: Color(0xFF10B981), size: 22),
                             ),
                           ),
                         ],
@@ -350,11 +351,26 @@ class _LiveTrackingPageState extends ConsumerState<LiveTrackingPage>
   }
 }
 
-Future<void> _callSupport(BuildContext context) async {
-  final uri = Uri(scheme: 'tel', path: '+918001234567');
-  if (!await launchUrl(uri, mode: LaunchMode.externalApplication) && context.mounted) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Call support at +91 80012 34567')),
-    );
-  }
+/// Haversine distance in km between two LatLng points.
+double _haversineKm(LatLng a, LatLng b) {
+  const r = 6371.0;
+  final dLat = (b.latitude - a.latitude) * math.pi / 180;
+  final dLng = (b.longitude - a.longitude) * math.pi / 180;
+  final sinLat = math.sin(dLat / 2);
+  final sinLng = math.sin(dLng / 2);
+  final c = sinLat * sinLat +
+      math.cos(a.latitude * math.pi / 180) *
+          math.cos(b.latitude * math.pi / 180) *
+          sinLng * sinLng;
+  return 2 * r * math.asin(math.sqrt(c));
+}
+
+/// Returns a human-readable ETA string based on Haversine distance at 20 km/h.
+String _etaString(LatLng workerLatLng, LatLng? customerLatLng) {
+  if (customerLatLng == null) return 'On the way';
+  final distKm = _haversineKm(workerLatLng, customerLatLng);
+  // 20 km/h average in Chennai city traffic + 5 min parking/setup buffer
+  final mins = (distKm / 20 * 60).ceil() + 5;
+  if (mins <= 1) return 'Arriving now';
+  return 'Arriving in $mins min';
 }

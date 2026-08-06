@@ -1,23 +1,28 @@
 import { Response } from "express";
 import { AuthenticatedRequest } from "../../middleware/auth.js";
 import { prisma } from "../../lib/prisma.js";
-import { applyReferralCode, generateReferralCode, getTransactions, getWalletBalance } from "./wallet.service.js";
+import { applyReferralCode, generateReferralCode, getTransactions, getWalletSummary } from "./wallet.service.js";
 import { logger } from "../../lib/logger.js";
 
 export async function getWalletHandler(request: AuthenticatedRequest, response: Response) {
   try {
     const userId = request.auth!.userId;
-    let user = await getWalletBalance(userId);
+    let summary = await getWalletSummary(userId);
 
-    if (!user.referralCode) {
+    if (!summary.referralCode) {
       const code = await generateReferralCode(userId);
-      user.referralCode = code;
+      summary = { ...summary, referralCode: code };
     }
 
-    // Fetch customer transactions (no workerId needed for wallet view)
     const transactions = await getTransactions(userId);
 
-    response.json({ balance: user.walletBalance, referralCode: user.referralCode, transactions });
+    response.json({
+      balance: summary.walletBalance,
+      referralCode: summary.referralCode,
+      totalReferrals: summary.totalReferrals,
+      referralEarnings: summary.referralEarnings,
+      transactions
+    });
   } catch (error) {
     logger.error({ error }, "Failed to get wallet");
     response.status(500).json({ message: "Internal server error" });

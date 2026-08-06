@@ -58,6 +58,7 @@ class AuthController extends AsyncNotifier<AuthSession?> {
     required String otp,
     required String role,
     String? name,
+    String? referralCode,
   }) async {
     state = const AsyncLoading();
     state = await AsyncValue.guard(() async {
@@ -67,6 +68,7 @@ class AuthController extends AsyncNotifier<AuthSession?> {
         otp: otp,
         role: role,
         name: name,
+        referralCode: referralCode,
       );
     });
   }

@@ -27,6 +27,7 @@ class AuthRemoteDataSource {
     required String otp,
     required String role,
     String? name,
+    String? referralCode,
   }) async {
     final response = await _dio.post<Map<String, dynamic>>(
       '/auth/otp/verify',
@@ -36,6 +37,8 @@ class AuthRemoteDataSource {
         'otp': otp,
         'role': role,
         'name': name,
+        if (referralCode != null && referralCode.isNotEmpty)
+          'referralCode': referralCode,
       },
     );
 

@@ -28,6 +28,7 @@ type CreatePaymentOrderInput = {
   couponCode?: string;
   bookingType?: "instant" | "scheduled";
   scheduledFor?: Date;
+  useWalletBalance?: boolean;
 };
 
 type VerifyPaymentInput = {
@@ -561,7 +562,27 @@ export async function createPaymentOrder(
     bookedItems.reduce((total, item) => total.add(item.gstAmount), new Prisma.Decimal(0))
   );
   const totalAmount = roundMoney(subtotalAmount.sub(discountAmount));
-  const totalAmountPaise = toPaise(totalAmount);
+
+  // ── Wallet deduction ───────────────────────────────────────────────────────
+  let walletDeductAmount = new Prisma.Decimal(0);
+  let chargeAmount = totalAmount; // Amount actually charged via Razorpay
+
+  if (input.useWalletBalance) {
+    const customer = await prisma.user.findUnique({
+      where: { id: input.userId },
+      select: { walletBalance: true }
+    });
+    const walletBalance = customer?.walletBalance ?? new Prisma.Decimal(0);
+    // Keep at least ₹1 going through Razorpay (minimum gateway amount)
+    const maxDeduct = totalAmount.sub(new Prisma.Decimal(1));
+    if (walletBalance.gt(0) && maxDeduct.gt(0)) {
+      walletDeductAmount = walletBalance.gte(maxDeduct) ? maxDeduct : walletBalance;
+      walletDeductAmount = roundMoney(walletDeductAmount);
+      chargeAmount = roundMoney(totalAmount.sub(walletDeductAmount));
+    }
+  }
+
+  const totalAmountPaise = toPaise(chargeAmount);
 
   if (totalAmountPaise < MINIMUM_ORDER_AMOUNT_PAISE) {
     throw AppError.badRequest("Final amount is below the minimum payable amount");
@@ -569,6 +590,12 @@ export async function createPaymentOrder(
 
   const bookingSummary = items.map((item) => `${item.serviceName} x${item.quantity}`).join(", ");
   const booking = await prisma.$transaction(async (tx) => {
+    const notesStr = [
+      bookingSummary,
+      couponCode ? `Coupon: ${couponCode}` : null,
+      walletDeductAmount.gt(0) ? `Wallet: \u20b9${walletDeductAmount}` : null
+    ].filter(Boolean).join(" | ");
+
     const createdBooking = await tx.booking.create({
       data: {
         code: bookingCode,
@@ -579,8 +606,8 @@ export async function createPaymentOrder(
         addressId: context.addressId,
         status: BookingStatus.PENDING,
         scheduledAt,
-        notes: couponCode ? `${bookingSummary} | Coupon: ${couponCode}` : bookingSummary,
-        customerNotes: couponCode ? `${bookingSummary} | Coupon: ${couponCode}` : bookingSummary,
+        notes: notesStr,
+        customerNotes: notesStr,
         subtotalAmount,
         discountAmount,
         taxAmount: totalGstAmount,
@@ -607,12 +634,13 @@ export async function createPaymentOrder(
         bookingId: createdBooking.id,
         status: PaymentStatus.PENDING,
         provider: "RAZORPAY",
-        amount: totalAmount,
+        amount: chargeAmount,
         currency: "INR",
         notes: {
           bookingCode: createdBooking.code,
           cityId: context.cityId,
           couponCode,
+          walletDeductAmountPaise: toPaise(walletDeductAmount),
           subtotalAmountPaise: toPaise(subtotalAmount),
           discountAmountPaise: toPaise(discountAmount),
           totalAmountPaise,
@@ -628,8 +656,28 @@ export async function createPaymentOrder(
       }
     });
 
+    // Debit wallet if customer chose to use balance
+    if (walletDeductAmount.gt(0)) {
+      const updatedUser = await tx.user.update({
+        where: { id: input.userId },
+        data: { walletBalance: { decrement: walletDeductAmount } },
+        select: { walletBalance: true }
+      });
+      await tx.walletTransaction.create({
+        data: {
+          userId: input.userId,
+          type: "WALLET_DEBIT",
+          amount: walletDeductAmount.negated(),
+          referenceType: "BOOKING",
+          referenceId: createdBooking.id,
+          balanceAfter: updatedUser.walletBalance
+        }
+      });
+    }
+
     return createdBooking;
   });
+
 
   try {
     const order = (await razorpay.orders.create({

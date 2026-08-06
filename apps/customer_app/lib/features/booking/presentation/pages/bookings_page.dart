@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/widgets/shimmer_placeholder.dart';
 import 'package:go_router/go_router.dart';
+import 'package:firebase_database/firebase_database.dart';
 import 'package:marketplace_shared/marketplace_shared.dart';
 
 class BookingsPage extends ConsumerStatefulWidget {
@@ -225,7 +226,7 @@ class _SkeletonCard extends StatelessWidget {
   }
 }
 
-class _BookingCard extends StatelessWidget {
+class _BookingCard extends ConsumerWidget {
   const _BookingCard({required this.booking, required this.statusType});
 
   final CustomerBooking booking;
@@ -256,9 +257,24 @@ class _BookingCard extends StatelessWidget {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final colorScheme = Theme.of(context).colorScheme;
     final statusColor = _getStatusColor(booking.status);
+
+    // Watch Firebase RTDB unread count for this booking's chat
+    final unreadAsync = ref.watch(
+      StreamProvider<int>((r) {
+        return FirebaseDatabase.instance
+            .ref('chats/${booking.id}/unread_customer')
+            .onValue
+            .map((e) {
+          final v = e.snapshot.value;
+          return v is int ? v : 0;
+        });
+      }),
+    );
+    final hasUnread = (unreadAsync.valueOrNull ?? 0) > 0;
+
     return TapScale(
       onTap: () => context.push('/booking/${booking.id}'),
       child: PremiumGlassCard(
@@ -270,14 +286,32 @@ class _BookingCard extends StatelessWidget {
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Container(
-                    height: 52,
-                    width: 52,
-                    decoration: BoxDecoration(
-                      color: statusColor.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(AbzioTheme.buttonRadius),
-                    ),
-                    child: Icon(Icons.home_repair_service_rounded, color: statusColor),
+                  Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      Container(
+                        height: 52,
+                        width: 52,
+                        decoration: BoxDecoration(
+                          color: statusColor.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(AbzioTheme.buttonRadius),
+                        ),
+                        child: Icon(Icons.home_repair_service_rounded, color: statusColor),
+                      ),
+                      if (hasUnread)
+                        Positioned(
+                          top: -4,
+                          right: -4,
+                          child: Container(
+                            width: 14,
+                            height: 14,
+                            decoration: const BoxDecoration(
+                              color: Colors.red,
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                        ),
+                    ],
                   ),
                   const SizedBox(width: 14),
                   Expanded(

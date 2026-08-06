@@ -31,6 +31,7 @@ class AuthRepositoryImpl implements AuthRepository {
     required String otp,
     required String role,
     String? name,
+    String? referralCode,
   }) async {
     final session = await _remoteDataSource.verifyOtp(
       channel: channel,
@@ -38,6 +39,7 @@ class AuthRepositoryImpl implements AuthRepository {
       otp: otp,
       role: role,
       name: name,
+      referralCode: referralCode,
     );
     await _secureStore.saveTokens(
       accessToken: session.accessToken,

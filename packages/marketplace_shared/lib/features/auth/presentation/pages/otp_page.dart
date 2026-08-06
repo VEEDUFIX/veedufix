@@ -36,6 +36,7 @@ class _OtpPageState extends ConsumerState<OtpPage> {
             otp: _otpController.text.trim(),
             role: args['role'] as String,
             name: args['name'] as String?,
+            referralCode: args['referralCode'] as String?,
           );
       if (!mounted) return;
       context.go('/app');

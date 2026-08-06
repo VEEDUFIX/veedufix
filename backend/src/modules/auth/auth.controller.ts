@@ -23,7 +23,8 @@ export async function verifyOtpHandler(request: Request, response: Response): Pr
     channel: request.body.channel,
     identifier: request.body.identifier,
     otp: request.body.otp,
-    name: request.body.name
+    name: request.body.name,
+    referralCode: request.body.referralCode
   });
 
   response.status(200).json(result);

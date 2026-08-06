@@ -6,6 +6,7 @@ import { publishNotificationEvent, publishTrackingEvent } from "../../lib/realti
 import { recordBookingTimelineEvent } from "../../lib/booking-timeline.js";
 import { getTokensForUser } from "../device-token/device-token.service.js";
 import { sendMulticastPush } from "../../lib/fcm.js";
+import { getTravelTimeMinutes } from "../../lib/maps.js";
 
 export const MAX_CONCURRENT_JOBS = 1;
 const OFFER_WINDOW_MS = 90_000;
@@ -535,7 +536,11 @@ function getBoundingBox(
   };
 }
 
-async function filterWorkersAvailableAt(workers: WorkerPoolCandidate[], dateTime: Date): Promise<WorkerPoolCandidate[]> {
+async function filterWorkersAvailableAt(
+  workers: WorkerPoolCandidate[],
+  dateTime: Date,
+  bookingLocation?: { latitude: number; longitude: number } | null
+): Promise<WorkerPoolCandidate[]> {
   if (workers.length === 0) {
     return [];
   }
@@ -543,38 +548,12 @@ async function filterWorkersAvailableAt(workers: WorkerPoolCandidate[], dateTime
   const workerIds = workers.map((worker) => worker.id);
   const dayOfWeek = dateTime.getDay();
   const minuteOfDay = dateTime.getHours() * 60 + dateTime.getMinutes();
-  const windowStart = new Date(dateTime.getTime() - 30 * 60 * 1000);
-  const windowEnd = new Date(dateTime.getTime() + 30 * 60 * 1000);
 
-  const [slots, bookingConflicts] = await Promise.all([
-    prisma.workerAvailability.findMany({
-      where: {
-        workerId: { in: workerIds },
-        dayOfWeek
-      },
-      select: {
-        workerId: true,
-        startTime: true,
-        endTime: true
-      }
-    }),
-    prisma.booking.findMany({
-      where: {
-        workerId: { in: workerIds },
-        bookingType: "scheduled",
-        scheduledFor: {
-          gte: windowStart,
-          lte: windowEnd
-        },
-        status: {
-          notIn: [...NON_ACTIVE_BOOKING_STATUSES]
-        }
-      },
-      select: {
-        workerId: true
-      }
-    })
-  ]);
+  // ── Weekly slot check (unchanged) ──────────────────────────────────────────
+  const slots = await prisma.workerAvailability.findMany({
+    where: { workerId: { in: workerIds }, dayOfWeek },
+    select: { workerId: true, startTime: true, endTime: true }
+  });
 
   const slotsByWorker = new Map<string, Array<{ startTime: string; endTime: string }>>();
   for (const slot of slots) {
@@ -583,14 +562,88 @@ async function filterWorkersAvailableAt(workers: WorkerPoolCandidate[], dateTime
     slotsByWorker.set(slot.workerId, workerSlots);
   }
 
-  const blockedWorkers = new Set(
-    bookingConflicts.map((booking) => booking.workerId).filter((workerId): workerId is string => Boolean(workerId))
-  );
+  // ── Conflict check — dynamic travel-time buffer ─────────────────────────────
+  //
+  // If we know the new booking's coordinates, use actual driving time from
+  // Google Maps Distance Matrix to decide whether each worker is free.
+  // Otherwise fall back to the static 30-minute symmetric window.
+
+  const blockedWorkerIds = new Set<string>();
+
+  if (bookingLocation) {
+    // Wider 2-hour look-ahead/behind window to catch all nearby bookings
+    const broadStart = new Date(dateTime.getTime() - 2 * 60 * 60 * 1000);
+    const broadEnd   = new Date(dateTime.getTime() + 2 * 60 * 60 * 1000);
+
+    const nearbyBookings = await prisma.booking.findMany({
+      where: {
+        workerId: { in: workerIds },
+        bookingType: "scheduled",
+        scheduledFor: { gte: broadStart, lte: broadEnd },
+        status: { notIn: [...NON_ACTIVE_BOOKING_STATUSES] }
+      },
+      select: {
+        workerId: true,
+        scheduledFor: true,
+        address: { select: { latitude: true, longitude: true } }
+      }
+    });
+
+    // For each nearby booking, compute actual travel time and block if too close
+    await Promise.all(
+      nearbyBookings.map(async (nearby) => {
+        if (!nearby.workerId) return;
+        const addrLat = nearby.address?.latitude != null ? Number(nearby.address.latitude) : null;
+        const addrLng = nearby.address?.longitude != null ? Number(nearby.address.longitude) : null;
+
+        let bufferMins: number;
+        if (addrLat !== null && addrLng !== null) {
+          try {
+            const travelMins = await getTravelTimeMinutes(
+              addrLat, addrLng,
+              bookingLocation.latitude, bookingLocation.longitude
+            );
+            // 15-min constant for job wrap-up / parking
+            bufferMins = travelMins + 15;
+          } catch {
+            bufferMins = 30; // fallback on any error
+          }
+        } else {
+          bufferMins = 30; // no coords — use static default
+        }
+
+        const gapMins = Math.abs(dateTime.getTime() - nearby.scheduledFor.getTime()) / 60_000;
+        if (gapMins < bufferMins) {
+          blockedWorkerIds.add(nearby.workerId);
+          logger.debug(
+            { workerId: nearby.workerId, gapMins: gapMins.toFixed(1), bufferMins },
+            "filterWorkersAvailableAt: worker blocked by travel-time conflict"
+          );
+        }
+      })
+    );
+  } else {
+    // Static 30-minute symmetric fallback
+    const windowStart = new Date(dateTime.getTime() - 30 * 60 * 1000);
+    const windowEnd   = new Date(dateTime.getTime() + 30 * 60 * 1000);
+
+    const conflicts = await prisma.booking.findMany({
+      where: {
+        workerId: { in: workerIds },
+        bookingType: "scheduled",
+        scheduledFor: { gte: windowStart, lte: windowEnd },
+        status: { notIn: [...NON_ACTIVE_BOOKING_STATUSES] }
+      },
+      select: { workerId: true }
+    });
+
+    for (const c of conflicts) {
+      if (c.workerId) blockedWorkerIds.add(c.workerId);
+    }
+  }
 
   return workers.filter((worker) => {
-    if (blockedWorkers.has(worker.id)) {
-      return false;
-    }
+    if (blockedWorkerIds.has(worker.id)) return false;
 
     const workerSlots = slotsByWorker.get(worker.id) ?? [];
     return workerSlots.some((slot) => {
@@ -734,7 +787,7 @@ async function rankCandidates(
   });
   const workers =
     options.availabilityAt && candidateWorkers.length > 0
-      ? await filterWorkersAvailableAt(candidateWorkers, options.availabilityAt)
+      ? await filterWorkersAvailableAt(candidateWorkers, options.availabilityAt, bookingLocation)
       : candidateWorkers;
   const workerIds = workers.map((worker) => worker.id);
   const lastCompletionMap = await getLastCompletionByWorker(workerIds);
