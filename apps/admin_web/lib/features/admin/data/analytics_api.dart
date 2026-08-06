@@ -4,12 +4,14 @@ class DailyTrendPoint {
   const DailyTrendPoint({
     required this.date,
     required this.revenue,
+    required this.commission,
     required this.bookings,
     required this.newWorkers,
   });
 
   final String date;
   final double revenue;
+  final double commission;
   final int bookings;
   final int newWorkers;
 
@@ -17,6 +19,7 @@ class DailyTrendPoint {
     return DailyTrendPoint(
       date: json['date'] as String,
       revenue: (json['revenue'] as num).toDouble(),
+      commission: (json['commission'] as num? ?? 0).toDouble(),
       bookings: (json['bookings'] as num).toInt(),
       newWorkers: (json['newWorkers'] as num).toInt(),
     );
@@ -71,18 +74,25 @@ class AnalyticsPayload {
   const AnalyticsPayload({
     required this.trends,
     required this.insights,
+    required this.activeBookings,
   });
 
   final List<DailyTrendPoint> trends;
   final AnalyticsInsights insights;
+  final int activeBookings;
 
   factory AnalyticsPayload.fromJson(Map<String, dynamic> json) {
     final trends = (json['trends'] as List<dynamic>? ?? const [])
         .whereType<Map<String, dynamic>>()
         .map(DailyTrendPoint.fromJson)
         .toList(growable: false);
-    final insights = AnalyticsInsights.fromJson(json['insights'] as Map<String, dynamic>? ?? const {});
-    return AnalyticsPayload(trends: trends, insights: insights);
+    final insights = AnalyticsInsights.fromJson(
+        json['insights'] as Map<String, dynamic>? ?? const {});
+    return AnalyticsPayload(
+      trends: trends,
+      insights: insights,
+      activeBookings: (json['activeBookings'] as num? ?? 0).toInt(),
+    );
   }
 }
 
@@ -97,6 +107,7 @@ class AnalyticsApi {
       queryParameters: {'days': days},
     );
 
-    return AnalyticsPayload.fromJson(response.data ?? const <String, dynamic>{});
+    return AnalyticsPayload.fromJson(
+        response.data ?? const <String, dynamic>{});
   }
 }

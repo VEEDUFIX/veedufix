@@ -49,6 +49,8 @@ import { invoiceRouter } from "./modules/invoice/invoice.routes.js";
 import { adminServiceAreaRouter, serviceAreaRouter } from "./modules/service-area/service-area.routes.js";
 import { adminPlatformSettingsRouter } from "./modules/platform-settings/platform-settings.routes.js";
 import { taxSummaryRouter } from "./modules/tax-summary/tax-summary.routes.js";
+import { customQuoteRouter } from "./modules/bookings/custom-quote.routes.js";
+import { sparePartsRouter } from "./modules/bookings/spare-parts.routes.js";
 
 export function createApp() {
   const app = express();
@@ -135,6 +137,8 @@ export function createApp() {
   app.use("/api", supportRouter);
   app.use("/api/device-tokens", deviceTokenRouter);
   app.use("/api", invoiceRouter);
+  app.use("/api", customQuoteRouter);
+  app.use("/api", sparePartsRouter);
 
   app.use(notFoundHandler);
   app.use(errorHandler);

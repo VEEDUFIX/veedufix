@@ -4,8 +4,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:marketplace_shared/marketplace_shared.dart';
+import 'package:razorpay_flutter/razorpay_flutter.dart';
 
 import '../../../profile/data/saved_addresses_api.dart';
+import '../../../../core/payments/razorpay_service.dart';
 
 class BookingDetailPage extends ConsumerWidget {
   const BookingDetailPage({super.key, required this.bookingId});
@@ -358,7 +360,18 @@ class _BookingDetailBody extends ConsumerWidget {
           ),
           const SizedBox(height: 12),
 
-          // ─── Worker info ───────────────────────────────────────────────────
+          // ─── Custom Quote Banner ─────────────────────────────────────────────────────
+          if (booking.customQuoteStatus != null) ...[
+            _CustomQuoteBanner(booking: booking),
+            const SizedBox(height: 12),
+          ],
+
+          // ─── Spare Parts Banner ─────────────────────────────────────────────────────
+          if (booking.sparePartStatus != null) ...[
+            _SparePartsBanner(booking: booking),
+            const SizedBox(height: 12),
+          ],
+
           if (booking.worker != null)
             PremiumGlassCard(
               child: Padding(
@@ -1227,6 +1240,14 @@ class BookingDetail {
     this.addressLabel,
     this.worker,
     this.timeline = const [],
+    this.customQuoteAmount,
+    this.customQuoteItemized,
+    this.customQuoteNotes,
+    this.customQuoteStatus,
+    this.sparePartStatus,
+    this.sparePartTotal,
+    this.sparePartItems,
+    this.sparePartReceiptUrl,
   });
 
   final String id;
@@ -1240,6 +1261,14 @@ class BookingDetail {
   final String? addressLabel;
   final BookingWorker? worker;
   final List<BookingTimelineEvent> timeline;
+  final double? customQuoteAmount;
+  final List<Map<String, dynamic>>? customQuoteItemized;
+  final String? customQuoteNotes;
+  final String? customQuoteStatus;
+  final String? sparePartStatus;
+  final double? sparePartTotal;
+  final List<Map<String, dynamic>>? sparePartItems;
+  final String? sparePartReceiptUrl;
 
   factory BookingDetail.fromJson(Map<String, dynamic> json) => BookingDetail(
         id: json['id'] as String? ?? '',
@@ -1259,6 +1288,19 @@ class BookingDetail {
             .map((item) =>
                 BookingTimelineEvent.fromJson(item as Map<String, dynamic>))
             .toList(),
+        customQuoteAmount:
+            (json['customQuoteAmount'] as num?)?.toDouble(),
+        customQuoteItemized: (json['customQuoteItemized'] as List<dynamic>?)
+            ?.map((e) => Map<String, dynamic>.from(e as Map))
+            .toList(),
+        customQuoteNotes: json['customQuoteNotes'] as String?,
+        customQuoteStatus: json['customQuoteStatus'] as String?,
+        sparePartStatus: json['sparePartStatus'] as String?,
+        sparePartTotal: (json['sparePartTotal'] as num?)?.toDouble(),
+        sparePartItems: (json['sparePartItems'] as List<dynamic>?)
+            ?.map((e) => Map<String, dynamic>.from(e as Map))
+            .toList(),
+        sparePartReceiptUrl: json['sparePartReceiptUrl'] as String?,
       );
 }
 
@@ -1286,6 +1328,485 @@ class BookingTimelineEvent {
         createdAt: DateTime.tryParse(json['createdAt'] as String? ?? '') ??
             DateTime.now(),
       );
+}
+
+// ─── Spare Parts Banner ───────────────────────────────────────────────────────
+
+class _SparePartsBanner extends ConsumerStatefulWidget {
+  const _SparePartsBanner({required this.booking});
+  final BookingDetail booking;
+
+  @override
+  ConsumerState<_SparePartsBanner> createState() => _SparePartsBannerState();
+}
+
+class _SparePartsBannerState extends ConsumerState<_SparePartsBanner> {
+  late final RazorpayService _razorpayService;
+  bool _loading = false;
+  // Stored while checkout is open so the success callback can call verify
+  String? _pendingOrderId;
+
+  @override
+  void initState() {
+    super.initState();
+    _razorpayService = RazorpayService.create();
+    _razorpayService.registerCallbacks(
+      onSuccess: _handlePaymentSuccess,
+      onError: _handlePaymentError,
+      onExternalWallet: (_) {},
+    );
+  }
+
+  @override
+  void dispose() {
+    _razorpayService.dispose();
+    super.dispose();
+  }
+
+  Future<void> _handlePaymentSuccess(PaymentSuccessResponse response) async {
+    final orderId = response.orderId ?? _pendingOrderId ?? '';
+    final paymentId = response.paymentId ?? '';
+    final signature = response.signature ?? '';
+    setState(() => _loading = true);
+    try {
+      final api = ref.read(apiClientProvider);
+      await api.post(
+        '/bookings/${widget.booking.id}/spare-parts/verify-payment',
+        data: {
+          'razorpayOrderId': orderId,
+          'razorpayPaymentId': paymentId,
+          'razorpaySignature': signature,
+        },
+      );
+      ref.invalidate(bookingDetailPageProvider(widget.booking.id));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+              content: Text('✅ Payment successful! Spare parts added to your bill.')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Verification failed: $e')));
+      }
+    } finally {
+      _pendingOrderId = null;
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  void _handlePaymentError(PaymentFailureResponse response) {
+    _pendingOrderId = null;
+    if (mounted) {
+      setState(() => _loading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+            content: Text(
+                'Payment failed: ${response.message ?? 'Unknown error'}')),
+      );
+    }
+  }
+
+  Future<void> _pay() async {
+    setState(() => _loading = true);
+    try {
+      final api = ref.read(apiClientProvider);
+      // 1. Create Razorpay order on our backend
+      final orderData = await api
+          .post('/bookings/${widget.booking.id}/spare-parts/payment-order');
+
+      final keyId = orderData['keyId'] as String;
+      final rzpOrderId = orderData['orderId'] as String;
+      final amountPaise = orderData['amountPaise'] as int;
+      final customerName = orderData['customerName'] as String? ?? 'Customer';
+      final phone = orderData['customerPhone'] as String? ?? '';
+
+      _pendingOrderId = rzpOrderId;
+
+      // 2. Open Razorpay native checkout
+      _razorpayService.openCheckout(
+        keyId: keyId,
+        orderId: rzpOrderId,
+        bookingCode: widget.booking.code,
+        customerName: customerName,
+        email: '',
+        phone: phone,
+        amountInPaise: amountPaise,
+      );
+      // _loading is cleared by success/error callback
+    } catch (e) {
+      _pendingOrderId = null;
+      if (mounted) {
+        setState(() => _loading = false);
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Error: $e')));
+      }
+    }
+  }
+
+  Future<void> _reject() async {
+    setState(() => _loading = true);
+    try {
+      final api = ref.read(apiClientProvider);
+      await api.post('/bookings/${widget.booking.id}/spare-parts/reject');
+      ref.invalidate(bookingDetailPageProvider(widget.booking.id));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Spare parts request rejected.')));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Error: $e')));
+      }
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
+    final status = widget.booking.sparePartStatus ?? 'PENDING';
+    final total = widget.booking.sparePartTotal ?? 0.0;
+    final items = widget.booking.sparePartItems ?? [];
+    final receiptUrl = widget.booking.sparePartReceiptUrl;
+
+    final (borderColor, bgColor, icon, label) = switch (status) {
+      'PAID' => (
+          const Color(0xFF10B981),
+          const Color(0xFF10B981),
+          Icons.check_circle_rounded,
+          'Spare Parts Paid'
+        ),
+      'REJECTED' => (
+          cs.outline,
+          cs.outlineVariant,
+          Icons.cancel_rounded,
+          'Spare Parts Rejected'
+        ),
+      _ => (
+          const Color(0xFFF97316),
+          const Color(0xFFF97316),
+          Icons.hardware_rounded,
+          'Spare Parts Added — Payment Required'
+        ),
+    };
+
+    return Container(
+      decoration: BoxDecoration(
+        color: bgColor.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(AbzioTheme.cardRadius),
+        border: Border.all(color: borderColor.withValues(alpha: 0.4)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Header
+            Row(
+              children: [
+                Icon(icon, color: borderColor, size: 20),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(label,
+                      style: tt.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w800, color: borderColor)),
+                ),
+                Text(
+                  '₹${total.toStringAsFixed(0)}',
+                  style: tt.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w900, color: borderColor),
+                ),
+              ],
+            ),
+
+            // Line items
+            if (items.isNotEmpty) ...[
+              const SizedBox(height: 14),
+              const Divider(height: 1),
+              const SizedBox(height: 10),
+              ...items.map((item) => Padding(
+                    padding: const EdgeInsets.only(bottom: 6),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Expanded(
+                            child: Text(item['label'] as String? ?? '',
+                                style: tt.bodyMedium)),
+                        Text(
+                          '₹${(item['amount'] as num).toStringAsFixed(0)}',
+                          style: tt.bodyMedium
+                              ?.copyWith(fontWeight: FontWeight.w700),
+                        ),
+                      ],
+                    ),
+                  )),
+            ],
+
+            // Receipt photo link
+            if (receiptUrl != null && receiptUrl.isNotEmpty) ...[
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Icon(Icons.receipt_long_rounded,
+                      size: 14, color: cs.onSurfaceVariant),
+                  const SizedBox(width: 6),
+                  Text('Receipt photo attached',
+                      style: tt.bodySmall
+                          ?.copyWith(color: cs.onSurfaceVariant)),
+                ],
+              ),
+            ],
+
+            // Pay / Reject buttons — only when PENDING
+            if (status == 'PENDING') ...[
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: _loading ? null : _reject,
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: cs.error,
+                        side:
+                            BorderSide(color: cs.error.withValues(alpha: 0.5)),
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                      ),
+                      child: _loading
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2))
+                          : const Text('Reject'),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    flex: 2,
+                    child: FilledButton.icon(
+                      onPressed: _loading ? null : _pay,
+                      icon: _loading
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(
+                                  strokeWidth: 2, color: Colors.white))
+                          : const Icon(Icons.payment_rounded, size: 18),
+                      label: Text(
+                          _loading ? 'Processing…' : 'Pay ₹${total.toStringAsFixed(0)}'),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: const Color(0xFFF97316),
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Custom Quote Banner ──────────────────────────────────────────────────────
+
+class _CustomQuoteBanner extends ConsumerStatefulWidget {
+  const _CustomQuoteBanner({required this.booking});
+  final BookingDetail booking;
+
+  @override
+  ConsumerState<_CustomQuoteBanner> createState() => _CustomQuoteBannerState();
+}
+
+class _CustomQuoteBannerState extends ConsumerState<_CustomQuoteBanner> {
+  bool _loading = false;
+
+  Future<void> _respond(String action) async {
+    setState(() => _loading = true);
+    try {
+      final api = ref.read(apiClientProvider);
+      await api.post('/bookings/${widget.booking.id}/$action-quote');
+      ref.invalidate(bookingDetailPageProvider(widget.booking.id));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(action == 'accept'
+              ? '✅ Quote accepted! Proceed to payment.'
+              : 'Quote rejected.'),
+        ));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
+    final status = widget.booking.customQuoteStatus ?? 'PENDING';
+    final amount = widget.booking.customQuoteAmount ?? 0.0;
+    final items = widget.booking.customQuoteItemized ?? [];
+    final notes = widget.booking.customQuoteNotes;
+
+    final (borderColor, bgColor, icon, label) = switch (status) {
+      'ACCEPTED' => (
+          const Color(0xFF10B981),
+          const Color(0xFF10B981),
+          Icons.check_circle_rounded,
+          'Quote Accepted'
+        ),
+      'REJECTED' => (
+          cs.outline,
+          cs.outlineVariant,
+          Icons.cancel_rounded,
+          'Quote Rejected'
+        ),
+      _ => (
+          const Color(0xFFF59E0B),
+          const Color(0xFFF59E0B),
+          Icons.request_quote_rounded,
+          'Quote Received — Review Required'
+        ),
+    };
+
+    return Container(
+      decoration: BoxDecoration(
+        color: bgColor.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(AbzioTheme.cardRadius),
+        border: Border.all(color: borderColor.withValues(alpha: 0.4)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Header
+            Row(
+              children: [
+                Icon(icon, color: borderColor, size: 20),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(label,
+                      style: tt.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w800, color: borderColor)),
+                ),
+                Text(
+                  '₹${amount.toStringAsFixed(0)}',
+                  style: tt.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w900, color: borderColor),
+                ),
+              ],
+            ),
+
+            // Line items
+            if (items.isNotEmpty) ...[
+              const SizedBox(height: 14),
+              const Divider(height: 1),
+              const SizedBox(height: 10),
+              ...items.map((item) => Padding(
+                    padding: const EdgeInsets.only(bottom: 6),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Expanded(
+                          child: Text(item['label'] as String? ?? '',
+                              style: tt.bodyMedium),
+                        ),
+                        Text(
+                          '₹${(item['amount'] as num).toStringAsFixed(0)}',
+                          style: tt.bodyMedium
+                              ?.copyWith(fontWeight: FontWeight.w700),
+                        ),
+                      ],
+                    ),
+                  )),
+            ],
+
+            // Notes
+            if (notes != null && notes.isNotEmpty) ...[
+              const SizedBox(height: 10),
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: cs.surfaceContainerHighest.withValues(alpha: 0.5),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(Icons.info_outline_rounded,
+                        size: 14, color: cs.onSurfaceVariant),
+                    const SizedBox(width: 6),
+                    Expanded(
+                        child: Text(notes,
+                            style: tt.bodySmall
+                                ?.copyWith(color: cs.onSurfaceVariant))),
+                  ],
+                ),
+              ),
+            ],
+
+            // Accept / Reject buttons — only when PENDING
+            if (status == 'PENDING') ...[
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: _loading ? null : () => _respond('reject'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: cs.error,
+                        side: BorderSide(color: cs.error.withValues(alpha: 0.5)),
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                      ),
+                      child: _loading
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child:
+                                  CircularProgressIndicator(strokeWidth: 2))
+                          : const Text('Reject'),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    flex: 2,
+                    child: FilledButton.icon(
+                      onPressed: _loading ? null : () => _respond('accept'),
+                      icon: _loading
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(
+                                  strokeWidth: 2, color: Colors.white))
+                          : const Icon(Icons.check_rounded, size: 18),
+                      label: Text(_loading ? 'Processing…' : 'Accept & Proceed'),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: const Color(0xFF10B981),
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 // ─── Provider ─────────────────────────────────────────────────────────────────

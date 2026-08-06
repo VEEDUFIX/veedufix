@@ -11,6 +11,8 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../../../core/offline/connectivity_service.dart';
 import '../providers/job_execution_provider.dart';
 import '../providers/worker_availability_provider.dart';
+import 'generate_quote_page.dart';
+import 'add_spare_parts_page.dart';
 
 class JobExecutionPage extends ConsumerStatefulWidget {
   const JobExecutionPage({
@@ -317,6 +319,68 @@ class _JobExecutionPageState extends ConsumerState<JobExecutionPage> {
               isCompleted: state.summary != null,
               child: _buildFinalStep(context, state),
             ),
+
+            // ── Generate Quote button (site-visit / large jobs) ──────────────
+            if (!completed) ...[  
+              const SizedBox(height: 20),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: () async {
+                    final sent = await Navigator.of(context).push<bool>(
+                      MaterialPageRoute(
+                        builder: (_) =>
+                            GenerateQuotePage(bookingId: widget.bookingId),
+                      ),
+                    );
+                    if (sent == true && context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text(
+                              'Quote sent! Waiting for customer approval.'),
+                        ),
+                      );
+                    }
+                  },
+                  icon: const Icon(Icons.request_quote_rounded),
+                  label: const Text('Generate Site Visit Quote'),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    textStyle: const TextStyle(
+                        fontWeight: FontWeight.w700, fontSize: 15),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 10),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: () async {
+                    final sent = await Navigator.of(context).push<bool>(
+                      MaterialPageRoute(
+                        builder: (_) =>
+                            AddSparePartsPage(bookingId: widget.bookingId),
+                      ),
+                    );
+                    if (sent == true && context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text(
+                              'Spare parts sent! Waiting for customer payment.'),
+                        ),
+                      );
+                    }
+                  },
+                  icon: const Icon(Icons.hardware_rounded),
+                  label: const Text('Add Spare Parts'),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    textStyle: const TextStyle(
+                        fontWeight: FontWeight.w700, fontSize: 15),
+                  ),
+                ),
+              ),
+            ],
           ],
         ),
       ),

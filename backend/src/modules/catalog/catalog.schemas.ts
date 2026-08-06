@@ -173,6 +173,7 @@ export const createServiceSchema = z.object({
     gstApplicable: z.boolean().optional(),
     emergencyAvailable: z.boolean().optional(),
     homeVisit: z.boolean().optional(),
+    requiresSiteVisit: z.boolean().optional(),
     isActive: z.boolean().optional(),
     featured: z.boolean().optional(),
     popular: z.boolean().optional(),

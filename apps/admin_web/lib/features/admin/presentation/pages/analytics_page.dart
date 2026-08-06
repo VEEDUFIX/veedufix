@@ -146,9 +146,12 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
                 child: Text('Failed to load data: $_error', style: const TextStyle(color: Colors.red)),
               )
             else if (_payload != null) ...[
-              _AnalyticsSummaryRow(trends: _payload!.trends),
+            _AnalyticsSummaryRow(
+              trends: _payload!.trends,
+              activeBookings: _payload!.activeBookings,
+            ),
               const SizedBox(height: 24),
-              // Charts Area
+              // Charts row 1 — GMV + Bookings
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -157,6 +160,9 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
                   Expanded(child: _buildBookingsChart(_payload!.trends)),
                 ],
               ),
+              const SizedBox(height: 24),
+              // Commission chart — full width
+              _buildCommissionChart(_payload!.trends),
               const SizedBox(height: 24),
               LayoutBuilder(
                 builder: (context, constraints) {
@@ -187,6 +193,95 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
                 },
               ),
             ]
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCommissionChart(List<DailyTrendPoint> trends) {
+    if (trends.isEmpty) return const SizedBox();
+
+    final maxY = trends
+        .map((t) => t.commission)
+        .fold<double>(0, (m, v) => v > m ? v : m);
+
+    return _ChartCard(
+      title: 'Commission Earned (₹)',
+      subtitle: 'Platform revenue from completed jobs',
+      fullWidth: true,
+      chart: LineChart(
+        LineChartData(
+          gridData: FlGridData(
+            show: true,
+            drawVerticalLine: false,
+            horizontalInterval: maxY > 0 ? (maxY / 4) : 500,
+            getDrawingHorizontalLine: (_) =>
+                const FlLine(color: Color(0xFFE5E7EB), strokeWidth: 1),
+          ),
+          titlesData: FlTitlesData(
+            show: true,
+            rightTitles:
+                const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+            topTitles:
+                const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+            leftTitles: AxisTitles(
+              sideTitles: SideTitles(
+                showTitles: true,
+                reservedSize: 56,
+                interval: maxY > 0 ? (maxY / 4) : 500,
+                getTitlesWidget: (value, _) => Text(
+                  NumberFormat.compact().format(value),
+                  style:
+                      const TextStyle(color: Colors.black54, fontSize: 12),
+                ),
+              ),
+            ),
+            bottomTitles: AxisTitles(
+              sideTitles: SideTitles(
+                showTitles: true,
+                reservedSize: 30,
+                interval: 7,
+                getTitlesWidget: (value, _) {
+                  final index = value.toInt();
+                  if (index < 0 || index >= trends.length)
+                    return const SizedBox();
+                  final date = DateTime.parse(trends[index].date);
+                  return Padding(
+                    padding: const EdgeInsets.only(top: 8.0),
+                    child: Text(
+                      DateFormat('MMM d').format(date),
+                      style: const TextStyle(
+                          color: Colors.black54, fontSize: 12),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ),
+          borderData: FlBorderData(show: false),
+          minX: 0,
+          maxX: (trends.length - 1).toDouble(),
+          minY: 0,
+          maxY: maxY > 0 ? maxY * 1.2 : 1000,
+          lineBarsData: [
+            LineChartBarData(
+              spots: trends
+                  .asMap()
+                  .entries
+                  .map((e) =>
+                      FlSpot(e.key.toDouble(), e.value.commission))
+                  .toList(),
+              isCurved: true,
+              color: const Color(0xFF059669),
+              barWidth: 3,
+              isStrokeCapRound: true,
+              dotData: const FlDotData(show: false),
+              belowBarData: BarAreaData(
+                show: true,
+                color: const Color(0xFF059669).withValues(alpha: 0.1),
+              ),
+            ),
           ],
         ),
       ),
@@ -391,13 +486,18 @@ class _RangeChip extends StatelessWidget {
 }
 
 class _AnalyticsSummaryRow extends StatelessWidget {
-  const _AnalyticsSummaryRow({required this.trends});
+  const _AnalyticsSummaryRow({
+    required this.trends,
+    required this.activeBookings,
+  });
 
   final List<DailyTrendPoint> trends;
+  final int activeBookings;
 
   @override
   Widget build(BuildContext context) {
     final totalRevenue = trends.fold<double>(0, (sum, point) => sum + point.revenue);
+    final totalCommission = trends.fold<double>(0, (sum, point) => sum + point.commission);
     final totalBookings = trends.fold<int>(0, (sum, point) => sum + point.bookings);
     final totalWorkers = trends.fold<int>(0, (sum, point) => sum + point.newWorkers);
     final topRevenueDay = trends.isEmpty
@@ -412,11 +512,20 @@ class _AnalyticsSummaryRow extends StatelessWidget {
       runSpacing: 16,
       children: [
         _MetricCard(
-          label: 'Total revenue',
+          label: 'Total GMV',
           value: '₹${NumberFormat.compact().format(totalRevenue)}',
           sublabel: '${trends.length} days tracked',
           icon: Icons.payments_rounded,
           color: const Color(0xFF0F766E),
+        ),
+        _MetricCard(
+          label: 'Commission earned',
+          value: '₹${NumberFormat.compact().format(totalCommission)}',
+          sublabel: totalRevenue > 0
+              ? '${(totalCommission / totalRevenue * 100).toStringAsFixed(1)}% of GMV'
+              : 'No revenue yet',
+          icon: Icons.percent_rounded,
+          color: const Color(0xFF059669),
         ),
         _MetricCard(
           label: 'Completed bookings',
@@ -424,6 +533,14 @@ class _AnalyticsSummaryRow extends StatelessWidget {
           sublabel: topBookingsDay == null ? 'No booking data' : 'Peak day ${DateFormat('MMM d').format(DateTime.parse(topBookingsDay.date))}',
           icon: Icons.receipt_long_rounded,
           color: const Color(0xFF2563EB),
+        ),
+        _MetricCard(
+          label: 'Live active jobs',
+          value: '$activeBookings',
+          sublabel: 'Right now across Chennai',
+          icon: Icons.bolt_rounded,
+          color: const Color(0xFFEA580C),
+          isLive: true,
         ),
         _MetricCard(
           label: 'New workers',
@@ -451,6 +568,7 @@ class _MetricCard extends StatelessWidget {
     required this.sublabel,
     required this.icon,
     required this.color,
+    this.isLive = false,
   });
 
   final String label;
@@ -458,6 +576,7 @@ class _MetricCard extends StatelessWidget {
   final String sublabel;
   final IconData icon;
   final Color color;
+  final bool isLive;
 
   @override
   Widget build(BuildContext context) {
@@ -469,7 +588,11 @@ class _MetricCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(AbzioTheme.buttonRadius),
-        border: Border.all(color: const Color(0xFFE5E7EB)),
+        border: Border.all(
+          color: isLive
+              ? color.withValues(alpha: 0.4)
+              : const Color(0xFFE5E7EB),
+        ),
         boxShadow: AbzioTheme.eliteShadow,
       ),
       child: Column(
@@ -486,7 +609,15 @@ class _MetricCard extends StatelessWidget {
                 child: Icon(icon, color: color, size: 20),
               ),
               const Spacer(),
-              Text(label, style: tt.labelMedium?.copyWith(color: cs.onSurfaceVariant, fontWeight: FontWeight.w700)),
+              if (isLive) ...
+                [
+                  _PulseDot(color: color),
+                  const SizedBox(width: 6),
+                ],
+              Text(label,
+                  style: tt.labelMedium?.copyWith(
+                      color: cs.onSurfaceVariant,
+                      fontWeight: FontWeight.w700)),
             ],
           ),
           const SizedBox(height: 18),
@@ -500,23 +631,82 @@ class _MetricCard extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 6),
-          Text(sublabel, style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
+          Text(sublabel,
+              style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
         ],
       ),
     );
   }
 }
 
+/// Pulsing red/orange dot for the live metric card.
+class _PulseDot extends StatefulWidget {
+  const _PulseDot({required this.color});
+  final Color color;
+
+  @override
+  State<_PulseDot> createState() => _PulseDotState();
+}
+
+class _PulseDotState extends State<_PulseDot>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl;
+  late final Animation<double> _anim;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 900),
+    )..repeat(reverse: true);
+    _anim = Tween<double>(begin: 0.3, end: 1.0).animate(
+      CurvedAnimation(parent: _ctrl, curve: Curves.easeInOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _anim,
+      builder: (_, __) => Opacity(
+        opacity: _anim.value,
+        child: Container(
+          width: 8,
+          height: 8,
+          decoration: BoxDecoration(
+            color: widget.color,
+            shape: BoxShape.circle,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _ChartCard extends StatelessWidget {
-  const _ChartCard({required this.title, required this.chart});
-  
+  const _ChartCard({
+    required this.title,
+    required this.chart,
+    this.subtitle,
+    this.fullWidth = false,
+  });
+
   final String title;
+  final String? subtitle;
   final Widget chart;
+  final bool fullWidth;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 400,
+      height: fullWidth ? 300 : 400,
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
         color: Colors.white,
@@ -535,6 +725,15 @@ class _ChartCard extends StatelessWidget {
               color: Colors.black87,
             ),
           ),
+          if (subtitle != null) ...
+            [
+              const SizedBox(height: 4),
+              Text(
+                subtitle!,
+                style: GoogleFonts.inter(
+                    fontSize: 13, color: Colors.black45),
+              ),
+            ],
           const SizedBox(height: 24),
           Expanded(child: chart),
         ],

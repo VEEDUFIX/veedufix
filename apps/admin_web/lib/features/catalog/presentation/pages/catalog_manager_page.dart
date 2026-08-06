@@ -842,6 +842,7 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
     bool popular = existing?.popular ?? false;
     bool emergency = existing?.emergencyAvailable ?? false;
     bool homeVisit = existing?.homeVisit ?? true;
+    bool requiresSiteVisit = existing?.requiresSiteVisit ?? false;
     bool isActive = existing?.isActive ?? true;
 
     return showDialog<Map<String, dynamic>>(
@@ -995,6 +996,12 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
                         title: const Text('Home visit'),
                       ),
                       SwitchListTile(
+                        value: requiresSiteVisit,
+                        onChanged: (value) => setState(() => requiresSiteVisit = value),
+                        title: const Text('Requires site visit (Big Job)'),
+                        subtitle: const Text('Worker visits first to generate a custom quote'),
+                      ),
+                      SwitchListTile(
                         value: isActive,
                         onChanged: (value) => setState(() => isActive = value),
                         title: const Text('Active'),
@@ -1041,6 +1048,7 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
                       'popular': popular,
                       'emergencyAvailable': emergency,
                       'homeVisit': homeVisit,
+                      'requiresSiteVisit': requiresSiteVisit,
                       'isActive': isActive,
                     });
                   },
@@ -2951,6 +2959,7 @@ class _ServiceDetailPageState extends ConsumerState<ServiceDetailPage> {
     var popular = existing.popular;
     var emergency = existing.emergencyAvailable;
     var homeVisit = existing.homeVisit;
+    var requiresSiteVisit = existing.requiresSiteVisit;
     var isActive = existing.isActive;
 
     return showDialog<Map<String, dynamic>>(
@@ -3105,6 +3114,12 @@ class _ServiceDetailPageState extends ConsumerState<ServiceDetailPage> {
                         title: const Text('Home visit'),
                       ),
                       SwitchListTile(
+                        value: requiresSiteVisit,
+                        onChanged: (value) => setState(() => requiresSiteVisit = value),
+                        title: const Text('Requires site visit (Big Job)'),
+                        subtitle: const Text('Worker visits first to generate a custom quote'),
+                      ),
+                      SwitchListTile(
                         value: isActive,
                         onChanged: (value) => setState(() => isActive = value),
                         title: const Text('Active'),
@@ -3149,6 +3164,7 @@ class _ServiceDetailPageState extends ConsumerState<ServiceDetailPage> {
                       'popular': popular,
                       'emergencyAvailable': emergency,
                       'homeVisit': homeVisit,
+                      'requiresSiteVisit': requiresSiteVisit,
                       'isActive': isActive,
                     });
                   },
@@ -3789,6 +3805,7 @@ class _AdminService {
     required this.popular,
     required this.emergencyAvailable,
     required this.homeVisit,
+    required this.requiresSiteVisit,
     required this.warrantyDays,
     required this.description,
     required this.shortDescription,
@@ -3817,6 +3834,7 @@ class _AdminService {
   final bool popular;
   final bool emergencyAvailable;
   final bool homeVisit;
+  final bool requiresSiteVisit;
   final int warrantyDays;
   final String? description;
   final String? shortDescription;
@@ -3846,6 +3864,7 @@ class _AdminService {
       popular: json['popular'] as bool? ?? false,
       emergencyAvailable: json['emergencyAvailable'] as bool? ?? false,
       homeVisit: json['homeVisit'] as bool? ?? true,
+      requiresSiteVisit: json['requiresSiteVisit'] as bool? ?? false,
       warrantyDays: (json['warrantyDays'] as num?)?.toInt() ?? 0,
       description: json['description'] as String?,
       shortDescription: json['shortDescription'] as String?,

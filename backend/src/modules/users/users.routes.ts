@@ -422,6 +422,7 @@ usersRouter.get("/bookings/:bookingId", requireAuth, async (request: Authenticat
       address: {
         select: { label: true, line1: true, city: { select: { name: true } } },
       },
+      sparePartRequest: true,
     },
   });
 
@@ -456,6 +457,16 @@ usersRouter.get("/bookings/:bookingId", requireAuth, async (request: Authenticat
             avatarUrl: booking.worker.user?.avatarUrl ?? null,
           }
         : null,
+      // Custom quote fields
+      customQuoteStatus: booking.customQuoteStatus ?? null,
+      customQuoteAmount: booking.customQuoteAmount ? Number(booking.customQuoteAmount) : null,
+      customQuoteItemized: booking.customQuoteItemized ?? null,
+      customQuoteNotes: booking.customQuoteNotes ?? null,
+      // Spare parts fields
+      sparePartStatus: booking.sparePartRequest?.status ?? null,
+      sparePartTotal: booking.sparePartRequest ? Number(booking.sparePartRequest.totalAmount) : null,
+      sparePartItems: booking.sparePartRequest?.items ?? null,
+      sparePartReceiptUrl: booking.sparePartRequest?.receiptPhotoUrl ?? null,
       timeline: (await getBookingTimelineEvents(booking.id)).map((event) => ({
         id: event.id,
         status: event.status,
