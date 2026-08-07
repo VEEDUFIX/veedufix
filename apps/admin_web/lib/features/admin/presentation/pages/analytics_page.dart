@@ -244,8 +244,9 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
                 interval: 7,
                 getTitlesWidget: (value, _) {
                   final index = value.toInt();
-                  if (index < 0 || index >= trends.length)
+                  if (index < 0 || index >= trends.length) {
                     return const SizedBox();
+                  }
                   final date = DateTime.parse(trends[index].date);
                   return Padding(
                     padding: const EdgeInsets.only(top: 8.0),

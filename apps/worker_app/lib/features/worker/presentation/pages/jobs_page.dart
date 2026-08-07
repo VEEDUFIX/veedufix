@@ -5,6 +5,8 @@ import 'package:intl/intl.dart';
 import 'package:marketplace_shared/marketplace_shared.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../data/worker_job_providers.dart';
+
 class JobsPage extends ConsumerStatefulWidget {
   const JobsPage({super.key});
 
@@ -184,8 +186,8 @@ class _JobCard extends ConsumerWidget {
         Future<void> acceptJob() async {
           try {
             await ref
-                .read(apiClientProvider)
-                .post('/bookings/${job.bookingId}/accept-job');
+                .read(workerJobRepositoryProvider)
+                .acceptJob(job.bookingId);
             ref.invalidate(workerJobsProvider('incoming'));
             if (context.mounted) {
               ScaffoldMessenger.of(context)
@@ -205,8 +207,8 @@ class _JobCard extends ConsumerWidget {
               throw Exception('Missing offer ID');
             }
             await ref
-                .read(apiClientProvider)
-                .post('/users/me/worker/jobs/${job.offerId}/decline');
+                .read(workerJobRepositoryProvider)
+                .declineJob(job.offerId!);
             ref.invalidate(workerJobsProvider('incoming'));
             if (context.mounted) {
               ScaffoldMessenger.of(context)
@@ -461,8 +463,8 @@ class _JobCard extends ConsumerWidget {
                         onPressed: () async {
                           try {
                             await ref
-                                .read(apiClientProvider)
-                                .post('/bookings/${job.bookingId}/accept-job');
+                                .read(workerJobRepositoryProvider)
+                                .acceptJob(job.bookingId);
                             ref.invalidate(workerJobsProvider('incoming'));
                             if (context.mounted) {
                               ScaffoldMessenger.of(context).showSnackBar(
@@ -488,8 +490,9 @@ class _JobCard extends ConsumerWidget {
                             if (job.offerId == null) {
                               throw Exception('Missing offer ID');
                             }
-                            await ref.read(apiClientProvider).post(
-                                '/users/me/worker/jobs/${job.offerId}/decline');
+                            await ref
+                                .read(workerJobRepositoryProvider)
+                                .declineJob(job.offerId!);
                             ref.invalidate(workerJobsProvider('incoming'));
                             if (context.mounted) {
                               ScaffoldMessenger.of(context).showSnackBar(
