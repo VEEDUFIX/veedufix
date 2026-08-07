@@ -217,6 +217,29 @@ class _BookingDetailBody extends ConsumerWidget {
             const SizedBox(height: 10),
           ],
 
+          if ((booking.status == 'PENDING' || booking.status == 'ACCEPTED') && booking.customQuoteStatus == null) ...[
+            TapScale(
+              onTap: () => context.push('/bookings/${booking.id}/custom-quote'),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF0D9488).withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(AbzioTheme.buttonRadius),
+                  border: Border.all(color: const Color(0xFF0D9488).withValues(alpha: 0.3)),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(Icons.request_quote_rounded, size: 18, color: Color(0xFF0D9488)),
+                    const SizedBox(width: 8),
+                    Text('Request custom quote', style: tt.labelLarge?.copyWith(fontWeight: FontWeight.w700, color: const Color(0xFF0D9488))),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 10),
+          ],
+
           if (isActive) ...[
             if (booking.status == 'EN_ROUTE' ||
                 booking.status == 'ARRIVED' ||
@@ -585,6 +608,40 @@ class _BookingDetailBody extends ConsumerWidget {
               ),
             ),
             const SizedBox(height: 10),
+            // Dispute CTA — only shown within 48h of completion
+            if (booking.canDispute)
+              Consumer(
+                builder: (context, ref, _) => TapScale(
+                  onTap: () => _raiseDisputeDialog(context, ref, booking),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF97316).withValues(alpha: 0.08),
+                      borderRadius:
+                          BorderRadius.circular(AbzioTheme.buttonRadius),
+                      border: Border.all(
+                          color: const Color(0xFFF97316).withValues(alpha: 0.3)),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(Icons.flag_rounded,
+                            size: 18, color: Color(0xFFF97316)),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Raise a Dispute',
+                          style:
+                              Theme.of(context).textTheme.titleSmall?.copyWith(
+                                    color: const Color(0xFFF97316),
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            if (booking.canDispute) const SizedBox(height: 10),
           ],
 
           if (canCancel) ...[
@@ -794,6 +851,199 @@ Future<void> _confirmCancelBooking(
 }
 
 // ─── Supporting widgets ───────────────────────────────────────────────────────
+
+Future<void> _raiseDisputeDialog(
+  BuildContext context,
+  WidgetRef ref,
+  BookingDetail booking,
+) async {
+  final reasonController = TextEditingController();
+
+  final confirmed = await showModalBottomSheet<bool>(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: Colors.transparent,
+    builder: (sheetContext) {
+      return Padding(
+        padding: EdgeInsets.only(
+          bottom: MediaQuery.of(sheetContext).viewInsets.bottom,
+        ),
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(24, 20, 24, 32),
+          decoration: BoxDecoration(
+            color: Theme.of(sheetContext).colorScheme.surface,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Theme.of(sheetContext)
+                        .colorScheme
+                        .outlineVariant
+                        .withValues(alpha: 0.5),
+                    borderRadius: BorderRadius.circular(99),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
+              Row(
+                children: [
+                  Container(
+                    width: 42,
+                    height: 42,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF97316).withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Icon(Icons.flag_rounded,
+                        color: Color(0xFFF97316), size: 22),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Raise a Dispute',
+                          style: Theme.of(sheetContext)
+                              .textTheme
+                              .titleLarge
+                              ?.copyWith(fontWeight: FontWeight.w800),
+                        ),
+                        Text(
+                          'Booking #${booking.code}',
+                          style: Theme.of(sheetContext)
+                              .textTheme
+                              .bodySmall
+                              ?.copyWith(
+                                  color: Theme.of(sheetContext)
+                                      .colorScheme
+                                      .onSurfaceVariant),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF97316).withValues(alpha: 0.06),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                      color: const Color(0xFFF97316).withValues(alpha: 0.2)),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Icon(Icons.info_outline_rounded,
+                        size: 16, color: Color(0xFFF97316)),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        'You have 48 hours after job completion to raise a dispute. Worker payment will be paused until the admin reviews your case.',
+                        style: Theme.of(sheetContext)
+                            .textTheme
+                            .bodySmall
+                            ?.copyWith(
+                              color: const Color(0xFFF97316),
+                              height: 1.5,
+                            ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: reasonController,
+                maxLines: 4,
+                maxLength: 500,
+                decoration: const InputDecoration(
+                  labelText: 'Describe the issue',
+                  hintText:
+                      'e.g. Work was incomplete, professional was unprofessional, damage caused...',
+                  alignLabelWithHint: true,
+                ),
+                autofocus: true,
+              ),
+              const SizedBox(height: 20),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () =>
+                          Navigator.of(sheetContext).pop(false),
+                      child: const Text('Cancel'),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: FilledButton.icon(
+                      style: FilledButton.styleFrom(
+                        backgroundColor: const Color(0xFFF97316),
+                      ),
+                      onPressed: () =>
+                          Navigator.of(sheetContext).pop(true),
+                      icon: const Icon(Icons.flag_rounded, size: 18),
+                      label: const Text('Submit Dispute'),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      );
+    },
+  );
+
+  if (confirmed != true) {
+    reasonController.dispose();
+    return;
+  }
+
+  final reason = reasonController.text.trim();
+  reasonController.dispose();
+
+  if (reason.length < 10) {
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+          content:
+              Text('Please provide a more detailed reason (min 10 characters).')),
+    );
+    return;
+  }
+
+  try {
+    await ref.read(apiClientProvider).post(
+      '/bookings/${booking.id}/dispute',
+      data: {'reason': reason},
+    );
+    ref.invalidate(bookingDetailPageProvider(booking.id));
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text(
+            'Dispute submitted. Our team will review within 24–48 hours.'),
+        backgroundColor: Color(0xFF0F766E),
+      ),
+    );
+  } catch (error) {
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Could not submit dispute: $error')),
+    );
+  }
+}
 
 Future<void> _showEditBookingSheet(
   BuildContext context,
@@ -1248,6 +1498,7 @@ class BookingDetail {
     this.sparePartTotal,
     this.sparePartItems,
     this.sparePartReceiptUrl,
+    this.completedAt,
   });
 
   final String id;
@@ -1269,6 +1520,15 @@ class BookingDetail {
   final double? sparePartTotal;
   final List<Map<String, dynamic>>? sparePartItems;
   final String? sparePartReceiptUrl;
+  final DateTime? completedAt;
+
+  /// Returns true if booking can still be disputed (within 48-hour window).
+  bool get canDispute {
+    if (status != 'COMPLETED') return false;
+    final completed = completedAt;
+    if (completed == null) return false;
+    return DateTime.now().difference(completed).inHours < 48;
+  }
 
   factory BookingDetail.fromJson(Map<String, dynamic> json) => BookingDetail(
         id: json['id'] as String? ?? '',
@@ -1301,6 +1561,9 @@ class BookingDetail {
             ?.map((e) => Map<String, dynamic>.from(e as Map))
             .toList(),
         sparePartReceiptUrl: json['sparePartReceiptUrl'] as String?,
+        completedAt: json['completedAt'] != null
+            ? DateTime.tryParse(json['completedAt'] as String)
+            : null,
       );
 }
 

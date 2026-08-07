@@ -185,6 +185,19 @@ class _AdminBookingDetailPageState extends ConsumerState<AdminBookingDetailPage>
                     ),
                   ),
                 ),
+                if (booking.customQuoteStatus != null) ...[
+                  const SizedBox(height: 16),
+                  const _SectionTitle(title: 'Custom Quote'),
+                  const SizedBox(height: 10),
+                  _CustomQuoteCard(
+                    bookingId: booking.id,
+                    status: booking.customQuoteStatus!,
+                    amount: booking.customQuoteAmount,
+                    notes: booking.customQuoteNotes,
+                    itemized: booking.customQuoteItemized,
+                    onReload: _reload,
+                  ),
+                ],
                 const SizedBox(height: 16),
                 const _SectionTitle(title: 'People'),
                 const SizedBox(height: 10),
@@ -320,6 +333,10 @@ class _AdminBookingDetail {
     required this.services,
     required this.timeline,
     required this.address,
+    this.customQuoteStatus,
+    this.customQuoteAmount,
+    this.customQuoteNotes,
+    this.customQuoteItemized,
   });
 
   final String id;
@@ -336,6 +353,10 @@ class _AdminBookingDetail {
   final List<_AdminBookingService> services;
   final List<_AdminBookingTimelineEvent> timeline;
   final _AdminBookingAddress? address;
+  final String? customQuoteStatus;
+  final double? customQuoteAmount;
+  final String? customQuoteNotes;
+  final List<dynamic>? customQuoteItemized;
 
   factory _AdminBookingDetail.fromJson(Map<String, dynamic> json) {
     return _AdminBookingDetail(
@@ -366,6 +387,10 @@ class _AdminBookingDetail {
       address: json['address'] is Map<String, dynamic>
           ? _AdminBookingAddress.fromJson(json['address'] as Map<String, dynamic>)
           : null,
+      customQuoteStatus: json['customQuoteStatus'] as String?,
+      customQuoteAmount: (json['customQuoteAmount'] as num?)?.toDouble(),
+      customQuoteNotes: json['customQuoteNotes'] as String?,
+      customQuoteItemized: json['customQuoteItemized'] as List<dynamic>?,
     );
   }
 }
@@ -729,6 +754,256 @@ class _DetailRow extends StatelessWidget {
       onTap: onTap,
       borderRadius: BorderRadius.circular(12),
       child: content,
+    );
+  }
+}
+
+class _CustomQuoteCard extends ConsumerWidget {
+  const _CustomQuoteCard({
+    required this.bookingId,
+    required this.status,
+    this.amount,
+    this.notes,
+    this.itemized,
+    required this.onReload,
+  });
+
+  final String bookingId;
+  final String status;
+  final double? amount;
+  final String? notes;
+  final List<dynamic>? itemized;
+  final VoidCallback onReload;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
+
+    Color badgeColor;
+    String badgeText;
+
+    switch (status) {
+      case 'REQUESTED':
+        badgeColor = Colors.orange;
+        badgeText = 'Quote Requested by Customer';
+        break;
+      case 'SUBMITTED':
+        badgeColor = Colors.blue;
+        badgeText = 'Quote Submitted — Awaiting Customer Response';
+        break;
+      case 'ACCEPTED':
+        badgeColor = Colors.green;
+        badgeText = 'Quote Accepted ✅';
+        break;
+      case 'DECLINED':
+        badgeColor = Colors.red;
+        badgeText = 'Quote Declined';
+        break;
+      default:
+        badgeColor = cs.primary;
+        badgeText = status;
+    }
+
+    return _SurfaceCard(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: badgeColor.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(999),
+              ),
+              child: Text(
+                badgeText,
+                style: tt.labelMedium?.copyWith(
+                  color: badgeColor,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            if (status == 'REQUESTED') ...[
+              const Text('The customer has requested a custom quote for this job.'),
+              const SizedBox(height: 16),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton(
+                  onPressed: () async {
+                    final result = await showDialog<bool>(
+                      context: context,
+                      builder: (ctx) => _SubmitQuoteDialog(bookingId: bookingId),
+                    );
+                    if (result == true) {
+                      onReload();
+                    }
+                  },
+                  child: const Text('Submit Quote'),
+                ),
+              ),
+            ] else if (status == 'SUBMITTED' || status == 'ACCEPTED') ...[
+              if (amount != null)
+                _DetailRow(label: 'Total Amount', value: '₹${amount!.toStringAsFixed(0)}'),
+              if (notes != null && notes!.isNotEmpty)
+                _DetailRow(label: 'Notes', value: notes!),
+              if (itemized != null && itemized!.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Text('Itemized Breakdown:', style: tt.bodyMedium?.copyWith(fontWeight: FontWeight.w700)),
+                const SizedBox(height: 4),
+                ...itemized!.map((item) {
+                  final map = item as Map<String, dynamic>;
+                  final label = map['label'] as String? ?? 'Item';
+                  final price = (map['price'] as num?)?.toDouble() ?? 0;
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 4, left: 8),
+                    child: Text('• $label: ₹${price.toStringAsFixed(0)}'),
+                  );
+                }),
+              ],
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SubmitQuoteDialog extends ConsumerStatefulWidget {
+  const _SubmitQuoteDialog({required this.bookingId});
+  final String bookingId;
+
+  @override
+  ConsumerState<_SubmitQuoteDialog> createState() => _SubmitQuoteDialogState();
+}
+
+class _SubmitQuoteDialogState extends ConsumerState<_SubmitQuoteDialog> {
+  final _amountCtrl = TextEditingController();
+  final _notesCtrl = TextEditingController();
+  final List<Map<String, dynamic>> _itemized = [];
+  bool _submitting = false;
+
+  void _addItem() {
+    setState(() {
+      _itemized.add({'label': '', 'price': 0.0});
+    });
+  }
+
+  void _removeItem(int index) {
+    setState(() {
+      _itemized.removeAt(index);
+    });
+  }
+
+  Future<void> _submit() async {
+    final amount = double.tryParse(_amountCtrl.text);
+    if (amount == null) return;
+
+    setState(() => _submitting = true);
+    try {
+      final api = ref.read(apiClientProvider);
+      await api.post('/bookings/${widget.bookingId}/custom-quote/submit', data: {
+        'amount': amount,
+        'notes': _notesCtrl.text,
+        'itemized': _itemized,
+      });
+      if (mounted) {
+        Navigator.pop(context, true);
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+      }
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
+  }
+
+  @override
+  void dispose() {
+    _amountCtrl.dispose();
+    _notesCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Submit Custom Quote'),
+      content: SizedBox(
+        width: 400,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              TextField(
+                controller: _amountCtrl,
+                decoration: const InputDecoration(labelText: 'Total Amount (₹)'),
+                keyboardType: TextInputType.number,
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: _notesCtrl,
+                decoration: const InputDecoration(labelText: 'Notes'),
+                maxLines: 3,
+              ),
+              const SizedBox(height: 16),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text('Itemized Breakdown', style: TextStyle(fontWeight: FontWeight.bold)),
+                  TextButton(
+                    onPressed: _addItem,
+                    child: const Text('Add Item'),
+                  ),
+                ],
+              ),
+              ..._itemized.asMap().entries.map((e) {
+                final i = e.key;
+                return Row(
+                  children: [
+                    Expanded(
+                      flex: 2,
+                      child: TextFormField(
+                        initialValue: _itemized[i]['label'] as String,
+                        decoration: const InputDecoration(hintText: 'Label'),
+                        onChanged: (v) => _itemized[i]['label'] = v,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      flex: 1,
+                      child: TextFormField(
+                        initialValue: (_itemized[i]['price'] as double).toString(),
+                        decoration: const InputDecoration(hintText: 'Price'),
+                        keyboardType: TextInputType.number,
+                        onChanged: (v) => _itemized[i]['price'] = double.tryParse(v) ?? 0.0,
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.delete, color: Colors.red),
+                      onPressed: () => _removeItem(i),
+                    ),
+                  ],
+                );
+              }),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _submitting ? null : () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: _submitting ? null : _submit,
+          child: _submitting ? const CircularProgressIndicator() : const Text('Submit'),
+        ),
+      ],
     );
   }
 }

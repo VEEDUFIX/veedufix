@@ -26,6 +26,10 @@ class CustomerBooking {
     this.addressLabel,
     this.cityName,
     this.worker,
+    this.customQuoteStatus,
+    this.customQuoteAmount,
+    this.customQuoteNotes,
+    this.customQuoteItemized,
   });
 
   final String id;
@@ -39,6 +43,10 @@ class CustomerBooking {
   final String? addressLabel;
   final String? cityName;
   final BookingWorker? worker;
+  final String? customQuoteStatus;
+  final double? customQuoteAmount;
+  final String? customQuoteNotes;
+  final List<dynamic>? customQuoteItemized;
 
   factory CustomerBooking.fromJson(Map<String, dynamic> json) => CustomerBooking(
         id: json['id'] as String? ?? '',
@@ -54,5 +62,9 @@ class CustomerBooking {
         worker: json['worker'] != null
             ? BookingWorker.fromJson(json['worker'] as Map<String, dynamic>)
             : null,
+        customQuoteStatus: json['customQuoteStatus'] as String?,
+        customQuoteAmount: (json['customQuoteAmount'] as num?)?.toDouble(),
+        customQuoteNotes: json['customQuoteNotes'] as String?,
+        customQuoteItemized: json['customQuoteItemized'] as List<dynamic>?,
       );
 }

@@ -423,6 +423,9 @@ usersRouter.get("/bookings/:bookingId", requireAuth, async (request: Authenticat
         select: { label: true, line1: true, city: { select: { name: true } } },
       },
       sparePartRequest: true,
+      jobExecution: {
+        select: { completedAt: true },
+      },
     },
   });
 
@@ -467,6 +470,8 @@ usersRouter.get("/bookings/:bookingId", requireAuth, async (request: Authenticat
       sparePartTotal: booking.sparePartRequest ? Number(booking.sparePartRequest.totalAmount) : null,
       sparePartItems: booking.sparePartRequest?.items ?? null,
       sparePartReceiptUrl: booking.sparePartRequest?.receiptPhotoUrl ?? null,
+      // Dispute window — completedAt from jobExecution lets the app enforce 48h limit
+      completedAt: booking.jobExecution?.completedAt?.toISOString() ?? null,
       timeline: (await getBookingTimelineEvents(booking.id)).map((event) => ({
         id: event.id,
         status: event.status,

@@ -31,6 +31,7 @@ import '../features/profile/presentation/pages/settings_page.dart';
 import '../features/wallet/presentation/pages/wallet_page.dart';
 import '../features/booking/presentation/pages/booking_detail_page.dart';
 import '../features/booking/presentation/pages/booking_invoice_page.dart';
+import '../features/booking/presentation/pages/custom_quote_page.dart';
 import '../features/cart/presentation/providers/cart_providers.dart';
 
 final routerProvider = Provider<GoRouter>((ref) {
@@ -116,6 +117,12 @@ final routerProvider = Provider<GoRouter>((ref) {
           final bookingId = state.uri.queryParameters['bookingId'] ?? '';
           return BookingRatingPage(bookingId: bookingId);
         },
+      ),
+      GoRoute(
+        path: '/bookings/:bookingId/custom-quote',
+        builder: (context, state) => CustomQuotePage(
+          bookingId: state.pathParameters['bookingId']!,
+        ),
       ),
       GoRoute(
         path: '/service',

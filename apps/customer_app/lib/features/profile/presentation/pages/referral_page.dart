@@ -13,6 +13,8 @@ class ReferralPage extends ConsumerWidget {
     final cs = Theme.of(context).colorScheme;
     final tt = Theme.of(context).textTheme;
     final walletAsync = ref.watch(walletProvider);
+    final session = ref.watch(authControllerProvider).valueOrNull;
+    final referralCode = session?.user.referralCode ?? 'LOADING...';
 
     return Scaffold(
       backgroundColor: cs.surface,
@@ -87,36 +89,39 @@ class ReferralPage extends ConsumerWidget {
               const SizedBox(height: 24),
 
               // ─── Referral code card ─────────────────────────────────────
-              PremiumCard(
+              PremiumGlassCard(
                 child: Padding(
-                  padding: const EdgeInsets.all(20),
+                  padding: const EdgeInsets.all(24),
+
                   child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      Icon(Icons.auto_awesome_rounded, color: cs.primary, size: 40),
+                      const SizedBox(height: 12),
                       Text('Your Referral Code', style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
-                      const SizedBox(height: 4),
+                      const SizedBox(height: 8),
                       Text(
-                        'Share your code and both you and your friend earn ₹100 on their first booking!',
+                        'Share your code and earn ₹100 when your friend completes their first booking',
+                        textAlign: TextAlign.center,
                         style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant),
                       ),
-                      const SizedBox(height: 16),
+                      const SizedBox(height: 24),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
                         decoration: BoxDecoration(
-                          color: cs.primaryContainer.withValues(alpha: 0.4),
+                          color: cs.surface,
                           borderRadius: BorderRadius.circular(AbzioTheme.buttonRadius),
-                          border: Border.all(color: cs.primary.withValues(alpha: 0.3)),
+                          border: Border.all(color: cs.primary.withValues(alpha: 0.3), width: 2),
                         ),
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
                             Text(
-                              wallet.referralCode,
-                              style: tt.titleLarge?.copyWith(fontWeight: FontWeight.w900, letterSpacing: 2, color: cs.primary),
+                              referralCode,
+                              style: tt.headlineSmall?.copyWith(fontWeight: FontWeight.w900, letterSpacing: 3, color: cs.primary),
                             ),
                             TapScale(
                               onTap: () {
-                                Clipboard.setData(ClipboardData(text: wallet.referralCode));
+                                Clipboard.setData(ClipboardData(text: referralCode));
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   const SnackBar(content: Text('Referral code copied!')),
                                 );
@@ -126,14 +131,14 @@ class ReferralPage extends ConsumerWidget {
                           ],
                         ),
                       ),
-                      const SizedBox(height: 16),
+                      const SizedBox(height: 24),
                       SizedBox(
                         width: double.infinity,
                         child: FilledButton.icon(
                           onPressed: () {
                             Share.share(
                               '🏠 Try VeeduFix — Chennai\'s best home services app!\n\n'
-                              'Use my referral code \'${wallet.referralCode}\' when you sign up '
+                              'Use my referral code \'$referralCode\' when you sign up '
                               'and we both get ₹100 wallet credits on your first booking.\n\n'
                               '🔗 Download: https://veedufix.app',
                             );
@@ -142,6 +147,43 @@ class ReferralPage extends ConsumerWidget {
                           label: const Text('Share with Friends'),
                         ),
                       ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 24),
+
+              // ─── How it works ───────────────────────────────────────────
+              Text('How it works', style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
+              const SizedBox(height: 12),
+              PremiumCard(
+                child: Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    children: [
+                      _buildStep(context, '1', 'Share your code with friends'),
+                      const Padding(
+                        padding: EdgeInsets.only(left: 16),
+                        child: Align(
+                          alignment: Alignment.centerLeft,
+                          child: SizedBox(
+                            height: 20,
+                            child: VerticalDivider(thickness: 2),
+                          ),
+                        ),
+                      ),
+                      _buildStep(context, '2', 'Friend books their first service'),
+                      const Padding(
+                        padding: EdgeInsets.only(left: 16),
+                        child: Align(
+                          alignment: Alignment.centerLeft,
+                          child: SizedBox(
+                            height: 20,
+                            child: VerticalDivider(thickness: 2),
+                          ),
+                        ),
+                      ),
+                      _buildStep(context, '3', 'You earn ₹100 wallet credit'),
                     ],
                   ),
                 ),
@@ -222,5 +264,29 @@ class ReferralPage extends ConsumerWidget {
     if (diff.inDays == 1) return 'Yesterday';
     if (diff.inDays < 7) return '${diff.inDays} days ago';
     return '${dt.day}/${dt.month}/${dt.year}';
+  }
+
+  Widget _buildStep(BuildContext context, String step, String text) {
+    final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
+    
+    return Row(
+      children: [
+        Container(
+          width: 32,
+          height: 32,
+          decoration: BoxDecoration(
+            color: cs.primary.withValues(alpha: 0.1),
+            shape: BoxShape.circle,
+          ),
+          alignment: Alignment.center,
+          child: Text(step, style: tt.titleMedium?.copyWith(color: cs.primary, fontWeight: FontWeight.bold)),
+        ),
+        const SizedBox(width: 16),
+        Expanded(
+          child: Text(text, style: tt.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
+        ),
+      ],
+    );
   }
 }

@@ -19,6 +19,7 @@ class AuthUser {
     required this.phone,
     required this.avatarUrl,
     this.cityId,
+    this.referralCode,
   });
 
   final String id;
@@ -28,4 +29,5 @@ class AuthUser {
   final String? phone;
   final String? avatarUrl;
   final String? cityId;
+  final String? referralCode;
 }

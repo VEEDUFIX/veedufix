@@ -357,6 +357,8 @@ class _AddressCard extends StatelessWidget {
   }
 }
 
+
+
 class _StatusPill extends StatelessWidget {
   const _StatusPill({
     required this.label,
@@ -459,7 +461,7 @@ class _SavedAddressEditorSheetState extends State<_SavedAddressEditorSheet> {
     _addressLine1Controller = TextEditingController(text: existing?.addressLine1 ?? '');
     _addressLine2Controller = TextEditingController(text: existing?.addressLine2 ?? '');
     _landmarkController = TextEditingController(text: existing?.landmark ?? '');
-    _cityController = TextEditingController(text: existing?.city ?? '');
+    _cityController = TextEditingController(text: existing?.city ?? 'Chennai');
     _pincodeController = TextEditingController(text: existing?.pincode ?? '');
     _latController = TextEditingController(text: existing?.lat.toString() ?? '');
     _lngController = TextEditingController(text: existing?.lng.toString() ?? '');
@@ -595,12 +597,31 @@ class _SavedAddressEditorSheetState extends State<_SavedAddressEditorSheet> {
                 _InputField(controller: _addressLine1Controller, label: 'Address line 1', validator: _requiredValidator),
                 _InputField(controller: _addressLine2Controller, label: 'Address line 2', optional: true),
                 _InputField(controller: _landmarkController, label: 'Landmark', optional: true),
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Row(
+                    children: [
+                      Icon(Icons.location_city_rounded,
+                          size: 14,
+                          color: Theme.of(context).colorScheme.primary),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          'VeeduFix currently serves Chennai only',
+                          style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                                color: Theme.of(context).colorScheme.primary,
+                                fontWeight: FontWeight.w700,
+                              ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
                 Row(
                   children: [
                     Expanded(
                       child: _InputField(controller: _cityController, label: 'City', validator: _requiredValidator),
                     ),
-                    const SizedBox(width: 12),
                     Expanded(
                       child: _InputField(
                         controller: _pincodeController,
@@ -743,8 +764,12 @@ String? _requiredValidator(String? value) {
 }
 
 String? _pincodeValidator(String? value) {
-  if (value == null || !RegExp(r'^[1-9][0-9]{5}$').hasMatch(value.trim())) {
+  final trimmed = value?.trim() ?? '';
+  if (!RegExp(r'^[1-9][0-9]{5}$').hasMatch(trimmed)) {
     return 'A valid 6-digit pincode is required';
+  }
+  if (!trimmed.startsWith('600')) {
+    return 'VeeduFix currently serves Chennai only (pincodes starting with 600)';
   }
   return null;
 }

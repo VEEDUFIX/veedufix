@@ -57,16 +57,22 @@ class _GenerateQuotePageState extends ConsumerState<GenerateQuotePage> {
     setState(() => _submitting = true);
     try {
       final api = ref.read(apiClientProvider);
+      final total = _total;
       await api.post(
-        '/bookings/${widget.bookingId}/custom-quote',
+        '/bookings/${widget.bookingId}/custom-quote/submit',
         data: {
-          'items': _items.map((i) => {'label': i.label.trim(), 'amount': i.amount}).toList(),
+          'amount': total,
+          'itemized': _items.map((i) => {
+            'label': i.label.trim(),
+            'qty': 1,
+            'unitPrice': i.amount,
+          }).toList(),
           'notes': _notesController.text.trim().isNotEmpty ? _notesController.text.trim() : null,
         },
       );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Quote sent to customer ✅')),
+          const SnackBar(content: Text('Custom quote submitted successfully ✅')),
         );
         Navigator.of(context).pop(true); // pop and signal success
       }

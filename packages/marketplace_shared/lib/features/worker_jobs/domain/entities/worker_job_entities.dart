@@ -18,6 +18,7 @@ class WorkerJob {
     // For incoming jobs only:
     this.offerId,
     this.expiresAt,
+    this.customQuoteStatus,
   });
 
   final String bookingId;
@@ -37,6 +38,7 @@ class WorkerJob {
   final String? customerAvatarUrl;
   final String? offerId;
   final DateTime? expiresAt;
+  final String? customQuoteStatus;
 
   factory WorkerJob.fromJson(Map<String, dynamic> json) => WorkerJob(
         bookingId: json['bookingId'] as String? ?? '',
@@ -67,6 +69,7 @@ class WorkerJob {
         expiresAt: json['expiresAt'] != null
             ? DateTime.tryParse(json['expiresAt'] as String)
             : null,
+        customQuoteStatus: json['customQuoteStatus'] as String?,
       );
 }
 

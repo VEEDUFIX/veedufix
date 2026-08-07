@@ -6,6 +6,7 @@ import 'package:marketplace_shared/marketplace_shared.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../data/worker_job_providers.dart';
+import 'generate_quote_page.dart';
 
 class JobsPage extends ConsumerStatefulWidget {
   const JobsPage({super.key});
@@ -411,6 +412,24 @@ class _JobCard extends ConsumerWidget {
                                     ),
                               ),
                             ),
+                            if (job.customQuoteStatus == 'REQUESTED') ...[
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFF97316).withValues(alpha: 0.15),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: const Text(
+                                  'Quote Requested',
+                                  style: TextStyle(
+                                    color: Color(0xFFF97316),
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 11,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                            ],
                             _StatusChip(label: job.code, accent: accent),
                           ],
                         ),
@@ -523,14 +542,39 @@ class _JobCard extends ConsumerWidget {
                   ),
                 )
               else if (tab == 'active')
-                SizedBox(
-                  width: double.infinity,
-                  child: FilledButton(
-                    onPressed: () {
-                      context.push('/job-execution?bookingId=${job.bookingId}');
-                    },
-                    child: const Text('Continue Job'),
-                  ),
+                Column(
+                  children: [
+                    if (job.customQuoteStatus == 'REQUESTED') ...[
+                      SizedBox(
+                        width: double.infinity,
+                        child: FilledButton.icon(
+                          onPressed: () {
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => GenerateQuotePage(bookingId: job.bookingId),
+                              ),
+                            );
+                          },
+                          icon: const Icon(Icons.request_quote_rounded),
+                          label: const Text('Generate Quote'),
+                          style: FilledButton.styleFrom(
+                            backgroundColor: const Color(0xFFF97316),
+                            foregroundColor: Colors.white,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                    ],
+                    SizedBox(
+                      width: double.infinity,
+                      child: FilledButton(
+                        onPressed: () {
+                          context.push('/job-execution?bookingId=${job.bookingId}');
+                        },
+                        child: const Text('Continue Job'),
+                      ),
+                    ),
+                  ],
                 )
               else if (tab == 'completed')
                 Row(

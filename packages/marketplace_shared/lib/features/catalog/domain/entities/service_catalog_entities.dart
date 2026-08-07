@@ -338,6 +338,7 @@ class CatalogService {
     this.gstApplicable = true,
     this.emergencyAvailable = false,
     this.homeVisit = true,
+    this.requiresSiteVisit = false,
     this.isActive = true,
     this.featured = false,
     this.popular = false,
@@ -375,6 +376,7 @@ class CatalogService {
   final bool gstApplicable;
   final bool emergencyAvailable;
   final bool homeVisit;
+  final bool requiresSiteVisit;
   final bool isActive;
   final bool featured;
   final bool popular;
@@ -413,6 +415,7 @@ class CatalogService {
       gstApplicable: json['gstApplicable'] as bool? ?? true,
       emergencyAvailable: json['emergencyAvailable'] as bool? ?? false,
       homeVisit: json['homeVisit'] as bool? ?? true,
+      requiresSiteVisit: json['requiresSiteVisit'] as bool? ?? false,
       isActive: json['isActive'] as bool? ?? true,
       featured: json['featured'] as bool? ?? false,
       popular: json['popular'] as bool? ?? false,
@@ -436,8 +439,8 @@ class CatalogService {
       requiredTools: _decodeList(json['requiredTools'], CatalogServiceRequirement.fromJson),
       requiredDocuments: _decodeList(json['requiredDocuments'], CatalogServiceRequirement.fromJson),
       pricingRules: _decodeList(json['pricingRules'], CatalogPriceRule.fromJson),
-      inclusions: (json['inclusions'] as List<dynamic>?)?.cast<String>() ?? const [],
-      exclusions: (json['exclusions'] as List<dynamic>?)?.cast<String>() ?? const [],
+      inclusions: (json['inclusions'] as List<dynamic>? ?? []).map((e) => e as String).toList(),
+      exclusions: (json['exclusions'] as List<dynamic>? ?? []).map((e) => e as String).toList(),
     );
   }
 
@@ -457,6 +460,7 @@ class CatalogService {
       'gstApplicable': gstApplicable,
       'emergencyAvailable': emergencyAvailable,
       'homeVisit': homeVisit,
+      'requiresSiteVisit': requiresSiteVisit,
       'isActive': isActive,
       'featured': featured,
       'popular': popular,

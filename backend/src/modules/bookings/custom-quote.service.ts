@@ -1,152 +1,76 @@
-import { prisma } from "../../lib/prisma.js";
-import { AppError } from "../../lib/app-error.js";
-import { logger } from "../../lib/logger.js";
-import { sendMulticastPush } from "../../lib/fcm.js";
+import { prisma } from '../../lib/prisma.js';
+import { AppError } from '../../lib/app-error.js';
 
-// ── Types ────────────────────────────────────────────────────────────────────
-
-export interface QuoteLineItem {
-  label: string;
-  amount: number;
+// Customer requests a custom quote for an existing booking
+export async function requestCustomQuote(bookingId: string, customerId: string, notes?: string) {
+  const booking = await prisma.booking.findUnique({ where: { id: bookingId } });
+  if (!booking) throw AppError.notFound('Booking not found');
+  if (booking.customerId !== customerId) throw AppError.forbidden('Not your booking');
+  if (booking.customQuoteStatus && booking.customQuoteStatus !== 'DECLINED') {
+    throw AppError.conflict('A custom quote is already in progress for this booking');
+  }
+  return prisma.booking.update({
+    where: { id: bookingId },
+    data: { customQuoteStatus: 'REQUESTED', customQuoteNotes: notes ?? null }
+  });
 }
 
-// ── Worker: Submit custom quote after site visit ─────────────────────────────
-
+// Admin/worker submits a quote price
 export async function submitCustomQuote(
-  workerId: string,
   bookingId: string,
-  items: QuoteLineItem[],
-  notes?: string
-): Promise<void> {
-  const booking = await prisma.booking.findUnique({
-    where: { id: bookingId },
-    include: {
-      worker: true,
-      customer: { select: { id: true, name: true } }
-    }
-  });
-
-  if (!booking) throw AppError.notFound("Booking not found");
-
-  // Ensure this worker is assigned to the booking
-  if (booking.worker?.userId !== workerId) {
-    throw AppError.forbidden("You are not assigned to this booking");
+  submitterId: string,
+  amount: number,
+  notes?: string,
+  itemized?: Array<{ label: string; qty: number; unitPrice: number }>
+) {
+  const booking = await prisma.booking.findUnique({ where: { id: bookingId } });
+  if (!booking) throw AppError.notFound('Booking not found');
+  if (booking.customQuoteStatus !== 'REQUESTED') {
+    throw AppError.conflict('Booking does not have an active custom quote request');
   }
-
-  // Only site-visit bookings can have a custom quote submitted
-  if (booking.customQuoteStatus === "ACCEPTED") {
-    throw AppError.conflict("A quote has already been accepted for this booking");
-  }
-
-  const totalAmount = items.reduce((sum, item) => sum + item.amount, 0);
-
-  await prisma.booking.update({
+  return prisma.booking.update({
     where: { id: bookingId },
     data: {
-      customQuoteAmount: totalAmount,
-      customQuoteItemized: items,
+      customQuoteStatus: 'SUBMITTED',
+      customQuoteAmount: amount,
       customQuoteNotes: notes ?? null,
-      customQuoteStatus: "PENDING"
+      customQuoteItemized: itemized ?? null
     }
   });
-
-  // Push notification to customer
-  try {
-    const deviceTokens = await prisma.deviceToken.findMany({
-      where: { userId: booking.customerId },
-      select: { token: true }
-    });
-    const tokens = deviceTokens.map((d) => d.token);
-    if (tokens.length > 0) {
-      await sendMulticastPush({
-        tokens,
-        title: "Quote Received! 📋",
-        body: `Worker has submitted a custom quote of ₹${totalAmount.toFixed(2)} for your booking.`,
-        data: { type: "CUSTOM_QUOTE_RECEIVED", bookingId }
-      });
-    }
-  } catch (err) {
-    logger.warn({ err, bookingId }, "submitCustomQuote: failed to send push notification");
-  }
-
-  logger.info({ bookingId, workerId, totalAmount }, "Custom quote submitted");
 }
 
-// ── Customer: Accept a custom quote ──────────────────────────────────────────
-
-export async function acceptCustomQuote(
-  customerId: string,
-  bookingId: string
-): Promise<{ quoteAmount: number }> {
-  const booking = await prisma.booking.findUnique({
+// Customer accepts or declines a submitted quote
+export async function respondToCustomQuote(bookingId: string, customerId: string, accept: boolean) {
+  const booking = await prisma.booking.findUnique({ where: { id: bookingId } });
+  if (!booking) throw AppError.notFound('Booking not found');
+  if (booking.customerId !== customerId) throw AppError.forbidden('Not your booking');
+  if (booking.customQuoteStatus !== 'SUBMITTED') {
+    throw AppError.conflict('No submitted quote to respond to');
+  }
+  const newStatus = accept ? 'ACCEPTED' : 'DECLINED';
+  return prisma.booking.update({
     where: { id: bookingId },
-    include: { worker: { include: { user: true } } }
+    data: { customQuoteStatus: newStatus }
   });
-
-  if (!booking) throw AppError.notFound("Booking not found");
-  if (booking.customerId !== customerId) throw AppError.forbidden("Access denied");
-  if (booking.customQuoteStatus !== "PENDING") {
-    throw AppError.conflict("No pending quote to accept");
-  }
-  if (!booking.customQuoteAmount) {
-    throw AppError.conflict("Quote amount is missing");
-  }
-
-  const quoteAmount = Number(booking.customQuoteAmount);
-
-  await prisma.booking.update({
-    where: { id: bookingId },
-    data: {
-      customQuoteStatus: "ACCEPTED",
-      totalAmount: quoteAmount
-    }
-  });
-
-  // Notify worker
-  try {
-    if (booking.worker) {
-      const deviceTokens = await prisma.deviceToken.findMany({
-        where: { userId: booking.worker.userId },
-        select: { token: true }
-      });
-      const tokens = deviceTokens.map((d) => d.token);
-      if (tokens.length > 0) {
-        await sendMulticastPush({
-          tokens,
-          title: "Quote Accepted! ✅",
-          body: `Customer has accepted your custom quote of ₹${booking.customQuoteAmount?.toFixed(2) || '0.00'}.`,
-          data: { type: "CUSTOM_QUOTE_ACCEPTED", bookingId }
-        });
-      }
-    }
-  } catch (err) {
-    logger.warn({ err, bookingId }, "acceptCustomQuote: failed to send push notification");
-  }
-
-  logger.info({ bookingId, customerId, quoteAmount }, "Custom quote accepted");
-  return { quoteAmount };
 }
 
-// ── Customer: Reject a custom quote ──────────────────────────────────────────
-
-export async function rejectCustomQuote(
-  customerId: string,
-  bookingId: string
-): Promise<void> {
+// Get custom quote details for a booking
+export async function getCustomQuote(bookingId: string, userId: string) {
   const booking = await prisma.booking.findUnique({
-    where: { id: bookingId }
-  });
-
-  if (!booking) throw AppError.notFound("Booking not found");
-  if (booking.customerId !== customerId) throw AppError.forbidden("Access denied");
-  if (booking.customQuoteStatus !== "PENDING") {
-    throw AppError.conflict("No pending quote to reject");
-  }
-
-  await prisma.booking.update({
     where: { id: bookingId },
-    data: { customQuoteStatus: "REJECTED" }
+    select: {
+      id: true,
+      customerId: true,
+      workerId: true,
+      customQuoteStatus: true,
+      customQuoteAmount: true,
+      customQuoteNotes: true,
+      customQuoteItemized: true
+    }
   });
-
-  logger.info({ bookingId, customerId }, "Custom quote rejected");
+  if (!booking) throw AppError.notFound('Booking not found');
+  if (booking.customerId !== userId && booking.workerId !== userId) {
+    throw AppError.forbidden('Access denied');
+  }
+  return booking;
 }

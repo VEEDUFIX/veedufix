@@ -59,6 +59,7 @@ final adminBookingsProvider = FutureProvider.autoDispose
     queryParameters: {
       if (filter.status.isNotEmpty) 'status': filter.status,
       if (filter.search.isNotEmpty) 'search': filter.search,
+      if (filter.customQuoteRequested) 'customQuoteRequested': 'true',
     },
   );
   return (data['bookings'] as List<dynamic>? ?? [])
@@ -67,16 +68,17 @@ final adminBookingsProvider = FutureProvider.autoDispose
 });
 
 class _BookingFilter {
-  const _BookingFilter({this.status = '', this.search = ''});
+  const _BookingFilter({this.status = '', this.search = '', this.customQuoteRequested = false});
   final String status;
   final String search;
+  final bool customQuoteRequested;
 
   @override
   bool operator ==(Object other) =>
-      other is _BookingFilter && other.status == status && other.search == search;
+      other is _BookingFilter && other.status == status && other.search == search && other.customQuoteRequested == customQuoteRequested;
 
   @override
-  int get hashCode => Object.hash(status, search);
+  int get hashCode => Object.hash(status, search, customQuoteRequested);
 }
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
@@ -94,6 +96,7 @@ class _BookingManagementPageState extends ConsumerState<BookingManagementPage>
     with SingleTickerProviderStateMixin {
   final _searchController = TextEditingController();
   String _search = '';
+  bool _customQuoteRequested = false;
   late TabController _tabController;
 
   static const _tabs = [
@@ -128,7 +131,7 @@ class _BookingManagementPageState extends ConsumerState<BookingManagementPage>
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final tt = Theme.of(context).textTheme;
-    final filter = _BookingFilter(status: _currentStatus, search: _search);
+    final filter = _BookingFilter(status: _currentStatus, search: _search, customQuoteRequested: _customQuoteRequested);
     final bookingsAsync = ref.watch(adminBookingsProvider(filter));
 
     return Scaffold(
@@ -187,6 +190,20 @@ class _BookingManagementPageState extends ConsumerState<BookingManagementPage>
               onChanged: (v) => setState(() => _search = v),
             ),
           ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 0),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: FilterChip(
+                label: const Text('Needs Quote'),
+                selected: _customQuoteRequested,
+                onSelected: (val) => setState(() => _customQuoteRequested = val),
+                selectedColor: Colors.orange.withValues(alpha: 0.2),
+                checkmarkColor: Colors.orange,
+              ),
+            ),
+          ),
+          const SizedBox(height: 10),
 
           // ── List ────────────────────────────────────────────────────
           Expanded(

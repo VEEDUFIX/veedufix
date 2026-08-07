@@ -6,7 +6,6 @@ import { publishNotificationEvent } from "../../lib/realtime.js";
 import { getTokensForUser } from "../device-token/device-token.service.js";
 import { sendPushNotification } from "../../config/firebase-admin.js";
 import { validateChecklistCompletion } from "../checklist/checklist.service.js";
-import { releaseWorkerPayout } from "../payout/payout.service.js";
 import { isWorkerEligible } from "../worker-onboarding/worker-onboarding.service.js";
 import { recordBookingTimelineEvent } from "../../lib/booking-timeline.js";
 import { AppError } from "../../lib/app-error.js";
@@ -476,10 +475,8 @@ export async function verifyCompletionOtp(
     bookingId,
     status: BookingStatus.COMPLETED,
     title: "Job completed",
-    description: "The service has been completed."
+    description: "The service has been completed. Payment will be released to the worker in 48 hours if no dispute is raised."
   });
-
-  await releaseWorkerPayout(bookingId);
 
   await notifyCustomer(booking.customerId, "rating_requested", {
     bookingId

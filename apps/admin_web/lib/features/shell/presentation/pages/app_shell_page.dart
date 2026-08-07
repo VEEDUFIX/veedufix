@@ -416,6 +416,7 @@ class _AppShellPageState extends ConsumerState<AppShellPage> {
       _QuickAction('Global Search', '/search', Icons.search_rounded),
       _QuickAction('Dashboard', '/admin', Icons.space_dashboard_rounded),
       _QuickAction('Alerts', '/ops/alerts', Icons.warning_rounded),
+      _QuickAction('Disputes', '/ops/disputes', Icons.gavel_rounded),
       _QuickAction(
           'Support Tickets', '/support-tickets', Icons.support_agent_rounded),
       _QuickAction('Worker Review', '/worker-review', Icons.how_to_reg_rounded),

@@ -77,6 +77,7 @@ type ServicePricingRecord = {
   gstRate: Prisma.Decimal;
   sacCode: string | null;
   gstApplicable: boolean;
+  requiresSiteVisit: boolean;
   subcategory: {
     id: string;
     name: string;
@@ -239,6 +240,10 @@ async function resolveCustomerContext(
     throw AppError.badRequest("Please add a valid saved address before placing a booking");
   }
 
+  if (!address.pincode.startsWith('600')) {
+    throw AppError.badRequest('We currently serve only Chennai (pincodes starting with 600)');
+  }
+
   await assertServiceablePincode({
     pincode: address.pincode,
     cityId: bookingCity.id
@@ -310,15 +315,19 @@ async function resolveBookingItems(input: {
       throw AppError.badRequest("Quantity must be a positive integer");
     }
 
-    const unitPrice = resolveServiceUnitPrice(service, input.cityId, at);
-    const totalPrice = roundMoney(unitPrice.mul(quantity));
+    const resolvedUnitPrice = resolveServiceUnitPrice(service, input.cityId, at);
+
+    // Site visit: Admin controls whether this is ₹0 or has a charge via startingPrice
+    const effectiveUnitPrice = resolvedUnitPrice;
+
+    const totalPrice = roundMoney(effectiveUnitPrice.mul(quantity));
 
     return {
       serviceId: service.id,
       serviceName: service.name,
       serviceSubcategoryId: service.subcategory.id,
       quantity,
-      unitPrice: roundMoney(unitPrice),
+      unitPrice: roundMoney(effectiveUnitPrice),
       totalPrice,
       gstRate: service.gstApplicable ? roundMoney(service.gstRate) : new Prisma.Decimal(0),
       sacCode: service.sacCode?.trim() || "PENDING",

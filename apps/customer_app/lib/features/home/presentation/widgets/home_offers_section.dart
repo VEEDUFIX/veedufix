@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import '../../../../core/widgets/metallic_card.dart';
 
 class HomeOffersSection extends StatelessWidget {
@@ -17,11 +18,12 @@ class HomeOffersSection extends StatelessWidget {
           baseColor: colorScheme.primary,
         ),
         const SizedBox(height: 12),
-        const MetallicCard(
+        MetallicCard(
           title: 'Referral rewards',
           subtitle: 'Invite friends and earn credits on your next booking.',
           icon: Icons.card_giftcard_rounded,
-          baseColor: Color(0xFF10B981),
+          baseColor: const Color(0xFF10B981),
+          onTap: () => context.push('/referral'),
         ),
       ],
     );

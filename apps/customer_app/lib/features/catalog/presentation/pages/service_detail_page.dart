@@ -216,6 +216,32 @@ class _ServiceDetailView extends ConsumerWidget {
                         _MetaChip(icon: Icons.shield_rounded, label: '${service.warrantyDays} day warranty'),
                     ],
                   ),
+                  if (service.requiresSiteVisit)
+                    Container(
+                      margin: const EdgeInsets.only(top: 12),
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF0D9488).withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: const Color(0xFF0D9488).withValues(alpha: 0.3)),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.home_repair_service_rounded,
+                              size: 16, color: Color(0xFF0D9488)),
+                          const SizedBox(width: 8),
+                          Text(
+                            price > 0 ? 'Site Visit Required — we assess before you pay' : 'Free Site Visit — we assess before you pay',
+                            style: const TextStyle(
+                              color: Color(0xFF0D9488),
+                              fontWeight: FontWeight.w700,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   const SizedBox(height: 24),
                   _SectionHeader(
                     title: 'About this service',

@@ -9,12 +9,14 @@ class MetallicCard extends StatefulWidget {
     required this.subtitle,
     required this.icon,
     this.baseColor = const Color(0xFF1E293B),
+    this.onTap,
   });
 
   final String title;
   final String subtitle;
   final IconData icon;
   final Color baseColor;
+  final VoidCallback? onTap;
 
   @override
   State<MetallicCard> createState() => _MetallicCardState();
@@ -50,8 +52,10 @@ class _MetallicCardState extends State<MetallicCard> {
     final beginAlign = Alignment(-1.0 - _tiltX, -1.0 - _tiltY);
     final endAlign = Alignment(1.0 - _tiltX, 1.0 - _tiltY);
 
-    return Container(
-      decoration: BoxDecoration(
+    return GestureDetector(
+      onTap: widget.onTap,
+      child: Container(
+        decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(24),
         boxShadow: [
           BoxShadow(
@@ -111,6 +115,7 @@ class _MetallicCardState extends State<MetallicCard> {
           ],
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 }
