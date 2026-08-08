@@ -11,7 +11,7 @@ import { releaseWorkerPayout } from "../payout/payout.service.js";
 
 const GRACE_PERIOD_MS = 48 * 60 * 60 * 1000; // 48 hours
 
-async function releaseEligiblePayouts(): Promise<void> {
+export async function releaseEligiblePayouts(): Promise<void> {
   const cutoff = new Date(Date.now() - GRACE_PERIOD_MS);
 
   // Find completed bookings older than 48h with no payout yet released

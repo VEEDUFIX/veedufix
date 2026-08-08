@@ -362,11 +362,11 @@ async function createPendingPayoutRecord(bookingId: string) {
   });
 
   if (!booking) {
-    throw new Error("Booking not found");
+    throw AppError.notFound("Booking not found");
   }
 
   if (!booking.workerId || !booking.worker) {
-    throw new Error("Assigned worker not found for booking");
+    throw AppError.notFound("Assigned worker not found for booking");
   }
 
   const totalAmount = toNumber(booking.totalAmount);
@@ -441,16 +441,21 @@ export async function releaseWorkerPayout(bookingId: string): Promise<void> {
 export async function retryPayout(payoutId: string) {
   const payout = await getPayoutById(payoutId);
   if (!payout) {
-    throw new Error("Payout not found");
+    throw AppError.notFound("Payout not found");
   }
 
   if (payout.status !== "failed") {
-    throw new Error("Only failed payouts can be retried");
+    throw AppError.badRequest("Only failed payouts can be retried");
+  }
+
+  // Only allow retry within 7 days of original creation
+  if (Date.now() - payout.createdAt.getTime() > 7 * 24 * 60 * 60 * 1000) {
+    throw AppError.badRequest("Payout is no longer retryable");
   }
 
   const updated = await claimRetryablePayout(payoutId);
   if (!updated) {
-    throw new Error("Payout is no longer retryable");
+    throw AppError.badRequest("Payout is no longer retryable");
   }
 
   await attemptPayout(updated);

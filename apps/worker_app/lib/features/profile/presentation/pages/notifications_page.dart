@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:marketplace_shared/marketplace_shared.dart';
 
+import '../providers/notifications_providers.dart';
+
 class NotificationsPage extends ConsumerWidget {
   const NotificationsPage({super.key});
 
@@ -133,7 +135,7 @@ class _NotificationList extends StatelessWidget {
 
 Future<void> _markAllNotificationsRead(BuildContext context, WidgetRef ref) async {
   try {
-    await ref.read(apiClientProvider).post('/notifications/mark-all-read');
+    await ref.read(notificationsRepositoryProvider).markAllAsRead();
     ref.invalidate(notificationsProvider);
     ref.invalidate(notificationsUnreadCountProvider);
   } catch (_) {
@@ -148,7 +150,7 @@ Future<void> _markAllNotificationsRead(BuildContext context, WidgetRef ref) asyn
 
 Future<void> _markNotificationRead(WidgetRef ref, String notificationId) async {
   try {
-    await ref.read(apiClientProvider).patch('/notifications/$notificationId/read');
+    await ref.read(notificationsRepositoryProvider).markAsRead(notificationId);
     ref.invalidate(notificationsProvider);
     ref.invalidate(notificationsUnreadCountProvider);
   } catch (_) {

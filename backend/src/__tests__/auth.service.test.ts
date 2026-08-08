@@ -76,6 +76,7 @@ const mockUser = {
   email: null,
   phone: '+919876543210',
   avatarUrl: null,
+  createdAt: new Date(),
 };
 
 // ─── requestOtp ───────────────────────────────────────────────────────────────

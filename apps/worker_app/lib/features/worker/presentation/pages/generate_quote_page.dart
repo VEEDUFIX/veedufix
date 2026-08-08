@@ -3,6 +3,9 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:marketplace_shared/marketplace_shared.dart';
 
+import '../../domain/entities/job_execution.dart';
+import '../../data/worker_job_providers.dart';
+
 // ── Model ────────────────────────────────────────────────────────────────────
 
 class _QuoteItem {
@@ -56,20 +59,18 @@ class _GenerateQuotePageState extends ConsumerState<GenerateQuotePage> {
 
     setState(() => _submitting = true);
     try {
-      final api = ref.read(apiClientProvider);
+      final repo = ref.read(workerJobRepositoryProvider);
       final total = _total;
-      await api.post(
-        '/bookings/${widget.bookingId}/custom-quote/submit',
-        data: {
-          'amount': total,
-          'itemized': _items.map((i) => {
-            'label': i.label.trim(),
-            'qty': 1,
-            'unitPrice': i.amount,
-          }).toList(),
-          'notes': _notesController.text.trim().isNotEmpty ? _notesController.text.trim() : null,
-        },
+      final payload = QuotePayload(
+        amount: total,
+        itemized: _items.map((i) => QuoteItem(
+          label: i.label.trim(),
+          qty: 1,
+          unitPrice: i.amount,
+        )).toList(),
+        notes: _notesController.text.trim().isNotEmpty ? _notesController.text.trim() : null,
       );
+      await repo.generateQuote(widget.bookingId, payload.toJson());
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Custom quote submitted successfully ✅')),

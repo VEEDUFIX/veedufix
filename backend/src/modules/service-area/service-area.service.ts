@@ -1,5 +1,6 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "../../lib/prisma.js";
+import { AppError } from "../../lib/app-error.js";
 
 export type ServiceAreaMatch = {
   id: string;
@@ -119,7 +120,7 @@ export async function assertServiceablePincode(input: {
 }): Promise<ServiceAreaMatch> {
   const area = await findServiceableArea(input);
   if (!area) {
-    throw new Error(ACTIVE_AREA_MESSAGE);
+    throw AppError.badRequest(ACTIVE_AREA_MESSAGE);
   }
   return area;
 }

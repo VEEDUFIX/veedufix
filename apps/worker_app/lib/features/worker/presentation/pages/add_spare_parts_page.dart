@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:marketplace_shared/marketplace_shared.dart';
+
+import '../../domain/entities/job_execution.dart';
+import '../../data/worker_job_providers.dart';
 
 /// Page where a worker can add spare parts used during a job.
 /// Each line item has a label and a price. An optional receipt photo URL
@@ -50,15 +52,16 @@ class _AddSparePartsPageState extends ConsumerState<AddSparePartsPage> {
 
     setState(() => _submitting = true);
     try {
-      final api = ref.read(apiClientProvider);
-      final payload = {
-        'items': _items
-            .map((i) => {'label': i.label.text.trim(), 'amount': i.amount})
+      final repo = ref.read(workerJobRepositoryProvider);
+      final payload = SparePartsPayload(
+        items: _items
+            .map((i) => SparePartItem(label: i.label.text.trim(), amount: i.amount!))
             .toList(),
-        if (_receiptUrlController.text.trim().isNotEmpty)
-          'receiptPhotoUrl': _receiptUrlController.text.trim(),
-      };
-      await api.post('/bookings/${widget.bookingId}/spare-parts', data: payload);
+        receiptPhotoUrl: _receiptUrlController.text.trim().isNotEmpty 
+            ? _receiptUrlController.text.trim() 
+            : null,
+      );
+      await repo.addSpareParts(widget.bookingId, payload.toJson());
       if (mounted) Navigator.of(context).pop(true);
     } catch (e) {
       if (mounted) {

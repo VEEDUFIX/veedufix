@@ -1,4 +1,5 @@
 import { prisma as db } from "../../lib/prisma.js";
+import { AppError } from "../../lib/app-error.js";
 
 export async function submitReview(data: {
   bookingId: string;
@@ -12,15 +13,15 @@ export async function submitReview(data: {
   });
 
   if (!booking) {
-    throw new Error("Booking not found");
+    throw AppError.notFound("Booking not found");
   }
 
   if (booking.customerId !== data.reviewerId) {
-    throw new Error("Unauthorized");
+    throw AppError.unauthorized("Unauthorized");
   }
 
   if (!booking.workerId) {
-    throw new Error("Booking has no worker assigned");
+    throw AppError.notFound("Booking has no worker assigned");
   }
 
   // Check if review already exists
@@ -29,7 +30,7 @@ export async function submitReview(data: {
   });
 
   if (existing) {
-    throw new Error("Review already submitted for this booking");
+    throw AppError.conflict("Review already submitted for this booking");
   }
 
   const review = await db.review.create({

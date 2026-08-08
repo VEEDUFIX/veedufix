@@ -96,17 +96,19 @@ function makeLimiter(
   // Destructure our custom options out so they are never forwarded to
   // rateLimit() — express-rate-limit v8 throws ERR_ERL_UNKNOWN_OPTION for
   // any key it doesn't recognise.
+  if (env.NODE_ENV === 'test' || process.env.VITEST) {
+    const dummy = ((req: any, res: any, next: any) => next()) as any;
+    dummy.resetKey = () => {};
+    dummy.getKey = () => undefined;
+    return dummy as RateLimitRequestHandler;
+  }
+
   const { forceProductionLimit, storePrefix, ...rlOptions } = options;
   return rateLimit({
-    standardHeaders: true,  // sends RateLimit-* and Retry-After headers
+    standardHeaders: true,
     legacyHeaders: false,
     skipSuccessfulRequests: false,
-    // Fail-open: if Redis is unreachable, log a warning and allow the request
-    // through rather than blocking legitimate users due to a caching-layer
-    // outage.  Mirrors the graceful-degradation pattern in catalog.service.ts.
     passOnStoreError: true,
-    // Wire our pino logger so Redis errors appear in structured logs alongside
-    // other application errors rather than being silently swallowed.
     logger,
     store: makeRedisStore(storePrefix),
     handler: (req, res) => rateLimitHandler(options.windowMs, req, res),

@@ -75,39 +75,43 @@ class HomePage extends ConsumerWidget {
                   subtitle: 'The most requested services in your area.',
                 ),
                 const SizedBox(height: 12),
-                SizedBox(
-                  height: 112,
-                  child: catalogAsync.isLoading
-                      ? ListView.separated(
-                          scrollDirection: Axis.horizontal,
-                          itemCount: 4,
-                          separatorBuilder: (_, __) => const SizedBox(width: 12),
-                          itemBuilder: (context, index) => const Column(
-                            children: [
-                              ShimmerPlaceholder(
-                                  width: 72, height: 72, borderRadius: 28),
-                              SizedBox(height: 10),
-                              ShimmerPlaceholder(
-                                  width: 60, height: 12, borderRadius: 6),
-                            ],
-                          ),
-                        )
-                      : catalogCategories.isNotEmpty
-                          ? ListView.separated(
-                              scrollDirection: Axis.horizontal,
-                              itemCount: catalogCategories.length,
-                              separatorBuilder: (_, __) =>
-                                  const SizedBox(width: 12),
-                              itemBuilder: (context, index) =>
-                                  CategoryChip(category: catalogCategories[index]),
-                            )
-                          : const PremiumEmptyState(
-                              icon: Icons.category_rounded,
-                              title: 'No featured categories right now',
-                              subtitle:
-                                  'Check back soon for fresh service groups in your area.',
-                            ),
-                ),
+                if (catalogAsync.isLoading)
+                  SizedBox(
+                    height: 124,
+                    child: ListView.separated(
+                      scrollDirection: Axis.horizontal,
+                      itemCount: 4,
+                      separatorBuilder: (_, __) => const SizedBox(width: 12),
+                      itemBuilder: (context, index) => const Column(
+                        children: [
+                          ShimmerPlaceholder(
+                              width: 72, height: 72, borderRadius: 28),
+                          SizedBox(height: 10),
+                          ShimmerPlaceholder(
+                              width: 60, height: 12, borderRadius: 6),
+                        ],
+                      ),
+                    ),
+                  )
+                else if (catalogCategories.isNotEmpty)
+                  SizedBox(
+                    height: 124,
+                    child: ListView.separated(
+                      scrollDirection: Axis.horizontal,
+                      itemCount: catalogCategories.length,
+                      separatorBuilder: (_, __) =>
+                          const SizedBox(width: 12),
+                      itemBuilder: (context, index) =>
+                          CategoryChip(category: catalogCategories[index]),
+                    ),
+                  )
+                else
+                  const PremiumEmptyState(
+                    icon: Icons.category_rounded,
+                    title: 'No featured categories right now',
+                    subtitle:
+                        'Check back soon for fresh service groups in your area.',
+                  ),
                 if (catalogSubcategories.isNotEmpty) ...[
                   const SizedBox(height: 20),
                   const HomeSectionLabel(
@@ -188,7 +192,7 @@ class HomePage extends ConsumerWidget {
                 ),
                 const SizedBox(height: 12),
                 SizedBox(
-                  height: 238,
+                  height: 280,
                   child: professionalsAsync.isLoading
                       ? ListView.separated(
                           scrollDirection: Axis.horizontal,

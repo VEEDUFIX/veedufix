@@ -1,55 +1,10 @@
-import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:marketplace_shared/marketplace_shared.dart';
 
-final workerEditProfileProvider = FutureProvider.autoDispose<Map<String, dynamic>>((ref) async {
-  final api = ref.watch(apiClientProvider);
-  return api.get('/users/me/worker/profile');
-});
-
-final workerPublicProfileProvider = FutureProvider.autoDispose.family<WorkerPublicProfile, String>((ref, workerId) async {
-  final api = ref.watch(apiClientProvider);
-  final response = await api.get('/users/workers/$workerId/profile');
-  return WorkerPublicProfile.fromJson(response['profile'] as Map<String, dynamic>);
-});
-
-final workerSkillCategoriesProvider = FutureProvider.autoDispose<List<CatalogCategory>>((ref) async {
-  final api = ref.watch(apiClientProvider);
-  final response = await api.get('/catalog');
-  final categories = response['categories'];
-  if (categories is! List) {
-    return const [];
-  }
-
-  return categories
-      .whereType<Map<String, dynamic>>()
-      .map(CatalogCategory.fromJson)
-      .toList(growable: false);
-});
-
-final workerProfileUpdateProvider =
-    StateNotifierProvider<_WorkerProfileUpdateNotifier, AsyncValue<void>>(
-  (ref) => _WorkerProfileUpdateNotifier(ref),
-);
-
-class _WorkerProfileUpdateNotifier extends StateNotifier<AsyncValue<void>> {
-  _WorkerProfileUpdateNotifier(this._ref) : super(const AsyncValue.data(null));
-  final Ref _ref;
-
-  Future<void> update(Map<String, dynamic> data) async {
-    state = const AsyncValue.loading();
-    try {
-      await _ref.read(apiClientProvider).patch('/users/me/worker/profile', data: data);
-      state = const AsyncValue.data(null);
-      _ref.invalidate(workerEditProfileProvider);
-    } catch (error, stackTrace) {
-      state = AsyncValue.error(error, stackTrace);
-    }
-  }
-}
+import '../providers/worker_profile_providers.dart';
 
 class WorkerProfileEditPage extends ConsumerStatefulWidget {
   const WorkerProfileEditPage({super.key});
@@ -410,17 +365,8 @@ class _WorkerProfileEditPageState extends ConsumerState<WorkerProfileEditPage> {
     }
 
     try {
-      final api = ref.read(apiClientProvider);
-      final response = await api.dio.post<Map<String, dynamic>>(
-        '/media/avatar',
-        data: FormData.fromMap({
-          'file': await MultipartFile.fromFile(image.path, filename: image.name),
-        }),
-        options: Options(contentType: Headers.multipartFormDataContentType),
-      );
-
-      final data = response.data ?? <String, dynamic>{};
-      final avatarUrl = data['avatarUrl'] as String?;
+      final repo = ref.read(workerProfileRepositoryProvider);
+      final avatarUrl = await repo.uploadAvatar(image.path, image.name);
       if (avatarUrl != null && avatarUrl.isNotEmpty) {
         if (!mounted) {
           return;
@@ -456,14 +402,8 @@ class _WorkerProfileEditPageState extends ConsumerState<WorkerProfileEditPage> {
     }
 
     try {
-      final api = ref.read(apiClientProvider);
-      await api.dio.post<Map<String, dynamic>>(
-        '/media/workers/portfolio',
-        data: FormData.fromMap({
-          'file': await MultipartFile.fromFile(image.path, filename: image.name),
-        }),
-        options: Options(contentType: Headers.multipartFormDataContentType),
-      );
+      final repo = ref.read(workerProfileRepositoryProvider);
+      await repo.uploadPortfolioPhoto(image.path, image.name);
 
       ref.invalidate(workerEditProfileProvider);
       ref.invalidate(workerPublicProfileProvider(workerId));
@@ -571,11 +511,9 @@ class _WorkerProfileEditPageState extends ConsumerState<WorkerProfileEditPage> {
     }
 
     try {
-      final api = ref.read(apiClientProvider);
-      await api.post(
-        '/worker/onboarding/skills',
-        data: {'categoryId': chosen.id},
-      );
+      final repo = ref.read(workerProfileRepositoryProvider);
+      await repo.addSkill(chosen.id);
+      
       ref.invalidate(workerEditProfileProvider);
       ref.invalidate(workerPublicProfileProvider(workerId));
       if (!context.mounted) {

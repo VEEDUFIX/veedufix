@@ -1,5 +1,6 @@
 import { v2 as cloudinary } from "cloudinary";
 import { prisma } from "../../lib/prisma.js";
+import { AppError } from "../../lib/app-error.js";
 import { env } from "../../config/env.js";
 import { uploadBufferToCloudinary } from "../../lib/cloudinary.js";
 import { publishNotificationEvent, publishTrackingEvent } from "../../lib/realtime.js";
@@ -31,7 +32,7 @@ function ensureConfigured(): void {
   }
 
   if (!env.CLOUDINARY_CLOUD_NAME || !env.CLOUDINARY_API_KEY || !env.CLOUDINARY_API_SECRET) {
-    throw new Error("Cloudinary credentials are not configured");
+    throw new AppError(500, "Cloudinary credentials are not configured");
   }
 
   cloudinary.config({
@@ -66,11 +67,11 @@ async function getBookingForWorkerUpload(bookingId: string, userId: string) {
   });
 
   if (!booking) {
-    throw new Error("Booking not found");
+    throw AppError.notFound("Booking not found");
   }
 
   if (!booking.worker || booking.worker.userId !== userId) {
-    throw new Error("You are not assigned to this booking");
+    throw AppError.forbidden("You are not assigned to this booking");
   }
 
   return booking;

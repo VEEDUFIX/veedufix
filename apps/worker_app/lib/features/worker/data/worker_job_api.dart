@@ -16,4 +16,12 @@ class WorkerJobApi {
   Future<void> startEnRoute(String bookingId) async {
     await _dio.post<dynamic>('/bookings/$bookingId/en-route');
   }
+
+  Future<void> addSpareParts(String bookingId, Map<String, dynamic> data) async {
+    await _dio.post<dynamic>('/bookings/$bookingId/spare-parts', data: data);
+  }
+
+  Future<void> generateQuote(String bookingId, Map<String, dynamic> data) async {
+    await _dio.post<dynamic>('/bookings/$bookingId/custom-quote/submit', data: data);
+  }
 }

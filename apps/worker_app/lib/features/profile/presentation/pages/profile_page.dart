@@ -4,6 +4,8 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:marketplace_shared/marketplace_shared.dart';
 
+import '../providers/worker_profile_providers.dart';
+
 final workerAuthSessionsProvider = FutureProvider.autoDispose<List<WorkerAuthSession>>((ref) async {
   final api = ref.watch(apiClientProvider);
   final data = await api.get('/auth/sessions');
@@ -38,11 +40,6 @@ class WorkerAuthSession {
         isActive: json['isActive'] as bool? ?? false,
       );
 }
-
-final workerAccountProfileProvider = FutureProvider.autoDispose<Map<String, dynamic>>((ref) async {
-  final api = ref.watch(apiClientProvider);
-  return api.get('/users/me');
-});
 
 class ProfilePage extends ConsumerWidget {
   const ProfilePage({super.key});

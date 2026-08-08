@@ -53,7 +53,7 @@ function otpLockKey(channel: LoginChannel, identifier: string): string {
   return `otp:locked:${channel}:${normalizeIdentifier(identifier, channel)}`;
 }
 
-function refreshTokenHash(token: string): string {
+function hashToken(token: string): string {
   return createHash("sha256").update(token).digest("hex");
 }
 
@@ -70,14 +70,14 @@ async function upsertAuthSession(
       userId,
       provider,
       providerId,
-      accessToken,
-      refreshToken
+      accessToken: hashToken(accessToken),
+      refreshToken: hashToken(refreshToken)
     },
     update: {
       userId,
       provider,
-      accessToken,
-      refreshToken
+      accessToken: hashToken(accessToken),
+      refreshToken: hashToken(refreshToken)
     }
   });
 
@@ -88,7 +88,7 @@ async function persistRefreshToken(userId: string, token: string, expiresInSecon
   await prisma.refreshToken.create({
     data: {
       userId,
-      tokenHash: refreshTokenHash(token),
+      tokenHash: hashToken(token),
       expiresAt: new Date(Date.now() + expiresInSeconds * 1000)
     }
   });
@@ -245,7 +245,7 @@ async function createSession(userId: string, role: LoginRole): Promise<string> {
 export async function refreshSession(refreshToken: string): Promise<AuthResult> {
   const payload = verifyRefreshToken(refreshToken) as TokenPayload;
   const stored = await prisma.refreshToken.findUnique({
-    where: { tokenHash: refreshTokenHash(refreshToken) },
+    where: { tokenHash: hashToken(refreshToken) },
     include: { user: true }
   });
 
@@ -263,10 +263,10 @@ export async function refreshSession(refreshToken: string): Promise<AuthResult> 
   });
   await persistRefreshToken(stored.userId, nextRefreshToken, extractExpirySeconds(process.env.JWT_REFRESH_TTL ?? "30d"));
   await prisma.authSession.updateMany({
-    where: { refreshToken },
+    where: { refreshToken: hashToken(refreshToken) },
     data: {
-      accessToken,
-      refreshToken: nextRefreshToken
+      accessToken: hashToken(accessToken),
+      refreshToken: hashToken(nextRefreshToken)
     }
   });
 
@@ -334,11 +334,11 @@ export async function signInWithGoogle(input: {
 
 export async function signOut(refreshToken: string): Promise<void> {
   await prisma.refreshToken.updateMany({
-    where: { tokenHash: refreshTokenHash(refreshToken) },
+    where: { tokenHash: hashToken(refreshToken) },
     data: { revokedAt: new Date() }
   });
   await prisma.authSession.updateMany({
-    where: { refreshToken },
+    where: { refreshToken: hashToken(refreshToken) },
     data: {
       accessToken: null,
       refreshToken: null

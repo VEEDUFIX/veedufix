@@ -185,12 +185,12 @@ class _AppBootstrapState extends ConsumerState<AppBootstrap> {
       return null;
     }
 
-    return switch (type) {
-      'arrival_status_changed' => '/arrival-otp?bookingId=$bookingId',
-      'completion_otp_requested' => '/completion-otp?bookingId=$bookingId',
-      'rating_requested' => '/booking-rating?bookingId=$bookingId',
-      _ => null,
-    };
+    switch (type) {
+      case 'arrival_status_changed': return '/arrival-otp?bookingId=$bookingId';
+      case 'completion_otp_requested': return '/completion-otp?bookingId=$bookingId';
+      case 'rating_requested': return '/booking-rating?bookingId=$bookingId';
+      default: return null;
+    }
   }
 
   @override

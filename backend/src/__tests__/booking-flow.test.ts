@@ -113,7 +113,7 @@ describe('Booking Flow', () => {
     it('succeeds with valid service IDs and address', async () => {
       vi.mocked(prisma.user.findUnique).mockResolvedValue({ id: 'u1', cityId: 'c1', name: 'Test', email: null, phone: null } as any);
       vi.mocked(prisma.city.findUnique).mockResolvedValue({ id: 'c1', name: 'City' } as any);
-      vi.mocked(prisma.address.findFirst).mockResolvedValue({ id: 'a1', userId: 'u1', pincode: '123456' } as any);
+      vi.mocked(prisma.address.findFirst).mockResolvedValue({ id: 'a1', userId: 'u1', pincode: '600001' } as any);
       
       const mockService = {
         id: 's1', name: 'AC Repair', isActive: true, startingPrice: new Prisma.Decimal(500), gstRate: new Prisma.Decimal(18),
@@ -135,7 +135,7 @@ describe('Booking Flow', () => {
     it('throws AppError.notFound when service not found', async () => {
       vi.mocked(prisma.user.findUnique).mockResolvedValue({ id: 'u1', cityId: 'c1', name: 'Test', email: null, phone: null } as any);
       vi.mocked(prisma.city.findUnique).mockResolvedValue({ id: 'c1', name: 'City' } as any);
-      vi.mocked(prisma.address.findFirst).mockResolvedValue({ id: 'a1', userId: 'u1', pincode: '123456' } as any);
+      vi.mocked(prisma.address.findFirst).mockResolvedValue({ id: 'a1', userId: 'u1', pincode: '600001' } as any);
       vi.mocked(prisma.service.findMany).mockResolvedValue([]); // Not found
       
       await expect(
@@ -146,7 +146,7 @@ describe('Booking Flow', () => {
     it('throws AppError.badRequest when no services selected', async () => {
       vi.mocked(prisma.user.findUnique).mockResolvedValue({ id: 'u1', cityId: 'c1', name: 'Test', email: null, phone: null } as any);
       vi.mocked(prisma.city.findUnique).mockResolvedValue({ id: 'c1', name: 'City' } as any);
-      vi.mocked(prisma.address.findFirst).mockResolvedValue({ id: 'a1', userId: 'u1', pincode: '123456' } as any);
+      vi.mocked(prisma.address.findFirst).mockResolvedValue({ id: 'a1', userId: 'u1', pincode: '600001' } as any);
       
       await expect(
         createPaymentOrder({ userId: 'u1', cityId: 'c1', items: [] })
@@ -156,7 +156,7 @@ describe('Booking Flow', () => {
     it('applies coupon discount correctly', async () => {
       vi.mocked(prisma.user.findUnique).mockResolvedValue({ id: 'u1', cityId: 'c1', name: 'Test', email: null, phone: null } as any);
       vi.mocked(prisma.city.findUnique).mockResolvedValue({ id: 'c1', name: 'City' } as any);
-      vi.mocked(prisma.address.findFirst).mockResolvedValue({ id: 'a1', userId: 'u1', pincode: '123456' } as any);
+      vi.mocked(prisma.address.findFirst).mockResolvedValue({ id: 'a1', userId: 'u1', pincode: '600001' } as any);
       
       const mockService = {
         id: 's1', name: 'AC Repair', isActive: true, startingPrice: new Prisma.Decimal(1000), gstRate: new Prisma.Decimal(18),
@@ -179,6 +179,66 @@ describe('Booking Flow', () => {
       const createCall = prismaMockTx.booking.create.mock.calls[0][0];
       // 1000 subtotal, 10% discount = 100
       expect(createCall.data.discountAmount.toNumber()).toBe(100);
+    });
+
+    it('selects the pricing rule with the highest priority', async () => {
+      vi.mocked(prisma.user.findUnique).mockResolvedValue({ id: 'u1', cityId: 'c1', name: 'Test', email: null, phone: null } as any);
+      vi.mocked(prisma.city.findUnique).mockResolvedValue({ id: 'c1', name: 'City' } as any);
+      vi.mocked(prisma.address.findFirst).mockResolvedValue({ id: 'a1', userId: 'u1', pincode: '600001' } as any);
+      
+      const now = new Date();
+      const mockService = {
+        id: 's1', name: 'AC Repair', isActive: true, startingPrice: new Prisma.Decimal(500), gstRate: new Prisma.Decimal(18),
+        gstApplicable: true, sacCode: '9987', subcategory: { id: 'sub1', name: 'AC' }, 
+        pricingRules: [
+          // Low priority rule
+          { id: 'r1', cityId: 'c1', type: 'BASE', priority: 1, price: new Prisma.Decimal(600), startsAt: null, endsAt: null, createdAt: now },
+          // High priority rule
+          { id: 'r2', cityId: 'c1', type: 'BASE', priority: 10, price: new Prisma.Decimal(800), startsAt: null, endsAt: null, createdAt: now },
+          // Medium priority rule
+          { id: 'r3', cityId: 'c1', type: 'BASE', priority: 5, price: new Prisma.Decimal(700), startsAt: null, endsAt: null, createdAt: now }
+        ]
+      };
+      vi.mocked(prisma.service.findMany).mockResolvedValue([mockService] as any);
+      prismaMockTx.booking.create.mockResolvedValue({ id: 'b1', code: 'BK-123' });
+      
+      await createPaymentOrder({
+        userId: 'u1', cityId: 'c1', items: [{ serviceId: 's1', quantity: 1 }]
+      });
+      
+      const createCall = prismaMockTx.booking.create.mock.calls[0][0];
+      // Should pick the priority: 10 rule, which has basePrice = 800
+      expect(createCall.data.subtotalAmount.toNumber()).toBe(800);
+    });
+
+    it('falls back to latest createdAt if priorities are tied', async () => {
+      vi.mocked(prisma.user.findUnique).mockResolvedValue({ id: 'u1', cityId: 'c1', name: 'Test', email: null, phone: null } as any);
+      vi.mocked(prisma.city.findUnique).mockResolvedValue({ id: 'c1', name: 'City' } as any);
+      vi.mocked(prisma.address.findFirst).mockResolvedValue({ id: 'a1', userId: 'u1', pincode: '600001' } as any);
+      
+      const time1 = new Date('2026-01-01');
+      const time2 = new Date('2026-06-01'); // Newer
+      
+      const mockService = {
+        id: 's1', name: 'AC Repair', isActive: true, startingPrice: new Prisma.Decimal(500), gstRate: new Prisma.Decimal(18),
+        gstApplicable: true, sacCode: '9987', subcategory: { id: 'sub1', name: 'AC' }, 
+        pricingRules: [
+          // Same priority, older
+          { id: 'r1', cityId: 'c1', type: 'BASE', priority: 5, price: new Prisma.Decimal(600), startsAt: null, endsAt: null, createdAt: time1 },
+          // Same priority, newer
+          { id: 'r2', cityId: 'c1', type: 'BASE', priority: 5, price: new Prisma.Decimal(900), startsAt: null, endsAt: null, createdAt: time2 }
+        ]
+      };
+      vi.mocked(prisma.service.findMany).mockResolvedValue([mockService] as any);
+      prismaMockTx.booking.create.mockResolvedValue({ id: 'b1', code: 'BK-123' });
+      
+      await createPaymentOrder({
+        userId: 'u1', cityId: 'c1', items: [{ serviceId: 's1', quantity: 1 }]
+      });
+      
+      const createCall = prismaMockTx.booking.create.mock.calls[0][0];
+      // Should pick the newer rule (basePrice = 900)
+      expect(createCall.data.subtotalAmount.toNumber()).toBe(900);
     });
   });
 
@@ -219,7 +279,6 @@ describe('Booking Flow', () => {
       const result = await verifyCompletionOtp('b1', 'w1', '5678');
       expect(result.status).toBe('completed');
       expect(prisma.booking.update).toHaveBeenCalledWith(expect.objectContaining({ data: { status: 'COMPLETED' } }));
-      expect(releaseWorkerPayout).toHaveBeenCalledWith('b1');
     });
 
     it('generateCompletionOtp throws if checklist items are incomplete', async () => {

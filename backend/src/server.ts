@@ -10,6 +10,7 @@ import { startPaymentReconciliation } from "./modules/scheduler/payment-reconcil
 import { startLifecycleNotifications } from "./modules/scheduler/lifecycle-notifications.js";
 import { startReferralCrediting } from "./modules/scheduler/referral-crediting.js";
 import { startPayoutReleaser } from "./modules/scheduler/payout-releaser.js";
+import { startWalletPayoutProcessor } from "./modules/scheduler/wallet-payout-processor.js";
 
 const app = createApp();
 const server = createServer(app);
@@ -22,6 +23,7 @@ startPaymentReconciliation();
 startLifecycleNotifications();
 startReferralCrediting();
 startPayoutReleaser();
+startWalletPayoutProcessor();
 
 server.listen(env.PORT, () => {
   logger.info(`API listening on port ${env.PORT}`);

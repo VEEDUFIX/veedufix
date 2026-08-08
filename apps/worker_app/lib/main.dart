@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:go_router/go_router.dart';
 import 'package:marketplace_shared/marketplace_shared.dart';
+import 'package:sentry_flutter/sentry_flutter.dart';
 import 'app/app.dart';
 import 'app/router.dart';
 
@@ -57,8 +58,14 @@ Future<void> main() async {
 
     });
 
-  runApp(UncontrolledProviderScope(
-    container: container,
-    child: const AppBootstrap(),
-  ));
+  await SentryFlutter.init(
+    (options) {
+      options.dsn = const String.fromEnvironment('SENTRY_DSN', defaultValue: '');
+      options.tracesSampleRate = 1.0;
+    },
+    appRunner: () => runApp(UncontrolledProviderScope(
+      container: container,
+      child: const AppBootstrap(),
+    )),
+  );
 }

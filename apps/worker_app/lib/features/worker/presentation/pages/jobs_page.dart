@@ -17,26 +17,28 @@ class JobsPage extends ConsumerStatefulWidget {
 
 class _JobsPageState extends ConsumerState<JobsPage>
     with SingleTickerProviderStateMixin {
-  late TabController _tabController;
+  TabController? _tabController;
   final _tabs = ['incoming', 'accepted', 'active', 'completed'];
 
   @override
-  void initState() {
-    super.initState();
-    final selectedTab = GoRouterState.of(context).uri.queryParameters['tab'];
-    final initialIndex = switch (selectedTab) {
-      'accepted' => 1,
-      'active' => 2,
-      'completed' => 3,
-      _ => 0,
-    };
-    _tabController =
-        TabController(length: 4, vsync: this, initialIndex: initialIndex);
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_tabController == null) {
+      final selectedTab = GoRouterState.of(context).uri.queryParameters['tab'];
+      final initialIndex = switch (selectedTab) {
+        'accepted' => 1,
+        'active' => 2,
+        'completed' => 3,
+        _ => 0,
+      };
+      _tabController =
+          TabController(length: 4, vsync: this, initialIndex: initialIndex);
+    }
   }
 
   @override
   void dispose() {
-    _tabController.dispose();
+    _tabController?.dispose();
     super.dispose();
   }
 
@@ -67,7 +69,7 @@ class _JobsPageState extends ConsumerState<JobsPage>
                   ),
                   const SizedBox(height: 18),
                   TabBar(
-                    controller: _tabController,
+                    controller: _tabController!,
                     isScrollable: true,
                     tabs: const [
                       Tab(text: 'Incoming'),
@@ -81,7 +83,7 @@ class _JobsPageState extends ConsumerState<JobsPage>
             ),
             Expanded(
               child: TabBarView(
-                controller: _tabController,
+                controller: _tabController!,
                 children: _tabs.map((tab) => _JobTabContent(tab: tab)).toList(),
               ),
             ),

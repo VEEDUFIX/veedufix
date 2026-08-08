@@ -1,5 +1,6 @@
 import { PaymentStatus, Prisma } from "@prisma/client";
 import Razorpay from "razorpay";
+import { AppError } from "../../lib/app-error.js";
 import { env } from "../../config/env.js";
 import { prisma } from "../../lib/prisma.js";
 import { logger } from "../../lib/logger.js";
@@ -64,7 +65,7 @@ const razorpay = createRazorpayClient();
 
 function createRazorpayClient(): Razorpay {
   if (!env.RAZORPAY_KEY_ID || !env.RAZORPAY_KEY_SECRET) {
-    throw new Error("Razorpay credentials are not configured");
+    throw new AppError(500, "Razorpay credentials are not configured");
   }
 
   return new Razorpay({
@@ -207,7 +208,7 @@ export async function processRefund(
   });
 
   if (!booking) {
-    throw new Error("Booking not found for refund processing");
+    throw AppError.notFound("Booking not found for refund processing");
   }
 
   const result = await attemptRazorpayRefund(bookingId, amount, reason);

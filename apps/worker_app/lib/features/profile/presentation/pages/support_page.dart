@@ -3,41 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:marketplace_shared/marketplace_shared.dart';
 
-final workerSupportTicketsProvider = FutureProvider.autoDispose<List<WorkerSupportTicket>>((ref) async {
-  final api = ref.watch(apiClientProvider);
-  final data = await api.get('/support/tickets/me');
-  final tickets = (data['tickets'] as List<dynamic>? ?? const [])
-      .whereType<Map<String, dynamic>>()
-      .map(WorkerSupportTicket.fromJson)
-      .toList(growable: false);
-  return tickets;
-});
-
-class WorkerSupportTicket {
-  const WorkerSupportTicket({
-    required this.id,
-    required this.subject,
-    required this.message,
-    required this.status,
-    required this.createdAt,
-  });
-
-  final String id;
-  final String subject;
-  final String message;
-  final String status;
-  final DateTime createdAt;
-
-  factory WorkerSupportTicket.fromJson(Map<String, dynamic> json) {
-    return WorkerSupportTicket(
-      id: json['id'] as String? ?? '',
-      subject: json['subject'] as String? ?? 'Support ticket',
-      message: json['message'] as String? ?? '',
-      status: json['status'] as String? ?? 'OPEN',
-      createdAt: DateTime.tryParse(json['createdAt'] as String? ?? '') ?? DateTime.now(),
-    );
-  }
-}
+import '../../domain/entities/worker_support_ticket.dart';
+import '../providers/support_providers.dart';
 
 class SupportPage extends ConsumerStatefulWidget {
   const SupportPage({
@@ -115,14 +82,11 @@ class _SupportPageState extends ConsumerState<SupportPage> {
 
     setState(() => _isSubmitting = true);
     try {
-      final api = ref.read(apiClientProvider);
-      await api.post(
-        '/support/tickets',
-        data: {
-          'subject': subject,
-          'message': message,
-          'category': _selectedCategory,
-        },
+      final repo = ref.read(supportRepositoryProvider);
+      await repo.submitTicket(
+        subject: subject,
+        message: message,
+        category: _selectedCategory,
       );
       _subjectCtrl.clear();
       _messageCtrl.clear();

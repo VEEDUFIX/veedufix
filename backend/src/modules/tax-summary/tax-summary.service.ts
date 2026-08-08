@@ -1,5 +1,6 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "../../lib/prisma.js";
+import { AppError } from "../../lib/app-error.js";
 import { getCommissionPercent } from "../payout/payout.service.js";
 
 type DateRange = {
@@ -110,7 +111,7 @@ export function parseDateRange(startDate?: string, endDate?: string): DateRange 
   const end = endDate ? new Date(endDate) : new Date();
 
   if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
-    throw new Error("Invalid date range");
+    throw AppError.badRequest("Invalid date range");
   }
 
   return {
@@ -122,7 +123,7 @@ export function parseDateRange(startDate?: string, endDate?: string): DateRange 
 export function financialYearRange(financialYear: string): DateRange {
   const match = financialYear.trim().match(/^(\d{4})\s*[-/]\s*(\d{2}|\d{4})$/);
   if (!match) {
-    throw new Error("Invalid financial year");
+    throw AppError.badRequest("Invalid financial year");
   }
 
   const startYear = Number(match[1]);
@@ -131,7 +132,7 @@ export function financialYearRange(financialYear: string): DateRange {
   const parsedEndYear = endPart.length === 2 ? Number(endPart) : Number(endPart.slice(-2));
 
   if (Number.isNaN(startYear) || Number.isNaN(parsedEndYear) || parsedEndYear !== expectedEndYear) {
-    throw new Error("Invalid financial year");
+    throw AppError.badRequest("Invalid financial year");
   }
 
   const startDate = new Date(startYear, 3, 1, 0, 0, 0, 0);

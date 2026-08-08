@@ -1,5 +1,6 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "../../lib/prisma.js";
+import { AppError } from "../../lib/app-error.js";
 import { writeAuditLog } from "../../lib/audit.js";
 
 type CommissionRecord = {
@@ -193,7 +194,7 @@ export async function saveCommission(commissionId: string | null, payload: Recor
   const isActive = typeof payload.isActive === "boolean" ? payload.isActive : true;
 
   if (Number.isNaN(rate) || Number.isNaN(fixedFee)) {
-    throw new Error("rate and fixedFee are required");
+    throw AppError.badRequest("rate and fixedFee are required");
   }
 
   const existing = commissionId

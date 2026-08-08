@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -9,98 +8,8 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:marketplace_shared/marketplace_shared.dart';
 
-// ─── Entities ─────────────────────────────────────────────────────────────────
-
-class WorkerWalletTransaction {
-  const WorkerWalletTransaction({
-    required this.id,
-    required this.type,
-    required this.amount,
-    required this.balanceAfter,
-    required this.createdAt,
-    this.note,
-  });
-
-  final String id;
-  final String type;
-  final double amount;
-  final double balanceAfter;
-  final DateTime createdAt;
-  final String? note;
-
-  bool get isCredit => amount >= 0;
-
-  String get label => switch (type) {
-        'CREDIT' => 'Job Earnings',
-        'DEBIT' => 'Deduction',
-        'PAYOUT' => 'Payout Withdrawn',
-        'BONUS' => 'Bonus',
-        'REFERRAL_BONUS' => 'Referral Bonus',
-        _ => type.replaceAll('_', ' ').toLowerCase().split(' ').map((w) => '${w[0].toUpperCase()}${w.substring(1)}').join(' '),
-      };
-
-  factory WorkerWalletTransaction.fromJson(Map<String, dynamic> json) =>
-      WorkerWalletTransaction(
-        id: json['id'] as String? ?? '',
-        type: json['type'] as String? ?? 'CREDIT',
-        amount: (json['amount'] as num?)?.toDouble() ?? 0.0,
-        balanceAfter: (json['balanceAfter'] as num?)?.toDouble() ?? 0.0,
-        createdAt: DateTime.tryParse(json['createdAt'] as String? ?? '') ?? DateTime.now(),
-        note: json['note'] as String?,
-      );
-}
-
-class WorkerWallet {
-  const WorkerWallet({
-    required this.balance,
-    required this.totalEarnings,
-    required this.pendingPayout,
-    required this.transactions,
-  });
-
-  final double balance;
-  final double totalEarnings;
-  final double pendingPayout;
-  final List<WorkerWalletTransaction> transactions;
-
-  factory WorkerWallet.fromJson(Map<String, dynamic> json) => WorkerWallet(
-        balance: (json['balance'] as num?)?.toDouble() ?? 0.0,
-        totalEarnings: (json['totalEarnings'] as num?)?.toDouble() ?? 0.0,
-        pendingPayout: (json['pendingPayout'] as num?)?.toDouble() ?? 0.0,
-        transactions: (json['transactions'] as List<dynamic>? ?? [])
-            .map((t) => WorkerWalletTransaction.fromJson(t as Map<String, dynamic>))
-            .toList(),
-      );
-}
-
-// ─── Provider ─────────────────────────────────────────────────────────────────
-
-final workerWalletProvider = FutureProvider.autoDispose<WorkerWallet>((ref) async {
-  final api = ref.watch(apiClientProvider);
-  final data = await api.get('/worker/wallet');
-  return WorkerWallet.fromJson(data);
-});
-
-final payoutRequestProvider = StateNotifierProvider<_PayoutNotifier, AsyncValue<void>>((ref) {
-  return _PayoutNotifier(ref);
-});
-
-class _PayoutNotifier extends StateNotifier<AsyncValue<void>> {
-  _PayoutNotifier(this._ref) : super(const AsyncValue.data(null));
-  final Ref _ref;
-
-  Future<void> requestPayout(double amount, String upiId) async {
-    state = const AsyncValue.loading();
-    try {
-      final api = _ref.read(apiClientProvider);
-      await api.post('/users/worker/wallet/payout', data: {'amount': amount, 'upiId': upiId});
-      state = const AsyncValue.data(null);
-      _ref.invalidate(workerWalletProvider);
-    } catch (e, st) {
-      state = AsyncValue.error(e, st);
-    }
-  }
-}
+import '../../domain/entities/worker_wallet.dart';
+import '../providers/worker_wallet_providers.dart';
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
@@ -288,11 +197,8 @@ class _WalletBody extends ConsumerWidget {
   Future<void> _exportStatement(BuildContext context, WidgetRef ref) async {
     final messenger = ScaffoldMessenger.of(context);
     try {
-      final response = await ref.read(apiClientProvider).dio.get<List<int>>(
-        '/worker/earnings/export/csv',
-        options: Options(responseType: ResponseType.bytes),
-      );
-      final bytes = response.data ?? const <int>[];
+      final repo = ref.read(workerWalletRepositoryProvider);
+      final bytes = await repo.exportStatement();
       if (bytes.isEmpty) {
         messenger.showSnackBar(
           const SnackBar(content: Text('Statement export is empty right now.')),

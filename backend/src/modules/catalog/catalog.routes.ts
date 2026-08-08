@@ -56,7 +56,9 @@ export const catalogRouter = Router();
 export const adminCatalogRouter = Router();
 
 catalogRouter.get("/", validate(catalogListQuerySchema), listCategoriesHandler);
+catalogRouter.get("/categories", validate(catalogListQuerySchema), listCategoriesHandler);
 catalogRouter.get("/home", homeCatalogHandler);
+catalogRouter.get("/services", validate(catalogSearchQuerySchema), searchCatalogHandler);
 
 // GET /api/catalog/coupons — Returns active public coupons
 catalogRouter.get('/coupons', async (_request, response) => {

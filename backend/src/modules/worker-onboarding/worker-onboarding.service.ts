@@ -1,5 +1,6 @@
 import { Gender, Prisma, VerificationStatus } from "@prisma/client";
 import { prisma } from "../../lib/prisma.js";
+import { AppError } from "../../lib/app-error.js";
 import { logger } from "../../lib/logger.js";
 import { uploadBufferToCloudinary, generateSignedUrl } from "../../lib/cloudinary.js";
 import { maskWorkerFinancialFields } from "../../lib/mask-worker.js";
@@ -331,7 +332,7 @@ async function uploadKycDocument(
   } else {
     const response = await fetch(fileUrl);
     if (!response.ok) {
-      throw new Error("Unable to fetch document file");
+      throw new AppError(502, "Unable to fetch document file");
     }
 
     const arrayBuffer = await response.arrayBuffer();
@@ -414,7 +415,7 @@ export async function uploadDocument(
   }
 
   if (!categoryId) {
-    throw new Error("categoryId is required for skill certification uploads");
+    throw AppError.badRequest("categoryId is required for skill certification uploads");
   }
 
   await prisma.workerSkill.upsert({

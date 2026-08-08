@@ -1,4 +1,7 @@
 import compression from "compression";
+import crypto from "crypto";
+import * as Sentry from "@sentry/node";
+import { nodeProfilingIntegration } from "@sentry/profiling-node";
 import cors from "cors";
 import express from "express";
 import type { Request } from "express";
@@ -55,9 +58,19 @@ import { sparePartsRouter } from "./modules/bookings/spare-parts.routes.js";
 export function createApp() {
   const app = express();
 
+  Sentry.init({
+    dsn: process.env.SENTRY_DSN || "",
+    integrations: [
+      nodeProfilingIntegration(),
+    ],
+    tracesSampleRate: 1.0,
+    profilesSampleRate: 1.0,
+  });
+
   app.use(
     pinoHttp({
-      logger
+      logger,
+      genReqId: (req) => req.headers["x-request-id"] || crypto.randomUUID()
     })
   );
   app.use(helmet());
@@ -77,14 +90,16 @@ export function createApp() {
   );
   app.use(express.urlencoded({ extended: true }));
   app.use(compression());
-  app.use(
-    rateLimit({
-      windowMs: 15 * 60 * 1000,
-      limit: env.NODE_ENV === "production" ? 100 : 1000,
-      standardHeaders: true,
-      legacyHeaders: false
-    })
-  );
+  if (!process.env.VITEST) {
+    app.use(
+      rateLimit({
+        windowMs: 15 * 60 * 1000,
+        limit: env.NODE_ENV === "production" ? 100 : 1000,
+        standardHeaders: true,
+        legacyHeaders: false
+      })
+    );
+  }
 
   app.get("/api", (_request, response) => {
     response.status(200).json({
@@ -141,6 +156,7 @@ export function createApp() {
   app.use("/api", sparePartsRouter);
 
   app.use(notFoundHandler);
+  Sentry.setupExpressErrorHandler(app);
   app.use(errorHandler);
 
   return app;

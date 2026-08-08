@@ -1,5 +1,6 @@
 import { BookingStatus, PaymentStatus, Prisma } from "@prisma/client";
 import { createHmac } from "crypto";
+import { AppError } from "../../lib/app-error.js";
 import { env } from "../../config/env.js";
 import { prisma } from "../../lib/prisma.js";
 import { logger } from "../../lib/logger.js";
@@ -48,7 +49,7 @@ type PaymentWithBooking = Prisma.PaymentGetPayload<{
 
 function verifyWebhookSignature(rawBody: string, signature: string): boolean {
   if (!env.RAZORPAY_WEBHOOK_SECRET) {
-    throw new Error("Razorpay webhook secret is not configured");
+    throw new AppError(500, "Razorpay webhook secret is not configured");
   }
 
   const expected = createHmac("sha256", env.RAZORPAY_WEBHOOK_SECRET)
@@ -389,11 +390,11 @@ export async function handleRazorpayWebhook(
   body: RazorpayWebhookEvent
 ): Promise<{ ok: true }> {
   if (!signature) {
-    throw new Error("Missing Razorpay webhook signature");
+    throw AppError.unauthorized("Missing Razorpay webhook signature");
   }
 
   if (!verifyWebhookSignature(rawBody, signature)) {
-    throw new Error("Invalid Razorpay webhook signature");
+    throw AppError.unauthorized("Invalid Razorpay webhook signature");
   }
 
   const event = body.event ?? "unknown";

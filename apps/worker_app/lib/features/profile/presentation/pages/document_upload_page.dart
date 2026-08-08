@@ -3,11 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:marketplace_shared/marketplace_shared.dart';
 
-final workerDocumentsProvider = FutureProvider.autoDispose<List<dynamic>>((ref) async {
-  final api = ref.watch(apiClientProvider);
-  final data = await api.get('/users/me/worker/documents');
-  return data['documents'] as List<dynamic>? ?? [];
-});
+import '../providers/worker_profile_providers.dart';
 
 class DocumentUploadPage extends ConsumerStatefulWidget {
   const DocumentUploadPage({super.key});
@@ -37,11 +33,8 @@ class _DocumentUploadPageState extends ConsumerState<DocumentUploadPage> {
     final url = _urlCtrl.text.trim();
 
     try {
-      final api = ref.read(apiClientProvider);
-      await api.post('/users/me/worker/documents', data: {
-        'type': _docType,
-        'url': url,
-      });
+      final repo = ref.read(workerProfileRepositoryProvider);
+      await repo.uploadDocument(_docType, url);
       
       if (!mounted) return;
       ref.invalidate(workerDocumentsProvider);
@@ -230,7 +223,7 @@ class _DocumentUploadPageState extends ConsumerState<DocumentUploadPage> {
                 sliver: SliverList(
                   delegate: SliverChildBuilderDelegate(
                     (context, index) {
-                      final doc = docs[index] as Map<String, dynamic>;
+                      final doc = docs[index];
                       final verifiedAt = doc['verifiedAt'];
                       final isVerified = verifiedAt != null;
                       return Padding(

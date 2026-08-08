@@ -1,4 +1,4 @@
-﻿import 'dart:math' as math;
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -7,6 +7,9 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:marketplace_shared/marketplace_shared.dart';
 
+import '../../data/worker_earnings_repository.dart';
+
+import '../../domain/entities/worker_earnings.dart';
 import '../providers/earnings_provider.dart';
 import '../../../../core/widgets/liquid_refresh.dart';
 import '../../../../core/widgets/metallic_card.dart';
@@ -26,7 +29,7 @@ class EarningsPage extends ConsumerStatefulWidget {
 class _EarningsPageState extends ConsumerState<EarningsPage> {
   static const int _pageSize = 6;
 
-  late final WorkerEarningsApi _api;
+  late final WorkerEarningsRepository _repo;
   final ScrollController _scrollController = ScrollController();
 
   WorkerEarningsSummary? _summary;
@@ -40,7 +43,7 @@ class _EarningsPageState extends ConsumerState<EarningsPage> {
   @override
   void initState() {
     super.initState();
-    _api = WorkerEarningsApi(ref.read(apiClientProvider).dio);
+    _repo = ref.read(workerEarningsRepositoryProvider);
     _scrollController.addListener(_handleScroll);
     _loadInitial();
   }
@@ -64,8 +67,8 @@ class _EarningsPageState extends ConsumerState<EarningsPage> {
     });
 
     try {
-      final summary = await _api.fetchSummary();
-      final page = await _api.fetchTransactions(page: 1, limit: _pageSize);
+      final summary = await _repo.fetchSummary();
+      final page = await _repo.fetchTransactions(page: 1, limit: _pageSize);
       if (!mounted) {
         return;
       }
@@ -100,7 +103,7 @@ class _EarningsPageState extends ConsumerState<EarningsPage> {
 
     try {
       final nextPage = _page + 1;
-      final page = await _api.fetchTransactions(page: nextPage, limit: _pageSize);
+      final page = await _repo.fetchTransactions(page: nextPage, limit: _pageSize);
       if (!mounted) {
         return;
       }

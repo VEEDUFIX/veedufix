@@ -86,7 +86,22 @@ class _BookingRatingPageState extends ConsumerState<BookingRatingPage> {
       body: FutureBuilder<BookingOtpDetails>(
         future: _detailsFuture,
         builder: (context, snapshot) {
-          final details = snapshot.data ?? BookingOtpDetails.fallback(widget.bookingId);
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          if (snapshot.hasError) {
+            return _MissingBookingPage(
+              title: 'Error loading details',
+              subtitle: 'Unable to load booking details: ${snapshot.error}',
+            );
+          }
+          final details = snapshot.data;
+          if (details == null) {
+            return const _MissingBookingPage(
+              title: 'Not found',
+              subtitle: 'No details found for this booking.',
+            );
+          }
 
           return ListView(
             padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),

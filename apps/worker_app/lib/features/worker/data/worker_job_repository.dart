@@ -36,6 +36,26 @@ class WorkerJobRepository {
     }
   }
 
+  Future<void> addSpareParts(String bookingId, Map<String, dynamic> data) async {
+    try {
+      await _api.addSpareParts(bookingId, data);
+    } on DioException catch (e) {
+      throw _handleError(e);
+    } catch (e) {
+      throw Exception('Failed to add spare parts: $e');
+    }
+  }
+
+  Future<void> generateQuote(String bookingId, Map<String, dynamic> data) async {
+    try {
+      await _api.generateQuote(bookingId, data);
+    } on DioException catch (e) {
+      throw _handleError(e);
+    } catch (e) {
+      throw Exception('Failed to generate quote: $e');
+    }
+  }
+
   Exception _handleError(DioException e) {
     final data = e.response?.data;
     if (data is Map<String, dynamic>) {
