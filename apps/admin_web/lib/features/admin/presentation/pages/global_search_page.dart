@@ -127,6 +127,62 @@ class _AdminGlobalSearchPageState extends ConsumerState<AdminGlobalSearchPage> {
       body: ListView(
         padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
         children: [
+          PremiumGlassCard(
+            child: Padding(
+              padding: const EdgeInsets.all(18),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        width: 52,
+                        height: 52,
+                        decoration: BoxDecoration(
+                          color: cs.primary.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        child: Icon(Icons.manage_search_rounded, color: cs.primary),
+                      ),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Search everything fast',
+                              style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'Find customers, workers, bookings, and support threads from one place.',
+                              style: tt.bodyMedium?.copyWith(
+                                color: cs.onSurfaceVariant,
+                                height: 1.45,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  const Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      _SearchHintChip(label: 'Bookings'),
+                      _SearchHintChip(label: 'Customers'),
+                      _SearchHintChip(label: 'Workers'),
+                      _SearchHintChip(label: 'Support'),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
           TextField(
             controller: _controller,
             decoration: InputDecoration(
@@ -134,6 +190,7 @@ class _AdminGlobalSearchPageState extends ConsumerState<AdminGlobalSearchPage> {
               prefixIcon: const Icon(Icons.search_rounded),
               suffixIcon: _query.isNotEmpty
                   ? IconButton(
+                      tooltip: 'Clear search',
                       icon: const Icon(Icons.clear_rounded),
                       onPressed: () {
                         _controller.clear();
@@ -226,8 +283,9 @@ class _SearchHintCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: cs.surfaceContainerHighest.withValues(alpha: 0.3),
-        borderRadius: BorderRadius.circular(20),
+        color: cs.surfaceContainerHighest.withValues(alpha: 0.32),
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.25)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -236,6 +294,34 @@ class _SearchHintCard extends StatelessWidget {
           const SizedBox(height: 8),
           Text(subtitle, style: tt.bodyMedium?.copyWith(color: cs.onSurfaceVariant)),
         ],
+      ),
+    );
+  }
+}
+
+class _SearchHintChip extends StatelessWidget {
+  const _SearchHintChip({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+      decoration: BoxDecoration(
+        color: cs.surfaceContainerHighest.withValues(alpha: 0.55),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.25)),
+      ),
+      child: Text(
+        label,
+        style: tt.labelMedium?.copyWith(
+          color: cs.onSurfaceVariant,
+          fontWeight: FontWeight.w700,
+        ),
       ),
     );
   }
@@ -262,7 +348,19 @@ class _SearchSection extends StatelessWidget {
         Text(title, style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
         const SizedBox(height: 10),
         if (results.isEmpty)
-          Text('No matches', style: tt.bodyMedium?.copyWith(color: cs.onSurfaceVariant))
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: cs.surfaceContainerHighest.withValues(alpha: 0.35),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.25)),
+            ),
+            child: Text(
+              'No matches in $title',
+              style: tt.bodyMedium?.copyWith(color: cs.onSurfaceVariant),
+            ),
+          )
         else
           ...results.map(
             (item) => Padding(
