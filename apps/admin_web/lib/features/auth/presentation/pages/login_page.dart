@@ -1,10 +1,15 @@
-import 'package:flutter/material.dart';
-import 'package:google_sign_in_web/google_sign_in_web.dart' as web;
-import 'package:google_sign_in_platform_interface/google_sign_in_platform_interface.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:marketplace_shared/marketplace_shared.dart';
-import '../../../../core/widgets/admin_logo.dart';
+import 'dart:async';
 import 'dart:ui';
+
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+import 'package:google_sign_in/google_sign_in.dart';
+import 'package:google_sign_in_platform_interface/google_sign_in_platform_interface.dart';
+import 'package:google_sign_in_web/google_sign_in_web.dart' as web;
+import 'package:marketplace_shared/marketplace_shared.dart';
+
+import '../../../../core/widgets/admin_logo.dart';
 
 class LoginPage extends ConsumerStatefulWidget {
   const LoginPage({super.key});
@@ -14,6 +19,158 @@ class LoginPage extends ConsumerStatefulWidget {
 }
 
 class _LoginPageState extends ConsumerState<LoginPage> {
+  late final GoogleSignIn _googleSignIn;
+  StreamSubscription<GoogleSignInAccount?>? _authSubscription;
+  bool _isSigningIn = false;
+  bool _suppressNextSignOut = false;
+  String? _initError;
+
+  @override
+  void initState() {
+    super.initState();
+
+    final environment = ref.read(environmentProvider);
+    _googleSignIn = GoogleSignIn(
+      clientId: environment.googleServerClientId.isEmpty
+          ? null
+          : environment.googleServerClientId,
+      scopes: const ['email'],
+    );
+
+    _authSubscription = _googleSignIn.onCurrentUserChanged.listen(
+      (account) => unawaited(_handleGoogleAccountChanged(account)),
+      onError: (Object error, StackTrace stackTrace) {
+        if (!mounted) {
+          return;
+        }
+        setState(() {
+          _isSigningIn = false;
+          _initError = 'Google sign-in failed to initialize.';
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Google sign-in could not be started.'),
+            backgroundColor: Theme.of(context).colorScheme.error,
+          ),
+        );
+      },
+    );
+
+    if (environment.googleServerClientId.isEmpty) {
+      _initError = 'Google sign-in is not configured for this environment.';
+      return;
+    }
+
+    unawaited(
+      _googleSignIn.signInSilently().catchError((Object error) {
+        if (!mounted) {
+          return null;
+        }
+        setState(() {
+          _initError = 'Unable to initialize Google sign-in.';
+        });
+        return null;
+      }),
+    );
+  }
+
+  @override
+  void dispose() {
+    _authSubscription?.cancel();
+    _authSubscription = null;
+    super.dispose();
+  }
+
+  Future<void> _handleGoogleAccountChanged(GoogleSignInAccount? account) async {
+    if (account == null) {
+      if (_suppressNextSignOut) {
+        _suppressNextSignOut = false;
+        return;
+      }
+
+      await ref.read(authControllerProvider.notifier).signOut();
+      if (mounted) {
+        setState(() {
+          _isSigningIn = false;
+        });
+      }
+      return;
+    }
+
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {
+      _isSigningIn = true;
+      _initError = null;
+    });
+
+    try {
+      final authentication = await account.authentication;
+      final idToken = authentication.idToken;
+      if (idToken == null || idToken.isEmpty) {
+        throw Exception('Google did not return an ID token.');
+      }
+
+      await ref.read(authControllerProvider.notifier).signInWithGoogle(
+            idToken: idToken,
+            role: 'ADMIN',
+          );
+
+      final session = ref.read(authControllerProvider).valueOrNull;
+      if (session == null) {
+        throw Exception('Admin session could not be created.');
+      }
+
+      if (session.user.role != 'ADMIN') {
+        await ref.read(authControllerProvider.notifier).signOut();
+        _suppressNextSignOut = true;
+        await _googleSignIn.signOut();
+        if (!mounted) {
+          return;
+        }
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('This Google account is not authorized for admin access.'),
+            backgroundColor: Theme.of(context).colorScheme.error,
+          ),
+        );
+        return;
+      }
+
+      if (!mounted) {
+        return;
+      }
+
+      context.go('/admin');
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _initError = 'Unable to complete Google sign-in.';
+      });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Unable to sign in right now.'),
+            backgroundColor: Theme.of(context).colorScheme.error,
+          ),
+        );
+
+      _suppressNextSignOut = true;
+      await _googleSignIn.signOut();
+      await ref.read(authControllerProvider.notifier).signOut();
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSigningIn = false;
+        });
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     ref.listen<AsyncValue<AuthSession?>>(authControllerProvider, (prev, next) {
@@ -27,10 +184,11 @@ class _LoginPageState extends ConsumerState<LoginPage> {
       }
     });
 
+    final theme = Theme.of(context);
+
     return Scaffold(
       body: Row(
         children: [
-          // Left side: Branding
           Expanded(
             flex: 5,
             child: Container(
@@ -67,18 +225,18 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                           const SizedBox(height: 16),
                           Text(
                             'Admin Control Center',
-                            style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                                  color: Colors.white.withValues(alpha: 0.9),
-                                  fontWeight: FontWeight.w300,
-                                ),
+                            style: theme.textTheme.headlineMedium?.copyWith(
+                              color: Colors.white.withValues(alpha: 0.9),
+                              fontWeight: FontWeight.w300,
+                            ),
                           ),
                           const SizedBox(height: 32),
                           Text(
                             'Secure access portal for managing platform operations, workers, and services.',
-                            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                  color: Colors.white.withValues(alpha: 0.7),
-                                  height: 1.5,
-                                ),
+                            style: theme.textTheme.titleMedium?.copyWith(
+                              color: Colors.white.withValues(alpha: 0.7),
+                              height: 1.5,
+                            ),
                           ),
                         ],
                       ),
@@ -88,7 +246,6 @@ class _LoginPageState extends ConsumerState<LoginPage> {
               ),
             ),
           ),
-          // Right side: Login Form
           Expanded(
             flex: 4,
             child: Container(
@@ -118,29 +275,67 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                                 Text(
                                   'Welcome Back',
                                   textAlign: TextAlign.center,
-                                  style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                                        color: const Color(0xFF111827),
-                                        fontWeight: FontWeight.w800,
-                                        letterSpacing: -0.5,
-                                      ),
+                                  style: theme.textTheme.headlineMedium?.copyWith(
+                                    color: const Color(0xFF111827),
+                                    fontWeight: FontWeight.w800,
+                                    letterSpacing: -0.5,
+                                  ),
                                 ),
                                 const SizedBox(height: 12),
                                 Text(
                                   'Sign in with your authorized admin account to continue.',
                                   textAlign: TextAlign.center,
-                                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                                        color: const Color(0xFF6B7280),
-                                      ),
+                                  style: theme.textTheme.bodyLarge?.copyWith(
+                                    color: const Color(0xFF6B7280),
+                                  ),
                                 ),
-                                const SizedBox(height: 48),
-                                Container(
-                                  alignment: Alignment.center,
-                                  height: 44,
-                                  child: (GoogleSignInPlatform.instance as web.GoogleSignInPlugin).renderButton(
-                                    configuration: web.GSIButtonConfiguration(
-                                      size: web.GSIButtonSize.large,
-                                      text: web.GSIButtonText.continueWith,
+                                const SizedBox(height: 32),
+                                if (_initError != null) ...[
+                                  Container(
+                                    padding: const EdgeInsets.all(14),
+                                    decoration: BoxDecoration(
+                                      color: theme.colorScheme.errorContainer,
+                                      borderRadius: BorderRadius.circular(14),
                                     ),
+                                    child: Text(
+                                      _initError!,
+                                      textAlign: TextAlign.center,
+                                      style: theme.textTheme.bodyMedium?.copyWith(
+                                        color: theme.colorScheme.onErrorContainer,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 16),
+                                ],
+                                SizedBox(
+                                  height: 52,
+                                  child: Stack(
+                                    alignment: Alignment.center,
+                                    children: [
+                                      Positioned.fill(
+                                        child: IgnorePointer(
+                                          ignoring: _isSigningIn || _initError != null,
+                                          child: Opacity(
+                                            opacity: _isSigningIn ? 0.35 : 1,
+                                            child: (GoogleSignInPlatform.instance
+                                                    as web.GoogleSignInPlugin)
+                                                .renderButton(
+                                              configuration: web.GSIButtonConfiguration(
+                                                size: web.GSIButtonSize.large,
+                                                text: web.GSIButtonText.continueWith,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                      if (_isSigningIn)
+                                        const SizedBox(
+                                          width: 22,
+                                          height: 22,
+                                          child: CircularProgressIndicator(strokeWidth: 2.5),
+                                        ),
+                                    ],
                                   ),
                                 ),
                               ],

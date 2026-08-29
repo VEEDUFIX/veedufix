@@ -2,22 +2,37 @@ import { UserRole } from "@prisma/client";
 import { prisma as db } from "../../lib/prisma.js";
 import { AppError } from "../../lib/app-error.js";
 
-export async function getOrCreateChatRoom(bookingId: string, userId: string, role: UserRole) {
+async function assertChatAccess(bookingId: string, userId: string, role: UserRole) {
   const booking = await db.booking.findUnique({
-    where: { id: bookingId }
+    where: { id: bookingId },
+    select: {
+      id: true,
+      customerId: true,
+      worker: {
+        select: {
+          userId: true
+        }
+      }
+    }
   });
 
   if (!booking) {
     throw AppError.notFound("Booking not found");
   }
 
-  if (role === "CUSTOMER" && booking.customerId !== userId) {
+  const isCustomer = booking.customerId === userId;
+  const isWorker = booking.worker?.userId === userId;
+  const isAdmin = role === "ADMIN";
+
+  if (!isCustomer && !isWorker && !isAdmin) {
     throw AppError.forbidden("Unauthorized");
   }
 
-  if (role === "WORKER" && booking.workerId !== userId) {
-    throw AppError.forbidden("Unauthorized");
-  }
+  return booking;
+}
+
+export async function getOrCreateChatRoom(bookingId: string, userId: string, role: UserRole) {
+  await assertChatAccess(bookingId, userId, role);
 
   let chatRoom = await db.chatRoom.findUnique({
     where: { bookingId },
@@ -51,6 +66,8 @@ export async function saveMessage(
   content: string,
   attachments?: Array<{ url: string; name?: string; mimeType?: string; size?: number; kind: "image" | "file" }>
 ) {
+  await assertChatAccess(bookingId, senderId, senderRole);
+
   const chatRoom = await db.chatRoom.findUnique({
     where: { bookingId }
   });
@@ -72,7 +89,9 @@ export async function saveMessage(
   return message;
 }
 
-export async function markMessagesAsRead(bookingId: string, userId: string) {
+export async function markMessagesAsRead(bookingId: string, userId: string, role: UserRole) {
+  await assertChatAccess(bookingId, userId, role);
+
   const chatRoom = await db.chatRoom.findUnique({
     where: { bookingId }
   });

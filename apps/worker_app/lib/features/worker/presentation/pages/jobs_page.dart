@@ -44,6 +44,14 @@ class _JobsPageState extends ConsumerState<JobsPage>
 
   @override
   Widget build(BuildContext context) {
+    final incomingAsync = ref.watch(workerJobsProvider('incoming'));
+    final acceptedAsync = ref.watch(workerJobsProvider('accepted'));
+    final activeAsync = ref.watch(workerJobsProvider('active'));
+    final completedAsync = ref.watch(workerJobsProvider('completed'));
+    final acceptedBookingId = acceptedAsync.valueOrNull?.isNotEmpty == true
+        ? acceptedAsync.valueOrNull!.first.bookingId
+        : null;
+
     return Scaffold(
       body: SafeArea(
         child: Column(
@@ -68,6 +76,31 @@ class _JobsPageState extends ConsumerState<JobsPage>
                         ),
                   ),
                   const SizedBox(height: 18),
+                  _JobsOverviewCard(
+                    incomingCount: incomingAsync.maybeWhen(
+                      data: (jobs) => jobs.length,
+                      orElse: () => null,
+                    ),
+                    acceptedCount: acceptedAsync.maybeWhen(
+                      data: (jobs) => jobs.length,
+                      orElse: () => null,
+                    ),
+                    activeCount: activeAsync.maybeWhen(
+                      data: (jobs) => jobs.length,
+                      orElse: () => null,
+                    ),
+                    completedCount: completedAsync.maybeWhen(
+                      data: (jobs) => jobs.length,
+                      orElse: () => null,
+                    ),
+                    onPrimaryAction: () => context.go('/jobs?tab=accepted'),
+                    onSecondaryAction: acceptedBookingId == null
+                        ? null
+                        : () => context.push(
+                              '/job-execution?bookingId=$acceptedBookingId',
+                            ),
+                  ),
+                  const SizedBox(height: 18),
                   TabBar(
                     controller: _tabController!,
                     isScrollable: true,
@@ -89,6 +122,158 @@ class _JobsPageState extends ConsumerState<JobsPage>
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _JobsOverviewCard extends StatelessWidget {
+  const _JobsOverviewCard({
+    required this.incomingCount,
+    required this.acceptedCount,
+    required this.activeCount,
+    required this.completedCount,
+    required this.onPrimaryAction,
+    required this.onSecondaryAction,
+  });
+
+  final int? incomingCount;
+  final int? acceptedCount;
+  final int? activeCount;
+  final int? completedCount;
+  final VoidCallback onPrimaryAction;
+  final VoidCallback? onSecondaryAction;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
+
+    return PremiumGlassCard(
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  width: 50,
+                  height: 50,
+                  decoration: BoxDecoration(
+                    color: cs.primary.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Icon(
+                    Icons.speed_rounded,
+                    color: cs.primary,
+                  ),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Today at a glance',
+                        style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Use the live counts to move faster between incoming leads, accepted work, and jobs already in motion.',
+                        style: tt.bodyMedium?.copyWith(
+                          color: cs.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: [
+                _JobsStatPill(label: 'Incoming', value: _countLabel(incomingCount)),
+                _JobsStatPill(label: 'Accepted', value: _countLabel(acceptedCount)),
+                _JobsStatPill(label: 'Active', value: _countLabel(activeCount)),
+                _JobsStatPill(label: 'Completed', value: _countLabel(completedCount)),
+              ],
+            ),
+            const SizedBox(height: 14),
+            Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: [
+                FilledButton.icon(
+                  onPressed: onPrimaryAction,
+                  icon: const Icon(Icons.keyboard_arrow_right_rounded, size: 18),
+                  label: const Text('Open accepted jobs'),
+                ),
+                OutlinedButton.icon(
+                  onPressed: onSecondaryAction,
+                  icon: const Icon(Icons.request_quote_rounded, size: 18),
+                  label: const Text('Start a quote'),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _countLabel(int? count) {
+    if (count == null) {
+      return '...';
+    }
+    return '$count';
+  }
+}
+
+class _JobsStatPill extends StatelessWidget {
+  const _JobsStatPill({
+    required this.label,
+    required this.value,
+  });
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: cs.surfaceContainerHighest.withValues(alpha: 0.55),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.25)),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: tt.labelMedium?.copyWith(
+              color: cs.onSurfaceVariant,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            value,
+            style: tt.titleMedium?.copyWith(
+              fontWeight: FontWeight.w900,
+              color: cs.onSurface,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -128,7 +313,7 @@ class _JobTabContent extends ConsumerWidget {
           );
         },
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, s) => Center(child: Text('Error loading jobs: $e')),
+        error: (e, s) => const Center(child: Text('Error loading jobs.')),
       ),
     );
   }
@@ -196,10 +381,10 @@ class _JobCard extends ConsumerWidget {
               ScaffoldMessenger.of(context)
                   .showSnackBar(const SnackBar(content: Text('Job accepted')));
             }
-          } catch (e) {
+          } catch (_) {
             if (context.mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Failed to accept: $e')));
+                  const SnackBar(content: Text('Failed to accept job.')));
             }
           }
         }
@@ -207,7 +392,14 @@ class _JobCard extends ConsumerWidget {
         Future<void> declineJob() async {
           try {
             if (job.offerId == null) {
-              throw Exception('Missing offer ID');
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('This offer is no longer available.'),
+                  ),
+                );
+              }
+              return;
             }
             await ref
                 .read(workerJobRepositoryProvider)
@@ -217,10 +409,10 @@ class _JobCard extends ConsumerWidget {
               ScaffoldMessenger.of(context)
                   .showSnackBar(const SnackBar(content: Text('Job declined')));
             }
-          } catch (e) {
+          } catch (_) {
             if (context.mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Failed to decline: $e')));
+                  const SnackBar(content: Text('Failed to decline job.')));
             }
           }
         }
@@ -492,11 +684,11 @@ class _JobCard extends ConsumerWidget {
                                   const SnackBar(
                                       content: Text('Job accepted')));
                             }
-                          } catch (e) {
+                          } catch (_) {
                             if (context.mounted) {
                               ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                      content: Text('Failed to accept: $e')));
+                                  const SnackBar(
+                                      content: Text('Failed to accept job.')));
                             }
                           }
                         },
@@ -506,10 +698,17 @@ class _JobCard extends ConsumerWidget {
                     const SizedBox(width: 12),
                     Expanded(
                       child: OutlinedButton(
-                        onPressed: () async {
+                          onPressed: () async {
                           try {
                             if (job.offerId == null) {
-                              throw Exception('Missing offer ID');
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('This offer is no longer available.'),
+                                  ),
+                                );
+                              }
+                              return;
                             }
                             await ref
                                 .read(workerJobRepositoryProvider)
@@ -520,11 +719,11 @@ class _JobCard extends ConsumerWidget {
                                   const SnackBar(
                                       content: Text('Job declined')));
                             }
-                          } catch (e) {
+                          } catch (_) {
                             if (context.mounted) {
                               ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                      content: Text('Failed to decline: $e')));
+                                  const SnackBar(
+                                      content: Text('Failed to decline job.')));
                             }
                           }
                         },

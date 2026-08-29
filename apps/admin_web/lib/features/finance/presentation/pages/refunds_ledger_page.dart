@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -131,6 +132,16 @@ class _RefundsLedgerPageState extends ConsumerState<RefundsLedgerPage> {
 
   Future<void> _openDetails(FinanceRefundItem refund) async {
     await context.push('/finance/refunds/${refund.id}', extra: refund);
+  }
+
+  Future<void> _copyToClipboard(String value, String label) async {
+    await Clipboard.setData(ClipboardData(text: value));
+    if (!mounted) {
+      return;
+    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('$label copied')),
+    );
   }
 
   Future<void> _retry(String refundId) async {
@@ -441,11 +452,24 @@ class _RefundsLedgerPageState extends ConsumerState<RefundsLedgerPage> {
                             return DataRow(
                               cells: [
                                 DataCell(
-                                  Text(
-                                    refund.bookingCode.isNotEmpty
-                                        ? refund.bookingCode
-                                        : refund.bookingId,
-                                    style: const TextStyle(fontWeight: FontWeight.w600),
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        child: Text(
+                                          refund.bookingCode.isNotEmpty ? refund.bookingCode : refund.bookingId,
+                                          style: const TextStyle(fontWeight: FontWeight.w600),
+                                        ),
+                                      ),
+                                      IconButton(
+                                        tooltip: 'Copy reference',
+                                        visualDensity: VisualDensity.compact,
+                                        onPressed: () => _copyToClipboard(
+                                          refund.bookingCode.isNotEmpty ? refund.bookingCode : refund.bookingId,
+                                          'Reference',
+                                        ),
+                                        icon: const Icon(Icons.copy_rounded, size: 16),
+                                      ),
+                                    ],
                                   ),
                                 ),
                                 DataCell(
@@ -484,13 +508,28 @@ class _RefundsLedgerPageState extends ConsumerState<RefundsLedgerPage> {
                                   ),
                                 ),
                                 DataCell(
-                                  refund.status == 'failed'
-                                      ? TextButton.icon(
+                                  Wrap(
+                                    spacing: 6,
+                                    runSpacing: 6,
+                                    children: [
+                                      TextButton.icon(
+                                        onPressed: () => _openDetails(refund),
+                                        icon: const Icon(Icons.open_in_new_rounded, size: 16),
+                                        label: const Text('Open'),
+                                      ),
+                                      TextButton.icon(
+                                        onPressed: () => context.push('/audit-logs?search=${Uri.encodeComponent(refund.id)}'),
+                                        icon: const Icon(Icons.manage_search_rounded, size: 16),
+                                        label: const Text('Audit'),
+                                      ),
+                                      if (refund.status == 'failed')
+                                        TextButton.icon(
                                           onPressed: () => _retry(refund.id),
                                           icon: const Icon(Icons.refresh_rounded, size: 16),
                                           label: const Text('Retry'),
-                                        )
-                                      : const SizedBox.shrink(),
+                                        ),
+                                    ],
+                                  ),
                                 ),
                               ],
                               onSelectChanged: (_) => _openDetails(refund),
@@ -655,6 +694,8 @@ class _RefundDetailPageState extends ConsumerState<RefundDetailPage> {
             );
           }
 
+          final bookingLookup = refund.bookingCode.trim().isNotEmpty ? refund.bookingCode.trim() : refund.bookingId;
+
           return ListView(
             padding: const EdgeInsets.all(24),
             children: [
@@ -668,6 +709,38 @@ class _RefundDetailPageState extends ConsumerState<RefundDetailPage> {
                   _DetailChip(label: refund.customerName ?? 'Unknown customer'),
                   _DetailChip(label: '₹${refund.amount.toStringAsFixed(2)}'),
                   _DetailChip(label: MaterialLocalizations.of(context).formatMediumDate(refund.createdAt)),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 12,
+                runSpacing: 12,
+                children: [
+                  OutlinedButton.icon(
+                    onPressed: () => _copyToClipboard(refund.id, 'Refund ID'),
+                    icon: const Icon(Icons.copy_rounded),
+                    label: const Text('Copy refund ID'),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: () => _copyToClipboard(refund.bookingId, 'Booking ID'),
+                    icon: const Icon(Icons.copy_rounded),
+                    label: const Text('Copy booking ID'),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: () => context.push('/admin-bookings/${refund.bookingId}'),
+                    icon: const Icon(Icons.receipt_long_rounded),
+                    label: const Text('Open booking'),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: () => context.push('/admin-bookings?search=${Uri.encodeComponent(bookingLookup)}'),
+                    icon: const Icon(Icons.search_rounded),
+                    label: const Text('Booking search'),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: () => context.push('/audit-logs?search=${Uri.encodeComponent(refund.id)}'),
+                    icon: const Icon(Icons.history_rounded),
+                    label: const Text('Audit trail'),
+                  ),
                 ],
               ),
               const SizedBox(height: 16),
@@ -711,6 +784,16 @@ class _RefundDetailPageState extends ConsumerState<RefundDetailPage> {
           );
         },
       ),
+    );
+  }
+
+  Future<void> _copyToClipboard(String value, String label) async {
+    await Clipboard.setData(ClipboardData(text: value));
+    if (!mounted) {
+      return;
+    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('$label copied')),
     );
   }
 }

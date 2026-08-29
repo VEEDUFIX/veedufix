@@ -4,7 +4,7 @@ import { WebSocket, WebSocketServer, type RawData } from "ws";
 import { prisma } from "./prisma.js";
 import { logger } from "./logger.js";
 import { redis } from "./redis.js";
-import { verifyAccessToken } from "./jwt.js";
+import { authenticateAccessToken } from "./auth-session.js";
 
 type Role = "CUSTOMER" | "WORKER" | "ADMIN";
 
@@ -65,8 +65,14 @@ function channelForNotification(userId: string): string {
 }
 
 function parseToken(request: IncomingMessage): string | null {
-  const url = new URL(request.url ?? "", "http://localhost");
-  return url.searchParams.get("token");
+  const protocolHeader = request.headers["sec-websocket-protocol"];
+  if (typeof protocolHeader === "string") {
+    const offeredProtocol = protocolHeader.split(",")[0]?.trim();
+    if (offeredProtocol) {
+      return offeredProtocol;
+    }
+  }
+  return null;
 }
 
 function parseBookingId(request: IncomingMessage): string | null {
@@ -109,7 +115,7 @@ async function authorizeConnection(
     throw new Error("Missing access token");
   }
 
-  const payload = verifyAccessToken(token);
+  const payload = await authenticateAccessToken(token);
   const auth: RealtimeAuth = {
     userId: payload.sub,
     role: payload.role,
@@ -294,7 +300,10 @@ export function attachRealtimeGateway(server: HttpServer): void {
     return;
   }
 
-  websocketServer = new WebSocketServer({ noServer: true });
+  websocketServer = new WebSocketServer({
+    noServer: true,
+    handleProtocols: (protocols) => protocols.values().next().value ?? false
+  });
   attachedServer = server;
   server.on("upgrade", onUpgrade);
   logger.info("Realtime websocket gateway attached");

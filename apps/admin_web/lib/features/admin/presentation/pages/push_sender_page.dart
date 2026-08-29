@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
@@ -570,6 +571,34 @@ class _BroadcastDetailPageState extends ConsumerState<BroadcastDetailPage> {
                     _DetailLine(label: 'Broadcast ID', value: broadcast.broadcastId),
                     _DetailLine(label: 'Target audience', value: broadcast.targetRole ?? 'ALL'),
                     _DetailLine(label: 'Deep link', value: broadcast.route ?? 'None'),
+                    const SizedBox(height: 12),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        OutlinedButton.icon(
+                          onPressed: () {
+                            Clipboard.setData(ClipboardData(text: broadcast.broadcastId));
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Broadcast ID copied')),
+                            );
+                          },
+                          icon: const Icon(Icons.copy_rounded, size: 16),
+                          label: const Text('Copy ID'),
+                        ),
+                        if (broadcast.route != null && broadcast.route!.trim().isNotEmpty)
+                          OutlinedButton.icon(
+                            onPressed: () {
+                              Clipboard.setData(ClipboardData(text: broadcast.route!.trim()));
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text('Deep link copied')),
+                              );
+                            },
+                            icon: const Icon(Icons.link_rounded, size: 16),
+                            label: const Text('Copy deep link'),
+                          ),
+                      ],
+                    ),
                   ],
                 ),
               ),

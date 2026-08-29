@@ -38,6 +38,14 @@ class _AppShellPageState extends ConsumerState<AppShellPage> {
     final adminInitial = adminName.isNotEmpty ? adminName[0].toUpperCase() : 'A';
     final summary = overviewAsync.valueOrNull?.summary;
     final alertsCount = overviewAsync.valueOrNull?.alerts.length ?? 0;
+    final actionInboxCount = summary == null
+        ? 0
+        : summary.dispatchFailuresCount +
+            summary.openSupportTicketsCount +
+            summary.failedPayoutsCount +
+            summary.failedRefundsCount +
+            summary.pendingWorkerReviewsCount +
+            summary.openDisputesCount;
     final supportTicketsCount = summary?.openSupportTicketsCount ?? 0;
     final workerReviewsCount = summary?.pendingWorkerReviewsCount ?? 0;
     final isDesktop = MediaQuery.of(context).size.width > 900;
@@ -160,6 +168,15 @@ class _AppShellPageState extends ConsumerState<AppShellPage> {
                             location,
                             showExpanded,
                             badge: _badgeLabel(alertsCount),
+                          ),
+                          _buildNavItem(
+                            '/admin/action-inbox',
+                            Icons.inbox_outlined,
+                            Icons.inbox_rounded,
+                            'Action Inbox',
+                            location,
+                            showExpanded,
+                            badge: _badgeLabel(actionInboxCount),
                           ),
                           _buildNavItem(
                             '/ops/disputes',
@@ -415,6 +432,7 @@ class _AppShellPageState extends ConsumerState<AppShellPage> {
     const actions = [
       _QuickAction('Global Search', '/search', Icons.search_rounded),
       _QuickAction('Dashboard', '/admin', Icons.space_dashboard_rounded),
+      _QuickAction('Action Inbox', '/admin/action-inbox', Icons.inbox_rounded),
       _QuickAction('Alerts', '/ops/alerts', Icons.warning_rounded),
       _QuickAction('Disputes', '/ops/disputes', Icons.gavel_rounded),
       _QuickAction(

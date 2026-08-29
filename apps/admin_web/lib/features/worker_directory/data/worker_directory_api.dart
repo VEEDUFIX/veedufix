@@ -294,7 +294,7 @@ class WorkerDirectoryApi {
     if (profile is Map<String, dynamic>) {
       return WorkerDirectoryProfile.fromJson(profile);
     }
-    throw StateError('Worker directory response was malformed.');
+    throw Exception('Worker directory response was malformed.');
   }
 }
 

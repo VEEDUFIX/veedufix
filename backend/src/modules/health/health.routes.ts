@@ -17,7 +17,7 @@ healthRouter.get("/", async (_request, response) => {
 
   try {
     // Deep check 1: Postgres
-    await prisma.$queryRaw`SELECT 1`;
+    await prisma.$queryRawUnsafe("SELECT 1");
     status.postgres = "up";
   } catch (error) {
     logger.error({ error }, "Health check failed: Postgres");

@@ -4,12 +4,14 @@ import { requireAuth, requireRole } from "../../middleware/auth.js";
 import { validate } from "../../middleware/validate.js";
 import {
   confirmJobPhotoSchema,
+  uploadChatAttachmentSchema,
   uploadJobPhotoSchema,
   uploadSignatureSchema
 } from "./upload.schemas.js";
 import {
   confirmJobPhotoHandler,
   generateUploadSignatureHandler,
+  uploadChatAttachmentHandler,
   uploadJobPhotoHandler
 } from "./upload.controller.js";
 
@@ -75,4 +77,13 @@ uploadRouter.post(
   requireRole("WORKER"),
   validate(confirmJobPhotoSchema),
   confirmJobPhotoHandler
+);
+
+uploadRouter.post(
+  "/chat-attachment",
+  requireAuth,
+  upload.single("file"),
+  handleMulterError,
+  validate(uploadChatAttachmentSchema),
+  uploadChatAttachmentHandler
 );

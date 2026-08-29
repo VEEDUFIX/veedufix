@@ -420,7 +420,7 @@ class JobExecutionNotifier extends StateNotifier<JobExecutionState> {
   JobExecutionBooking get _booking {
     final booking = state.booking;
     if (booking == null) {
-      throw StateError('Job execution booking has not been initialised.');
+      throw Exception('Job execution booking has not been initialised.');
     }
     return booking;
   }
@@ -1162,7 +1162,7 @@ class JobExecutionNotifier extends StateNotifier<JobExecutionState> {
     final data = response.data ?? <String, dynamic>{};
     final secureUrl = data['secure_url'] as String?;
     if (secureUrl == null || secureUrl.isEmpty) {
-      throw StateError('Cloudinary did not return a secure URL.');
+      throw Exception('Cloudinary did not return a secure URL.');
     }
     return secureUrl;
   }

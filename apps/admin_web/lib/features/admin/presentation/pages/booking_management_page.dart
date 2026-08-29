@@ -208,8 +208,25 @@ class _BookingManagementPageState extends ConsumerState<BookingManagementPage>
           // ── List ────────────────────────────────────────────────────
           Expanded(
             child: bookingsAsync.when(
-              loading: () => const Center(child: CircularProgressIndicator()),
-              error: (e, _) => Center(child: Text('Error: $e')),
+              loading: () => ListView.separated(
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+                itemCount: 4,
+                separatorBuilder: (_, __) => const SizedBox(height: 10),
+                itemBuilder: (_, __) => const _BookingSkeletonCard(),
+              ),
+              error: (e, _) => Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: PremiumEmptyState(
+                    icon: Icons.cloud_off_rounded,
+                    title: 'Could not load bookings',
+                    subtitle: 'The bookings queue is unavailable right now. Please retry.',
+                    actionLabel: 'Retry',
+                    onAction: () => ref.refresh(adminBookingsProvider(filter).future),
+                  ),
+                ),
+              ),
               data: (bookings) {
                 if (bookings.isEmpty) {
                   return const PremiumEmptyState(
@@ -231,6 +248,44 @@ class _BookingManagementPageState extends ConsumerState<BookingManagementPage>
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _BookingSkeletonCard extends StatelessWidget {
+  const _BookingSkeletonCard();
+
+  @override
+  Widget build(BuildContext context) {
+    return const PremiumGlassCard(
+      child: Padding(
+        padding: EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                ShimmerWidget(width: 48, height: 48, radius: 14),
+                SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      ShimmerWidget(width: 180, height: 16, radius: 8),
+                      SizedBox(height: 8),
+                      ShimmerWidget(width: 120, height: 12, radius: 6),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            SizedBox(height: 16),
+            ShimmerWidget(width: double.infinity, height: 12, radius: 6),
+            SizedBox(height: 8),
+            ShimmerWidget(width: 160, height: 12, radius: 6),
+          ],
+        ),
       ),
     );
   }
@@ -344,6 +399,42 @@ class _AdminBookingCard extends StatelessWidget {
                 _InfoChip(
                   icon: Icons.currency_rupee_rounded,
                   label: '₹${booking.totalAmount.toStringAsFixed(0)}',
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                TextButton.icon(
+                  onPressed: () async {
+                    await Clipboard.setData(ClipboardData(text: booking.id));
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Booking ID copied')),
+                      );
+                    }
+                  },
+                  icon: const Icon(Icons.copy_rounded, size: 16),
+                  label: const Text('Copy ID'),
+                ),
+                TextButton.icon(
+                  onPressed: () async {
+                    await Clipboard.setData(ClipboardData(text: booking.code));
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Booking code copied')),
+                      );
+                    }
+                  },
+                  icon: const Icon(Icons.tag_rounded, size: 16),
+                  label: const Text('Copy code'),
+                ),
+                TextButton.icon(
+                  onPressed: () => context.push('/audit-logs?search=${Uri.encodeComponent(booking.id)}'),
+                  icon: const Icon(Icons.manage_search_rounded, size: 16),
+                  label: const Text('Audit'),
                 ),
               ],
             ),

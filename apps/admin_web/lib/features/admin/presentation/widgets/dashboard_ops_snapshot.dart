@@ -1,16 +1,22 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:admin_web/features/ops/data/ops_api.dart';
+import 'package:marketplace_shared/marketplace_shared.dart';
 import 'dashboard_shared.dart';
 
 class DashboardOpsSnapshot extends StatelessWidget {
   final bool isLoading;
   final OpsOverviewSnapshot? snapshot;
+  final String? error;
+  final VoidCallback? onRetry;
 
   const DashboardOpsSnapshot({
     super.key,
     required this.isLoading,
     this.snapshot,
+    this.error,
+    this.onRetry,
   });
 
   @override
@@ -27,8 +33,76 @@ class DashboardOpsSnapshot extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 24),
+        if (snapshot != null) ...[
+          GlassCard(
+            child: Padding(
+              padding: const EdgeInsets.all(18),
+              child: Row(
+                children: [
+                  Container(
+                    width: 52,
+                    height: 52,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF0F766E).withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: const Icon(Icons.inbox_rounded, color: Color(0xFF0F766E)),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Unified action inbox',
+                          style: GoogleFonts.poppins(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.black87,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Triage support, finance, review, and dispute items from one queue before they grow.',
+                          style: GoogleFonts.inter(
+                            color: Colors.black54,
+                            height: 1.35,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  FilledButton(
+                    onPressed: () => context.go('/admin/action-inbox'),
+                    child: const Text('Open inbox'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 24),
+        ],
         if (isLoading)
-          const Center(child: CircularProgressIndicator())
+          const Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _SnapshotSkeletonRow(),
+              SizedBox(height: 24),
+              _SnapshotSkeletonRow(),
+              SizedBox(height: 16),
+              _SnapshotSkeletonRow(),
+            ],
+          )
+        else if (error != null)
+          PremiumEmptyState(
+            icon: Icons.cloud_off_rounded,
+            title: 'Could not load operations snapshot',
+            subtitle:
+                'The live operations metrics are unavailable right now. Please retry.',
+            actionLabel: 'Retry',
+            onAction: onRetry,
+          )
         else if (snapshot != null) ...[
           LayoutBuilder(
             builder: (context, constraints) {
@@ -165,6 +239,53 @@ class SnapshotCard extends StatelessWidget {
               fontWeight: FontWeight.w700,
             ),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SnapshotSkeletonRow extends StatelessWidget {
+  const _SnapshotSkeletonRow();
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isSmall = constraints.maxWidth < 800;
+        final cards = [
+          const _SnapshotSkeletonCard(),
+          if (isSmall) const SizedBox(height: 24) else const SizedBox(width: 24),
+          const _SnapshotSkeletonCard(),
+          if (isSmall) const SizedBox(height: 24) else const SizedBox(width: 24),
+          const _SnapshotSkeletonCard(),
+        ];
+
+        if (isSmall) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: cards,
+          );
+        }
+        return Row(
+          children: cards.map((c) => c is SizedBox ? c : Expanded(child: c)).toList(),
+        );
+      },
+    );
+  }
+}
+
+class _SnapshotSkeletonCard extends StatelessWidget {
+  const _SnapshotSkeletonCard();
+
+  @override
+  Widget build(BuildContext context) {
+    return const GlassCard(
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          ShimmerWidget(width: 120, height: 14, radius: 8),
+          ShimmerWidget(width: 48, height: 16, radius: 8),
         ],
       ),
     );

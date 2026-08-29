@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:dio/dio.dart';
 import 'package:intl/intl.dart';
 import 'package:marketplace_shared/marketplace_shared.dart';
 import 'package:razorpay_flutter/razorpay_flutter.dart';
@@ -37,11 +38,14 @@ class BookingDetailPage extends ConsumerWidget {
             ),
           ),
         ),
-        title: Text('Booking Details',
-            style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
+        title: Text(
+          'Booking Details',
+          style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+        ),
         actions: [
           bookingAsync.whenOrNull(
                 data: (b) => IconButton(
+                  tooltip: 'Share booking',
                   icon: const Icon(Icons.share_rounded),
                   onPressed: () => _shareBooking(context, b),
                 ),
@@ -64,28 +68,31 @@ class BookingDetailPage extends ConsumerWidget {
   }
 
   void _shareBooking(BuildContext context, BookingDetail booking) {
-    Clipboard.setData(ClipboardData(
-      text: 'Booking #${booking.code} — ${booking.serviceName}\n'
-          'Status: ${_statusLabel(booking.status)}\n'
-          'Total: ₹${booking.totalAmount.toStringAsFixed(0)}',
-    ));
+    Clipboard.setData(
+      ClipboardData(
+        text:
+            'Booking #${booking.code} — ${booking.serviceName}\n'
+            'Status: ${_statusLabel(booking.status)}\n'
+            'Total: ₹${booking.totalAmount.toStringAsFixed(0)}',
+      ),
+    );
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Booking info copied to clipboard')),
     );
   }
 
   static String _statusLabel(String s) => switch (s) {
-        'PENDING' => 'Pending',
-        'ACCEPTED' => 'Accepted',
-        'WORKER_ASSIGNED' => 'Worker Assigned',
-        'EN_ROUTE' => 'En Route',
-        'ARRIVED' => 'Arrived',
-        'IN_PROGRESS' => 'In Progress',
-        'COMPLETED' => 'Completed',
-        'CANCELLED' => 'Cancelled',
-        'REFUNDED' => 'Refunded',
-        _ => s,
-      };
+    'PENDING' => 'Pending',
+    'ACCEPTED' => 'Accepted',
+    'WORKER_ASSIGNED' => 'Worker Assigned',
+    'EN_ROUTE' => 'En Route',
+    'ARRIVED' => 'Arrived',
+    'IN_PROGRESS' => 'In Progress',
+    'COMPLETED' => 'Completed',
+    'CANCELLED' => 'Cancelled',
+    'REFUNDED' => 'Refunded',
+    _ => s,
+  };
 }
 
 class _BookingDetailBody extends ConsumerWidget {
@@ -95,34 +102,34 @@ class _BookingDetailBody extends ConsumerWidget {
   static const _accent = Color(0xFFC2A15E);
 
   String get _statusLabel => switch (booking.status) {
-        'PENDING' => 'Pending',
-        'ACCEPTED' => 'Accepted',
-        'WORKER_ASSIGNED' => 'Worker Assigned',
-        'EN_ROUTE' => 'En Route',
-        'ARRIVED' => 'Arrived',
-        'IN_PROGRESS' => 'In Progress',
-        'COMPLETED' => 'Completed',
-        'CANCELLED' => 'Cancelled',
-        'REFUNDED' => 'Refunded',
-        _ => booking.status,
-      };
+    'PENDING' => 'Pending',
+    'ACCEPTED' => 'Accepted',
+    'WORKER_ASSIGNED' => 'Worker Assigned',
+    'EN_ROUTE' => 'En Route',
+    'ARRIVED' => 'Arrived',
+    'IN_PROGRESS' => 'In Progress',
+    'COMPLETED' => 'Completed',
+    'CANCELLED' => 'Cancelled',
+    'REFUNDED' => 'Refunded',
+    _ => booking.status,
+  };
 
   Color get _statusColor => switch (booking.status) {
-        'COMPLETED' => const Color(0xFF10B981),
-        'CANCELLED' || 'REFUNDED' => const Color(0xFFEF4444),
-        'IN_PROGRESS' || 'ARRIVED' => const Color(0xFF6366F1),
-        'EN_ROUTE' => const Color(0xFF14B8A6),
-        _ => const Color(0xFFF59E0B),
-      };
+    'COMPLETED' => const Color(0xFF10B981),
+    'CANCELLED' || 'REFUNDED' => const Color(0xFFEF4444),
+    'IN_PROGRESS' || 'ARRIVED' => const Color(0xFF6366F1),
+    'EN_ROUTE' => const Color(0xFF14B8A6),
+    _ => const Color(0xFFF59E0B),
+  };
 
   IconData get _statusIcon => switch (booking.status) {
-        'COMPLETED' => Icons.task_alt_rounded,
-        'CANCELLED' || 'REFUNDED' => Icons.cancel_rounded,
-        'IN_PROGRESS' => Icons.build_rounded,
-        'EN_ROUTE' => Icons.directions_car_rounded,
-        'ARRIVED' => Icons.location_on_rounded,
-        _ => Icons.schedule_rounded,
-      };
+    'COMPLETED' => Icons.task_alt_rounded,
+    'CANCELLED' || 'REFUNDED' => Icons.cancel_rounded,
+    'IN_PROGRESS' => Icons.build_rounded,
+    'EN_ROUTE' => Icons.directions_car_rounded,
+    'ARRIVED' => Icons.location_on_rounded,
+    _ => Icons.schedule_rounded,
+  };
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -134,10 +141,10 @@ class _BookingDetailBody extends ConsumerWidget {
       'WORKER_ASSIGNED',
       'EN_ROUTE',
       'ARRIVED',
-      'IN_PROGRESS'
+      'IN_PROGRESS',
     ].contains(booking.status);
     final canCancel = isActive;
-    final canRebook = booking.serviceSlug != null && !isActive;
+    final canRebook = !isActive;
 
     return RefreshIndicator(
       onRefresh: () async {
@@ -172,14 +179,21 @@ class _BookingDetailBody extends ConsumerWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(_statusLabel,
-                          style: tt.titleMedium?.copyWith(
-                              color: _statusColor,
-                              fontWeight: FontWeight.w800)),
+                      Text(
+                        _statusLabel,
+                        style: tt.titleMedium?.copyWith(
+                          color: _statusColor,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
                       const SizedBox(height: 2),
-                      Text('Booking #${booking.code}',
-                          style: tt.bodySmall?.copyWith(
-                              color: cs.onSurfaceVariant, letterSpacing: 0.5)),
+                      Text(
+                        'Booking #${booking.code}',
+                        style: tt.bodySmall?.copyWith(
+                          color: cs.onSurfaceVariant,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -193,23 +207,33 @@ class _BookingDetailBody extends ConsumerWidget {
             TapScale(
               onTap: () => _showEditBookingSheet(context, ref, booking),
               child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 14,
+                ),
                 decoration: BoxDecoration(
                   color: cs.surfaceContainerHighest.withValues(alpha: 0.5),
                   borderRadius: BorderRadius.circular(AbzioTheme.buttonRadius),
                   border: Border.all(
-                      color: cs.outlineVariant.withValues(alpha: 0.3)),
+                    color: cs.outlineVariant.withValues(alpha: 0.3),
+                  ),
                 ),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Icon(Icons.edit_calendar_rounded,
-                        size: 18, color: cs.primary),
+                    Icon(
+                      Icons.edit_calendar_rounded,
+                      size: 18,
+                      color: cs.primary,
+                    ),
                     const SizedBox(width: 8),
-                    Text('Edit address & time',
-                        style: tt.labelLarge?.copyWith(
-                            fontWeight: FontWeight.w700, color: cs.primary)),
+                    Text(
+                      'Edit address & time',
+                      style: tt.labelLarge?.copyWith(
+                        fontWeight: FontWeight.w700,
+                        color: cs.primary,
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -217,28 +241,50 @@ class _BookingDetailBody extends ConsumerWidget {
             const SizedBox(height: 10),
           ],
 
-          if ((booking.status == 'PENDING' || booking.status == 'ACCEPTED') && booking.customQuoteStatus == null) ...[
+          if ((booking.status == 'PENDING' || booking.status == 'ACCEPTED') &&
+              booking.customQuoteStatus == null) ...[
             TapScale(
               onTap: () => context.push('/bookings/${booking.id}/custom-quote'),
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 14,
+                ),
                 decoration: BoxDecoration(
                   color: const Color(0xFF0D9488).withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(AbzioTheme.buttonRadius),
-                  border: Border.all(color: const Color(0xFF0D9488).withValues(alpha: 0.3)),
+                  border: Border.all(
+                    color: const Color(0xFF0D9488).withValues(alpha: 0.3),
+                  ),
                 ),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    const Icon(Icons.request_quote_rounded, size: 18, color: Color(0xFF0D9488)),
+                    const Icon(
+                      Icons.request_quote_rounded,
+                      size: 18,
+                      color: Color(0xFF0D9488),
+                    ),
                     const SizedBox(width: 8),
-                    Text('Request custom quote', style: tt.labelLarge?.copyWith(fontWeight: FontWeight.w700, color: const Color(0xFF0D9488))),
+                    Text(
+                      'Request custom quote',
+                      style: tt.labelLarge?.copyWith(
+                        fontWeight: FontWeight.w700,
+                        color: const Color(0xFF0D9488),
+                      ),
+                    ),
                   ],
                 ),
               ),
             ),
             const SizedBox(height: 10),
           ],
+
+          _BookingHelpCard(
+            booking: booking,
+            canEdit: booking.status == 'PENDING',
+          ),
+          const SizedBox(height: 16),
 
           if (isActive) ...[
             if (booking.status == 'EN_ROUTE' ||
@@ -250,32 +296,42 @@ class _BookingDetailBody extends ConsumerWidget {
                       context.push('/tracking?bookingId=${booking.id}'),
                   child: Container(
                     padding: const EdgeInsets.symmetric(
-                        horizontal: 20, vertical: 14),
+                      horizontal: 20,
+                      vertical: 14,
+                    ),
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
                         colors: [cs.primary, cs.primary.withValues(alpha: 0.8)],
                         begin: Alignment.topLeft,
                         end: Alignment.bottomRight,
                       ),
-                      borderRadius:
-                          BorderRadius.circular(AbzioTheme.buttonRadius),
+                      borderRadius: BorderRadius.circular(
+                        AbzioTheme.buttonRadius,
+                      ),
                       boxShadow: [
                         BoxShadow(
-                            color: cs.primary.withValues(alpha: 0.35),
-                            blurRadius: 16,
-                            offset: const Offset(0, 6))
+                          color: cs.primary.withValues(alpha: 0.35),
+                          blurRadius: 16,
+                          offset: const Offset(0, 6),
+                        ),
                       ],
                     ),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        const Icon(Icons.location_on_rounded,
-                            color: Colors.white, size: 20),
+                        const Icon(
+                          Icons.location_on_rounded,
+                          color: Colors.white,
+                          size: 20,
+                        ),
                         const SizedBox(width: 10),
-                        Text('Track Professional',
-                            style: tt.titleSmall?.copyWith(
-                                color: Colors.white,
-                                fontWeight: FontWeight.w800)),
+                        Text(
+                          'Track Professional',
+                          style: tt.titleSmall?.copyWith(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
                       ],
                     ),
                   ),
@@ -292,22 +348,30 @@ class _BookingDetailBody extends ConsumerWidget {
                       child: Container(
                         padding: const EdgeInsets.symmetric(vertical: 14),
                         decoration: BoxDecoration(
-                          color:
-                              cs.surfaceContainerHighest.withValues(alpha: 0.5),
+                          color: cs.surfaceContainerHighest.withValues(
+                            alpha: 0.5,
+                          ),
                           borderRadius: BorderRadius.circular(14),
                           border: Border.all(
-                              color: cs.outlineVariant.withValues(alpha: 0.3)),
+                            color: cs.outlineVariant.withValues(alpha: 0.3),
+                          ),
                         ),
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Icon(Icons.chat_bubble_outline_rounded,
-                                size: 18, color: cs.primary),
+                            Icon(
+                              Icons.chat_bubble_outline_rounded,
+                              size: 18,
+                              color: cs.primary,
+                            ),
                             const SizedBox(width: 8),
-                            Text('Chat',
-                                style: tt.labelLarge?.copyWith(
-                                    fontWeight: FontWeight.w700,
-                                    color: cs.primary)),
+                            Text(
+                              'Chat',
+                              style: tt.labelLarge?.copyWith(
+                                fontWeight: FontWeight.w700,
+                                color: cs.primary,
+                              ),
+                            ),
                           ],
                         ),
                       ),
@@ -344,15 +408,20 @@ class _BookingDetailBody extends ConsumerWidget {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(booking.serviceName,
-                                style: tt.titleMedium
-                                    ?.copyWith(fontWeight: FontWeight.w800)),
+                            Text(
+                              booking.serviceName,
+                              style: tt.titleMedium?.copyWith(
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
                             const SizedBox(height: 2),
                             Text(
-                              DateFormat('EEE, d MMM y • h:mm a')
-                                  .format(booking.scheduledAt),
-                              style: tt.bodySmall
-                                  ?.copyWith(color: cs.onSurfaceVariant),
+                              DateFormat(
+                                'EEE, d MMM y • h:mm a',
+                              ).format(booking.scheduledAt),
+                              style: tt.bodySmall?.copyWith(
+                                color: cs.onSurfaceVariant,
+                              ),
                             ),
                           ],
                         ),
@@ -366,13 +435,20 @@ class _BookingDetailBody extends ConsumerWidget {
                     Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Icon(Icons.location_on_rounded,
-                            size: 18, color: cs.primary),
+                        Icon(
+                          Icons.location_on_rounded,
+                          size: 18,
+                          color: cs.primary,
+                        ),
                         const SizedBox(width: 8),
                         Expanded(
-                          child: Text(booking.addressLabel!,
-                              style: tt.bodyMedium
-                                  ?.copyWith(color: cs.onSurface, height: 1.4)),
+                          child: Text(
+                            booking.addressLabel!,
+                            style: tt.bodyMedium?.copyWith(
+                              color: cs.onSurface,
+                              height: 1.4,
+                            ),
+                          ),
                         ),
                       ],
                     ),
@@ -405,8 +481,9 @@ class _BookingDetailBody extends ConsumerWidget {
                     const _SectionLabel(label: 'Professional'),
                     const SizedBox(height: 12),
                     TapScale(
-                      onTap: () => context
-                          .push('/professional?id=${booking.worker!.id}'),
+                      onTap: () => context.push(
+                        '/professional?id=${booking.worker!.id}',
+                      ),
                       child: Row(
                         children: [
                           MarketplaceNetworkAvatar(
@@ -418,7 +495,9 @@ class _BookingDetailBody extends ConsumerWidget {
                                   .substring(0, 1)
                                   .toUpperCase(),
                               style: tt.titleMedium?.copyWith(
-                                  color: _accent, fontWeight: FontWeight.w800),
+                                color: _accent,
+                                fontWeight: FontWeight.w800,
+                              ),
                             ),
                           ),
                           const SizedBox(width: 14),
@@ -426,27 +505,36 @@ class _BookingDetailBody extends ConsumerWidget {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text(booking.worker!.name,
-                                    style: tt.titleMedium?.copyWith(
-                                        fontWeight: FontWeight.w800)),
+                                Text(
+                                  booking.worker!.name,
+                                  style: tt.titleMedium?.copyWith(
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
                                 const SizedBox(height: 4),
                                 Row(
                                   children: [
-                                    const Icon(Icons.star_rounded,
-                                        size: 14, color: Color(0xFFF59E0B)),
+                                    const Icon(
+                                      Icons.star_rounded,
+                                      size: 14,
+                                      color: Color(0xFFF59E0B),
+                                    ),
                                     const SizedBox(width: 4),
                                     Text(
-                                        booking.worker!.rating
-                                            .toStringAsFixed(1),
-                                        style: tt.bodySmall?.copyWith(
-                                            fontWeight: FontWeight.w600)),
+                                      booking.worker!.rating.toStringAsFixed(1),
+                                      style: tt.bodySmall?.copyWith(
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
                                   ],
                                 ),
                               ],
                             ),
                           ),
-                          Icon(Icons.chevron_right_rounded,
-                              color: cs.onSurfaceVariant),
+                          Icon(
+                            Icons.chevron_right_rounded,
+                            color: cs.onSurfaceVariant,
+                          ),
                         ],
                       ),
                     ),
@@ -466,22 +554,27 @@ class _BookingDetailBody extends ConsumerWidget {
                   const _SectionLabel(label: 'Payment'),
                   const SizedBox(height: 16),
                   _PayRow(
-                      label: 'Service total',
-                      value: '₹${booking.totalAmount.toStringAsFixed(2)}'),
+                    label: 'Service total',
+                    value: '₹${booking.totalAmount.toStringAsFixed(2)}',
+                  ),
                   const SizedBox(height: 10),
                   const Divider(height: 1),
                   const SizedBox(height: 10),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text('Amount paid',
-                          style: tt.titleSmall
-                              ?.copyWith(fontWeight: FontWeight.w800)),
+                      Text(
+                        'Amount paid',
+                        style: tt.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
                       Text(
                         '₹${booking.totalAmount.toStringAsFixed(2)}',
                         style: tt.titleSmall?.copyWith(
-                            fontWeight: FontWeight.w800,
-                            color: const Color(0xFF10B981)),
+                          fontWeight: FontWeight.w800,
+                          color: const Color(0xFF10B981),
+                        ),
                       ),
                     ],
                   ),
@@ -520,14 +613,17 @@ class _BookingDetailBody extends ConsumerWidget {
                   ),
                   const SizedBox(height: 16),
                   if (booking.timeline.isNotEmpty) ...[
-                    for (var index = 0;
-                        index < booking.timeline.length;
-                        index++)
+                    for (
+                      var index = 0;
+                      index < booking.timeline.length;
+                      index++
+                    )
                       _TimelineStep(
                         status: booking.timeline[index].status,
                         label: booking.timeline[index].title,
-                        time: DateFormat('d MMM, h:mm a')
-                            .format(booking.timeline[index].createdAt),
+                        time: DateFormat(
+                          'd MMM, h:mm a',
+                        ).format(booking.timeline[index].createdAt),
                         description: booking.timeline[index].description,
                         isCompleted: true,
                         isFirst: index == 0,
@@ -537,8 +633,9 @@ class _BookingDetailBody extends ConsumerWidget {
                     _TimelineStep(
                       status: 'PENDING',
                       label: 'Booking placed',
-                      time: DateFormat('d MMM, h:mm a')
-                          .format(booking.scheduledAt),
+                      time: DateFormat(
+                        'd MMM, h:mm a',
+                      ).format(booking.scheduledAt),
                       isCompleted: true,
                       isFirst: true,
                     ),
@@ -554,8 +651,11 @@ class _BookingDetailBody extends ConsumerWidget {
                       status: 'IN_PROGRESS',
                       label: 'Work in progress',
                       time: '',
-                      isCompleted: ['IN_PROGRESS', 'ARRIVED', 'COMPLETED']
-                          .contains(booking.status),
+                      isCompleted: [
+                        'IN_PROGRESS',
+                        'ARRIVED',
+                        'COMPLETED',
+                      ].contains(booking.status),
                     ),
                     _TimelineStep(
                       status: booking.status,
@@ -590,7 +690,7 @@ class _BookingDetailBody extends ConsumerWidget {
                       color: const Color(0xFFF59E0B).withValues(alpha: 0.3),
                       blurRadius: 16,
                       offset: const Offset(0, 6),
-                    )
+                    ),
                   ],
                 ),
                 child: Row(
@@ -598,11 +698,13 @@ class _BookingDetailBody extends ConsumerWidget {
                   children: [
                     const Icon(Icons.star_rounded, color: Colors.white),
                     const SizedBox(width: 8),
-                    Text('Rate this service',
-                        style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                              color: Colors.white,
-                              fontWeight: FontWeight.w800,
-                            )),
+                    Text(
+                      'Rate this service',
+                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -617,24 +719,29 @@ class _BookingDetailBody extends ConsumerWidget {
                     padding: const EdgeInsets.symmetric(vertical: 14),
                     decoration: BoxDecoration(
                       color: const Color(0xFFF97316).withValues(alpha: 0.08),
-                      borderRadius:
-                          BorderRadius.circular(AbzioTheme.buttonRadius),
+                      borderRadius: BorderRadius.circular(
+                        AbzioTheme.buttonRadius,
+                      ),
                       border: Border.all(
-                          color: const Color(0xFFF97316).withValues(alpha: 0.3)),
+                        color: const Color(0xFFF97316).withValues(alpha: 0.3),
+                      ),
                     ),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        const Icon(Icons.flag_rounded,
-                            size: 18, color: Color(0xFFF97316)),
+                        const Icon(
+                          Icons.flag_rounded,
+                          size: 18,
+                          color: Color(0xFFF97316),
+                        ),
                         const SizedBox(width: 8),
                         Text(
                           'Raise a Dispute',
-                          style:
-                              Theme.of(context).textTheme.titleSmall?.copyWith(
-                                    color: const Color(0xFFF97316),
-                                    fontWeight: FontWeight.w700,
-                                  ),
+                          style: Theme.of(context).textTheme.titleSmall
+                              ?.copyWith(
+                                color: const Color(0xFFF97316),
+                                fontWeight: FontWeight.w700,
+                              ),
                         ),
                       ],
                     ),
@@ -652,8 +759,9 @@ class _BookingDetailBody extends ConsumerWidget {
                   padding: const EdgeInsets.symmetric(vertical: 14),
                   decoration: BoxDecoration(
                     color: cs.errorContainer.withValues(alpha: 0.55),
-                    borderRadius:
-                        BorderRadius.circular(AbzioTheme.buttonRadius),
+                    borderRadius: BorderRadius.circular(
+                      AbzioTheme.buttonRadius,
+                    ),
                     border: Border.all(color: cs.error.withValues(alpha: 0.25)),
                   ),
                   child: Row(
@@ -664,9 +772,9 @@ class _BookingDetailBody extends ConsumerWidget {
                       Text(
                         'Cancel Booking',
                         style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                              color: cs.error,
-                              fontWeight: FontWeight.w700,
-                            ),
+                          color: cs.error,
+                          fontWeight: FontWeight.w700,
+                        ),
                       ),
                     ],
                   ),
@@ -686,20 +794,24 @@ class _BookingDetailBody extends ConsumerWidget {
                 color: cs.surfaceContainerHighest.withValues(alpha: 0.45),
                 borderRadius: BorderRadius.circular(AbzioTheme.buttonRadius),
                 border: Border.all(
-                    color: cs.outlineVariant.withValues(alpha: 0.45)),
+                  color: cs.outlineVariant.withValues(alpha: 0.45),
+                ),
               ),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.support_agent_rounded,
-                      color: cs.primary, size: 18),
+                  Icon(
+                    Icons.support_agent_rounded,
+                    color: cs.primary,
+                    size: 18,
+                  ),
                   const SizedBox(width: 8),
                   Text(
                     'Need help? Contact support',
                     style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                          color: cs.primary,
-                          fontWeight: FontWeight.w700,
-                        ),
+                      color: cs.primary,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                 ],
               ),
@@ -709,27 +821,34 @@ class _BookingDetailBody extends ConsumerWidget {
 
           if (canRebook) ...[
             TapScale(
-              onTap: () => context.push('/service/${booking.serviceSlug}'),
-              child: Container(
-                padding: const EdgeInsets.symmetric(vertical: 14),
-                decoration: BoxDecoration(
-                  color: cs.primary,
-                  borderRadius: BorderRadius.circular(AbzioTheme.buttonRadius),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Icon(Icons.refresh_rounded,
-                        color: Colors.white, size: 18),
-                    const SizedBox(width: 8),
-                    Text(
-                      'Book Again',
-                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w700,
-                          ),
-                    ),
-                  ],
+              onTap: () => _openRebookBooking(context, booking),
+              child: Semantics(
+                button: true,
+                label: 'Book again for ${booking.serviceName}',
+                child: Container(
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  decoration: BoxDecoration(
+                    color: cs.primary,
+                    borderRadius: BorderRadius.circular(AbzioTheme.buttonRadius),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(
+                        Icons.refresh_rounded,
+                        color: Colors.white,
+                        size: 18,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Book Again',
+                        style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -742,20 +861,24 @@ class _BookingDetailBody extends ConsumerWidget {
               decoration: BoxDecoration(
                 color: cs.surfaceContainerHighest.withValues(alpha: 0.5),
                 borderRadius: BorderRadius.circular(AbzioTheme.buttonRadius),
-                border:
-                    Border.all(color: cs.outlineVariant.withValues(alpha: 0.5)),
+                border: Border.all(
+                  color: cs.outlineVariant.withValues(alpha: 0.5),
+                ),
               ),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.receipt_long_rounded,
-                      color: cs.onSurface, size: 18),
+                  Icon(
+                    Icons.receipt_long_rounded,
+                    color: cs.onSurface,
+                    size: 18,
+                  ),
                   const SizedBox(width: 8),
                   Text(
                     'View Invoice',
                     style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                          fontWeight: FontWeight.w700,
-                        ),
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                 ],
               ),
@@ -767,33 +890,238 @@ class _BookingDetailBody extends ConsumerWidget {
   }
 }
 
+class _BookingHelpCard extends StatelessWidget {
+  const _BookingHelpCard({
+    required this.booking,
+    required this.canEdit,
+  });
+
+  final BookingDetail booking;
+  final bool canEdit;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
+    final bookingCode = booking.code;
+    final serviceName = booking.serviceName;
+
+    return PremiumGlassCard(
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  width: 42,
+                  height: 42,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF0F766E).withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: Icon(Icons.support_agent_rounded, color: cs.primary),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Need help with this booking?',
+                        style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'Get help with timing, payment, or the professional without leaving this page.',
+                        style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: [
+                _HelpActionChip(
+                  label: 'Booking issue',
+                  icon: Icons.receipt_long_rounded,
+                  color: const Color(0xFFF59E0B),
+                  onTap: () => _openSupportDraft(
+                    context,
+                    category: 'booking',
+                    subject: 'Issue with booking #$bookingCode',
+                    message:
+                        'I need help with booking #$bookingCode for $serviceName. Please review the booking and let me know the next steps.',
+                    bookingId: booking.id,
+                    bookingCode: bookingCode,
+                    serviceName: serviceName,
+                  ),
+                ),
+                _HelpActionChip(
+                  label: 'Payment issue',
+                  icon: Icons.payments_rounded,
+                  color: const Color(0xFF10B981),
+                  onTap: () => _openSupportDraft(
+                    context,
+                    category: 'payment',
+                    subject: 'Payment or refund issue',
+                    message:
+                        'I need help with a payment or refund for booking #$bookingCode ($serviceName).',
+                    bookingId: booking.id,
+                    bookingCode: bookingCode,
+                    serviceName: serviceName,
+                  ),
+                ),
+                _HelpActionChip(
+                  label: 'Report professional',
+                  icon: Icons.person_off_rounded,
+                  color: const Color(0xFFEF4444),
+                  onTap: () => _openSupportDraft(
+                    context,
+                    category: 'professional',
+                    subject: 'Report a professional',
+                    message:
+                        'I want to report an issue with the professional on booking #$bookingCode ($serviceName).',
+                    bookingId: booking.id,
+                    bookingCode: bookingCode,
+                    serviceName: serviceName,
+                  ),
+                ),
+                if (canEdit)
+                  _HelpActionChip(
+                    label: 'Edit booking',
+                    icon: Icons.edit_calendar_rounded,
+                    color: cs.primary,
+                    onTap: () => _openSupportDraft(
+                      context,
+                      category: 'booking',
+                      subject: 'Need to update booking #$bookingCode',
+                      message:
+                          'I would like help updating booking #$bookingCode for $serviceName. Please advise on the next step.',
+                      bookingId: booking.id,
+                      bookingCode: bookingCode,
+                      serviceName: serviceName,
+                    ),
+                  ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _HelpActionChip extends StatelessWidget {
+  const _HelpActionChip({
+    required this.label,
+    required this.icon,
+    required this.color,
+    required this.onTap,
+  });
+
+  final String label;
+  final IconData icon;
+  final Color color;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final tt = Theme.of(context).textTheme;
+    return ActionChip(
+      label: Text(label),
+      avatar: Icon(icon, size: 18, color: color),
+      labelStyle: tt.labelLarge?.copyWith(fontWeight: FontWeight.w700),
+      onPressed: onTap,
+      backgroundColor: color.withValues(alpha: 0.1),
+      side: BorderSide(color: color.withValues(alpha: 0.2)),
+    );
+  }
+}
+
+void _openSupportDraft(
+  BuildContext context, {
+  required String category,
+  required String subject,
+  required String message,
+  required String bookingId,
+  required String bookingCode,
+  required String serviceName,
+}) {
+  context.push(
+    '/support?autoCompose=true&category=${Uri.encodeComponent(category)}&bookingId=${Uri.encodeComponent(bookingId)}&bookingCode=${Uri.encodeComponent(bookingCode)}&serviceName=${Uri.encodeComponent(serviceName)}&subject=${Uri.encodeComponent(subject)}&message=${Uri.encodeComponent(message)}',
+  );
+}
+
 Future<void> _confirmCancelBooking(
   BuildContext context,
   WidgetRef ref,
   BookingDetail booking,
 ) async {
   final controller = TextEditingController();
+  final refundPreview = _refundPreviewForBooking(booking);
   try {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) {
         return AlertDialog(
           title: const Text('Cancel booking?'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text(
-                  'Tell us why you want to cancel so we can improve support.'),
-              const SizedBox(height: 12),
-              TextField(
-                controller: controller,
-                maxLines: 3,
-                maxLength: 200,
-                decoration: const InputDecoration(
-                  hintText: 'Reason for cancellation',
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: Theme.of(dialogContext).colorScheme.primaryContainer.withValues(alpha: 0.45),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                      color: Theme.of(dialogContext).colorScheme.primary.withValues(alpha: 0.16),
+                    ),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Refund preview',
+                        style: Theme.of(dialogContext).textTheme.labelLarge?.copyWith(
+                              fontWeight: FontWeight.w800,
+                              color: Theme.of(dialogContext).colorScheme.primary,
+                            ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        refundPreview,
+                        style: Theme.of(dialogContext).textTheme.bodyMedium?.copyWith(
+                              color: Theme.of(dialogContext).colorScheme.onSurfaceVariant,
+                              height: 1.4,
+                            ),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-            ],
+                const SizedBox(height: 14),
+                const Text(
+                  'Tell us why you want to cancel so we can improve support.',
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: controller,
+                  maxLines: 3,
+                  maxLength: 200,
+                  decoration: const InputDecoration(
+                    hintText: 'Reason for cancellation',
+                  ),
+                ),
+              ],
+            ),
           ),
           actions: [
             TextButton(
@@ -821,7 +1149,8 @@ Future<void> _confirmCancelBooking(
       }
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-            content: Text('Please provide a short cancellation reason.')),
+          content: Text('Please provide a short cancellation reason.'),
+        ),
       );
       return;
     }
@@ -834,20 +1163,80 @@ Future<void> _confirmCancelBooking(
     if (!context.mounted) {
       return;
     }
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Booking cancelled.')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Booking cancelled.')));
     context.go('/bookings');
   } catch (error) {
     if (!context.mounted) {
       return;
     }
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Could not cancel booking: $error')),
-    );
+    final message = error is DioException ? _errorMessageFromDio(error) : error.toString();
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   } finally {
     controller.dispose();
   }
+}
+
+void _openRebookBooking(BuildContext context, BookingDetail booking) {
+  final serviceSlug = booking.serviceSlug;
+  if (serviceSlug != null && serviceSlug.isNotEmpty) {
+    context.push('/service?id=${Uri.encodeComponent(serviceSlug)}');
+    return;
+  }
+
+  context.push('/search?q=${Uri.encodeComponent(booking.serviceName)}');
+}
+
+String _errorMessageFromDio(DioException error) {
+  final data = error.response?.data;
+  if (data is Map<String, dynamic>) {
+    final message = data['message'];
+    if (message is String && message.trim().isNotEmpty) {
+      return message;
+    }
+    final errorMessage = data['error_message'];
+    if (errorMessage is String && errorMessage.trim().isNotEmpty) {
+      return errorMessage;
+    }
+  }
+
+  return error.message ?? 'Could not cancel booking.';
+}
+
+String _refundPreviewForBooking(BookingDetail booking) {
+  final status = booking.status.toUpperCase();
+  final now = DateTime.now();
+  final scheduledAt = booking.scheduledAt.toLocal();
+  final hoursUntilBooking = scheduledAt.difference(now).inHours;
+
+  if (status == 'CANCELLED') {
+    return 'This booking is already cancelled, so no additional refund applies.';
+  }
+
+  if (status == 'COMPLETED') {
+    return 'This booking is complete. Refunds are usually unavailable after completion.';
+  }
+
+  if (status == 'PENDING' || status == 'REQUESTED') {
+    return 'A full refund is usually expected while the booking is still waiting for confirmation.';
+  }
+
+  if (status == 'ASSIGNED' || status == 'IN_PROGRESS') {
+    return 'A partial refund may apply because the job is already assigned or underway.';
+  }
+
+  if (hoursUntilBooking > 6) {
+    return 'A full refund is likely if you cancel now.';
+  }
+
+  if (hoursUntilBooking > 2) {
+    return 'A partial refund may apply this close to the scheduled time.';
+  }
+
+  return 'Refund eligibility is limited because the scheduled time is very near.';
 }
 
 // ─── Supporting widgets ───────────────────────────────────────────────────────
@@ -883,10 +1272,9 @@ Future<void> _raiseDisputeDialog(
                   width: 40,
                   height: 4,
                   decoration: BoxDecoration(
-                    color: Theme.of(sheetContext)
-                        .colorScheme
-                        .outlineVariant
-                        .withValues(alpha: 0.5),
+                    color: Theme.of(
+                      sheetContext,
+                    ).colorScheme.outlineVariant.withValues(alpha: 0.5),
                     borderRadius: BorderRadius.circular(99),
                   ),
                 ),
@@ -901,8 +1289,11 @@ Future<void> _raiseDisputeDialog(
                       color: const Color(0xFFF97316).withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(12),
                     ),
-                    child: const Icon(Icons.flag_rounded,
-                        color: Color(0xFFF97316), size: 22),
+                    child: const Icon(
+                      Icons.flag_rounded,
+                      color: Color(0xFFF97316),
+                      size: 22,
+                    ),
                   ),
                   const SizedBox(width: 14),
                   Expanded(
@@ -911,20 +1302,17 @@ Future<void> _raiseDisputeDialog(
                       children: [
                         Text(
                           'Raise a Dispute',
-                          style: Theme.of(sheetContext)
-                              .textTheme
-                              .titleLarge
+                          style: Theme.of(sheetContext).textTheme.titleLarge
                               ?.copyWith(fontWeight: FontWeight.w800),
                         ),
                         Text(
                           'Booking #${booking.code}',
-                          style: Theme.of(sheetContext)
-                              .textTheme
-                              .bodySmall
+                          style: Theme.of(sheetContext).textTheme.bodySmall
                               ?.copyWith(
-                                  color: Theme.of(sheetContext)
-                                      .colorScheme
-                                      .onSurfaceVariant),
+                                color: Theme.of(
+                                  sheetContext,
+                                ).colorScheme.onSurfaceVariant,
+                              ),
                         ),
                       ],
                     ),
@@ -938,20 +1326,22 @@ Future<void> _raiseDisputeDialog(
                   color: const Color(0xFFF97316).withValues(alpha: 0.06),
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(
-                      color: const Color(0xFFF97316).withValues(alpha: 0.2)),
+                    color: const Color(0xFFF97316).withValues(alpha: 0.2),
+                  ),
                 ),
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Icon(Icons.info_outline_rounded,
-                        size: 16, color: Color(0xFFF97316)),
+                    const Icon(
+                      Icons.info_outline_rounded,
+                      size: 16,
+                      color: Color(0xFFF97316),
+                    ),
                     const SizedBox(width: 10),
                     Expanded(
                       child: Text(
                         'You have 48 hours after job completion to raise a dispute. Worker payment will be paused until the admin reviews your case.',
-                        style: Theme.of(sheetContext)
-                            .textTheme
-                            .bodySmall
+                        style: Theme.of(sheetContext).textTheme.bodySmall
                             ?.copyWith(
                               color: const Color(0xFFF97316),
                               height: 1.5,
@@ -979,8 +1369,7 @@ Future<void> _raiseDisputeDialog(
                 children: [
                   Expanded(
                     child: OutlinedButton(
-                      onPressed: () =>
-                          Navigator.of(sheetContext).pop(false),
+                      onPressed: () => Navigator.of(sheetContext).pop(false),
                       child: const Text('Cancel'),
                     ),
                   ),
@@ -990,8 +1379,7 @@ Future<void> _raiseDisputeDialog(
                       style: FilledButton.styleFrom(
                         backgroundColor: const Color(0xFFF97316),
                       ),
-                      onPressed: () =>
-                          Navigator.of(sheetContext).pop(true),
+                      onPressed: () => Navigator.of(sheetContext).pop(true),
                       icon: const Icon(Icons.flag_rounded, size: 18),
                       label: const Text('Submit Dispute'),
                     ),
@@ -1017,30 +1405,34 @@ Future<void> _raiseDisputeDialog(
     if (!context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
-          content:
-              Text('Please provide a more detailed reason (min 10 characters).')),
+        content: Text(
+          'Please provide a more detailed reason (min 10 characters).',
+        ),
+      ),
     );
     return;
   }
 
   try {
-    await ref.read(apiClientProvider).post(
-      '/bookings/${booking.id}/dispute',
-      data: {'reason': reason},
-    );
+    await ref
+        .read(apiClientProvider)
+        .post('/bookings/${booking.id}/dispute', data: {'reason': reason});
     ref.invalidate(bookingDetailPageProvider(booking.id));
     if (!context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
         content: Text(
-            'Dispute submitted. Our team will review within 24–48 hours.'),
+          'Dispute submitted. Our team will review within 24–48 hours.',
+        ),
         backgroundColor: Color(0xFF0F766E),
       ),
     );
   } catch (error) {
     if (!context.mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Could not submit dispute: $error')),
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(
+      const SnackBar(content: Text('Could not submit dispute.')),
     );
   }
 }
@@ -1148,23 +1540,25 @@ class _BookingEditSheetState extends ConsumerState<_BookingEditSheet> {
 
     setState(() => _saving = true);
     try {
-      await ref.read(apiClientProvider).patch(
-        '/bookings/${widget.booking.id}',
-        data: {
-          'addressId': _selectedAddressId,
-          'scheduledAt': _selectedDateTime.toIso8601String(),
-        },
-      );
+      await ref
+          .read(apiClientProvider)
+          .patch(
+            '/bookings/${widget.booking.id}',
+            data: {
+              'addressId': _selectedAddressId,
+              'scheduledAt': _selectedDateTime.toIso8601String(),
+            },
+          );
       ref.invalidate(bookingDetailPageProvider(widget.booking.id));
       if (!mounted) return;
       Navigator.of(context).pop();
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Booking updated.')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Booking updated.')));
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not update booking: $error')),
+        const SnackBar(content: Text('Could not update booking.')),
       );
     } finally {
       if (mounted) {
@@ -1179,8 +1573,9 @@ class _BookingEditSheetState extends ConsumerState<_BookingEditSheet> {
     final tt = Theme.of(context).textTheme;
 
     return Padding(
-      padding:
-          EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+      padding: EdgeInsets.only(
+        bottom: MediaQuery.of(context).viewInsets.bottom,
+      ),
       child: Container(
         padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
         decoration: BoxDecoration(
@@ -1204,8 +1599,10 @@ class _BookingEditSheetState extends ConsumerState<_BookingEditSheet> {
                 ),
               ),
               const SizedBox(height: 18),
-              Text('Edit booking',
-                  style: tt.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
+              Text(
+                'Edit booking',
+                style: tt.titleLarge?.copyWith(fontWeight: FontWeight.w800),
+              ),
               const SizedBox(height: 4),
               Text(
                 'Update the address or reschedule before dispatch starts.',
@@ -1214,15 +1611,18 @@ class _BookingEditSheetState extends ConsumerState<_BookingEditSheet> {
               const SizedBox(height: 18),
               if (_loading)
                 const Center(
-                    child: Padding(
-                        padding: EdgeInsets.all(16),
-                        child: CircularProgressIndicator()))
+                  child: Padding(
+                    padding: EdgeInsets.all(16),
+                    child: CircularProgressIndicator(),
+                  ),
+                )
               else if (_error != null)
                 Text(_error!, style: tt.bodyMedium?.copyWith(color: cs.error))
               else ...[
-                Text('Saved address',
-                    style:
-                        tt.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
+                Text(
+                  'Saved address',
+                  style: tt.titleSmall?.copyWith(fontWeight: FontWeight.w700),
+                ),
                 const SizedBox(height: 8),
                 RadioGroup<String>(
                   groupValue: _selectedAddressId,
@@ -1233,9 +1633,12 @@ class _BookingEditSheetState extends ConsumerState<_BookingEditSheet> {
                       ..._addresses.map((address) {
                         return RadioListTile<String>(
                           value: address.id,
-                          title: Text(address.label,
-                              style: tt.bodyMedium
-                                  ?.copyWith(fontWeight: FontWeight.w700)),
+                          title: Text(
+                            address.label,
+                            style: tt.bodyMedium?.copyWith(
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
                           subtitle: Text(address.displayAddress),
                         );
                       }),
@@ -1251,7 +1654,8 @@ class _BookingEditSheetState extends ConsumerState<_BookingEditSheet> {
                         onPressed: _pickDate,
                         icon: const Icon(Icons.calendar_month_rounded),
                         label: Text(
-                            DateFormat('d MMM y').format(_selectedDateTime)),
+                          DateFormat('d MMM y').format(_selectedDateTime),
+                        ),
                       ),
                     ),
                     const SizedBox(width: 12),
@@ -1260,7 +1664,8 @@ class _BookingEditSheetState extends ConsumerState<_BookingEditSheet> {
                         onPressed: _pickTime,
                         icon: const Icon(Icons.schedule_rounded),
                         label: Text(
-                            DateFormat('h:mm a').format(_selectedDateTime)),
+                          DateFormat('h:mm a').format(_selectedDateTime),
+                        ),
                       ),
                     ),
                   ],
@@ -1294,10 +1699,10 @@ class _SectionLabel extends StatelessWidget {
     return Text(
       label.toUpperCase(),
       style: Theme.of(context).textTheme.labelSmall?.copyWith(
-            letterSpacing: 1.2,
-            fontWeight: FontWeight.w700,
-            color: Theme.of(context).colorScheme.onSurfaceVariant,
-          ),
+        letterSpacing: 1.2,
+        fontWeight: FontWeight.w700,
+        color: Theme.of(context).colorScheme.onSurfaceVariant,
+      ),
     );
   }
 }
@@ -1315,8 +1720,10 @@ class _PayRow extends StatelessWidget {
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
         Text(label, style: tt.bodyMedium?.copyWith(color: cs.onSurfaceVariant)),
-        Text(value,
-            style: tt.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
+        Text(
+          value,
+          style: tt.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
+        ),
       ],
     );
   }
@@ -1342,33 +1749,31 @@ class _TimelineStep extends StatelessWidget {
   final bool isLast;
 
   Color _statusColor(ColorScheme cs) => switch (status) {
-        'COMPLETED' => const Color(0xFF10B981),
-        'REFUNDED' ||
-        'CANCELLED' ||
-        'CANCELLED_MANUAL' ||
-        'CANCELLED_NO_SHOW' =>
-          const Color(0xFFEF4444),
-        'ARRIVED' || 'IN_PROGRESS' => const Color(0xFF6366F1),
-        'WORKER_ASSIGNED' => const Color(0xFF0F766E),
-        'PAYMENT_CAPTURED' => const Color(0xFF14B8A6),
-        'DISPATCH_FAILED' => const Color(0xFFF59E0B),
-        _ => cs.primary,
-      };
+    'COMPLETED' => const Color(0xFF10B981),
+    'REFUNDED' ||
+    'CANCELLED' ||
+    'CANCELLED_MANUAL' ||
+    'CANCELLED_NO_SHOW' => const Color(0xFFEF4444),
+    'ARRIVED' || 'IN_PROGRESS' => const Color(0xFF6366F1),
+    'WORKER_ASSIGNED' => const Color(0xFF0F766E),
+    'PAYMENT_CAPTURED' => const Color(0xFF14B8A6),
+    'DISPATCH_FAILED' => const Color(0xFFF59E0B),
+    _ => cs.primary,
+  };
 
   IconData _statusIcon() => switch (status) {
-        'COMPLETED' => Icons.task_alt_rounded,
-        'REFUNDED' ||
-        'CANCELLED' ||
-        'CANCELLED_MANUAL' ||
-        'CANCELLED_NO_SHOW' =>
-          Icons.cancel_rounded,
-        'ARRIVED' => Icons.location_on_rounded,
-        'IN_PROGRESS' => Icons.handyman_rounded,
-        'WORKER_ASSIGNED' => Icons.verified_rounded,
-        'PAYMENT_CAPTURED' => Icons.payments_rounded,
-        'DISPATCH_FAILED' => Icons.report_problem_rounded,
-        _ => Icons.schedule_rounded,
-      };
+    'COMPLETED' => Icons.task_alt_rounded,
+    'REFUNDED' ||
+    'CANCELLED' ||
+    'CANCELLED_MANUAL' ||
+    'CANCELLED_NO_SHOW' => Icons.cancel_rounded,
+    'ARRIVED' => Icons.location_on_rounded,
+    'IN_PROGRESS' => Icons.handyman_rounded,
+    'WORKER_ASSIGNED' => Icons.verified_rounded,
+    'PAYMENT_CAPTURED' => Icons.payments_rounded,
+    'DISPATCH_FAILED' => Icons.report_problem_rounded,
+    _ => Icons.schedule_rounded,
+  };
 
   @override
   Widget build(BuildContext context) {
@@ -1415,22 +1820,29 @@ class _TimelineStep extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(label,
-                    style: tt.bodyMedium?.copyWith(
-                      fontWeight: FontWeight.w600,
-                      color: isCompleted ? accent : cs.onSurfaceVariant,
-                    )),
+                Text(
+                  label,
+                  style: tt.bodyMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
+                    color: isCompleted ? accent : cs.onSurfaceVariant,
+                  ),
+                ),
                 if (time.isNotEmpty) ...[
                   const SizedBox(height: 2),
-                  Text(time,
-                      style:
-                          tt.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
+                  Text(
+                    time,
+                    style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+                  ),
                 ],
                 if (description != null && description!.isNotEmpty) ...[
                   const SizedBox(height: 4),
-                  Text(description!,
-                      style: tt.bodySmall
-                          ?.copyWith(color: cs.onSurfaceVariant, height: 1.35)),
+                  Text(
+                    description!,
+                    style: tt.bodySmall?.copyWith(
+                      color: cs.onSurfaceVariant,
+                      height: 1.35,
+                    ),
+                  ),
                 ],
               ],
             ),
@@ -1442,10 +1854,7 @@ class _TimelineStep extends StatelessWidget {
 }
 
 class _TimelineBadge extends StatelessWidget {
-  const _TimelineBadge({
-    required this.icon,
-    required this.label,
-  });
+  const _TimelineBadge({required this.icon, required this.label});
 
   final IconData icon;
   final String label;
@@ -1466,8 +1875,10 @@ class _TimelineBadge extends StatelessWidget {
         children: [
           Icon(icon, size: 14, color: cs.primary),
           const SizedBox(width: 6),
-          Text(label,
-              style: tt.labelMedium?.copyWith(fontWeight: FontWeight.w700)),
+          Text(
+            label,
+            style: tt.labelMedium?.copyWith(fontWeight: FontWeight.w700),
+          ),
         ],
       ),
     );
@@ -1531,40 +1942,41 @@ class BookingDetail {
   }
 
   factory BookingDetail.fromJson(Map<String, dynamic> json) => BookingDetail(
-        id: json['id'] as String? ?? '',
-        code: json['code'] as String? ?? '',
-        status: json['status'] as String? ?? 'PENDING',
-        scheduledAt: DateTime.tryParse(json['scheduledAt'] as String? ?? '') ??
-            DateTime.now(),
-        totalAmount: (json['totalAmount'] as num?)?.toDouble() ?? 0.0,
-        serviceName: json['serviceName'] as String? ?? 'Service',
-        serviceIcon: json['serviceIcon'] as String?,
-        serviceSlug: json['serviceSlug'] as String?,
-        addressLabel: json['addressLabel'] as String?,
-        worker: json['worker'] != null
-            ? BookingWorker.fromJson(json['worker'] as Map<String, dynamic>)
-            : null,
-        timeline: (json['timeline'] as List<dynamic>? ?? [])
-            .map((item) =>
-                BookingTimelineEvent.fromJson(item as Map<String, dynamic>))
-            .toList(),
-        customQuoteAmount:
-            (json['customQuoteAmount'] as num?)?.toDouble(),
-        customQuoteItemized: (json['customQuoteItemized'] as List<dynamic>?)
-            ?.map((e) => Map<String, dynamic>.from(e as Map))
-            .toList(),
-        customQuoteNotes: json['customQuoteNotes'] as String?,
-        customQuoteStatus: json['customQuoteStatus'] as String?,
-        sparePartStatus: json['sparePartStatus'] as String?,
-        sparePartTotal: (json['sparePartTotal'] as num?)?.toDouble(),
-        sparePartItems: (json['sparePartItems'] as List<dynamic>?)
-            ?.map((e) => Map<String, dynamic>.from(e as Map))
-            .toList(),
-        sparePartReceiptUrl: json['sparePartReceiptUrl'] as String?,
-        completedAt: json['completedAt'] != null
-            ? DateTime.tryParse(json['completedAt'] as String)
-            : null,
-      );
+    id: json['id'] as String? ?? '',
+    code: json['code'] as String? ?? '',
+    status: json['status'] as String? ?? 'PENDING',
+    scheduledAt:
+        DateTime.tryParse(json['scheduledAt'] as String? ?? '') ??
+        DateTime.now(),
+    totalAmount: (json['totalAmount'] as num?)?.toDouble() ?? 0.0,
+    serviceName: json['serviceName'] as String? ?? 'Service',
+    serviceIcon: json['serviceIcon'] as String?,
+    serviceSlug: json['serviceSlug'] as String?,
+    addressLabel: json['addressLabel'] as String?,
+    worker: json['worker'] != null
+        ? BookingWorker.fromJson(json['worker'] as Map<String, dynamic>)
+        : null,
+    timeline: (json['timeline'] as List<dynamic>? ?? [])
+        .map(
+          (item) => BookingTimelineEvent.fromJson(item as Map<String, dynamic>),
+        )
+        .toList(),
+    customQuoteAmount: (json['customQuoteAmount'] as num?)?.toDouble(),
+    customQuoteItemized: (json['customQuoteItemized'] as List<dynamic>?)
+        ?.map((e) => Map<String, dynamic>.from(e as Map))
+        .toList(),
+    customQuoteNotes: json['customQuoteNotes'] as String?,
+    customQuoteStatus: json['customQuoteStatus'] as String?,
+    sparePartStatus: json['sparePartStatus'] as String?,
+    sparePartTotal: (json['sparePartTotal'] as num?)?.toDouble(),
+    sparePartItems: (json['sparePartItems'] as List<dynamic>?)
+        ?.map((e) => Map<String, dynamic>.from(e as Map))
+        .toList(),
+    sparePartReceiptUrl: json['sparePartReceiptUrl'] as String?,
+    completedAt: json['completedAt'] != null
+        ? DateTime.tryParse(json['completedAt'] as String)
+        : null,
+  );
 }
 
 class BookingTimelineEvent {
@@ -1588,7 +2000,8 @@ class BookingTimelineEvent {
         status: json['status'] as String? ?? 'PENDING',
         title: json['title'] as String? ?? 'Update',
         description: json['description'] as String?,
-        createdAt: DateTime.tryParse(json['createdAt'] as String? ?? '') ??
+        createdAt:
+            DateTime.tryParse(json['createdAt'] as String? ?? '') ??
             DateTime.now(),
       );
 }
@@ -1645,13 +2058,19 @@ class _SparePartsBannerState extends ConsumerState<_SparePartsBanner> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-              content: Text('✅ Payment successful! Spare parts added to your bill.')),
+            content: Text(
+              '✅ Payment successful! Spare parts added to your bill.',
+            ),
+          ),
         );
       }
-    } catch (e) {
+    } catch (_) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Verification failed: $e')));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(
+          const SnackBar(content: Text('Verification failed. Please try again.')),
+        );
       }
     } finally {
       _pendingOrderId = null;
@@ -1665,8 +2084,10 @@ class _SparePartsBannerState extends ConsumerState<_SparePartsBanner> {
       setState(() => _loading = false);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-            content: Text(
-                'Payment failed: ${response.message ?? 'Unknown error'}')),
+          content: Text(
+            'Payment failed: ${response.message ?? 'Unknown error'}',
+          ),
+        ),
       );
     }
   }
@@ -1676,14 +2097,19 @@ class _SparePartsBannerState extends ConsumerState<_SparePartsBanner> {
     try {
       final api = ref.read(apiClientProvider);
       // 1. Create Razorpay order on our backend
-      final orderData = await api
-          .post('/bookings/${widget.booking.id}/spare-parts/payment-order');
+      final orderData = await api.post(
+        '/bookings/${widget.booking.id}/spare-parts/payment-order',
+      );
 
-      final keyId = orderData['keyId'] as String;
-      final rzpOrderId = orderData['orderId'] as String;
-      final amountPaise = orderData['amountPaise'] as int;
+      final keyId = orderData['keyId'] as String? ?? '';
+      final rzpOrderId = orderData['orderId'] as String? ?? '';
+      final amountPaise = orderData['amountPaise'] as int?;
       final customerName = orderData['customerName'] as String? ?? 'Customer';
       final phone = orderData['customerPhone'] as String? ?? '';
+
+      if (keyId.isEmpty || rzpOrderId.isEmpty || amountPaise == null) {
+        throw Exception('Payment order response was incomplete.');
+      }
 
       _pendingOrderId = rzpOrderId;
 
@@ -1698,12 +2124,15 @@ class _SparePartsBannerState extends ConsumerState<_SparePartsBanner> {
         amountInPaise: amountPaise,
       );
       // _loading is cleared by success/error callback
-    } catch (e) {
+    } catch (_) {
       _pendingOrderId = null;
       if (mounted) {
         setState(() => _loading = false);
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Error: $e')));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(
+          const SnackBar(content: Text('Could not start payment. Please try again.')),
+        );
       }
     }
   }
@@ -1716,12 +2145,16 @@ class _SparePartsBannerState extends ConsumerState<_SparePartsBanner> {
       ref.invalidate(bookingDetailPageProvider(widget.booking.id));
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Spare parts request rejected.')));
+          const SnackBar(content: Text('Spare parts request rejected.')),
+        );
       }
-    } catch (e) {
+    } catch (_) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Error: $e')));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(
+          const SnackBar(content: Text('Could not reject spare parts request.')),
+        );
       }
     } finally {
       if (mounted) setState(() => _loading = false);
@@ -1739,23 +2172,23 @@ class _SparePartsBannerState extends ConsumerState<_SparePartsBanner> {
 
     final (borderColor, bgColor, icon, label) = switch (status) {
       'PAID' => (
-          const Color(0xFF10B981),
-          const Color(0xFF10B981),
-          Icons.check_circle_rounded,
-          'Spare Parts Paid'
-        ),
+        const Color(0xFF10B981),
+        const Color(0xFF10B981),
+        Icons.check_circle_rounded,
+        'Spare Parts Paid',
+      ),
       'REJECTED' => (
-          cs.outline,
-          cs.outlineVariant,
-          Icons.cancel_rounded,
-          'Spare Parts Rejected'
-        ),
+        cs.outline,
+        cs.outlineVariant,
+        Icons.cancel_rounded,
+        'Spare Parts Rejected',
+      ),
       _ => (
-          const Color(0xFFF97316),
-          const Color(0xFFF97316),
-          Icons.hardware_rounded,
-          'Spare Parts Added — Payment Required'
-        ),
+        const Color(0xFFF97316),
+        const Color(0xFFF97316),
+        Icons.hardware_rounded,
+        'Spare Parts Added — Payment Required',
+      ),
     };
 
     return Container(
@@ -1775,14 +2208,20 @@ class _SparePartsBannerState extends ConsumerState<_SparePartsBanner> {
                 Icon(icon, color: borderColor, size: 20),
                 const SizedBox(width: 10),
                 Expanded(
-                  child: Text(label,
-                      style: tt.titleSmall?.copyWith(
-                          fontWeight: FontWeight.w800, color: borderColor)),
+                  child: Text(
+                    label,
+                    style: tt.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w800,
+                      color: borderColor,
+                    ),
+                  ),
                 ),
                 Text(
                   '₹${total.toStringAsFixed(0)}',
                   style: tt.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w900, color: borderColor),
+                    fontWeight: FontWeight.w900,
+                    color: borderColor,
+                  ),
                 ),
               ],
             ),
@@ -1792,22 +2231,28 @@ class _SparePartsBannerState extends ConsumerState<_SparePartsBanner> {
               const SizedBox(height: 14),
               const Divider(height: 1),
               const SizedBox(height: 10),
-              ...items.map((item) => Padding(
-                    padding: const EdgeInsets.only(bottom: 6),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Expanded(
-                            child: Text(item['label'] as String? ?? '',
-                                style: tt.bodyMedium)),
-                        Text(
-                          '₹${(item['amount'] as num).toStringAsFixed(0)}',
-                          style: tt.bodyMedium
-                              ?.copyWith(fontWeight: FontWeight.w700),
+              ...items.map(
+                (item) => Padding(
+                  padding: const EdgeInsets.only(bottom: 6),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Expanded(
+                        child: Text(
+                          item['label'] as String? ?? '',
+                          style: tt.bodyMedium,
                         ),
-                      ],
-                    ),
-                  )),
+                      ),
+                      Text(
+                        '₹${(item['amount'] as num).toStringAsFixed(0)}',
+                        style: tt.bodyMedium?.copyWith(
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
             ],
 
             // Receipt photo link
@@ -1815,12 +2260,16 @@ class _SparePartsBannerState extends ConsumerState<_SparePartsBanner> {
               const SizedBox(height: 10),
               Row(
                 children: [
-                  Icon(Icons.receipt_long_rounded,
-                      size: 14, color: cs.onSurfaceVariant),
+                  Icon(
+                    Icons.receipt_long_rounded,
+                    size: 14,
+                    color: cs.onSurfaceVariant,
+                  ),
                   const SizedBox(width: 6),
-                  Text('Receipt photo attached',
-                      style: tt.bodySmall
-                          ?.copyWith(color: cs.onSurfaceVariant)),
+                  Text(
+                    'Receipt photo attached',
+                    style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+                  ),
                 ],
               ),
             ],
@@ -1835,15 +2284,17 @@ class _SparePartsBannerState extends ConsumerState<_SparePartsBanner> {
                       onPressed: _loading ? null : _reject,
                       style: OutlinedButton.styleFrom(
                         foregroundColor: cs.error,
-                        side:
-                            BorderSide(color: cs.error.withValues(alpha: 0.5)),
+                        side: BorderSide(
+                          color: cs.error.withValues(alpha: 0.5),
+                        ),
                         padding: const EdgeInsets.symmetric(vertical: 12),
                       ),
                       child: _loading
                           ? const SizedBox(
                               width: 16,
                               height: 16,
-                              child: CircularProgressIndicator(strokeWidth: 2))
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
                           : const Text('Reject'),
                     ),
                   ),
@@ -1857,10 +2308,16 @@ class _SparePartsBannerState extends ConsumerState<_SparePartsBanner> {
                               width: 16,
                               height: 16,
                               child: CircularProgressIndicator(
-                                  strokeWidth: 2, color: Colors.white))
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
+                            )
                           : const Icon(Icons.payment_rounded, size: 18),
                       label: Text(
-                          _loading ? 'Processing…' : 'Pay ₹${total.toStringAsFixed(0)}'),
+                        _loading
+                            ? 'Processing…'
+                            : 'Pay ₹${total.toStringAsFixed(0)}',
+                      ),
                       style: FilledButton.styleFrom(
                         backgroundColor: const Color(0xFFF97316),
                         padding: const EdgeInsets.symmetric(vertical: 12),
@@ -1897,16 +2354,22 @@ class _CustomQuoteBannerState extends ConsumerState<_CustomQuoteBanner> {
       await api.post('/bookings/${widget.booking.id}/$action-quote');
       ref.invalidate(bookingDetailPageProvider(widget.booking.id));
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(action == 'accept'
-              ? '✅ Quote accepted! Proceed to payment.'
-              : 'Quote rejected.'),
-        ));
-      }
-    } catch (e) {
-      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e')),
+          SnackBar(
+            content: Text(
+              action == 'accept'
+                  ? '✅ Quote accepted! Proceed to payment.'
+                  : 'Quote rejected.',
+            ),
+          ),
+        );
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(
+          const SnackBar(content: Text('Unable to complete verification.')),
         );
       }
     } finally {
@@ -1925,23 +2388,23 @@ class _CustomQuoteBannerState extends ConsumerState<_CustomQuoteBanner> {
 
     final (borderColor, bgColor, icon, label) = switch (status) {
       'ACCEPTED' => (
-          const Color(0xFF10B981),
-          const Color(0xFF10B981),
-          Icons.check_circle_rounded,
-          'Quote Accepted'
-        ),
+        const Color(0xFF10B981),
+        const Color(0xFF10B981),
+        Icons.check_circle_rounded,
+        'Quote Accepted',
+      ),
       'REJECTED' => (
-          cs.outline,
-          cs.outlineVariant,
-          Icons.cancel_rounded,
-          'Quote Rejected'
-        ),
+        cs.outline,
+        cs.outlineVariant,
+        Icons.cancel_rounded,
+        'Quote Rejected',
+      ),
       _ => (
-          const Color(0xFFF59E0B),
-          const Color(0xFFF59E0B),
-          Icons.request_quote_rounded,
-          'Quote Received — Review Required'
-        ),
+        const Color(0xFFF59E0B),
+        const Color(0xFFF59E0B),
+        Icons.request_quote_rounded,
+        'Quote Received — Review Required',
+      ),
     };
 
     return Container(
@@ -1961,14 +2424,20 @@ class _CustomQuoteBannerState extends ConsumerState<_CustomQuoteBanner> {
                 Icon(icon, color: borderColor, size: 20),
                 const SizedBox(width: 10),
                 Expanded(
-                  child: Text(label,
-                      style: tt.titleSmall?.copyWith(
-                          fontWeight: FontWeight.w800, color: borderColor)),
+                  child: Text(
+                    label,
+                    style: tt.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w800,
+                      color: borderColor,
+                    ),
+                  ),
                 ),
                 Text(
                   '₹${amount.toStringAsFixed(0)}',
                   style: tt.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w900, color: borderColor),
+                    fontWeight: FontWeight.w900,
+                    color: borderColor,
+                  ),
                 ),
               ],
             ),
@@ -1978,23 +2447,28 @@ class _CustomQuoteBannerState extends ConsumerState<_CustomQuoteBanner> {
               const SizedBox(height: 14),
               const Divider(height: 1),
               const SizedBox(height: 10),
-              ...items.map((item) => Padding(
-                    padding: const EdgeInsets.only(bottom: 6),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Expanded(
-                          child: Text(item['label'] as String? ?? '',
-                              style: tt.bodyMedium),
+              ...items.map(
+                (item) => Padding(
+                  padding: const EdgeInsets.only(bottom: 6),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Expanded(
+                        child: Text(
+                          item['label'] as String? ?? '',
+                          style: tt.bodyMedium,
                         ),
-                        Text(
-                          '₹${(item['amount'] as num).toStringAsFixed(0)}',
-                          style: tt.bodyMedium
-                              ?.copyWith(fontWeight: FontWeight.w700),
+                      ),
+                      Text(
+                        '₹${(item['amount'] as num).toStringAsFixed(0)}',
+                        style: tt.bodyMedium?.copyWith(
+                          fontWeight: FontWeight.w700,
                         ),
-                      ],
-                    ),
-                  )),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
             ],
 
             // Notes
@@ -2009,13 +2483,20 @@ class _CustomQuoteBannerState extends ConsumerState<_CustomQuoteBanner> {
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Icon(Icons.info_outline_rounded,
-                        size: 14, color: cs.onSurfaceVariant),
+                    Icon(
+                      Icons.info_outline_rounded,
+                      size: 14,
+                      color: cs.onSurfaceVariant,
+                    ),
                     const SizedBox(width: 6),
                     Expanded(
-                        child: Text(notes,
-                            style: tt.bodySmall
-                                ?.copyWith(color: cs.onSurfaceVariant))),
+                      child: Text(
+                        notes,
+                        style: tt.bodySmall?.copyWith(
+                          color: cs.onSurfaceVariant,
+                        ),
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -2031,15 +2512,17 @@ class _CustomQuoteBannerState extends ConsumerState<_CustomQuoteBanner> {
                       onPressed: _loading ? null : () => _respond('reject'),
                       style: OutlinedButton.styleFrom(
                         foregroundColor: cs.error,
-                        side: BorderSide(color: cs.error.withValues(alpha: 0.5)),
+                        side: BorderSide(
+                          color: cs.error.withValues(alpha: 0.5),
+                        ),
                         padding: const EdgeInsets.symmetric(vertical: 12),
                       ),
                       child: _loading
                           ? const SizedBox(
                               width: 16,
                               height: 16,
-                              child:
-                                  CircularProgressIndicator(strokeWidth: 2))
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
                           : const Text('Reject'),
                     ),
                   ),
@@ -2053,9 +2536,14 @@ class _CustomQuoteBannerState extends ConsumerState<_CustomQuoteBanner> {
                               width: 16,
                               height: 16,
                               child: CircularProgressIndicator(
-                                  strokeWidth: 2, color: Colors.white))
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
+                            )
                           : const Icon(Icons.check_rounded, size: 18),
-                      label: Text(_loading ? 'Processing…' : 'Accept & Proceed'),
+                      label: Text(
+                        _loading ? 'Processing…' : 'Accept & Proceed',
+                      ),
                       style: FilledButton.styleFrom(
                         backgroundColor: const Color(0xFF10B981),
                         padding: const EdgeInsets.symmetric(vertical: 12),
@@ -2076,7 +2564,7 @@ class _CustomQuoteBannerState extends ConsumerState<_CustomQuoteBanner> {
 
 final bookingDetailPageProvider = FutureProvider.family
     .autoDispose<BookingDetail, String>((ref, bookingId) async {
-  final api = ref.watch(apiClientProvider);
-  final data = await api.get('/users/bookings/$bookingId');
-  return BookingDetail.fromJson(data['booking'] as Map<String, dynamic>);
-});
+      final api = ref.watch(apiClientProvider);
+      final data = await api.get('/users/bookings/$bookingId');
+      return BookingDetail.fromJson(data['booking'] as Map<String, dynamic>);
+    });

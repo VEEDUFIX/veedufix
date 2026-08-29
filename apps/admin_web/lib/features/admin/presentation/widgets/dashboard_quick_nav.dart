@@ -28,6 +28,13 @@ class DashboardQuickNav extends StatelessWidget {
           runSpacing: 24,
           children: [
             ActionCard(
+              title: 'Action Inbox',
+              subtitle: 'Unified queue for alerts, support, reviews, payouts, refunds, and disputes',
+              icon: Icons.inbox_rounded,
+              color: const Color(0xFF0F766E),
+              onTap: () => context.go('/admin/action-inbox'),
+            ),
+            ActionCard(
               title: 'Ops Overview',
               subtitle: 'Monitor jobs, dispatch, and disputes',
               icon: Icons.monitor_heart_rounded,

@@ -28,7 +28,10 @@ class RazorpayService {
     required int amountInPaise,
   }) {
     if (keyId.isEmpty) {
-      throw StateError('Missing Razorpay key ID.');
+      throw Exception('Missing Razorpay key ID.');
+    }
+    if (orderId.isEmpty) {
+      throw Exception('Missing Razorpay order ID.');
     }
 
     final options = <String, Object?>{

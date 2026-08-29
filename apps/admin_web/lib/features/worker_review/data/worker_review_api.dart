@@ -303,7 +303,7 @@ class WorkerReviewApi {
     if (profile is Map<String, dynamic>) {
       return WorkerReviewProfile.fromJson(profile);
     }
-    throw StateError('Worker review response was malformed.');
+    throw Exception('Worker review response was malformed.');
   }
 
   /// Requests a short-lived (5-minute) signed Cloudinary URL for a worker's
@@ -313,7 +313,7 @@ class WorkerReviewApi {
         .get<Map<String, dynamic>>('/admin/worker-review/$profileId/documents/aadhaar');
     final url = response.data?['url'] as String?;
     if (url == null || url.isEmpty) {
-      throw StateError('Server returned no URL for Aadhaar document.');
+      throw Exception('Server returned no URL for Aadhaar document.');
     }
     return url;
   }
@@ -326,7 +326,7 @@ class WorkerReviewApi {
     );
     final url = response.data?['url'] as String?;
     if (url == null || url.isEmpty) {
-      throw StateError('Server returned no URL for certification document.');
+      throw Exception('Server returned no URL for certification document.');
     }
     return url;
   }

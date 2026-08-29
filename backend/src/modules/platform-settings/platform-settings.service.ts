@@ -119,7 +119,10 @@ export async function getPlatformSettings() {
   };
 }
 
-export async function savePlatformSettings(payload: Record<string, unknown>) {
+export async function savePlatformSettings(
+  payload: Record<string, unknown>,
+  adminId = "system"
+) {
   const gstin = typeof payload.gstin === "string" ? payload.gstin.trim() : null;
   const legalBusinessName = typeof payload.legalBusinessName === "string" ? payload.legalBusinessName.trim() : null;
   const registeredAddress = typeof payload.registeredAddress === "string" ? payload.registeredAddress.trim() : null;
@@ -163,7 +166,7 @@ export async function savePlatformSettings(payload: Record<string, unknown>) {
   ]);
 
   await writeAuditLog({
-    adminId: "system",
+    adminId,
     action: "platform.settings_updated",
     targetType: "platform_settings",
     targetId: "primary",
@@ -187,7 +190,11 @@ export async function listCommissions() {
   };
 }
 
-export async function saveCommission(commissionId: string | null, payload: Record<string, unknown>) {
+export async function saveCommission(
+  commissionId: string | null,
+  payload: Record<string, unknown>,
+  adminId = "system"
+) {
   const cityId = typeof payload.cityId === "string" ? payload.cityId.trim() : null;
   const rate = typeof payload.rate === "number" ? payload.rate : Number(payload.rate);
   const fixedFee = typeof payload.fixedFee === "number" ? payload.fixedFee : Number(payload.fixedFee);
@@ -232,7 +239,7 @@ export async function saveCommission(commissionId: string | null, payload: Recor
     : null;
 
   await writeAuditLog({
-    adminId: "system",
+    adminId,
     action: existing ? "commission.updated" : "commission.created",
     targetType: "commission_rule",
     targetId: saved.id,
@@ -253,9 +260,9 @@ export async function saveCommission(commissionId: string | null, payload: Recor
   };
 }
 
-export async function deleteCommission(commissionId: string) {
+export async function deleteCommission(commissionId: string, adminId = "system") {
   await writeAuditLog({
-    adminId: "system",
+    adminId,
     action: "commission.deleted",
     targetType: "commission_rule",
     targetId: commissionId,

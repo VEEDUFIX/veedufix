@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:go_router/go_router.dart';
@@ -210,6 +211,26 @@ class _AuditLogsPageState extends ConsumerState<AuditLogsPage> {
                         });
                       },
                     ),
+                    _AuditFilterChip(
+                      label: 'Disputes',
+                      selected: _search.contains('dispute'),
+                      onTap: () {
+                        setState(() {
+                          _searchController.text = 'dispute';
+                          _search = 'dispute';
+                        });
+                      },
+                    ),
+                    _AuditFilterChip(
+                      label: 'Settings',
+                      selected: _search.contains('setting'),
+                      onTap: () {
+                        setState(() {
+                          _searchController.text = 'setting';
+                          _search = 'setting';
+                        });
+                      },
+                    ),
                   ],
                 ),
               ],
@@ -257,6 +278,7 @@ class _AuditLogsPageState extends ConsumerState<AuditLogsPage> {
                     final log = logs[index];
                     final isMoney = log.action.contains('refund') || log.action.contains('payout');
                     final isWorker = log.action.contains('worker');
+                    final relatedRoute = _relatedRouteForLog(log);
                     return InkWell(
                       borderRadius: BorderRadius.circular(20),
                       onTap: () => context.push('/audit-logs/${log.id}', extra: log),
@@ -309,6 +331,43 @@ class _AuditLogsPageState extends ConsumerState<AuditLogsPage> {
                                 style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant, fontFamily: 'monospace'),
                               ),
                             ],
+                            const SizedBox(height: 12),
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 8,
+                              children: [
+                                TextButton.icon(
+                                  onPressed: () async {
+                                    await Clipboard.setData(ClipboardData(text: log.targetId));
+                                    if (context.mounted) {
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        const SnackBar(content: Text('Target ID copied')),
+                                      );
+                                    }
+                                  },
+                                  icon: const Icon(Icons.copy_rounded, size: 16),
+                                  label: const Text('Copy target ID'),
+                                ),
+                                TextButton.icon(
+                                  onPressed: () async {
+                                    await Clipboard.setData(ClipboardData(text: log.id));
+                                    if (context.mounted) {
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        const SnackBar(content: Text('Log ID copied')),
+                                      );
+                                    }
+                                  },
+                                  icon: const Icon(Icons.copy_rounded, size: 16),
+                                  label: const Text('Copy log ID'),
+                                ),
+                                if (relatedRoute != null)
+                                  TextButton.icon(
+                                    onPressed: () => context.push(relatedRoute),
+                                    icon: const Icon(Icons.open_in_new_rounded, size: 16),
+                                    label: Text('Open related ${_relatedLabelForLog(log)}'),
+                                  ),
+                              ],
+                            ),
                           ],
                         ),
                       ),
@@ -397,6 +456,7 @@ class _AuditLogDetailPageState extends ConsumerState<AuditLogDetailPage> {
           }
 
           final metadataText = log.metadata == null ? null : const JsonEncoder.withIndent('  ').convert(log.metadata);
+          final relatedRoute = _relatedRouteForLog(log);
 
           return ListView(
             padding: const EdgeInsets.fromLTRB(20, 20, 20, 28),
@@ -449,6 +509,19 @@ class _AuditLogDetailPageState extends ConsumerState<AuditLogDetailPage> {
                         child: SelectableText(
                           metadataText,
                           style: tt.bodySmall?.copyWith(fontFamily: 'monospace', color: cs.onSurfaceVariant),
+                        ),
+                      ),
+                    ],
+                    if (relatedRoute != null) ...[
+                      const SizedBox(height: 14),
+                      SizedBox(
+                        width: double.infinity,
+                        child: FilledButton.tonalIcon(
+                          onPressed: () => context.push(relatedRoute),
+                          icon: const Icon(Icons.open_in_new_rounded),
+                          label: Text(
+                            'Open related ${_relatedLabelForLog(log)}',
+                          ),
                         ),
                       ),
                     ],
@@ -560,4 +633,49 @@ class _AuditFilterChip extends StatelessWidget {
       ),
     );
   }
+}
+
+String? _relatedRouteForLog(AdminAuditLogEntry log) {
+  final targetType = log.targetType.toLowerCase().trim();
+  final targetId = log.targetId.trim();
+  if (targetId.isEmpty) {
+    return null;
+  }
+
+  if (targetType.contains('dispute')) {
+    return '/ops/disputes/$targetId';
+  }
+  if (targetType.contains('payout')) {
+    return '/finance/payouts/$targetId';
+  }
+  if (targetType.contains('refund')) {
+    return '/finance/refunds/$targetId';
+  }
+  if (targetType.contains('worker') || targetType.contains('profile')) {
+    return '/workers/$targetId';
+  }
+  if (targetType.contains('booking')) {
+    return '/bookings/$targetId';
+  }
+  return null;
+}
+
+String _relatedLabelForLog(AdminAuditLogEntry log) {
+  final targetType = log.targetType.toLowerCase().trim();
+  if (targetType.contains('dispute')) {
+    return 'dispute';
+  }
+  if (targetType.contains('payout')) {
+    return 'payout';
+  }
+  if (targetType.contains('refund')) {
+    return 'refund';
+  }
+  if (targetType.contains('worker') || targetType.contains('profile')) {
+    return 'worker profile';
+  }
+  if (targetType.contains('booking')) {
+    return 'booking';
+  }
+  return 'record';
 }

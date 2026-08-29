@@ -11,8 +11,8 @@ class WorkerProfileRepository {
       return await _api.get('/users/me');
     } on DioException catch (e) {
       throw _handleError(e);
-    } catch (e) {
-      throw Exception('Failed to load account: $e');
+    } catch (_) {
+      throw Exception('Failed to load account.');
     }
   }
 
@@ -21,8 +21,8 @@ class WorkerProfileRepository {
       return await _api.get('/users/me/worker/profile');
     } on DioException catch (e) {
       throw _handleError(e);
-    } catch (e) {
-      throw Exception('Failed to load profile: $e');
+    } catch (_) {
+      throw Exception('Failed to load profile.');
     }
   }
 
@@ -32,8 +32,8 @@ class WorkerProfileRepository {
       return WorkerPublicProfile.fromJson(response['profile'] as Map<String, dynamic>);
     } on DioException catch (e) {
       throw _handleError(e);
-    } catch (e) {
-      throw Exception('Failed to load public profile: $e');
+    } catch (_) {
+      throw Exception('Failed to load public profile.');
     }
   }
 
@@ -42,8 +42,8 @@ class WorkerProfileRepository {
       await _api.patch('/users/me/worker/profile', data: data);
     } on DioException catch (e) {
       throw _handleError(e);
-    } catch (e) {
-      throw Exception('Failed to update profile: $e');
+    } catch (_) {
+      throw Exception('Failed to update profile.');
     }
   }
 
@@ -60,8 +60,8 @@ class WorkerProfileRepository {
       return data['avatarUrl'] as String?;
     } on DioException catch (e) {
       throw _handleError(e);
-    } catch (e) {
-      throw Exception('Failed to upload avatar: $e');
+    } catch (_) {
+      throw Exception('Failed to upload avatar.');
     }
   }
 
@@ -76,8 +76,8 @@ class WorkerProfileRepository {
       );
     } on DioException catch (e) {
       throw _handleError(e);
-    } catch (e) {
-      throw Exception('Failed to upload portfolio photo: $e');
+    } catch (_) {
+      throw Exception('Failed to upload portfolio photo.');
     }
   }
 
@@ -86,8 +86,8 @@ class WorkerProfileRepository {
       await _api.post('/worker/onboarding/skills', data: {'categoryId': categoryId});
     } on DioException catch (e) {
       throw _handleError(e);
-    } catch (e) {
-      throw Exception('Failed to add skill: $e');
+    } catch (_) {
+      throw Exception('Failed to add skill.');
     }
   }
 
@@ -98,8 +98,8 @@ class WorkerProfileRepository {
       return docs.whereType<Map<String, dynamic>>().toList(growable: false);
     } on DioException catch (e) {
       throw _handleError(e);
-    } catch (e) {
-      throw Exception('Failed to fetch documents: $e');
+    } catch (_) {
+      throw Exception('Failed to fetch documents.');
     }
   }
 
@@ -111,8 +111,8 @@ class WorkerProfileRepository {
       });
     } on DioException catch (e) {
       throw _handleError(e);
-    } catch (e) {
-      throw Exception('Failed to upload document: $e');
+    } catch (_) {
+      throw Exception('Failed to upload document.');
     }
   }
 
@@ -127,8 +127,8 @@ class WorkerProfileRepository {
           .toList(growable: false);
     } on DioException catch (e) {
       throw _handleError(e);
-    } catch (e) {
-      throw Exception('Failed to fetch categories: $e');
+    } catch (_) {
+      throw Exception('Failed to fetch categories.');
     }
   }
 

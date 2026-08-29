@@ -24,10 +24,10 @@ WebSocketChannel connectTrackingSocket({
       apiBaseUrl: apiBaseUrl,
       path: '/tracking/ws',
       queryParameters: {
-        'token': token,
         'bookingId': bookingId,
       },
     ),
+    protocols: [token],
   );
 }
 
@@ -39,9 +39,7 @@ WebSocketChannel connectNotificationSocket({
     buildRealtimeUri(
       apiBaseUrl: apiBaseUrl,
       path: '/notifications/ws',
-      queryParameters: {
-        'token': token,
-      },
     ),
+    protocols: [token],
   );
 }

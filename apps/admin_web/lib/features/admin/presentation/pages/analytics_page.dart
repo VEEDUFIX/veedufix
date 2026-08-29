@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:marketplace_shared/marketplace_shared.dart';
 import 'package:fl_chart/fl_chart.dart';
@@ -101,6 +102,33 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
                 ),
               ],
             ),
+            const SizedBox(height: 16),
+            Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: [
+                OutlinedButton.icon(
+                  onPressed: () => context.go('/finance'),
+                  icon: const Icon(Icons.account_balance_wallet_rounded, size: 18),
+                  label: const Text('Finance'),
+                ),
+                OutlinedButton.icon(
+                  onPressed: () => context.go('/admin-bookings'),
+                  icon: const Icon(Icons.receipt_long_rounded, size: 18),
+                  label: const Text('Bookings'),
+                ),
+                OutlinedButton.icon(
+                  onPressed: () => context.go('/customers'),
+                  icon: const Icon(Icons.people_alt_rounded, size: 18),
+                  label: const Text('Customers'),
+                ),
+                OutlinedButton.icon(
+                  onPressed: () => context.go('/audit-logs'),
+                  icon: const Icon(Icons.manage_search_rounded, size: 18),
+                  label: const Text('Audit logs'),
+                ),
+              ],
+            ),
             const SizedBox(height: 32),
             Wrap(
               spacing: 10,
@@ -135,15 +163,22 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
             const SizedBox(height: 24),
 
             if (_isLoading)
-              const Center(
-                child: Padding(
-                  padding: EdgeInsets.all(48.0),
-                  child: CircularProgressIndicator(),
-                ),
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 48.0),
+                child: _AnalyticsSkeleton(),
               )
             else if (_error != null)
               Center(
-                child: Text('Failed to load data: $_error', style: const TextStyle(color: Colors.red)),
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: PremiumEmptyState(
+                    icon: Icons.cloud_off_rounded,
+                    title: 'Could not load analytics',
+                    subtitle: 'The analytics dashboard is unavailable right now. Please retry.',
+                    actionLabel: 'Retry',
+                    onAction: _loadData,
+                  ),
+                ),
               )
             else if (_payload != null) ...[
             _AnalyticsSummaryRow(
@@ -444,6 +479,77 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
             );
           }).toList(),
         ),
+      ),
+    );
+  }
+}
+
+class _AnalyticsSkeleton extends StatelessWidget {
+  const _AnalyticsSkeleton();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Expanded(child: _AnalyticsMetricSkeleton()),
+            SizedBox(width: 16),
+            Expanded(child: _AnalyticsMetricSkeleton()),
+            SizedBox(width: 16),
+            Expanded(child: _AnalyticsMetricSkeleton()),
+          ],
+        ),
+        SizedBox(height: 24),
+        Row(
+          children: [
+            Expanded(child: _AnalyticsChartSkeleton(height: 320)),
+            SizedBox(width: 24),
+            Expanded(child: _AnalyticsChartSkeleton(height: 320)),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class _AnalyticsMetricSkeleton extends StatelessWidget {
+  const _AnalyticsMetricSkeleton();
+
+  @override
+  Widget build(BuildContext context) {
+    return const PremiumGlassCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          ShimmerWidget(width: 120, height: 14, radius: 8),
+          SizedBox(height: 12),
+          ShimmerWidget(width: 96, height: 28, radius: 10),
+          SizedBox(height: 10),
+          ShimmerWidget(width: 150, height: 12, radius: 6),
+        ],
+      ),
+    );
+  }
+}
+
+class _AnalyticsChartSkeleton extends StatelessWidget {
+  const _AnalyticsChartSkeleton({this.height = 240});
+
+  final double height;
+
+  @override
+  Widget build(BuildContext context) {
+    return PremiumGlassCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const ShimmerWidget(width: 180, height: 18, radius: 8),
+          const SizedBox(height: 8),
+          const ShimmerWidget(width: 240, height: 12, radius: 6),
+          SizedBox(height: height),
+        ],
       ),
     );
   }

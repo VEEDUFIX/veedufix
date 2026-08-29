@@ -608,7 +608,7 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
       final decoded = jsonDecode(controller.text) as Map<String, dynamic>;
       final categories = decoded['categories'];
       if (categories is! List) {
-        throw StateError('categories must be an array');
+        throw Exception('categories must be an array');
       }
       await _api.importCatalog(categories);
       await _reload();

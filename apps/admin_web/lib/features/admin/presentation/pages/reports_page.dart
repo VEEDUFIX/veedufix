@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:marketplace_shared/marketplace_shared.dart';
@@ -66,6 +67,33 @@ class ReportsPage extends ConsumerWidget {
                       FilledButton.tonal(
                         onPressed: () => _download('$baseUrl/api/admin/reports/payouts?status=failed'),
                         child: const Text('Failed payouts'),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      OutlinedButton.icon(
+                        onPressed: () => context.go('/finance'),
+                        icon: const Icon(Icons.account_balance_wallet_rounded, size: 16),
+                        label: const Text('Finance hub'),
+                      ),
+                      OutlinedButton.icon(
+                        onPressed: () => context.go('/audit-logs'),
+                        icon: const Icon(Icons.manage_search_rounded, size: 16),
+                        label: const Text('Audit logs'),
+                      ),
+                      OutlinedButton.icon(
+                        onPressed: () {
+                          Clipboard.setData(ClipboardData(text: '$baseUrl/api/admin/reports/bookings'));
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Bookings export URL copied')),
+                          );
+                        },
+                        icon: const Icon(Icons.copy_rounded, size: 16),
+                        label: const Text('Copy bookings URL'),
                       ),
                     ],
                   ),

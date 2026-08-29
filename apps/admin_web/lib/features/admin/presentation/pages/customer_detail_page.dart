@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
@@ -40,6 +41,16 @@ class _AdminCustomerDetailPageState extends ConsumerState<AdminCustomerDetailPag
       _future = _load();
     });
     await _future;
+  }
+
+  Future<void> _copyToClipboard(String value, String label) async {
+    await Clipboard.setData(ClipboardData(text: value));
+    if (!mounted) {
+      return;
+    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('$label copied')),
+    );
   }
 
   @override
@@ -104,6 +115,8 @@ class _AdminCustomerDetailPageState extends ConsumerState<AdminCustomerDetailPag
               ),
             );
           }
+
+          final searchTerm = customer.phone.trim().isNotEmpty ? customer.phone.trim() : customer.id;
 
           return RefreshIndicator(
             onRefresh: _reload,
@@ -173,6 +186,44 @@ class _AdminCustomerDetailPageState extends ConsumerState<AdminCustomerDetailPag
                                 value: '₹${customer.totalSpend.toStringAsFixed(0)}',
                                 icon: Icons.currency_rupee_rounded,
                               ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        Wrap(
+                          spacing: 10,
+                          runSpacing: 10,
+                          children: [
+                            OutlinedButton.icon(
+                              onPressed: () => _copyToClipboard(customer.id, 'Customer ID'),
+                              icon: const Icon(Icons.copy_rounded),
+                              label: const Text('Copy customer ID'),
+                            ),
+                            OutlinedButton.icon(
+                              onPressed: () => _copyToClipboard(customer.phone, 'Phone number'),
+                              icon: const Icon(Icons.phone_rounded),
+                              label: const Text('Copy phone'),
+                            ),
+                            if ((customer.email ?? '').trim().isNotEmpty)
+                              OutlinedButton.icon(
+                                onPressed: () => _copyToClipboard(customer.email!, 'Email address'),
+                                icon: const Icon(Icons.mail_outline_rounded),
+                                label: const Text('Copy email'),
+                              ),
+                            OutlinedButton.icon(
+                              onPressed: () => context.push('/audit-logs?search=${Uri.encodeComponent(customer.id)}'),
+                              icon: const Icon(Icons.manage_search_rounded),
+                              label: const Text('Audit trail'),
+                            ),
+                            OutlinedButton.icon(
+                              onPressed: () => context.push('/admin-bookings?search=${Uri.encodeComponent(searchTerm)}'),
+                              icon: const Icon(Icons.receipt_long_rounded),
+                              label: const Text('Bookings'),
+                            ),
+                            OutlinedButton.icon(
+                              onPressed: () => context.push('/support-tickets?search=${Uri.encodeComponent(searchTerm)}'),
+                              icon: const Icon(Icons.support_agent_rounded),
+                              label: const Text('Support'),
                             ),
                           ],
                         ),

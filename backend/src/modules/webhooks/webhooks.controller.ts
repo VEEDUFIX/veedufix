@@ -1,4 +1,5 @@
 import { Request, Response } from "express";
+import { logger } from "../../lib/logger.js";
 import { handleRazorpayWebhook } from "./webhooks.service.js";
 
 type RequestWithRawBody = Request & {
@@ -17,6 +18,7 @@ export async function razorpayWebhookHandler(request: Request, response: Respons
     );
     response.status(200).json({ ok: true });
   } catch (error) {
+    logger.warn({ error }, "Webhook processing failed");
     response.status(400).json({
       message: "Webhook processing failed"
     });

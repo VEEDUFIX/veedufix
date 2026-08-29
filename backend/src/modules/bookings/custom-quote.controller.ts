@@ -1,5 +1,6 @@
 import { Response, NextFunction } from 'express';
 import { AuthenticatedRequest } from '../../middleware/auth.js';
+import { UserRole } from '@prisma/client';
 import * as quoteService from './custom-quote.service.js';
 
 export async function requestCustomQuoteHandler(req: AuthenticatedRequest, res: Response, next: NextFunction) {
@@ -18,6 +19,7 @@ export async function submitCustomQuoteHandler(req: AuthenticatedRequest, res: R
     const booking = await quoteService.submitCustomQuote(
       req.params.bookingId as string,
       req.auth!.userId,
+      req.auth!.role as UserRole,
       req.body.amount,
       req.body.notes,
       req.body.itemized

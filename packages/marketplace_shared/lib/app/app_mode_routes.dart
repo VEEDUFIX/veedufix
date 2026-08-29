@@ -106,6 +106,7 @@ Set<String> allowedRoutesForMode(AppMode mode) {
       },
     AppMode.admin => const {
         '/admin',
+        '/admin/action-inbox',
         '/search',
         '/analytics',
         '/profile',

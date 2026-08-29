@@ -11,8 +11,8 @@ class NotificationsRepository {
       await _api.post('/notifications/mark-all-read');
     } on DioException catch (e) {
       throw _handleError(e);
-    } catch (e) {
-      throw Exception('Failed to mark all as read: $e');
+    } catch (_) {
+      throw Exception('Failed to mark all as read.');
     }
   }
 
@@ -21,8 +21,8 @@ class NotificationsRepository {
       await _api.patch('/notifications/$notificationId/read');
     } on DioException catch (e) {
       throw _handleError(e);
-    } catch (e) {
-      throw Exception('Failed to mark notification as read: $e');
+    } catch (_) {
+      throw Exception('Failed to mark notification as read.');
     }
   }
 

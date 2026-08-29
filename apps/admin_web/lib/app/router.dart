@@ -6,6 +6,7 @@ import 'package:marketplace_shared/marketplace_shared.dart';
 import '../features/auth/presentation/pages/login_page.dart';
 import '../features/auth/presentation/pages/otp_page.dart';
 import '../features/admin/presentation/pages/admin_dashboard_page.dart';
+import '../features/admin/presentation/pages/action_inbox_page.dart';
 import '../features/admin/presentation/pages/admin_quick_actions_page.dart';
 import '../features/admin/presentation/pages/analytics_page.dart';
 import '../features/catalog/presentation/pages/catalog_manager_page.dart';
@@ -99,6 +100,10 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/admin',
             builder: (context, state) => const AdminDashboardPage(),
+          ),
+          GoRoute(
+            path: '/admin/action-inbox',
+            builder: (context, state) => const AdminActionInboxPage(),
           ),
           GoRoute(
             path: '/admin/quick-actions',

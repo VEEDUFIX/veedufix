@@ -156,8 +156,25 @@ class CouponManagerPage extends ConsumerWidget {
         ],
       ),
       body: couponsAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text('Error: $e')),
+        loading: () => ListView.separated(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.fromLTRB(20, 12, 20, 40),
+          itemCount: 4,
+          separatorBuilder: (_, __) => const SizedBox(height: 10),
+          itemBuilder: (_, __) => const _CouponSkeletonCard(),
+        ),
+        error: (e, _) => Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: PremiumEmptyState(
+              icon: Icons.cloud_off_rounded,
+              title: 'Could not load coupons',
+              subtitle: 'Coupon data is unavailable right now. Please retry.',
+              actionLabel: 'Retry',
+              onAction: () => ref.refresh(adminCouponsProvider.future),
+            ),
+          ),
+        ),
         data: (coupons) => coupons.isEmpty
             ? const PremiumEmptyState(
                 icon: Icons.discount_rounded,
@@ -335,6 +352,35 @@ class _CouponCard extends StatelessWidget {
   }
 }
 
+class _CouponSkeletonCard extends StatelessWidget {
+  const _CouponSkeletonCard();
+
+  @override
+  Widget build(BuildContext context) {
+    return const PremiumGlassCard(
+      child: Padding(
+        padding: EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                ShimmerWidget(width: 100, height: 16, radius: 8),
+                Spacer(),
+                ShimmerWidget(width: 72, height: 28, radius: 999),
+              ],
+            ),
+            SizedBox(height: 10),
+            ShimmerWidget(width: 180, height: 12, radius: 6),
+            SizedBox(height: 8),
+            ShimmerWidget(width: 120, height: 12, radius: 6),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class CouponDetailPage extends ConsumerStatefulWidget {
   const CouponDetailPage({
     super.key,
@@ -500,6 +546,38 @@ class _CouponDetailPageState extends ConsumerState<CouponDetailPage> {
                 Text(coupon.description!.trim()),
                 const SizedBox(height: 16),
               ],
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  OutlinedButton.icon(
+                    onPressed: () {
+                      Clipboard.setData(ClipboardData(text: coupon.id));
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Coupon ID copied')),
+                      );
+                    },
+                    icon: const Icon(Icons.copy_rounded, size: 16),
+                    label: const Text('Copy ID'),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: () {
+                      Clipboard.setData(ClipboardData(text: coupon.code));
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Coupon code copied')),
+                      );
+                    },
+                    icon: const Icon(Icons.local_offer_rounded, size: 16),
+                    label: const Text('Copy code'),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: () => context.push('/audit-logs?search=${Uri.encodeComponent(coupon.id)}'),
+                    icon: const Icon(Icons.manage_search_rounded, size: 16),
+                    label: const Text('Audit trail'),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
               Wrap(
                 spacing: 8,
                 runSpacing: 8,

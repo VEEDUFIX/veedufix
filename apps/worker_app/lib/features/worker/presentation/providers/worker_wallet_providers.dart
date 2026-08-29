@@ -20,7 +20,7 @@ class _PayoutNotifier extends StateNotifier<AsyncValue<void>> {
   _PayoutNotifier(this._ref) : super(const AsyncValue.data(null));
   final Ref _ref;
 
-  Future<void> requestPayout(double amount, String upiId) async {
+  Future<void> requestPayout(double amount, {String? upiId}) async {
     state = const AsyncValue.loading();
     try {
       final repo = _ref.read(workerWalletRepositoryProvider);

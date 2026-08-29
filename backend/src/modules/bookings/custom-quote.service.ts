@@ -1,3 +1,4 @@
+import { UserRole } from "@prisma/client";
 import { prisma } from '../../lib/prisma.js';
 import { AppError } from '../../lib/app-error.js';
 
@@ -19,6 +20,7 @@ export async function requestCustomQuote(bookingId: string, customerId: string, 
 export async function submitCustomQuote(
   bookingId: string,
   submitterId: string,
+  submitterRole: UserRole,
   amount: number,
   notes?: string,
   itemized?: Array<{ label: string; qty: number; unitPrice: number }>
@@ -28,6 +30,18 @@ export async function submitCustomQuote(
   if (booking.customQuoteStatus !== 'REQUESTED') {
     throw AppError.conflict('Booking does not have an active custom quote request');
   }
+
+  if (submitterRole !== "ADMIN") {
+    const workerProfile = await prisma.workerProfile.findUnique({
+      where: { userId: submitterId },
+      select: { id: true }
+    });
+
+    if (!workerProfile || booking.workerId !== workerProfile.id) {
+      throw AppError.forbidden('Only the assigned worker can submit this quote');
+    }
+  }
+
   return prisma.booking.update({
     where: { id: bookingId },
     data: {

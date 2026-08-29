@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:marketplace_shared/marketplace_shared.dart';
 import 'package:url_launcher/url_launcher_string.dart';
 
@@ -211,6 +213,16 @@ class _WorkerReviewDetailPageState extends ConsumerState<WorkerReviewDetailPage>
     }
   }
 
+  Future<void> _copyToClipboard(String value, String label) async {
+    await Clipboard.setData(ClipboardData(text: value));
+    if (!mounted) {
+      return;
+    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('$label copied')),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final profile = _profile;
@@ -305,6 +317,39 @@ class _WorkerReviewDetailPageState extends ConsumerState<WorkerReviewDetailPage>
                       _StatusChip(label: profile.submittedShortDate, accent: accent),
                       _StatusChip(label: requestedCategories.isEmpty ? 'No skills submitted' : '${requestedCategories.length} requested categories', accent: const Color(0xFF2563EB)),
                       _StatusChip(label: profile.maskedAadhaar, accent: const Color(0xFF0F766E)),
+                    ],
+                  ),
+                  const SizedBox(height: 14),
+                  Wrap(
+                    spacing: 10,
+                    runSpacing: 10,
+                    children: [
+                      OutlinedButton.icon(
+                        onPressed: () => context.push('/workers/${profile.id}'),
+                        icon: const Icon(Icons.badge_rounded),
+                        label: const Text('Open worker profile'),
+                      ),
+                      OutlinedButton.icon(
+                        onPressed: () => context.go('/worker-review'),
+                        icon: const Icon(Icons.list_alt_rounded),
+                        label: const Text('Review queue'),
+                      ),
+                      OutlinedButton.icon(
+                        onPressed: () => _copyToClipboard(profile.id, 'Profile ID'),
+                        icon: const Icon(Icons.copy_rounded),
+                        label: const Text('Copy profile ID'),
+                      ),
+                      if (profile.userId.isNotEmpty)
+                        OutlinedButton.icon(
+                          onPressed: () => _copyToClipboard(profile.userId, 'User ID'),
+                          icon: const Icon(Icons.person_outline_rounded),
+                          label: const Text('Copy user ID'),
+                        ),
+                      OutlinedButton.icon(
+                        onPressed: () => context.push('/audit-logs?search=${Uri.encodeComponent(profile.id)}'),
+                        icon: const Icon(Icons.manage_search_rounded),
+                        label: const Text('Audit trail'),
+                      ),
                     ],
                   ),
                 ],

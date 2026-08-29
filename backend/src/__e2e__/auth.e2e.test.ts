@@ -13,7 +13,7 @@ vi.mock('../lib/prisma.js', () => ({
       create: vi.fn(),
     },
     authSession: {
-      upsert: vi.fn(),
+      create: vi.fn(),
     },
     refreshToken: {
       create: vi.fn(),
@@ -130,7 +130,7 @@ describe('Auth API (E2E)', () => {
       vi.mocked(prisma.user.upsert).mockResolvedValue({
         id: 'user1', phone: '+919876543210', role: 'CUSTOMER', isActive: true, createdAt: new Date(0)
       } as any);
-      vi.mocked(prisma.authSession.upsert).mockResolvedValue({ id: 'session1' } as any);
+      vi.mocked(prisma.authSession.create).mockResolvedValue({ id: 'session1' } as any);
 
       const res = await request(app)
         .post('/api/auth/otp/verify')

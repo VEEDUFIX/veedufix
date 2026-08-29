@@ -712,13 +712,15 @@ model AuthSession {
   userId      String
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   provider    String
-  providerId  String   @unique
+  providerId  String
   accessToken String?
   refreshToken String?
   ipAddress   String?
   userAgent   String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+
+  @@index([providerId])
 }
 
 model WorkerSkill {

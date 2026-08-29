@@ -445,7 +445,7 @@ export async function retryPayout(payoutId: string) {
   }
 
   if (payout.status !== "failed") {
-    throw AppError.badRequest("Only failed payouts can be retried");
+    return payout;
   }
 
   // Only allow retry within 7 days of original creation
@@ -455,6 +455,10 @@ export async function retryPayout(payoutId: string) {
 
   const updated = await claimRetryablePayout(payoutId);
   if (!updated) {
+    const current = await getPayoutById(payoutId);
+    if (current && current.status !== "failed") {
+      return current;
+    }
     throw AppError.badRequest("Payout is no longer retryable");
   }
 

@@ -735,6 +735,16 @@ class _ServiceAreaDetailPageState extends ConsumerState<ServiceAreaDetailPage> {
     }
   }
 
+  Future<void> _copyToClipboard(String value, String label) async {
+    await Clipboard.setData(ClipboardData(text: value));
+    if (!mounted) {
+      return;
+    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('$label copied')),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
@@ -795,6 +805,7 @@ class _ServiceAreaDetailPageState extends ConsumerState<ServiceAreaDetailPage> {
           final coverage = area.pincode != null
               ? 'Exact pincode ${area.pincode}'
               : 'Range ${area.pincodeRangeStart ?? 'n/a'} - ${area.pincodeRangeEnd ?? 'n/a'}';
+          final cityLookup = area.city.id;
 
           return ListView(
             padding: const EdgeInsets.all(24),
@@ -851,6 +862,21 @@ class _ServiceAreaDetailPageState extends ConsumerState<ServiceAreaDetailPage> {
                 spacing: 12,
                 runSpacing: 12,
                 children: [
+                  OutlinedButton.icon(
+                    onPressed: () => _copyToClipboard(area.id, 'Area ID'),
+                    icon: const Icon(Icons.copy_rounded),
+                    label: const Text('Copy area ID'),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: () => _copyToClipboard(cityLookup, 'City ID'),
+                    icon: const Icon(Icons.location_city_rounded),
+                    label: const Text('Copy city ID'),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: () => context.go('/service-areas'),
+                    icon: const Icon(Icons.map_rounded),
+                    label: const Text('Manage areas'),
+                  ),
                   FilledButton(
                     onPressed: _busy ? null : () => _toggleActive(area),
                     child: Text(area.isActive ? 'Pause area' : 'Activate area'),

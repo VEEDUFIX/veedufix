@@ -21,7 +21,7 @@ vi.mock('../lib/prisma.js', () => ({
   prisma: {
     user: { upsert: vi.fn() },
     refreshToken: { create: vi.fn(), findUnique: vi.fn(), update: vi.fn() },
-    authSession: { upsert: vi.fn(), updateMany: vi.fn() },
+    authSession: { create: vi.fn(), updateMany: vi.fn() },
   },
 }));
 
@@ -157,7 +157,7 @@ describe('verifyOtp', () => {
     vi.mocked(redis.del).mockResolvedValue(1);
     vi.mocked(prisma.user.upsert).mockResolvedValue(mockUser as never);
     vi.mocked(prisma.refreshToken.create).mockResolvedValue({} as never);
-    vi.mocked(prisma.authSession.upsert).mockResolvedValue({} as never);
+    vi.mocked(prisma.authSession.create).mockResolvedValue({} as never);
 
     const result = await verifyOtp({
       channel: 'PHONE',
@@ -179,7 +179,7 @@ describe('verifyOtp', () => {
     vi.mocked(redis.del).mockResolvedValue(1);
     vi.mocked(prisma.user.upsert).mockResolvedValue(mockUser as never);
     vi.mocked(prisma.refreshToken.create).mockResolvedValue({} as never);
-    vi.mocked(prisma.authSession.upsert).mockResolvedValue({} as never);
+    vi.mocked(prisma.authSession.create).mockResolvedValue({} as never);
 
     await verifyOtp({ channel: 'PHONE', identifier: '+919876543210', otp: '123456' });
 

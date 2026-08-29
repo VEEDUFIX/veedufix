@@ -1,7 +1,12 @@
 import { Response } from "express";
 import { AuthenticatedRequest } from "../../middleware/auth.js";
-import { prisma } from "../../lib/prisma.js";
-import { applyReferralCode, generateReferralCode, getTransactions, getWalletSummary } from "./wallet.service.js";
+import {
+  applyReferralCode,
+  generateReferralCode,
+  getTransactions,
+  getWalletSummary,
+  requestWorkerPayout
+} from "./wallet.service.js";
 import { logger } from "../../lib/logger.js";
 
 export async function getWalletHandler(request: AuthenticatedRequest, response: Response) {
@@ -51,64 +56,42 @@ export async function requestPayoutHandler(request: AuthenticatedRequest, respon
   try {
     const userId = request.auth!.userId;
     const role = request.auth!.role;
-    const { amount } = request.body as { amount: number };
+    const { amount, upiId } = request.body as { amount: number; upiId?: string };
 
     if (role !== "WORKER") {
       return response.status(403).json({ message: "Only workers can request payouts" });
     }
 
-    const workerProfile = await prisma.workerProfile.findUnique({
-      where: { userId },
-      select: { id: true, upiId: true }
+    const payout = await requestWorkerPayout({
+      userId,
+      amount,
+      upiId
     });
 
-    if (!workerProfile) {
-      return response.status(404).json({ message: "Worker profile not found" });
-    }
-
-    if (!workerProfile.upiId?.trim()) {
-      return response.status(400).json({ message: "UPI ID is not configured for this worker" });
-    }
-
-    const lastTx = await prisma.walletTransaction.findFirst({
-      where: { workerId: workerProfile.id },
-      orderBy: { createdAt: "desc" },
-      select: { balanceAfter: true }
-    });
-
-    const currentBalance = lastTx ? Number(lastTx.balanceAfter) : 0;
-    if (amount > currentBalance) {
-      return response.status(400).json({ message: "Insufficient wallet balance" });
-    }
-
-    const newBalance = currentBalance - amount;
-
-    const tx = await prisma.walletTransaction.create({
-      data: {
-        userId,
-        workerId: workerProfile.id,
-        type: "PAYOUT_PENDING",
-        amount: -amount,
-        balanceAfter: newBalance,
-        referenceType: "PAYOUT_REQUEST",
-        metadata: {
-          upiId: workerProfile.upiId.trim(),
-          requestedAt: new Date().toISOString(),
-          note: `UPI payout of ₹${amount} to ${workerProfile.upiId.trim()}`
-        }
-      }
-    });
-
-    logger.info({ userId, amount, transactionId: tx.id }, "Payout requested");
+    logger.info({ userId, amount, transactionId: payout.transaction.id }, "Payout requested");
     response.status(201).json({
       success: true,
-      transactionId: tx.id,
+      transactionId: payout.transaction.id,
       amountRequested: amount,
-      upiId: workerProfile.upiId.trim(),
-      newBalance
+      upiId: payout.upiId,
+      newBalance: payout.newBalance
     });
   } catch (error) {
     logger.error({ error }, "Failed to request payout");
+    if (error instanceof Error) {
+      if (error.message === "amount must be a positive number") {
+        response.status(400).json({ message: error.message });
+        return;
+      }
+      if (error.message === "Worker profile not found" || error.message === "UPI ID is not configured for this worker") {
+        response.status(404).json({ message: error.message });
+        return;
+      }
+      if (error.message === "Insufficient wallet balance" || error.message === "UPI ID does not match the worker profile") {
+        response.status(400).json({ message: error.message });
+        return;
+      }
+    }
     response.status(500).json({ message: "Internal server error" });
   }
 }

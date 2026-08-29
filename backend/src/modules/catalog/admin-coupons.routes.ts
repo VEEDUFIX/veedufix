@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { requireAuth, requireRole, type AuthenticatedRequest } from "../../middleware/auth.js";
 import { prisma } from "../../lib/prisma.js";
+import { writeAuditLog } from "../../lib/audit.js";
 
 export const adminCouponsRouter = Router();
 
@@ -71,6 +72,20 @@ adminCouponsRouter.post("/", async (request: AuthenticatedRequest, response) => 
     },
   });
 
+  void writeAuditLog({
+    adminId: request.auth!.userId,
+    action: "coupon.created",
+    targetType: "coupon",
+    targetId: coupon.id,
+    note: `Created coupon ${coupon.code}`,
+    metadata: {
+      code: coupon.code,
+      type: coupon.type,
+      value: Number(coupon.value),
+      isActive: coupon.isActive
+    }
+  });
+
   response.status(201).json({ coupon });
 });
 
@@ -86,12 +101,41 @@ adminCouponsRouter.patch("/:id/toggle", async (request: AuthenticatedRequest, re
     where: { id },
     data: { isActive: !coupon.isActive },
   });
+
+  void writeAuditLog({
+    adminId: request.auth!.userId,
+    action: "coupon.updated",
+    targetType: "coupon",
+    targetId: id,
+    note: updated.isActive ? "Coupon activated" : "Coupon deactivated",
+    metadata: {
+      code: coupon.code,
+      isActive: updated.isActive
+    }
+  });
+
   response.status(200).json({ isActive: updated.isActive });
 });
 
 // Delete coupon
 adminCouponsRouter.delete("/:id", async (request: AuthenticatedRequest, response) => {
   const { id } = request.params as { id: string };
+  const coupon = await prisma.coupon.findUnique({ where: { id } });
   await prisma.coupon.delete({ where: { id } });
+
+  if (coupon) {
+    void writeAuditLog({
+      adminId: request.auth!.userId,
+      action: "coupon.deleted",
+      targetType: "coupon",
+      targetId: id,
+      note: `Deleted coupon ${coupon.code}`,
+      metadata: {
+        code: coupon.code,
+        type: coupon.type
+      }
+    });
+  }
+
   response.status(200).json({ success: true });
 });

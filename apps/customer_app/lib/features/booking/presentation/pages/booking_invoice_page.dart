@@ -5,16 +5,16 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:marketplace_shared/marketplace_shared.dart';
 
-final bookingInvoiceProvider =
-    FutureProvider.autoDispose.family<_BookingInvoice, String>((ref, bookingId) async {
-  final apiClient = ref.watch(apiClientProvider);
-  final response = await apiClient.get('/bookings/$bookingId/invoice');
-  final payload = response['invoice'] ?? response;
-  if (payload is! Map<String, dynamic>) {
-    throw StateError('Invoice payload missing');
-  }
-  return _BookingInvoice.fromJson(payload);
-});
+final bookingInvoiceProvider = FutureProvider.autoDispose
+    .family<_BookingInvoice, String>((ref, bookingId) async {
+      final apiClient = ref.watch(apiClientProvider);
+      final response = await apiClient.get('/bookings/$bookingId/invoice');
+      final payload = response['invoice'] ?? response;
+      if (payload is! Map<String, dynamic>) {
+        throw Exception('Invoice payload missing from response.');
+      }
+      return _BookingInvoice.fromJson(payload);
+    });
 
 class BookingInvoicePage extends ConsumerWidget {
   const BookingInvoicePage({super.key, required this.bookingId});
@@ -45,7 +45,10 @@ class BookingInvoicePage extends ConsumerWidget {
             ),
           ),
         ),
-        title: Text('Invoice', style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
+        title: Text(
+          'Invoice',
+          style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+        ),
         actions: [
           invoiceAsync.whenOrNull(
                 data: (invoice) => IconButton(
@@ -71,7 +74,8 @@ class BookingInvoicePage extends ConsumerWidget {
                 ),
                 const SizedBox(height: 16),
                 FilledButton(
-                  onPressed: () => ref.invalidate(bookingInvoiceProvider(bookingId)),
+                  onPressed: () =>
+                      ref.invalidate(bookingInvoiceProvider(bookingId)),
                   child: const Text('Try again'),
                 ),
                 const SizedBox(height: 8),
@@ -100,7 +104,8 @@ class BookingInvoicePage extends ConsumerWidget {
   }
 
   void _shareInvoice(BuildContext context, _BookingInvoice invoice) {
-    final text = '''
+    final text =
+        '''
 VeeduFix Invoice
 Invoice No: ${invoice.invoiceNumber}
 Booking Ref: #${invoice.bookingCode.isEmpty ? invoice.bookingId : invoice.bookingCode}
@@ -172,8 +177,16 @@ class _InvoiceBody extends StatelessWidget {
                 runSpacing: 10,
                 children: [
                   _HeaderChip(label: 'Invoice #', value: invoice.invoiceNumber),
-                  _HeaderChip(label: 'Booking', value: invoice.bookingCode.isEmpty ? invoice.bookingId : invoice.bookingCode),
-                  _HeaderChip(label: 'Issued', value: DateFormat('d MMM y').format(invoice.issuedAt)),
+                  _HeaderChip(
+                    label: 'Booking',
+                    value: invoice.bookingCode.isEmpty
+                        ? invoice.bookingId
+                        : invoice.bookingCode,
+                  ),
+                  _HeaderChip(
+                    label: 'Issued',
+                    value: DateFormat('d MMM y').format(invoice.issuedAt),
+                  ),
                   _HeaderChip(label: 'GSTIN', value: invoice.platformGstin),
                 ],
               ),
@@ -193,13 +206,22 @@ class _InvoiceBody extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('Bill To', style: tt.labelLarge?.copyWith(color: Colors.black54)),
+              Text(
+                'Bill To',
+                style: tt.labelLarge?.copyWith(color: Colors.black54),
+              ),
               const SizedBox(height: 4),
-              Text(invoice.customerName, style: tt.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
+              Text(
+                invoice.customerName,
+                style: tt.titleLarge?.copyWith(fontWeight: FontWeight.w800),
+              ),
               const SizedBox(height: 4),
               Text(
                 invoice.bookingStatus,
-                style: tt.bodyMedium?.copyWith(color: _green, fontWeight: FontWeight.w600),
+                style: tt.bodyMedium?.copyWith(
+                  color: _green,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ],
           ),
@@ -223,9 +245,15 @@ class _InvoiceBody extends StatelessWidget {
           ),
           child: Column(
             children: [
-              _SummaryRow(label: 'Subtotal', value: _money(invoice.subtotalAmount)),
+              _SummaryRow(
+                label: 'Subtotal',
+                value: _money(invoice.subtotalAmount),
+              ),
               const SizedBox(height: 8),
-              _SummaryRow(label: 'Discount', value: '-${_money(invoice.discountAmount)}'),
+              _SummaryRow(
+                label: 'Discount',
+                value: '-${_money(invoice.discountAmount)}',
+              ),
               const SizedBox(height: 8),
               _SummaryRow(label: 'GST', value: _money(invoice.totalGstAmount)),
               const Divider(height: 24),
@@ -291,7 +319,10 @@ class _InvoiceLineCard extends StatelessWidget {
               const SizedBox(width: 12),
               Text(
                 _money(item.total),
-                style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w800, color: _accent),
+                style: tt.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w800,
+                  color: _accent,
+                ),
               ),
             ],
           ),
@@ -334,14 +365,19 @@ class _HeaderChip extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(label, style: Theme.of(context).textTheme.labelSmall?.copyWith(color: Colors.white70)),
+          Text(
+            label,
+            style: Theme.of(
+              context,
+            ).textTheme.labelSmall?.copyWith(color: Colors.white70),
+          ),
           const SizedBox(height: 2),
           Text(
             value,
             style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w700,
-                ),
+              color: Colors.white,
+              fontWeight: FontWeight.w700,
+            ),
           ),
         ],
       ),
@@ -394,7 +430,10 @@ class _SummaryRow extends StatelessWidget {
         Text(
           value,
           style: emphasize
-              ? tt.titleMedium?.copyWith(fontWeight: FontWeight.w800, color: const Color(0xFFC2A15E))
+              ? tt.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w800,
+                  color: const Color(0xFFC2A15E),
+                )
               : tt.bodyMedium?.copyWith(fontWeight: FontWeight.w700),
         ),
       ],
@@ -417,7 +456,10 @@ class _DetailRow extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Text(label, style: tt.bodyMedium?.copyWith(color: Colors.black54)),
-          Text(value, style: tt.bodyMedium?.copyWith(fontWeight: FontWeight.w700)),
+          Text(
+            value,
+            style: tt.bodyMedium?.copyWith(fontWeight: FontWeight.w700),
+          ),
         ],
       ),
     );
@@ -468,7 +510,9 @@ class _BookingInvoice {
       bookingCode: json['bookingCode'] as String? ?? '',
       bookingStatus: json['bookingStatus'] as String? ?? '',
       invoiceNumber: json['invoiceNumber'] as String? ?? '',
-      issuedAt: DateTime.tryParse(json['issuedAt'] as String? ?? '') ?? DateTime.now(),
+      issuedAt:
+          DateTime.tryParse(json['issuedAt'] as String? ?? '') ??
+          DateTime.now(),
       platformGstin: json['platformGstin'] as String? ?? '',
       legalBusinessName: json['legalBusinessName'] as String? ?? '',
       registeredAddress: json['registeredAddress'] as String? ?? '',
@@ -510,7 +554,9 @@ class _InvoiceLineItem {
   factory _InvoiceLineItem.fromJson(Map<String, dynamic> json) {
     return _InvoiceLineItem(
       description: json['description'] as String? ?? 'Service',
-      sacCode: (json['sacCode'] as String?)?.trim().isNotEmpty == true ? json['sacCode'] as String : 'PENDING',
+      sacCode: (json['sacCode'] as String?)?.trim().isNotEmpty == true
+          ? json['sacCode'] as String
+          : 'PENDING',
       quantity: (json['quantity'] as num?)?.toInt() ?? 1,
       unitPrice: _toDouble(json['unitPrice']),
       basePrice: _toDouble(json['basePrice']),
@@ -528,5 +574,9 @@ double _toDouble(dynamic value) {
 }
 
 String _money(double value) {
-  return NumberFormat.currency(locale: 'en_IN', symbol: '₹', decimalDigits: 2).format(value);
+  return NumberFormat.currency(
+    locale: 'en_IN',
+    symbol: '₹',
+    decimalDigits: 2,
+  ).format(value);
 }

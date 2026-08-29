@@ -20,6 +20,10 @@ type PrismaModelDelegate = {
 export type AppPrismaClient = {
   $connect(): Promise<void>;
   $disconnect(): Promise<void>;
+  $queryRaw<T = unknown>(query: TemplateStringsArray | string, ...values: any[]): Promise<T>;
+  $queryRawUnsafe<T = unknown>(query: string, ...values: any[]): Promise<T>;
+  $executeRaw(query: TemplateStringsArray | string, ...values: any[]): Promise<number>;
+  $executeRawUnsafe(query: string, ...values: any[]): Promise<number>;
   $transaction<P extends Array<Promise<any>>>(arg: [...P], options?: any): Promise<{ [K in keyof P]: Awaited<P[K]> }>;
   $transaction<R>(fn: (tx: AppPrismaClient) => Promise<R>, options?: any): Promise<R>;
   $on(eventType: string, callback: (...args: any[]) => void): void;

@@ -44,8 +44,8 @@ class RealtimeService {
     final token = await _secureStore.readAccessToken();
     if (token == null) return;
 
-    final url = Uri.parse('$_wsBaseUrl/tracking/ws?bookingId=$bookingId&token=$token');
-    _trackingChannel = WebSocketChannel.connect(url);
+    final url = Uri.parse('$_wsBaseUrl/tracking/ws?bookingId=$bookingId');
+    _trackingChannel = WebSocketChannel.connect(url, protocols: [token]);
     
     _trackingChannel!.stream.listen(
       (message) {
@@ -84,8 +84,8 @@ class RealtimeService {
     final token = await _secureStore.readAccessToken();
     if (token == null) return;
 
-    final url = Uri.parse('$_wsBaseUrl/notifications/ws?token=$token');
-    _notificationChannel = WebSocketChannel.connect(url);
+    final url = Uri.parse('$_wsBaseUrl/notifications/ws');
+    _notificationChannel = WebSocketChannel.connect(url, protocols: [token]);
     
     _notificationChannel!.stream.listen(
       (message) {

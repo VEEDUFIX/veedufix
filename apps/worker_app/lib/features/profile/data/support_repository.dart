@@ -17,8 +17,8 @@ class SupportRepository {
       return tickets;
     } on DioException catch (e) {
       throw _handleError(e);
-    } catch (e) {
-      throw Exception('Failed to load support tickets: $e');
+    } catch (_) {
+      throw Exception('Failed to load support tickets.');
     }
   }
 
@@ -38,8 +38,8 @@ class SupportRepository {
       );
     } on DioException catch (e) {
       throw _handleError(e);
-    } catch (e) {
-      throw Exception('Failed to submit ticket: $e');
+    } catch (_) {
+      throw Exception('Failed to submit ticket.');
     }
   }
 

@@ -36,6 +36,10 @@ export async function sendMessageHandler(request: AuthenticatedRequest, response
     response.json({ message });
   } catch (error) {
     logger.error({ error, bookingId: request.params.bookingId }, "Failed to send message");
+    if (error instanceof Error && (error.message === "Unauthorized" || error.message === "Access denied")) {
+      response.status(403).json({ message: "Not authorized to send messages in this chat" });
+      return;
+    }
     response.status(500).json({ message: "Internal server error" });
   }
 }
@@ -44,12 +48,17 @@ export async function markAsReadHandler(request: AuthenticatedRequest, response:
   try {
     const bookingId = request.params.bookingId as string;
     const userId = request.auth!.userId;
+    const role = request.auth!.role as UserRole;
 
-    await markMessagesAsRead(bookingId, userId);
+    await markMessagesAsRead(bookingId, userId, role);
 
     response.json({ success: true });
   } catch (error) {
     logger.error({ error, bookingId: request.params.bookingId }, "Failed to mark messages as read");
+    if (error instanceof Error && (error.message === "Unauthorized" || error.message === "Access denied")) {
+      response.status(403).json({ message: "Not authorized to update chat state" });
+      return;
+    }
     response.status(500).json({ message: "Internal server error" });
   }
 }

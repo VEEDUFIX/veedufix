@@ -35,7 +35,7 @@ class _ArrivalOtpPageState extends ConsumerState<ArrivalOtpPage> {
 
   Future<_ArrivalOtpScreenData> _load() async {
     if (widget.bookingId.trim().isEmpty) {
-      throw StateError('Missing booking id.');
+      throw Exception('Missing booking id.');
     }
 
     final details = await _api.fetchDetails(widget.bookingId);

@@ -3,6 +3,7 @@ import { requireAuth, type AuthenticatedRequest } from "../../middleware/auth.js
 import { prisma } from "../../lib/prisma.js";
 import { getBookingTimelineEvents } from "../../lib/booking-timeline.js";
 import { serializeWorkerProfile } from "../worker-onboarding/worker-onboarding.service.js";
+import { requestWorkerPayout } from "../wallet/wallet.service.js";
 
 export const usersRouter = Router();
 
@@ -634,13 +635,13 @@ usersRouter.get("/bookings/:bookingId/summary", requireAuth, async (request: Aut
 });
 
 // ─── Public worker profile ────────────────────────────────────────────────────
-usersRouter.get("/workers/:workerId/profile", async (request, response) => {
+usersRouter.get("/workers/:workerId/profile", requireAuth, async (request, response) => {
   const { workerId } = request.params as { workerId: string };
 
   const profile = await prisma.workerProfile.findUnique({
     where: { id: workerId },
     include: {
-      user: { select: { id: true, name: true, avatarUrl: true, phone: true } },
+      user: { select: { id: true, name: true, avatarUrl: true } },
       skills: {
         include: { category: { select: { name: true, slug: true } } },
         take: 10
@@ -751,6 +752,21 @@ usersRouter.post("/worker/wallet/payout", requireAuth, async (request: Authentic
     response.status(400).json({ message: "upiId is required" });
     return;
   }
+
+  const payout = await requestWorkerPayout({
+    userId,
+    amount,
+    upiId
+  });
+
+  response.status(201).json({
+    success: true,
+    transactionId: payout.transaction.id,
+    amountRequested: amount,
+    upiId: payout.upiId,
+    newBalance: payout.newBalance
+  });
+  return;
 
   // Fetch worker profile + current balance
   const workerProfile = await prisma.workerProfile.findUnique({

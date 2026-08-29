@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -10,6 +9,7 @@ import 'package:marketplace_shared/marketplace_shared.dart';
 
 import '../../domain/entities/worker_wallet.dart';
 import '../providers/worker_wallet_providers.dart';
+import '../../../profile/presentation/providers/worker_profile_providers.dart';
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
@@ -21,6 +21,7 @@ class WorkerWalletPage extends ConsumerWidget {
     final cs = Theme.of(context).colorScheme;
     final tt = Theme.of(context).textTheme;
     final walletAsync = ref.watch(workerWalletProvider);
+    final profileAsync = ref.watch(workerAccountProfileProvider);
 
     return Scaffold(
       backgroundColor: cs.surface,
@@ -43,17 +44,22 @@ class WorkerWalletPage extends ConsumerWidget {
         title: Text('Wallet & Earnings', style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
       ),
       body: walletAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => const Center(
+        loading: () => const _WalletLoadingView(),
+        error: (_, __) => Center(
           child: PremiumEmptyState(
             icon: Icons.account_balance_wallet_outlined,
             title: 'Could not load wallet',
-            subtitle: 'Pull down to retry.',
+            subtitle: 'Check your connection and try again.',
+            actionLabel: 'Retry',
+            onAction: () => ref.invalidate(workerWalletProvider),
           ),
         ),
         data: (wallet) => RefreshIndicator(
-          onRefresh: () => ref.refresh(workerWalletProvider.future),
-          child: _WalletBody(wallet: wallet),
+          onRefresh: () async {
+            await ref.read(workerWalletProvider.future);
+            await ref.read(workerAccountProfileProvider.future);
+          },
+          child: _WalletBody(wallet: wallet, profileAsync: profileAsync),
         ),
       ),
     );
@@ -61,13 +67,16 @@ class WorkerWalletPage extends ConsumerWidget {
 }
 
 class _WalletBody extends ConsumerWidget {
-  const _WalletBody({required this.wallet});
+  const _WalletBody({required this.wallet, required this.profileAsync});
   final WorkerWallet wallet;
+  final AsyncValue<Map<String, dynamic>> profileAsync;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final cs = Theme.of(context).colorScheme;
     final tt = Theme.of(context).textTheme;
+    final payoutUpiId = _extractPayoutUpi(profileAsync.valueOrNull);
+    final hasPayoutDetails = payoutUpiId != null;
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(20, 8, 20, 40),
@@ -107,6 +116,18 @@ class _WalletBody extends ConsumerWidget {
                   _StatChip(label: 'Pending', value: '₹${wallet.pendingPayout.toStringAsFixed(0)}'),
                 ],
               ),
+              const SizedBox(height: 14),
+              Text(
+                'Withdrawals start at ₹100 and are usually processed within 24 hours.',
+                style: tt.bodySmall?.copyWith(color: Colors.white70, height: 1.3),
+              ),
+              const SizedBox(height: 10),
+              Text(
+                hasPayoutDetails
+                    ? 'Payouts will be sent to your saved UPI: $payoutUpiId'
+                    : 'Add a payout UPI in your profile before requesting withdrawals.',
+                style: tt.bodySmall?.copyWith(color: Colors.white70, height: 1.3),
+              ),
             ],
           ),
         ),
@@ -114,28 +135,44 @@ class _WalletBody extends ConsumerWidget {
 
         // ── Withdraw CTA ─────────────────────────────────────────────────
         TapScale(
-          onTap: () => _showPayoutSheet(context, ref, wallet.balance),
+          onTap: hasPayoutDetails
+              ? () => _showPayoutSheet(context, ref, wallet.balance, payoutUpiId)
+              : () => context.push('/profile/edit'),
           child: Container(
             padding: const EdgeInsets.symmetric(vertical: 16),
             decoration: BoxDecoration(
-              color: cs.primaryContainer.withValues(alpha: 0.4),
+              color: hasPayoutDetails ? cs.primaryContainer.withValues(alpha: 0.4) : cs.surfaceContainerHighest.withValues(alpha: 0.55),
               borderRadius: BorderRadius.circular(AbzioTheme.buttonRadius),
-              border: Border.all(color: cs.primary.withValues(alpha: 0.3)),
+              border: Border.all(color: hasPayoutDetails ? cs.primary.withValues(alpha: 0.3) : cs.outlineVariant),
             ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(Icons.upload_rounded, color: cs.primary, size: 20),
+                Icon(
+                  hasPayoutDetails ? Icons.payments_rounded : Icons.person_rounded,
+                  color: hasPayoutDetails ? cs.primary : cs.onSurfaceVariant,
+                  size: 20,
+                ),
                 const SizedBox(width: 10),
                 Text(
-                  'Withdraw to UPI',
-                  style: tt.titleSmall?.copyWith(color: cs.primary, fontWeight: FontWeight.w800),
+                  hasPayoutDetails ? 'Request payout' : 'Add payout details',
+                  style: tt.titleSmall?.copyWith(
+                    color: hasPayoutDetails ? cs.primary : cs.onSurface,
+                    fontWeight: FontWeight.w800,
+                  ),
                 ),
               ],
             ),
           ),
         ),
         const SizedBox(height: 24),
+        Text(
+          hasPayoutDetails
+              ? 'Use the wallet sheet below to request a payout against your saved UPI.'
+              : 'Open your profile to add a payout UPI, then return here to request a withdrawal.',
+          style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+        ),
+        const SizedBox(height: 20),
 
         // ── Transaction history ──────────────────────────────────────────
         TapScale(
@@ -185,12 +222,16 @@ class _WalletBody extends ConsumerWidget {
     );
   }
 
-  void _showPayoutSheet(BuildContext context, WidgetRef ref, double balance) {
+  void _showPayoutSheet(BuildContext context, WidgetRef ref, double balance, String? payoutUpiId) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => _PayoutSheet(availableBalance: balance, ref: ref),
+      builder: (_) => _PayoutSheet(
+        availableBalance: balance,
+        ref: ref,
+        payoutUpiId: payoutUpiId,
+      ),
     );
   }
 
@@ -222,9 +263,9 @@ class _WalletBody extends ConsumerWidget {
           ],
         ),
       );
-    } catch (e) {
+    } catch (_) {
       messenger.showSnackBar(
-        SnackBar(content: Text('Could not export statement: $e')),
+        const SnackBar(content: Text('Could not export statement.')),
       );
     }
   }
@@ -426,22 +467,26 @@ class _DetailRow extends StatelessWidget {
 // ─── Payout bottom sheet ──────────────────────────────────────────────────────
 
 class _PayoutSheet extends ConsumerStatefulWidget {
-  const _PayoutSheet({required this.availableBalance, required this.ref});
+  const _PayoutSheet({
+    required this.availableBalance,
+    required this.ref,
+    required this.payoutUpiId,
+  });
   final double availableBalance;
   final WidgetRef ref;
+  final String? payoutUpiId;
 
   @override
   ConsumerState<_PayoutSheet> createState() => _PayoutSheetState();
 }
 
 class _PayoutSheetState extends ConsumerState<_PayoutSheet> {
-  final _upiController = TextEditingController();
   final _amountController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
+  static const _presetAmounts = [100.0, 500.0, 1000.0];
 
   @override
   void dispose() {
-    _upiController.dispose();
     _amountController.dispose();
     super.dispose();
   }
@@ -452,6 +497,9 @@ class _PayoutSheetState extends ConsumerState<_PayoutSheet> {
     final tt = Theme.of(context).textTheme;
     final payoutState = ref.watch(payoutRequestProvider);
     final isLoading = payoutState.isLoading;
+    final presetAmounts = _eligiblePresetAmounts();
+    final showFullBalanceChip = widget.availableBalance >= 100 &&
+        !presetAmounts.any((amount) => amount == widget.availableBalance);
 
     return Padding(
       padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
@@ -484,20 +532,64 @@ class _PayoutSheetState extends ConsumerState<_PayoutSheet> {
                 style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant),
               ),
               const SizedBox(height: 20),
-              TextFormField(
-                controller: _upiController,
-                decoration: InputDecoration(
-                  labelText: 'UPI ID',
-                  hintText: 'yourname@upi',
-                  prefixIcon: const Icon(Icons.account_balance_rounded),
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+              if (widget.availableBalance < 100) ...[
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: cs.errorContainer.withValues(alpha: 0.45),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: cs.error.withValues(alpha: 0.2)),
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(Icons.info_outline_rounded, color: cs.error, size: 20),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          'You need at least ₹100 to request a payout. Keep earning and come back once your balance crosses the threshold.',
+                          style: tt.bodySmall?.copyWith(color: cs.onSurface, height: 1.35),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-                keyboardType: TextInputType.emailAddress,
-                validator: (v) {
-                  if (v == null || v.trim().isEmpty) { return 'Enter your UPI ID'; }
-                  if (!v.contains('@')) { return 'Enter a valid UPI ID'; }
-                  return null;
-                },
+                const SizedBox(height: 16),
+              ],
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: cs.surfaceContainerHighest.withValues(alpha: 0.4),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.6)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Payout destination', style: tt.labelLarge?.copyWith(fontWeight: FontWeight.w800)),
+                    const SizedBox(height: 6),
+                    Text(
+                      widget.payoutUpiId ?? 'No UPI saved yet',
+                      style: tt.titleSmall?.copyWith(fontWeight: FontWeight.w700),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      widget.payoutUpiId != null
+                          ? 'This request will be sent to the UPI saved in your profile.'
+                          : 'Add a UPI in your profile before you can request a payout.',
+                      style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant, height: 1.3),
+                    ),
+                    if (widget.payoutUpiId == null) ...[
+                      const SizedBox(height: 12),
+                      FilledButton.tonal(
+                        onPressed: () => context.push('/profile/edit'),
+                        child: const Text('Open profile'),
+                      ),
+                    ],
+                  ],
+                ),
               ),
               const SizedBox(height: 14),
               TextFormField(
@@ -509,6 +601,7 @@ class _PayoutSheetState extends ConsumerState<_PayoutSheet> {
                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
                 ),
                 keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                textInputAction: TextInputAction.done,
                 validator: (v) {
                   final amount = double.tryParse(v ?? '');
                   if (amount == null || amount <= 0) { return 'Enter a valid amount'; }
@@ -516,6 +609,30 @@ class _PayoutSheetState extends ConsumerState<_PayoutSheet> {
                   if (amount < 100) { return 'Minimum withdrawal is ₹100'; }
                   return null;
                 },
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Minimum withdrawal is ₹100. Higher amounts will process in the same payout queue.',
+                style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+              ),
+              const SizedBox(height: 14),
+              Wrap(
+                spacing: 10,
+                runSpacing: 10,
+                children: [
+                  for (final amount in presetAmounts)
+                    ActionChip(
+                      label: Text('₹${_formatPresetAmount(amount)}'),
+                      onPressed: () => _setAmount(amount),
+                      labelStyle: tt.labelLarge?.copyWith(fontWeight: FontWeight.w700),
+                    ),
+                  if (showFullBalanceChip)
+                    ActionChip(
+                      label: const Text('Full balance'),
+                      onPressed: () => _setAmount(widget.availableBalance),
+                      labelStyle: tt.labelLarge?.copyWith(fontWeight: FontWeight.w700),
+                    ),
+                ],
               ),
               const SizedBox(height: 20),
               SizedBox(
@@ -528,8 +645,13 @@ class _PayoutSheetState extends ConsumerState<_PayoutSheet> {
                   ),
                   child: isLoading
                       ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                      : Text('Withdraw Now', style: tt.titleSmall?.copyWith(color: Colors.white, fontWeight: FontWeight.w800)),
+                      : Text('Request payout', style: tt.titleSmall?.copyWith(color: Colors.white, fontWeight: FontWeight.w800)),
                 ),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                'We’ll queue this request for approval and processing.',
+                style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant),
               ),
             ],
           ),
@@ -538,22 +660,116 @@ class _PayoutSheetState extends ConsumerState<_PayoutSheet> {
     );
   }
 
+  List<double> _eligiblePresetAmounts() {
+    return _presetAmounts
+        .where((amount) => amount <= widget.availableBalance && amount >= 100)
+        .toList(growable: false);
+  }
+
+  String _formatPresetAmount(double amount) {
+    return amount == amount.truncateToDouble() ? amount.toStringAsFixed(0) : amount.toStringAsFixed(2);
+  }
+
+  void _setAmount(double amount) {
+    final formatted = amount == amount.truncateToDouble() ? amount.toStringAsFixed(0) : amount.toStringAsFixed(2);
+    _amountController.text = formatted;
+    _amountController.selection = TextSelection.collapsed(offset: formatted.length);
+  }
+
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) { return; }
     final amount = double.parse(_amountController.text);
-    final upiId = _upiController.text.trim();
-    await ref.read(payoutRequestProvider.notifier).requestPayout(amount, upiId);
+    final messenger = ScaffoldMessenger.of(context);
+    await ref.read(payoutRequestProvider.notifier).requestPayout(amount, upiId: widget.payoutUpiId);
     if (!mounted) { return; }
     final error = ref.read(payoutRequestProvider).error;
     if (error != null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed: $error'), backgroundColor: Colors.red),
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text('Payout request could not be submitted.'),
+          backgroundColor: Colors.red,
+        ),
       );
     } else {
       Navigator.of(context).pop();
-      ScaffoldMessenger.of(context).showSnackBar(
+      messenger.showSnackBar(
         const SnackBar(content: Text('Payout request submitted! Usually processed in 24h.')),
       );
     }
+  }
+}
+
+String? _extractPayoutUpi(Map<String, dynamic>? accountData) {
+  if (accountData == null) return null;
+  final user = accountData['user'] as Map<String, dynamic>?;
+  final workerProfile = user?['workerProfile'] as Map<String, dynamic>?;
+  final upi = workerProfile?['upiId'] as String?;
+  final trimmed = upi?.trim();
+  if (trimmed == null || trimmed.isEmpty) {
+    return null;
+  }
+  return trimmed;
+}
+
+class _WalletLoadingView extends StatelessWidget {
+  const _WalletLoadingView();
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+
+    Widget block({double height = 16, double width = double.infinity}) {
+      return Container(
+        height: height,
+        width: width,
+        decoration: BoxDecoration(
+          color: cs.surfaceContainerHighest.withValues(alpha: 0.75),
+          borderRadius: BorderRadius.circular(12),
+        ),
+      );
+    }
+
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(20, 12, 20, 40),
+      children: [
+        PremiumGlassCard(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                block(height: 14, width: 120),
+                const SizedBox(height: 14),
+                block(height: 44, width: 180),
+                const SizedBox(height: 22),
+                Row(
+                  children: [
+                    Expanded(child: block(height: 56)),
+                    const SizedBox(width: 12),
+                    Expanded(child: block(height: 56)),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 20),
+        PremiumGlassCard(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              children: [
+                block(height: 18, width: 160),
+                const SizedBox(height: 14),
+                for (var i = 0; i < 3; i++) ...[
+                  block(height: 72),
+                  if (i < 2) const SizedBox(height: 10),
+                ],
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
   }
 }

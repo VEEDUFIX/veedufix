@@ -170,7 +170,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Unable to use current location: $error')),
+        const SnackBar(content: Text('Unable to use current location.')),
       );
     }
   }
@@ -204,10 +204,12 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
           content: Text('Payment Verified & Booking Confirmed!')));
       context.pushReplacement('/tracking?bookingId=$bookingId');
-    } catch (e) {
+    } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('Verification Failed: $e')));
+          .showSnackBar(
+            const SnackBar(content: Text('Verification failed. Please try again.')),
+          );
     } finally {
       if (mounted) setState(() => _isProcessing = false);
     }
@@ -241,8 +243,16 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
       final repo = ref.read(paymentRepositoryProvider);
 
       if (cityId.isEmpty) {
-        throw StateError(
-            'Your city is missing from your profile. Please update your profile and try again.');
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Your city is missing from your profile. Please update your profile and try again.',
+            ),
+          ),
+        );
+        setState(() => _isProcessing = false);
+        return;
       }
 
       final orderData = await repo.createOrder(
@@ -272,11 +282,12 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
       };
 
       _razorpay.open(options);
-    } catch (e) {
+    } catch (_) {
       if (!mounted) return;
       setState(() => _isProcessing = false);
       ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error initializing payment: $e')));
+        const SnackBar(content: Text('Could not start payment. Please try again.')),
+      );
     }
   }
 
@@ -674,8 +685,10 @@ class _StepAddress extends ConsumerWidget {
           ),
           error: (err, stack) => Padding(
             padding: const EdgeInsets.only(bottom: 16),
-            child: Text('Failed to load addresses: $err',
-                style: tt.bodyMedium?.copyWith(color: cs.error)),
+            child: Text(
+              'Failed to load addresses.',
+              style: tt.bodyMedium?.copyWith(color: cs.error),
+            ),
           ),
         ),
         const SizedBox(height: 16),

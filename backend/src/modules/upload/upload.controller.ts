@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 import {
   assertWorkerCanUploadJobPhoto,
+  uploadChatAttachment,
   confirmJobPhotoUpload,
   generateUploadSignature,
   uploadAndRecordJobPhoto
@@ -10,10 +11,49 @@ type UploadRequest = Request & {
   auth?: {
     userId: string;
     role: "CUSTOMER" | "WORKER" | "ADMIN";
-    sessionId: string;
+  sessionId: string;
   };
   file?: Express.Multer.File;
 };
+
+export async function uploadChatAttachmentHandler(request: Request, response: Response): Promise<void> {
+  const uploadRequest = request as UploadRequest;
+  if (!uploadRequest.auth) {
+    response.status(401).json({ message: "Authentication required" });
+    return;
+  }
+
+  if (!uploadRequest.file) {
+    response.status(400).json({ message: "Image file is required" });
+    return;
+  }
+
+  const bookingId = String(request.body.bookingId ?? "").trim();
+  if (!bookingId) {
+    response.status(400).json({ message: "bookingId is required" });
+    return;
+  }
+
+  const result = await uploadChatAttachment(
+    uploadRequest.file.buffer,
+    bookingId,
+    uploadRequest.auth.userId,
+    uploadRequest.file.originalname
+  );
+
+  response.status(201).json({
+    attachment: {
+      url: result.secureUrl,
+      name: uploadRequest.file.originalname,
+      mimeType: uploadRequest.file.mimetype,
+      size: result.bytes,
+      kind: "image",
+      publicId: result.publicId,
+      folder: result.folder,
+      format: result.format ?? null
+    }
+  });
+}
 
 export async function generateUploadSignatureHandler(
   request: Request,

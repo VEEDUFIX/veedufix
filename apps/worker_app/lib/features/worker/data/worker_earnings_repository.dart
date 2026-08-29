@@ -12,8 +12,8 @@ class WorkerEarningsRepository {
       return await _api.fetchSummary();
     } on DioException catch (e) {
       throw _handleError(e);
-    } catch (e) {
-      throw Exception('Failed to load earnings summary: $e');
+    } catch (_) {
+      throw Exception('Failed to load earnings summary.');
     }
   }
 
@@ -34,8 +34,8 @@ class WorkerEarningsRepository {
       );
     } on DioException catch (e) {
       throw _handleError(e);
-    } catch (e) {
-      throw Exception('Failed to load earnings transactions: $e');
+    } catch (_) {
+      throw Exception('Failed to load earnings transactions.');
     }
   }
 

@@ -1,5 +1,8 @@
-import 'package:firebase_database/firebase_database.dart';
+import 'dart:async';
+
+import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:marketplace_shared/marketplace_shared.dart';
 
 class ChatMessage {
   ChatMessage({
@@ -18,12 +21,14 @@ class ChatMessage {
   final bool isRead;
   final List<ChatAttachment> attachments;
 
-  factory ChatMessage.fromJson(String id, Map<dynamic, dynamic> json) {
+  factory ChatMessage.fromApi(String id, Map<String, dynamic> json) {
+    final createdAt = json['createdAt'] as String? ?? '';
     return ChatMessage(
       id: id,
-      text: json['text'] as String? ?? '',
+      text: json['content'] as String? ?? '',
       senderId: json['senderId'] as String? ?? '',
-      timestamp: DateTime.fromMillisecondsSinceEpoch(json['timestamp'] as int? ?? 0),
+      timestamp: DateTime.tryParse(createdAt) ??
+          DateTime.fromMillisecondsSinceEpoch(0),
       isRead: json['isRead'] as bool? ?? false,
       attachments: (json['attachments'] as List<dynamic>? ?? const [])
           .whereType<Map<dynamic, dynamic>>()
@@ -34,11 +39,10 @@ class ChatMessage {
 
   Map<String, dynamic> toJson() {
     return {
-      'text': text,
-      'senderId': senderId,
-      'timestamp': timestamp.millisecondsSinceEpoch,
-      'isRead': isRead,
-      'attachments': attachments.map((attachment) => attachment.toJson()).toList(growable: false),
+      'content': text,
+      'attachments': attachments
+          .map((attachment) => attachment.toJson())
+          .toList(growable: false),
     };
   }
 }
@@ -75,27 +79,63 @@ class ChatAttachment {
       };
 }
 
-final chatProvider = StreamProvider.family<List<ChatMessage>, String>((ref, bookingId) {
-  final refDb = FirebaseDatabase.instance.ref('chats/$bookingId');
-  return refDb.onValue.map((event) {
-    final map = event.snapshot.value as Map<dynamic, dynamic>?;
-    if (map == null) return [];
-    
-    final messages = map.entries.map((e) {
-      final val = e.value as Map<dynamic, dynamic>;
-      return ChatMessage.fromJson(e.key.toString(), val);
-    }).toList();
-    
-    messages.sort((a, b) => a.timestamp.compareTo(b.timestamp));
-    return messages;
-  });
+final chatProvider =
+    StreamProvider.family<List<ChatMessage>, String>((ref, bookingId) async* {
+  final api = ref.watch(apiClientProvider);
+
+  while (true) {
+    final data = await api.get('/chat/$bookingId');
+    final chatRoom = data['chatRoom'] as Map<String, dynamic>?;
+    final messages = (chatRoom?['messages'] as List<dynamic>? ?? const [])
+        .whereType<Map<dynamic, dynamic>>()
+        .map((entry) {
+      final message = Map<String, dynamic>.from(entry);
+      final id = message['id'] as String? ?? '';
+      return ChatMessage.fromApi(id, message);
+    }).toList(growable: false)
+      ..sort((a, b) => a.timestamp.compareTo(b.timestamp));
+
+    yield messages;
+    await Future.delayed(const Duration(seconds: 3));
+  }
 });
 
 final chatControllerProvider = Provider<ChatController>((ref) {
-  return ChatController();
+  return ChatController(ref.watch(apiClientProvider));
 });
 
 class ChatController {
+  ChatController(this._api);
+
+  final ApiClient _api;
+
+  Future<ChatAttachment> uploadAttachment({
+    required String bookingId,
+    required List<int> bytes,
+    required String filename,
+  }) async {
+    final response = await _api.post(
+      '/upload/chat-attachment',
+      data: FormData.fromMap({
+        'bookingId': bookingId,
+        'file': MultipartFile.fromBytes(bytes, filename: filename),
+      }),
+    );
+
+    final attachment = response['attachment'] as Map<String, dynamic>?;
+    if (attachment == null) {
+      throw Exception('Upload failed: attachment data was missing.');
+    }
+
+    return ChatAttachment(
+      url: attachment['url'] as String? ?? '',
+      kind: attachment['kind'] as String? ?? 'image',
+      name: attachment['name'] as String?,
+      mimeType: attachment['mimeType'] as String?,
+      size: (attachment['size'] as num?)?.toInt(),
+    );
+  }
+
   Future<void> sendMessage({
     required String bookingId,
     required String text,
@@ -103,42 +143,22 @@ class ChatController {
     List<ChatAttachment> attachments = const [],
   }) async {
     if (text.isEmpty && attachments.isEmpty) return;
-    
-    final refDb = FirebaseDatabase.instance.ref('chats/$bookingId').push();
-    final message = ChatMessage(
-      id: refDb.key!,
-      text: text,
-      senderId: senderId,
-      timestamp: DateTime.now(),
-      isRead: false,
-      attachments: attachments,
+
+    await _api.post(
+      '/chat/$bookingId/messages',
+      data: {
+        'content': text,
+        'attachments': attachments
+            .map((attachment) => attachment.toJson())
+            .toList(growable: false),
+      },
     );
-    
-    await refDb.set(message.toJson());
   }
 
   Future<void> markAsRead({
     required String bookingId,
     required String userId,
   }) async {
-    final refDb = FirebaseDatabase.instance.ref('chats/$bookingId');
-    final snapshot = await refDb.get();
-    final map = snapshot.value as Map<dynamic, dynamic>?;
-    if (map == null) return;
-
-    final updates = <String, Object?>{};
-    for (final entry in map.entries) {
-      final value = entry.value as Map<dynamic, dynamic>?;
-      if (value == null) continue;
-      final senderId = value['senderId'] as String?;
-      final isRead = value['isRead'] as bool? ?? false;
-      if (senderId != null && senderId != userId && !isRead) {
-        updates['${entry.key}/isRead'] = true;
-      }
-    }
-
-    if (updates.isNotEmpty) {
-      await refDb.update(updates);
-    }
+    await _api.post('/chat/$bookingId/read', data: {});
   }
 }

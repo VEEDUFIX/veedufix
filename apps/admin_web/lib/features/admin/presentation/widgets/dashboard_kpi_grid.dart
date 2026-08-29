@@ -1,18 +1,23 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:admin_web/features/ops/data/ops_api.dart';
+import 'package:marketplace_shared/marketplace_shared.dart';
 import 'dashboard_shared.dart';
 
 class DashboardKpiGrid extends StatelessWidget {
   final bool isCompact;
   final bool isLoading;
   final OpsOverviewSnapshot? snapshot;
+  final String? error;
+  final VoidCallback? onRetry;
 
   const DashboardKpiGrid({
     super.key,
     required this.isCompact,
     required this.isLoading,
     this.snapshot,
+    this.error,
+    this.onRetry,
   });
 
   Widget _metricBox(BuildContext context, bool isCompact, {required Widget child}) {
@@ -23,9 +28,30 @@ class DashboardKpiGrid extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (isLoading) {
-      return const Center(child: CircularProgressIndicator());
+      return Wrap(
+        spacing: 24,
+        runSpacing: 24,
+        children: List.generate(
+          6,
+          (index) => _metricBox(
+            context,
+            isCompact,
+            child: const _MetricSkeletonCard(),
+          ),
+        ),
+      );
     }
-    
+
+    if (error != null) {
+      return PremiumEmptyState(
+        icon: Icons.cloud_off_rounded,
+        title: 'Could not load overview',
+        subtitle: 'The dashboard overview could not be fetched. Please try again.',
+        actionLabel: 'Retry',
+        onAction: onRetry,
+      );
+    }
+
     if (snapshot == null) {
       return const SizedBox.shrink();
     }
@@ -87,6 +113,32 @@ class DashboardKpiGrid extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _MetricSkeletonCard extends StatelessWidget {
+  const _MetricSkeletonCard();
+
+  @override
+  Widget build(BuildContext context) {
+    return const GlassCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              ShimmerWidget(width: 92, height: 14, radius: 8),
+              ShimmerWidget(width: 36, height: 36, radius: 12),
+            ],
+          ),
+          SizedBox(height: 18),
+          ShimmerWidget(width: 96, height: 32, radius: 10),
+          SizedBox(height: 10),
+          ShimmerWidget(width: 140, height: 12, radius: 6),
+        ],
+      ),
     );
   }
 }

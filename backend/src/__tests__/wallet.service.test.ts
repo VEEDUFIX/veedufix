@@ -6,15 +6,17 @@ import { Prisma } from '@prisma/client';
 vi.mock('../lib/prisma.js', () => ({
   prisma: {
     $transaction: vi.fn((cb) => cb(prismaMockTx)),
-    user: { findUnique: vi.fn(), update: vi.fn() },
+    user: { findUnique: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
+    workerProfile: { findUnique: vi.fn() },
     referral: { findMany: vi.fn(), findFirst: vi.fn(), create: vi.fn() },
     walletTransaction: { findMany: vi.fn(), create: vi.fn(), update: vi.fn() },
   },
 }));
 
 const prismaMockTx = {
+  workerProfile: { findUnique: vi.fn() },
   referral: { create: vi.fn() },
-  user: { update: vi.fn() },
+  user: { update: vi.fn(), updateMany: vi.fn(), findUnique: vi.fn() },
   walletTransaction: { create: vi.fn(), update: vi.fn() },
 };
 
@@ -39,6 +41,7 @@ import {
   getWalletSummary,
   generateReferralCode,
   applyReferralCode,
+  requestWorkerPayout,
   getTransactions,
   processPendingWalletPayouts
 } from '../modules/wallet/wallet.service.js';
@@ -119,6 +122,60 @@ describe('Wallet Service', () => {
       expect(prismaMockTx.referral.create).toHaveBeenCalled();
       expect(prismaMockTx.user.update).toHaveBeenCalledTimes(2);
       expect(prismaMockTx.walletTransaction.create).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  describe('requestWorkerPayout', () => {
+    it('debts wallet and records a payout request inside a transaction', async () => {
+      prismaMockTx.workerProfile.findUnique.mockResolvedValue({
+        id: 'wp_1',
+        upiId: 'worker@upi'
+      } as any);
+      prismaMockTx.user.updateMany.mockResolvedValue({ count: 1 } as any);
+      prismaMockTx.user.findUnique.mockResolvedValue({ walletBalance: new Prisma.Decimal(350) } as any);
+      prismaMockTx.walletTransaction.create.mockResolvedValue({ id: 'tx_payout_1' } as any);
+
+      const result = await requestWorkerPayout({
+        userId: 'u1',
+        amount: 150,
+        upiId: 'worker@upi'
+      });
+
+      expect(prismaMockTx.user.updateMany).toHaveBeenCalledWith({
+        where: {
+          id: 'u1',
+          walletBalance: { gte: 150 }
+        },
+        data: {
+          walletBalance: { decrement: 150 }
+        }
+      });
+      expect(prismaMockTx.walletTransaction.create).toHaveBeenCalledWith(expect.objectContaining({
+        data: expect.objectContaining({
+          userId: 'u1',
+          workerId: 'wp_1',
+          type: 'PAYOUT_PENDING',
+          amount: -150
+        })
+      }));
+      expect(result.newBalance).toBe(350);
+      expect(result.upiId).toBe('worker@upi');
+    });
+
+    it('rejects a payout when the wallet balance is insufficient', async () => {
+      prismaMockTx.workerProfile.findUnique.mockResolvedValue({
+        id: 'wp_1',
+        upiId: 'worker@upi'
+      } as any);
+      prismaMockTx.user.updateMany.mockResolvedValue({ count: 0 } as any);
+
+      await expect(
+        requestWorkerPayout({
+          userId: 'u1',
+          amount: 999,
+          upiId: 'worker@upi'
+        })
+      ).rejects.toSatisfy((err: any) => err instanceof AppError && err.statusCode === 400);
     });
   });
 

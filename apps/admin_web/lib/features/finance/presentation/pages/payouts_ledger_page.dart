@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -133,6 +134,16 @@ class _PayoutsLedgerPageState extends ConsumerState<PayoutsLedgerPage> {
     await context.push('/finance/payouts/${payout.id}', extra: payout);
   }
 
+  Future<void> _copyToClipboard(String value, String label) async {
+    await Clipboard.setData(ClipboardData(text: value));
+    if (!mounted) {
+      return;
+    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('$label copied')),
+    );
+  }
+
   Future<void> _retry(String payoutId) async {
     setState(() => _busy = true);
     try {
@@ -226,6 +237,11 @@ class _PayoutsLedgerPageState extends ConsumerState<PayoutsLedgerPage> {
 
   @override
   Widget build(BuildContext context) {
+    final failedCount = _items.where((item) => item.status == 'failed').length;
+    final successCount = _items.where((item) => item.status == 'success').length;
+    final inFlightCount = _items.where((item) => item.status == 'pending' || item.status == 'processing').length;
+    final failureRate = _items.isEmpty ? 0.0 : failedCount / _items.length;
+
     if (_loadingInitial && _items.isEmpty) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
@@ -323,18 +339,58 @@ class _PayoutsLedgerPageState extends ConsumerState<PayoutsLedgerPage> {
                           ),
                           PremiumStatCard(
                             label: 'Failed',
-                            value: '${_items.where((item) => item.status == 'failed').length}',
+                            value: '$failedCount',
                             icon: Icons.warning_rounded,
                             accentColor: const Color(0xFFEF4444),
                           ),
                           PremiumStatCard(
                             label: 'Success',
-                            value: '${_items.where((item) => item.status == 'success').length}',
+                            value: '$successCount',
                             icon: Icons.check_circle_rounded,
                             accentColor: const Color(0xFF10B981),
                           ),
+                          PremiumStatCard(
+                            label: 'In flight',
+                            value: '$inFlightCount',
+                            icon: Icons.hourglass_top_rounded,
+                            accentColor: const Color(0xFF7C3AED),
+                          ),
+                          PremiumStatCard(
+                            label: 'Failure rate',
+                            value: '${(failureRate * 100).toStringAsFixed(0)}%',
+                            icon: Icons.trending_down_rounded,
+                            accentColor: const Color(0xFFF59E0B),
+                          ),
                         ],
                       ),
+                      if (failedCount > 0) ...[
+                        const SizedBox(height: 12),
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(14),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF59E0B).withValues(alpha: 0.08),
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(color: const Color(0xFFF59E0B).withValues(alpha: 0.16)),
+                          ),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Icon(Icons.info_outline_rounded, color: Color(0xFFF59E0B), size: 20),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Text(
+                                  'Failed payouts usually need a beneficiary or UPI check before retrying. Open a payout row to review the failure reason and retry from the detail view.',
+                                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                        height: 1.35,
+                                      ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ),
@@ -445,11 +501,24 @@ class _PayoutsLedgerPageState extends ConsumerState<PayoutsLedgerPage> {
                             return DataRow(
                               cells: [
                                 DataCell(
-                                  Text(
-                                    payout.bookingCode.isNotEmpty
-                                        ? payout.bookingCode
-                                        : payout.bookingId,
-                                    style: const TextStyle(fontWeight: FontWeight.w600),
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        child: Text(
+                                          payout.bookingCode.isNotEmpty ? payout.bookingCode : payout.bookingId,
+                                          style: const TextStyle(fontWeight: FontWeight.w600),
+                                        ),
+                                      ),
+                                      IconButton(
+                                        tooltip: 'Copy reference',
+                                        visualDensity: VisualDensity.compact,
+                                        onPressed: () => _copyToClipboard(
+                                          payout.bookingCode.isNotEmpty ? payout.bookingCode : payout.bookingId,
+                                          'Reference',
+                                        ),
+                                        icon: const Icon(Icons.copy_rounded, size: 16),
+                                      ),
+                                    ],
                                   ),
                                 ),
                                 DataCell(
@@ -479,13 +548,28 @@ class _PayoutsLedgerPageState extends ConsumerState<PayoutsLedgerPage> {
                                   Text(MaterialLocalizations.of(context).formatMediumDate(payout.createdAt)),
                                 ),
                                 DataCell(
-                                  payout.status == 'failed'
-                                      ? TextButton.icon(
+                                  Wrap(
+                                    spacing: 6,
+                                    runSpacing: 6,
+                                    children: [
+                                      TextButton.icon(
+                                        onPressed: () => _openDetails(payout),
+                                        icon: const Icon(Icons.open_in_new_rounded, size: 16),
+                                        label: const Text('Open'),
+                                      ),
+                                      TextButton.icon(
+                                        onPressed: () => context.push('/audit-logs?search=${Uri.encodeComponent(payout.id)}'),
+                                        icon: const Icon(Icons.manage_search_rounded, size: 16),
+                                        label: const Text('Audit'),
+                                      ),
+                                      if (payout.status == 'failed')
+                                        TextButton.icon(
                                           onPressed: () => _retry(payout.id),
                                           icon: const Icon(Icons.refresh_rounded, size: 16),
                                           label: const Text('Retry'),
-                                        )
-                                      : const SizedBox.shrink(),
+                                        ),
+                                    ],
+                                  ),
                                 ),
                               ],
                               onSelectChanged: (_) => _openDetails(payout),
@@ -650,6 +734,8 @@ class _PayoutDetailPageState extends ConsumerState<PayoutDetailPage> {
             );
           }
 
+          final bookingLookup = _bookingLookup(payout);
+
           return ListView(
             padding: const EdgeInsets.all(24),
             children: [
@@ -665,6 +751,38 @@ class _PayoutDetailPageState extends ConsumerState<PayoutDetailPage> {
                   _DetailChip(label: '₹${payout.amount.toStringAsFixed(2)}'),
                   _DetailChip(label: 'Commission ₹${payout.commissionAmount.toStringAsFixed(2)}'),
                   _DetailChip(label: MaterialLocalizations.of(context).formatMediumDate(payout.createdAt)),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 12,
+                runSpacing: 12,
+                children: [
+                  OutlinedButton.icon(
+                    onPressed: () => _copyToClipboard(payout.id, 'Payout ID'),
+                    icon: const Icon(Icons.copy_rounded),
+                    label: const Text('Copy payout ID'),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: () => _copyToClipboard(payout.bookingId, 'Booking ID'),
+                    icon: const Icon(Icons.copy_rounded),
+                    label: const Text('Copy booking ID'),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: () => context.push('/admin-bookings/${payout.bookingId}'),
+                    icon: const Icon(Icons.receipt_long_rounded),
+                    label: const Text('Open booking'),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: () => context.push('/admin-bookings?search=${Uri.encodeComponent(bookingLookup)}'),
+                    icon: const Icon(Icons.search_rounded),
+                    label: const Text('Booking search'),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: () => context.push('/audit-logs?search=${Uri.encodeComponent(payout.id)}'),
+                    icon: const Icon(Icons.history_rounded),
+                    label: const Text('Audit trail'),
+                  ),
                 ],
               ),
               const SizedBox(height: 16),
@@ -706,6 +824,20 @@ class _PayoutDetailPageState extends ConsumerState<PayoutDetailPage> {
           );
         },
       ),
+    );
+  }
+
+  String _bookingLookup(FinancePayoutItem payout) {
+    return payout.bookingCode.trim().isNotEmpty ? payout.bookingCode.trim() : payout.bookingId;
+  }
+
+  Future<void> _copyToClipboard(String value, String label) async {
+    await Clipboard.setData(ClipboardData(text: value));
+    if (!mounted) {
+      return;
+    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('$label copied')),
     );
   }
 }

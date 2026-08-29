@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:firebase_storage/firebase_storage.dart';
 import 'package:marketplace_shared/marketplace_shared.dart';
 import '../providers/chat_providers.dart';
 
@@ -60,17 +59,14 @@ class _WorkerChatPageState extends ConsumerState<WorkerChatPage>
     final picked = await _picker.pickImage(source: ImageSource.gallery, imageQuality: 80);
     if (picked == null) return;
     try {
-      final ref = FirebaseStorage.instance
-          .ref('chat-attachments/${widget.bookingId}/${DateTime.now().millisecondsSinceEpoch}_${picked.name}');
-      final uploadTask = await ref.putData(await picked.readAsBytes());
-      final url = await uploadTask.ref.getDownloadURL();
+      final attachment = await ref.read(chatControllerProvider).uploadAttachment(
+        bookingId: widget.bookingId,
+        bytes: await picked.readAsBytes(),
+        filename: picked.name,
+      );
       if (!mounted) return;
       setState(() {
-        _draftAttachments.add(ChatAttachment(
-          url: url,
-          kind: 'image',
-          name: picked.name,
-        ));
+        _draftAttachments.add(attachment);
       });
     } catch (_) {
       if (!mounted) return;

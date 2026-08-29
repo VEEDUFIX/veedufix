@@ -1,5 +1,5 @@
 import { NextFunction, Request, Response } from "express";
-import { verifyAccessToken } from "../lib/jwt.js";
+import { authenticateAccessToken } from "../lib/auth-session.js";
 
 export type AuthenticatedRequest = Request & {
   auth?: {
@@ -16,18 +16,19 @@ export function requireAuth(request: AuthenticatedRequest, response: Response, n
     return;
   }
 
-  try {
-    const token = header.slice(7);
-    const payload = verifyAccessToken(token);
-    request.auth = {
-      userId: payload.sub,
-      role: payload.role,
-      sessionId: payload.sessionId
-    };
-    next();
-  } catch {
-    response.status(401).json({ message: "Invalid or expired token" });
-  }
+  const token = header.slice(7);
+  void authenticateAccessToken(token)
+    .then((payload) => {
+      request.auth = {
+        userId: payload.sub,
+        role: payload.role,
+        sessionId: payload.sessionId
+      };
+      next();
+    })
+    .catch(() => {
+      response.status(401).json({ message: "Invalid or expired token" });
+    });
 }
 
 export function requireRole(...roles: Array<"CUSTOMER" | "WORKER" | "ADMIN">) {

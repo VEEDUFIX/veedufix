@@ -347,6 +347,54 @@ class _EarningsPageState extends ConsumerState<EarningsPage> {
                         ),
                       ],
                     ),
+                    const SizedBox(height: 12),
+                    PremiumGlassCard(
+                      child: Padding(
+                        padding: const EdgeInsets.all(18),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Payout management',
+                              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              'Open the wallet, update payout details, or ask for help if a withdrawal is stuck.',
+                              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                  ),
+                            ),
+                            const SizedBox(height: 14),
+                            Wrap(
+                              spacing: 10,
+                              runSpacing: 10,
+                              children: [
+                                FilledButton.icon(
+                                  onPressed: () => context.push('/wallet'),
+                                  icon: const Icon(Icons.account_balance_wallet_rounded, size: 18),
+                                  label: const Text('Open wallet'),
+                                ),
+                                OutlinedButton.icon(
+                                  onPressed: () => context.push('/profile/edit'),
+                                  icon: const Icon(Icons.person_rounded, size: 18),
+                                  label: const Text('Edit payout details'),
+                                ),
+                                TextButton.icon(
+                                  onPressed: () => context.push(
+                                    '/support?autoCompose=true&initialCategory=payment&initialSubject=${Uri.encodeComponent('Payout or wallet issue')}&initialMessage=${Uri.encodeComponent('I need help with my worker payout setup or a withdrawal that needs attention.')}',
+                                  ),
+                                  icon: const Icon(Icons.support_agent_rounded, size: 18),
+                                  label: const Text('Get support'),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
                     const SizedBox(height: 18),
                     const PremiumSectionHeader(
                       title: 'Recent payouts',
@@ -510,28 +558,10 @@ class _EarningsPageState extends ConsumerState<EarningsPage> {
                     ),
                     const SizedBox(height: 18),
                     TapScale(
-                      onTap: () async {
-                        try {
-                          await ref.read(apiClientProvider).dio.post(
-                                '/wallet/payout',
-                                data: {'amount': 100},
-                              );
-                          if (context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('Payout requested successfully!')),
-                            );
-                          }
-                        } catch (e) {
-                          if (context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('Failed to request payout')),
-                            );
-                          }
-                        }
-                      },
+                      onTap: () => context.push('/wallet'),
                       child: const MetallicCard(
-                        title: 'Instant Cashout',
-                        subtitle: 'Powered by RazorpayX',
+                        title: 'Withdraw Earnings',
+                        subtitle: 'Open wallet to request a real payout',
                         icon: Icons.account_balance_wallet_rounded,
                         baseColor: Color(0xFF14B8A6),
                       ),

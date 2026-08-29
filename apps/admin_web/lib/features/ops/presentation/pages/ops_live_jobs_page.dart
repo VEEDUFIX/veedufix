@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -46,33 +47,23 @@ class _OpsLiveJobsPageState extends ConsumerState<OpsLiveJobsPage> {
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting &&
               !snapshot.hasData) {
-            return const Center(child: CircularProgressIndicator());
+            return const Padding(
+              padding: EdgeInsets.all(24),
+              child: _LiveJobsSkeleton(),
+            );
           }
 
           if (snapshot.hasError) {
             return Center(
               child: Padding(
                 padding: const EdgeInsets.all(24),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(Icons.error_outline_rounded, size: 48),
-                    const SizedBox(height: 12),
-                    Text(
-                      'Unable to load live jobs',
-                      style: Theme.of(context)
-                          .textTheme
-                          .titleLarge
-                          ?.copyWith(fontWeight: FontWeight.w800),
-                      textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(height: 8),
-                    Text(snapshot.error.toString(),
-                        textAlign: TextAlign.center),
-                    const SizedBox(height: 16),
-                    FilledButton(
-                        onPressed: _reload, child: const Text('Retry')),
-                  ],
+                child: PremiumEmptyState(
+                  icon: Icons.cloud_off_rounded,
+                  title: 'Could not load live jobs',
+                  subtitle:
+                      'The live jobs queue is unavailable right now. Please retry.',
+                  actionLabel: 'Retry',
+                  onAction: _reload,
                 ),
               ),
             );
@@ -181,6 +172,7 @@ class _OpsLiveJobsPageState extends ConsumerState<OpsLiveJobsPage> {
                             DataColumn(label: Text('Status')),
                             DataColumn(label: Text('Elapsed')),
                             DataColumn(label: Text('Scheduled')),
+                            DataColumn(label: Text('Action')),
                           ],
                           rows: jobs
                               .map(
@@ -196,17 +188,50 @@ class _OpsLiveJobsPageState extends ConsumerState<OpsLiveJobsPage> {
                                     },
                                   ),
                                   cells: [
-                                    DataCell(Text(job.bookingCode)),
-                                    DataCell(Text(job.customerName)),
                                     DataCell(
-                                        Text(job.workerName ?? 'Unassigned')),
-                                    DataCell(SizedBox(
-                                        width: 180,
-                                        child: Text(job.serviceLabel))),
+                                      Row(
+                                        children: [
+                                          Expanded(child: Text(job.bookingCode)),
+                                          IconButton(
+                                            tooltip: 'Copy booking code',
+                                            visualDensity: VisualDensity.compact,
+                                            onPressed: () async {
+                                              await Clipboard.setData(ClipboardData(text: job.bookingCode));
+                                              if (context.mounted) {
+                                                ScaffoldMessenger.of(context).showSnackBar(
+                                                  const SnackBar(content: Text('Booking code copied')),
+                                                );
+                                              }
+                                            },
+                                            icon: const Icon(Icons.copy_rounded, size: 16),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    DataCell(Text(job.customerName)),
+                                    DataCell(Text(job.workerName ?? 'Unassigned')),
+                                    DataCell(SizedBox(width: 180, child: Text(job.serviceLabel))),
                                     DataCell(_StatusPill(status: job.status)),
                                     DataCell(Text(job.elapsedLabel)),
-                                    DataCell(Text(
-                                        _formatDate(context, job.scheduledAt))),
+                                    DataCell(Text(_formatDate(context, job.scheduledAt))),
+                                    DataCell(
+                                      Wrap(
+                                        spacing: 6,
+                                        runSpacing: 6,
+                                        children: [
+                                          TextButton.icon(
+                                            onPressed: () => _showJobDetails(job),
+                                            icon: const Icon(Icons.open_in_new_rounded, size: 16),
+                                            label: const Text('Open'),
+                                          ),
+                                          TextButton.icon(
+                                            onPressed: () => context.push('/audit-logs?search=${Uri.encodeComponent(job.bookingId)}'),
+                                            icon: const Icon(Icons.manage_search_rounded, size: 16),
+                                            label: const Text('Audit'),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
                                   ],
                                   onSelectChanged: (_) => _showJobDetails(job),
                                 ),
@@ -430,28 +455,23 @@ class _OpsLiveJobDetailPageState extends ConsumerState<OpsLiveJobDetailPage> {
         future: _jobFuture,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting && !snapshot.hasData) {
-            return const Center(child: CircularProgressIndicator());
+            return const Padding(
+              padding: EdgeInsets.all(24),
+              child: _JobDetailSkeleton(),
+            );
           }
 
           if (snapshot.hasError) {
             return Center(
               child: Padding(
                 padding: const EdgeInsets.all(24),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(Icons.error_outline_rounded, size: 48),
-                    const SizedBox(height: 12),
-                    Text(
-                      'Unable to load live job',
-                      style: tt.titleLarge?.copyWith(fontWeight: FontWeight.w800),
-                      textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(height: 8),
-                    Text(snapshot.error.toString(), textAlign: TextAlign.center),
-                    const SizedBox(height: 16),
-                    FilledButton(onPressed: _reload, child: const Text('Retry')),
-                  ],
+                child: PremiumEmptyState(
+                  icon: Icons.cloud_off_rounded,
+                  title: 'Could not load live job',
+                  subtitle:
+                      'The selected job details are unavailable right now. Please retry.',
+                  actionLabel: 'Retry',
+                  onAction: _reload,
                 ),
               ),
             );
@@ -609,6 +629,56 @@ class _SummaryBadge extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+class _LiveJobsSkeleton extends StatelessWidget {
+  const _LiveJobsSkeleton();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _SkeletonBlock(width: 260, height: 28),
+        SizedBox(height: 12),
+        _SkeletonBlock(width: 520, height: 16),
+        SizedBox(height: 24),
+        _SkeletonBlock(width: double.infinity, height: 56),
+        SizedBox(height: 12),
+        _SkeletonBlock(width: double.infinity, height: 320),
+      ],
+    );
+  }
+}
+
+class _JobDetailSkeleton extends StatelessWidget {
+  const _JobDetailSkeleton();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _SkeletonBlock(width: 220, height: 24),
+        SizedBox(height: 12),
+        _SkeletonBlock(width: 320, height: 14),
+        SizedBox(height: 24),
+        _SkeletonBlock(width: double.infinity, height: 220),
+      ],
+    );
+  }
+}
+
+class _SkeletonBlock extends StatelessWidget {
+  const _SkeletonBlock({required this.width, required this.height});
+
+  final double width;
+  final double height;
+
+  @override
+  Widget build(BuildContext context) {
+    return ShimmerWidget(width: width, height: height, radius: 10);
   }
 }
 

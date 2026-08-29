@@ -24,6 +24,14 @@ export type UploadedJobPhoto = {
   format?: string;
 };
 
+export type UploadedChatAttachment = {
+  secureUrl: string;
+  publicId: string;
+  folder: string;
+  bytes: number;
+  format?: string;
+};
+
 let configured = false;
 
 function ensureConfigured(): void {
@@ -83,6 +91,31 @@ export async function assertWorkerCanUploadJobPhoto(bookingId: string, userId: s
 
 function jobPhotoStatus(type: JobPhotoType): string {
   return type === "before" ? "JOB_PHOTO_BEFORE_UPLOADED" : "JOB_PHOTO_AFTER_UPLOADED";
+}
+
+async function getBookingForChatUpload(bookingId: string, userId: string) {
+  const booking = await prisma.booking.findUnique({
+    where: { id: bookingId },
+    include: {
+      worker: {
+        select: {
+          userId: true
+        }
+      }
+    }
+  });
+
+  if (!booking) {
+    throw AppError.notFound("Booking not found");
+  }
+
+  const isCustomer = booking.customerId === userId;
+  const isWorker = booking.worker?.userId === userId;
+  if (!isCustomer && !isWorker) {
+    throw AppError.forbidden("You are not part of this booking");
+  }
+
+  return booking;
 }
 
 function jobPhotoTitle(type: JobPhotoType): string {
@@ -171,6 +204,34 @@ export async function uploadJobPhoto(
   const uploaded = await uploadBufferToCloudinary(fileBuffer, {
     folder,
     public_id: jobPhotoPublicId(bookingId, type),
+    resource_type: "image",
+    overwrite: true
+  });
+
+  return {
+    secureUrl: uploaded.secure_url,
+    publicId: uploaded.public_id,
+    folder,
+    bytes: uploaded.bytes ?? fileBuffer.length,
+    format: uploaded.format
+  };
+}
+
+export async function uploadChatAttachment(
+  fileBuffer: Buffer,
+  bookingId: string,
+  userId: string,
+  filename?: string
+): Promise<UploadedChatAttachment> {
+  ensureConfigured();
+  await getBookingForChatUpload(bookingId, userId);
+
+  const folder = `veedufix/chat/${bookingId}/${userId}`;
+  const suffix = Math.random().toString(36).slice(2, 10);
+  const publicId = `chat-attachment-${Date.now()}-${suffix}${filename ? `-${filename.replace(/[^a-zA-Z0-9._-]/g, "_")}` : ""}`;
+  const uploaded = await uploadBufferToCloudinary(fileBuffer, {
+    folder,
+    public_id: publicId,
     resource_type: "image",
     overwrite: true
   });

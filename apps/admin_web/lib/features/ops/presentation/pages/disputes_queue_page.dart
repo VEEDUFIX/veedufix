@@ -1,3 +1,4 @@
+import 'package:flutter/services.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -134,14 +135,28 @@ class _DisputesQueuePageState extends ConsumerState<DisputesQueuePage> {
   @override
   Widget build(BuildContext context) {
     if (_loadingInitial && _items.isEmpty) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+      return const Scaffold(
+        body: Padding(
+          padding: EdgeInsets.all(24),
+          child: _DisputesSkeleton(),
+        ),
+      );
     }
 
     if (_loadError != null && _items.isEmpty) {
       return Scaffold(
-        body: _ErrorState(
-          error: _loadError!,
-          onRetry: _reload,
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: PremiumEmptyState(
+              icon: Icons.cloud_off_rounded,
+              title: 'Could not load disputes',
+              subtitle:
+                  'The dispute queue is unavailable right now. Please retry.',
+              actionLabel: 'Retry',
+              onAction: _reload,
+            ),
+          ),
         ),
       );
     }
@@ -293,10 +308,31 @@ class _DisputesQueuePageState extends ConsumerState<DisputesQueuePage> {
                               return DataRow(
                                 onSelectChanged: (_) => _openDispute(item.id),
                                 cells: [
-                                  DataCell(Text(
-                                    item.bookingCode,
-                                    style: const TextStyle(fontWeight: FontWeight.w600),
-                                  )),
+                                  DataCell(
+                                    Row(
+                                      children: [
+                                        Expanded(
+                                          child: Text(
+                                            item.bookingCode,
+                                            style: const TextStyle(fontWeight: FontWeight.w600),
+                                          ),
+                                        ),
+                                        IconButton(
+                                          tooltip: 'Copy booking code',
+                                          visualDensity: VisualDensity.compact,
+                                          onPressed: () async {
+                                            await Clipboard.setData(ClipboardData(text: item.bookingCode));
+                                            if (context.mounted) {
+                                              ScaffoldMessenger.of(context).showSnackBar(
+                                                const SnackBar(content: Text('Booking code copied')),
+                                              );
+                                            }
+                                          },
+                                          icon: const Icon(Icons.copy_rounded, size: 16),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
                                   DataCell(Row(
                                     children: [
                                       CircleAvatar(
@@ -332,8 +368,23 @@ class _DisputesQueuePageState extends ConsumerState<DisputesQueuePage> {
                                   )),
                                   DataCell(_GlowingStatusBadge(status: item.status)),
                                   DataCell(Text(MaterialLocalizations.of(context).formatMediumDate(item.createdAt))),
-                                  const DataCell(
-                                    Icon(Icons.chevron_right_rounded, color: Color(0xFF94A3B8)),
+                                  DataCell(
+                                    Wrap(
+                                      spacing: 6,
+                                      runSpacing: 6,
+                                      children: [
+                                        TextButton.icon(
+                                          onPressed: () => _openDispute(item.id),
+                                          icon: const Icon(Icons.open_in_new_rounded, size: 16),
+                                          label: const Text('Open'),
+                                        ),
+                                        TextButton.icon(
+                                          onPressed: () => context.push('/audit-logs?search=${Uri.encodeComponent(item.bookingId)}'),
+                                          icon: const Icon(Icons.manage_search_rounded, size: 16),
+                                          label: const Text('Audit'),
+                                        ),
+                                      ],
+                                  ),
                                   ),
                                 ],
                               );
@@ -359,9 +410,19 @@ class _DisputesQueuePageState extends ConsumerState<DisputesQueuePage> {
                       const Spacer(),
                       if (_loadingMore)
                         const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2),
+                          width: 120,
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(strokeWidth: 2),
+                              ),
+                              SizedBox(width: 10),
+                              Text('Loading more'),
+                            ],
+                          ),
                         )
                       else if (_hasMore)
                         Text(
@@ -484,41 +545,35 @@ class _GlowingStatusBadge extends StatelessWidget {
   }
 }
 
-class _ErrorState extends StatelessWidget {
-  const _ErrorState({
-    required this.error,
-    required this.onRetry,
-  });
-
-  final String error;
-  final VoidCallback onRetry;
+class _DisputesSkeleton extends StatelessWidget {
+  const _DisputesSkeleton();
 
   @override
   Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.error_outline_rounded, size: 48),
-            const SizedBox(height: 12),
-            Text(
-              'Unable to load disputes',
-              style: Theme.of(context)
-                  .textTheme
-                  .titleLarge
-                  ?.copyWith(fontWeight: FontWeight.w800),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 8),
-            Text(error, textAlign: TextAlign.center),
-            const SizedBox(height: 16),
-            FilledButton(onPressed: onRetry, child: const Text('Retry')),
-          ],
-        ),
-      ),
+    return const Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _SkeletonBlock(width: 280, height: 28),
+        SizedBox(height: 12),
+        _SkeletonBlock(width: 500, height: 16),
+        SizedBox(height: 24),
+        _SkeletonBlock(width: double.infinity, height: 110),
+        SizedBox(height: 12),
+        _SkeletonBlock(width: double.infinity, height: 300),
+      ],
     );
+  }
+}
+
+class _SkeletonBlock extends StatelessWidget {
+  const _SkeletonBlock({required this.width, required this.height});
+
+  final double width;
+  final double height;
+
+  @override
+  Widget build(BuildContext context) {
+    return ShimmerWidget(width: width, height: height, radius: 10);
   }
 }
 
@@ -540,4 +595,3 @@ class _SurfacePanel extends StatelessWidget {
     );
   }
 }
-

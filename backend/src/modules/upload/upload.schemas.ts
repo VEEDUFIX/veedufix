@@ -27,3 +27,9 @@ export const confirmJobPhotoSchema = z.object({
     format: z.string().min(1).optional()
   })
 });
+
+export const uploadChatAttachmentSchema = z.object({
+  body: z.object({
+    bookingId: z.string().min(1)
+  })
+});

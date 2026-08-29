@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -944,6 +945,33 @@ class _PlatformSettingsHistoryRow extends StatelessWidget {
                   '${DateFormat('d MMM y, h:mm a').format(entry.createdAt)} · ${entry.adminId}',
                   style: tt.labelMedium?.copyWith(color: cs.onSurfaceVariant),
                 ),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    TextButton.icon(
+                      onPressed: () {
+                        Clipboard.setData(ClipboardData(text: entry.id));
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('History ID copied')),
+                        );
+                      },
+                      icon: const Icon(Icons.copy_rounded, size: 16),
+                      label: const Text('Copy ID'),
+                    ),
+                    TextButton.icon(
+                      onPressed: () {
+                        Clipboard.setData(ClipboardData(text: entry.targetId));
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Target ID copied')),
+                        );
+                      },
+                      icon: const Icon(Icons.copy_rounded, size: 16),
+                      label: const Text('Copy target'),
+                    ),
+                  ],
+                ),
               ],
             ),
           ),
@@ -1113,6 +1141,122 @@ class _CommissionDetailPageState extends ConsumerState<CommissionDetailPage> {
     }
   }
 
+  Future<void> _editCommission(_CommissionEntry commission) async {
+    final formKey = GlobalKey<FormState>();
+    final rateController = TextEditingController(text: commission.rate.toStringAsFixed(2));
+    final feeController = TextEditingController(text: commission.fixedFee.toStringAsFixed(2));
+    final isActive = ValueNotifier<bool>(commission.isActive);
+
+    try {
+      final result = await showDialog<Map<String, dynamic>>(
+        context: context,
+        barrierDismissible: false,
+        builder: (dialogContext) {
+          return AlertDialog(
+            title: const Text('Edit commission rule'),
+            content: SizedBox(
+              width: 520,
+              child: StatefulBuilder(
+                builder: (context, setState) {
+                  return Form(
+                    key: formKey,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        TextFormField(
+                          controller: rateController,
+                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                          decoration: const InputDecoration(
+                            labelText: 'Commission rate %',
+                            border: OutlineInputBorder(),
+                          ),
+                          validator: (value) {
+                            final parsed = double.tryParse(value?.trim() ?? '');
+                            if (parsed == null || parsed < 0) {
+                              return 'Enter a valid commission rate';
+                            }
+                            return null;
+                          },
+                        ),
+                        const SizedBox(height: 16),
+                        TextFormField(
+                          controller: feeController,
+                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                          decoration: const InputDecoration(
+                            labelText: 'Fixed fee',
+                            border: OutlineInputBorder(),
+                          ),
+                          validator: (value) {
+                            final parsed = double.tryParse(value?.trim() ?? '');
+                            if (parsed == null || parsed < 0) {
+                              return 'Enter a valid fixed fee';
+                            }
+                            return null;
+                          },
+                        ),
+                        const SizedBox(height: 16),
+                        SwitchListTile.adaptive(
+                          contentPadding: EdgeInsets.zero,
+                          value: isActive.value,
+                          onChanged: (value) => setState(() => isActive.value = value),
+                          title: const Text('Active'),
+                          subtitle: const Text('Inactive rules stay in history but are ignored.'),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: () {
+                  if (!formKey.currentState!.validate()) {
+                    return;
+                  }
+                  final rate = double.tryParse(rateController.text.trim());
+                  final fixedFee = double.tryParse(feeController.text.trim());
+                  if (rate == null || rate < 0 || fixedFee == null || fixedFee < 0) {
+                    return;
+                  }
+                  Navigator.of(dialogContext).pop({
+                    'cityId': commission.cityId,
+                    'rate': rate,
+                    'fixedFee': fixedFee,
+                    'isActive': isActive.value,
+                  });
+                },
+                child: const Text('Save'),
+              ),
+            ],
+          );
+        },
+      );
+
+      if (result == null) {
+        return;
+      }
+
+      setState(() => _busy = true);
+      try {
+        await _api.updateCommission(commission.id, result);
+        await _reload();
+      } finally {
+        if (mounted) {
+          setState(() => _busy = false);
+        }
+      }
+    } finally {
+      rateController.dispose();
+      feeController.dispose();
+      isActive.dispose();
+    }
+  }
+
   Future<void> _deleteCommission(_CommissionEntry commission) async {
     setState(() => _busy = true);
     try {
@@ -1242,6 +1386,44 @@ class _CommissionDetailPageState extends ConsumerState<CommissionDetailPage> {
               _DetailLine(label: 'Fixed fee', value: '₹${commission.fixedFee.toStringAsFixed(2)}'),
               _DetailLine(label: 'Status', value: commission.isActive ? 'Active' : 'Inactive'),
               _DetailLine(label: 'Available cities', value: '${snapshotData.cities.length}'),
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  OutlinedButton.icon(
+                    onPressed: () {
+                      Clipboard.setData(ClipboardData(text: commission.id));
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Commission ID copied')),
+                      );
+                    },
+                    icon: const Icon(Icons.copy_rounded, size: 16),
+                    label: const Text('Copy ID'),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: () => context.push('/audit-logs?search=${Uri.encodeComponent(commission.id)}'),
+                    icon: const Icon(Icons.manage_search_rounded, size: 16),
+                    label: const Text('Audit trail'),
+                  ),
+                  if (commission.cityId != null)
+                    OutlinedButton.icon(
+                      onPressed: () {
+                        Clipboard.setData(ClipboardData(text: commission.cityId!));
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('City ID copied')),
+                        );
+                      },
+                      icon: const Icon(Icons.location_city_rounded, size: 16),
+                      label: const Text('Copy city ID'),
+                    ),
+                  OutlinedButton.icon(
+                    onPressed: _busy ? null : () => _editCommission(commission),
+                    icon: const Icon(Icons.edit_rounded, size: 16),
+                    label: const Text('Edit rule'),
+                  ),
+                ],
+              ),
               const SizedBox(height: 20),
               Wrap(
                 spacing: 12,

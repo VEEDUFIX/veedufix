@@ -295,7 +295,29 @@ class _SearchPageState extends ConsumerState<SearchPage> {
                   borderRadius: 24,
                 ),
               ),
-              error: (err, stack) => Center(child: Text('Error: $err')),
+              error: (err, stack) => Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: PremiumEmptyState(
+                    icon: Icons.cloud_off_rounded,
+                    title: 'Could not load search results',
+                    subtitle:
+                        'We hit a network issue while searching. Please try again in a moment.',
+                    actionLabel: 'Retry',
+                    onAction: () {
+                      final _ = ref.refresh(
+                        searchCatalogFilteredProvider(
+                          _SearchFilters(
+                            query: _query,
+                            categorySlug: _selectedCategorySlug,
+                            subcategorySlug: _selectedSubcategorySlug,
+                          ),
+                        ).future,
+                      );
+                    },
+                  ),
+                ),
+              ),
             ),
     );
   }
@@ -332,6 +354,59 @@ class _SearchHome extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.all(24),
       children: [
+        PremiumGlassCard(
+          child: Padding(
+            padding: const EdgeInsets.all(18),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  width: 50,
+                  height: 50,
+                  decoration: BoxDecoration(
+                    color: cs.primary.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Icon(
+                    Icons.search_rounded,
+                    color: cs.primary,
+                  ),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Find the right service faster',
+                        style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Search by service name, browse trending categories, or jump straight into the right fit with filters.',
+                        style: tt.bodyMedium?.copyWith(
+                          color: cs.onSurfaceVariant,
+                          height: 1.45,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      const Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          _SearchHintChip(label: 'Trending first'),
+                          _SearchHintChip(label: 'Filter by category'),
+                          _SearchHintChip(label: 'Tap to compare'),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 18),
         if (categories.isNotEmpty) ...[
           Text('Categories',
               style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
@@ -520,10 +595,48 @@ class _SearchResults extends StatelessWidget {
     final cs = Theme.of(context).colorScheme;
     if (results.isEmpty) {
       return Center(
-        child: PremiumEmptyState(
-          icon: Icons.search_off_rounded,
-          title: 'No results for "$query"',
-          subtitle: 'Try searching for something else.',
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: PremiumGlassCard(
+            child: Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 60,
+                    height: 60,
+                    decoration: BoxDecoration(
+                      color: cs.primary.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(18),
+                    ),
+                    child: Icon(
+                      Icons.search_off_rounded,
+                      color: cs.primary,
+                      size: 28,
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  Text(
+                    'No results for "$query"',
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w800,
+                        ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Try a broader search, switch categories, or use the trending services above.',
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: cs.onSurfaceVariant,
+                          height: 1.45,
+                        ),
+                  ),
+                ],
+              ),
+            ),
+          ),
         ),
       );
     }
@@ -610,6 +723,34 @@ class _SearchItem {
   final String? subtitle;
   final String? categorySlug;
   final String? subcategorySlug;
+}
+
+class _SearchHintChip extends StatelessWidget {
+  const _SearchHintChip({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: cs.surfaceContainerHighest.withValues(alpha: 0.55),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.25)),
+      ),
+      child: Text(
+        label,
+        style: tt.labelLarge?.copyWith(
+          fontWeight: FontWeight.w700,
+          color: cs.onSurface,
+        ),
+      ),
+    );
+  }
 }
 
 extension _IterableFirstOrNull<T> on Iterable<T> {

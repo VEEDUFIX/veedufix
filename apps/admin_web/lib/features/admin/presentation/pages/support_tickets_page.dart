@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:go_router/go_router.dart';
@@ -238,6 +239,86 @@ class _SupportTicketsPageState extends ConsumerState<SupportTicketsPage> {
           physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
           children: [
+            PremiumGlassCard(
+              child: Padding(
+                padding: const EdgeInsets.all(18),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      width: 52,
+                      height: 52,
+                      decoration: BoxDecoration(
+                        color: cs.primary.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: Icon(Icons.support_agent_rounded, color: cs.primary),
+                    ),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Support command center',
+                            style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Keep customer issues moving by filtering, escalating, and resolving tickets from one place.',
+                            style: tt.bodyMedium?.copyWith(
+                              color: cs.onSurfaceVariant,
+                              height: 1.45,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    FilledButton.icon(
+                      onPressed: () => context.go('/admin/action-inbox'),
+                      icon: const Icon(Icons.inbox_rounded, size: 18),
+                      label: const Text('Open inbox'),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: _AdminKpiPill(
+                    label: 'Open',
+                    value: ticketsAsync.maybeWhen(
+                      data: (tickets) => tickets.where((ticket) => ticket.status == 'OPEN').length.toString(),
+                      orElse: () => '...',
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: _AdminKpiPill(
+                    label: 'In progress',
+                    value: ticketsAsync.maybeWhen(
+                      data: (tickets) => tickets.where((ticket) => ticket.status == 'IN_PROGRESS').length.toString(),
+                      orElse: () => '...',
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: _AdminKpiPill(
+                    label: 'Resolved',
+                    value: ticketsAsync.maybeWhen(
+                      data: (tickets) => tickets.where((ticket) => ticket.status == 'RESOLVED').length.toString(),
+                      orElse: () => '...',
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
             TextField(
               controller: _searchController,
               decoration: InputDecoration(
@@ -274,17 +355,140 @@ class _SupportTicketsPageState extends ConsumerState<SupportTicketsPage> {
             ),
             const SizedBox(height: 16),
             ticketsAsync.when(
-              loading: () => const Center(child: Padding(
-                padding: EdgeInsets.all(32),
-                child: CircularProgressIndicator(),
-              )),
-              error: (error, stack) => Center(child: Text('Failed to load tickets: $error')),
+              loading: () => const Padding(
+                padding: EdgeInsets.symmetric(vertical: 24),
+                child: Column(
+                  children: [
+                    _TicketSkeletonCard(),
+                    SizedBox(height: 12),
+                    _TicketSkeletonCard(),
+                    SizedBox(height: 12),
+                    _TicketSkeletonCard(),
+                  ],
+                ),
+              ),
+              error: (error, stack) => Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: PremiumGlassCard(
+                  child: Padding(
+                    padding: const EdgeInsets.all(18),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Container(
+                              width: 50,
+                              height: 50,
+                              decoration: BoxDecoration(
+                                color: cs.error.withValues(alpha: 0.12),
+                                borderRadius: BorderRadius.circular(16),
+                              ),
+                              child: Icon(Icons.cloud_off_rounded, color: cs.error),
+                            ),
+                            const SizedBox(width: 14),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Could not load support tickets',
+                                    style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    'The ticket queue is unavailable right now. Please retry in a moment.',
+                                    style: tt.bodyMedium?.copyWith(
+                                      color: cs.onSurfaceVariant,
+                                      height: 1.45,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 14),
+                        FilledButton.icon(
+                          onPressed: () => ref.refresh(adminSupportTicketsProvider((search: _search, status: _status)).future),
+                          icon: const Icon(Icons.refresh_rounded, size: 18),
+                          label: const Text('Retry'),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
               data: (tickets) {
                 if (tickets.isEmpty) {
-                  return const PremiumEmptyState(
-                    icon: Icons.support_agent_rounded,
-                    title: 'No tickets found',
-                    subtitle: 'There are no support tickets for this filter yet.',
+                  return Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: PremiumGlassCard(
+                      child: Padding(
+                        padding: const EdgeInsets.all(18),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Container(
+                                  width: 50,
+                                  height: 50,
+                                  decoration: BoxDecoration(
+                                    color: cs.primary.withValues(alpha: 0.12),
+                                    borderRadius: BorderRadius.circular(16),
+                                  ),
+                                  child: Icon(Icons.support_agent_rounded, color: cs.primary),
+                                ),
+                                const SizedBox(width: 14),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        'No tickets found',
+                                        style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        'There are no support tickets for this filter yet. Try another status or search term.',
+                                        style: tt.bodyMedium?.copyWith(
+                                          color: cs.onSurfaceVariant,
+                                          height: 1.45,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 14),
+                            Wrap(
+                              spacing: 10,
+                              runSpacing: 10,
+                              children: [
+                                OutlinedButton.icon(
+                                  onPressed: () => setState(() {
+                                    _searchController.clear();
+                                    _search = '';
+                                    _status = '';
+                                  }),
+                                  icon: const Icon(Icons.filter_alt_off_rounded, size: 18),
+                                  label: const Text('Clear filters'),
+                                ),
+                                FilledButton.icon(
+                                  onPressed: () => context.go('/admin/action-inbox'),
+                                  icon: const Icon(Icons.inbox_rounded, size: 18),
+                                  label: const Text('Open inbox'),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
                   );
                 }
 
@@ -382,6 +586,30 @@ class _SupportTicketsPageState extends ConsumerState<SupportTicketsPage> {
                                 ),
                               ],
                             ),
+                            const SizedBox(height: 6),
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 8,
+                              children: [
+                                TextButton.icon(
+                                  onPressed: () async {
+                                    await Clipboard.setData(ClipboardData(text: ticket.id));
+                                    if (context.mounted) {
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        const SnackBar(content: Text('Ticket ID copied')),
+                                      );
+                                    }
+                                  },
+                                  icon: const Icon(Icons.copy_rounded, size: 16),
+                                  label: const Text('Copy ID'),
+                                ),
+                                TextButton.icon(
+                                  onPressed: () => context.push('/audit-logs?search=${Uri.encodeComponent(ticket.id)}'),
+                                  icon: const Icon(Icons.manage_search_rounded, size: 16),
+                                  label: const Text('Audit'),
+                                ),
+                              ],
+                            ),
                           ],
                         ),
                       ),
@@ -407,6 +635,80 @@ class _SupportTicketsPageState extends ConsumerState<SupportTicketsPage> {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _TicketSkeletonCard extends StatelessWidget {
+  const _TicketSkeletonCard();
+
+  @override
+  Widget build(BuildContext context) {
+    return const PremiumGlassCard(
+      child: Padding(
+        padding: EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(child: ShimmerWidget(width: 180, height: 16, radius: 8)),
+                SizedBox(width: 12),
+                ShimmerWidget(width: 84, height: 28, radius: 999),
+              ],
+            ),
+            SizedBox(height: 10),
+            ShimmerWidget(width: double.infinity, height: 12, radius: 6),
+            SizedBox(height: 8),
+            ShimmerWidget(width: 220, height: 12, radius: 6),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _AdminKpiPill extends StatelessWidget {
+  const _AdminKpiPill({
+    required this.label,
+    required this.value,
+  });
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: cs.surfaceContainerHighest.withValues(alpha: 0.45),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.25)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: tt.labelMedium?.copyWith(
+              color: cs.onSurfaceVariant,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            value,
+            style: tt.titleMedium?.copyWith(
+              fontWeight: FontWeight.w900,
+              color: cs.onSurface,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -478,6 +780,16 @@ class _SupportTicketDetailPageState extends ConsumerState<SupportTicketDetailPag
       data: {'status': status},
     );
     ref.invalidate(adminSupportTicketThreadProvider(ticketId));
+  }
+
+  Future<void> _copyToClipboard(String value, String label) async {
+    await Clipboard.setData(ClipboardData(text: value));
+    if (!mounted) {
+      return;
+    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('$label copied')),
+    );
   }
 
   Future<void> _escalate(AdminSupportTicket ticket) async {
@@ -565,6 +877,8 @@ class _SupportTicketDetailPageState extends ConsumerState<SupportTicketDetailPag
             ),
             data: (thread) {
               final ticket = thread.ticket;
+              final customerLookup =
+                  (ticket.userPhone ?? '').trim().isNotEmpty ? ticket.userPhone!.trim() : ticket.id;
               return ListView(
                 padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
                 children: [
@@ -583,6 +897,41 @@ class _SupportTicketDetailPageState extends ConsumerState<SupportTicketDetailPag
                       _MetaPill(label: ticket.assignedToName == null ? 'Unassigned' : 'Assigned to ${ticket.assignedToName}'),
                       _MetaPill(label: '${thread.replies.length} replies'),
                       _MetaPill(label: ticket.userPhone ?? 'No phone'),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      OutlinedButton.icon(
+                        onPressed: () => _copyToClipboard(ticket.id, 'Ticket ID'),
+                        icon: const Icon(Icons.copy_rounded),
+                        label: const Text('Copy ticket ID'),
+                      ),
+                      if ((ticket.userPhone ?? '').trim().isNotEmpty)
+                        OutlinedButton.icon(
+                          onPressed: () => _copyToClipboard(ticket.userPhone!, 'Phone number'),
+                          icon: const Icon(Icons.phone_rounded),
+                          label: const Text('Copy phone'),
+                        ),
+                      OutlinedButton.icon(
+                        onPressed: () => context.push('/audit-logs?search=${Uri.encodeComponent(ticket.id)}'),
+                        icon: const Icon(Icons.manage_search_rounded),
+                        label: const Text('Audit trail'),
+                      ),
+                      OutlinedButton.icon(
+                        onPressed: () => context.push(
+                          '/search?q=${Uri.encodeComponent((ticket.userPhone ?? '').trim().isNotEmpty ? ticket.userPhone!.trim() : ticket.id)}',
+                        ),
+                        icon: const Icon(Icons.search_rounded),
+                        label: const Text('Open search'),
+                      ),
+                      OutlinedButton.icon(
+                        onPressed: () => context.push('/admin-bookings?search=${Uri.encodeComponent(customerLookup)}'),
+                        icon: const Icon(Icons.receipt_long_rounded),
+                        label: const Text('Customer bookings'),
+                      ),
                     ],
                   ),
                   const SizedBox(height: 12),

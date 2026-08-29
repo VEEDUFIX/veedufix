@@ -1,9 +1,10 @@
 import { BookingStatus, PaymentStatus, Prisma } from "@prisma/client";
-import { createHmac } from "crypto";
+import { createHash, createHmac } from "crypto";
 import { AppError } from "../../lib/app-error.js";
 import { env } from "../../config/env.js";
 import { prisma } from "../../lib/prisma.js";
 import { logger } from "../../lib/logger.js";
+import { redis } from "../../lib/redis.js";
 import {
   publishNotificationEvent,
   publishTrackingEvent
@@ -57,6 +58,18 @@ function verifyWebhookSignature(rawBody: string, signature: string): boolean {
     .digest("hex");
 
   return expected === signature;
+}
+
+async function claimWebhookDelivery(rawBody: string, signature: string): Promise<boolean> {
+  const digest = createHash("sha256")
+    .update(rawBody)
+    .update("|")
+    .update(signature)
+    .digest("hex");
+
+  const key = `webhook:razorpay:${digest}`;
+  const result = await redis.set(key, "1", "EX", 24 * 60 * 60, "NX");
+  return result === "OK";
 }
 
 function compactNotes(notes: Record<string, unknown>): Record<string, unknown> {
@@ -395,6 +408,12 @@ export async function handleRazorpayWebhook(
 
   if (!verifyWebhookSignature(rawBody, signature)) {
     throw AppError.unauthorized("Invalid Razorpay webhook signature");
+  }
+
+  const claimed = await claimWebhookDelivery(rawBody, signature);
+  if (!claimed) {
+    logger.info({ event: body.event ?? "unknown" }, "Duplicate Razorpay webhook delivery ignored");
+    return { ok: true };
   }
 
   const event = body.event ?? "unknown";

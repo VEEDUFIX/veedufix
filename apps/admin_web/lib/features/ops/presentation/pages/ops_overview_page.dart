@@ -40,13 +40,24 @@ class _OpsOverviewPageState extends ConsumerState<OpsOverviewPage> {
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting &&
               !snapshot.hasData) {
-            return const Center(child: CircularProgressIndicator());
+            return const Padding(
+              padding: EdgeInsets.all(24),
+              child: _OverviewSkeleton(),
+            );
           }
 
           if (snapshot.hasError) {
-            return _ErrorState(
-              error: snapshot.error.toString(),
-              onRetry: _reload,
+            return Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: PremiumEmptyState(
+                  icon: Icons.cloud_off_rounded,
+                  title: 'Could not load operations overview',
+                  subtitle: 'The ops summary is unavailable right now. Please retry.',
+                  actionLabel: 'Retry',
+                  onAction: _reload,
+                ),
+              ),
             );
           }
 
@@ -492,30 +503,76 @@ class _AlertMark extends StatelessWidget {
   }
 }
 
-class _ErrorState extends StatelessWidget {
-  const _ErrorState({required this.error, required this.onRetry});
-  final String error;
-  final VoidCallback onRetry;
+class _OverviewSkeleton extends StatelessWidget {
+  const _OverviewSkeleton();
 
   @override
   Widget build(BuildContext context) {
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Icon(Icons.error_outline_rounded, size: 48, color: Colors.black45),
-          const SizedBox(height: 16),
-          Text(
-            'Failed to load operations data',
-            style: GoogleFonts.poppins(fontSize: 20, fontWeight: FontWeight.w700),
-          ),
-          const SizedBox(height: 8),
-          Text(error, style: const TextStyle(color: Colors.black54)),
-          const SizedBox(height: 24),
-          FilledButton(onPressed: onRetry, child: const Text('Retry')),
-        ],
+    return const Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _SkeletonBlock(width: 320, height: 28),
+        SizedBox(height: 10),
+        _SkeletonBlock(width: 520, height: 16),
+        SizedBox(height: 32),
+        Wrap(
+          spacing: 24,
+          runSpacing: 24,
+          children: [
+            _SkeletonCard(),
+            _SkeletonCard(),
+            _SkeletonCard(),
+          ],
+        ),
+        SizedBox(height: 48),
+        _SkeletonCard(height: 260),
+        SizedBox(height: 24),
+        _SkeletonCard(height: 260),
+      ],
+    );
+  }
+}
+
+class _SkeletonCard extends StatelessWidget {
+  const _SkeletonCard({this.height = 180});
+
+  final double height;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFE5E7EB)),
+        boxShadow: AbzioTheme.eliteShadow,
+      ),
+      child: SizedBox(
+        height: height,
+        child: const Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _SkeletonBlock(width: 160, height: 18),
+            SizedBox(height: 12),
+            _SkeletonBlock(width: double.infinity, height: 12),
+            SizedBox(height: 8),
+            _SkeletonBlock(width: 220, height: 12),
+          ],
+        ),
       ),
     );
+  }
+}
+
+class _SkeletonBlock extends StatelessWidget {
+  const _SkeletonBlock({required this.width, required this.height});
+
+  final double width;
+  final double height;
+
+  @override
+  Widget build(BuildContext context) {
+    return ShimmerWidget(width: width, height: height, radius: 10);
   }
 }
 

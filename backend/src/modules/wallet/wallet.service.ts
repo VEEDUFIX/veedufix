@@ -57,6 +57,86 @@ export async function generateReferralCode(userId: string) {
   return code;
 }
 
+export async function requestWorkerPayout(input: {
+  userId: string;
+  amount: number;
+  upiId?: string;
+}) {
+  if (!Number.isFinite(input.amount) || input.amount <= 0) {
+    throw AppError.badRequest("amount must be a positive number");
+  }
+
+  const result = await db.$transaction(async (tx) => {
+    const workerProfile = await tx.workerProfile.findUnique({
+      where: { userId: input.userId },
+      select: {
+        id: true,
+        upiId: true
+      }
+    });
+
+    if (!workerProfile) {
+      throw AppError.notFound("Worker profile not found");
+    }
+
+    const storedUpiId = workerProfile.upiId?.trim();
+    if (!storedUpiId) {
+      throw AppError.badRequest("UPI ID is not configured for this worker");
+    }
+
+    if (input.upiId && input.upiId.trim() !== storedUpiId) {
+      throw AppError.badRequest("UPI ID does not match the worker profile");
+    }
+
+    const updatedBalance = await tx.user.updateMany({
+      where: {
+        id: input.userId,
+        walletBalance: { gte: input.amount }
+      },
+      data: {
+        walletBalance: { decrement: input.amount }
+      }
+    });
+
+    if (updatedBalance.count === 0) {
+      throw AppError.badRequest("Insufficient wallet balance");
+    }
+
+    const user = await tx.user.findUnique({
+      where: { id: input.userId },
+      select: { walletBalance: true }
+    });
+
+    if (!user) {
+      throw AppError.notFound("User not found");
+    }
+
+    const transaction = await tx.walletTransaction.create({
+      data: {
+        userId: input.userId,
+        workerId: workerProfile.id,
+        type: "PAYOUT_PENDING",
+        amount: -input.amount,
+        balanceAfter: user.walletBalance,
+        referenceType: "PAYOUT_REQUEST",
+        metadata: {
+          upiId: storedUpiId,
+          requestedAt: new Date().toISOString(),
+          note: `UPI payout of INR ${input.amount} to ${storedUpiId}`
+        }
+      }
+    });
+
+    return {
+      transaction,
+      newBalance: Number(user.walletBalance),
+      upiId: storedUpiId
+    };
+  });
+
+  return result;
+}
+
 export async function applyReferralCode(userId: string, referralCode: string) {
   const referrer = await db.user.findUnique({
     where: { referralCode }
@@ -303,4 +383,3 @@ export async function processPendingWalletPayouts(): Promise<void> {
     }
   }
 }
-

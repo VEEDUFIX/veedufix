@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
@@ -36,6 +37,16 @@ class _AdminBookingDetailPageState extends ConsumerState<AdminBookingDetailPage>
       _future = _load();
     });
     await _future;
+  }
+
+  Future<void> _copyToClipboard(String value, String label) async {
+    await Clipboard.setData(ClipboardData(text: value));
+    if (!mounted) {
+      return;
+    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('$label copied')),
+    );
   }
 
   @override
@@ -101,6 +112,9 @@ class _AdminBookingDetailPageState extends ConsumerState<AdminBookingDetailPage>
             );
           }
 
+          final customerLookup =
+              (booking.customer.phone ?? '').trim().isNotEmpty ? booking.customer.phone!.trim() : booking.customer.id;
+
           return RefreshIndicator(
             onRefresh: _reload,
             child: ListView(
@@ -148,6 +162,44 @@ class _AdminBookingDetailPageState extends ConsumerState<AdminBookingDetailPage>
                                   fontWeight: FontWeight.w800,
                                 ),
                               ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        Wrap(
+                          spacing: 10,
+                          runSpacing: 10,
+                          children: [
+                            OutlinedButton.icon(
+                              onPressed: () => _copyToClipboard(booking.id, 'Booking ID'),
+                              icon: const Icon(Icons.copy_rounded),
+                              label: const Text('Copy booking ID'),
+                            ),
+                            OutlinedButton.icon(
+                              onPressed: () => _copyToClipboard(booking.customer.id, 'Customer ID'),
+                              icon: const Icon(Icons.person_outline_rounded),
+                              label: const Text('Copy customer ID'),
+                            ),
+                            if (booking.worker != null && booking.worker!.id.isNotEmpty)
+                              OutlinedButton.icon(
+                                onPressed: () => _copyToClipboard(booking.worker!.id, 'Worker ID'),
+                                icon: const Icon(Icons.badge_outlined),
+                                label: const Text('Copy worker ID'),
+                              ),
+                            OutlinedButton.icon(
+                              onPressed: () => context.push('/audit-logs?search=${Uri.encodeComponent(booking.id)}'),
+                              icon: const Icon(Icons.manage_search_rounded),
+                              label: const Text('Audit trail'),
+                            ),
+                            OutlinedButton.icon(
+                              onPressed: () => context.push('/admin-bookings?search=${Uri.encodeComponent(customerLookup)}'),
+                              icon: const Icon(Icons.receipt_long_rounded),
+                              label: const Text('Customer bookings'),
+                            ),
+                            OutlinedButton.icon(
+                              onPressed: () => context.push('/support-tickets?search=${Uri.encodeComponent(customerLookup)}'),
+                              icon: const Icon(Icons.support_agent_rounded),
+                              label: const Text('Support'),
                             ),
                           ],
                         ),

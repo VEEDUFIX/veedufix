@@ -3,6 +3,7 @@ import { z } from "zod";
 import { prisma } from "../../lib/prisma.js";
 import { requireAuth, requireRole, type AuthenticatedRequest } from "../../middleware/auth.js";
 import { validate } from "../../middleware/validate.js";
+import { writeAuditLog } from "../../lib/audit.js";
 
 export const supportRouter = Router();
 
@@ -374,7 +375,7 @@ supportRouter.patch(
   requireAuth,
   requireRole("ADMIN"),
   validate(updateSupportTicketStatusSchema),
-  async (request, response) => {
+  async (request: AuthenticatedRequest, response) => {
     const { ticketId } = request.params as { ticketId: string };
     const { status } = request.body as { status: "OPEN" | "IN_PROGRESS" | "RESOLVED" | "CLOSED" };
 
@@ -404,6 +405,15 @@ supportRouter.patch(
       }
     });
 
+    void writeAuditLog({
+      adminId: request.auth!.userId,
+      action: "support.ticket_status_updated",
+      targetType: "support_ticket",
+      targetId: ticketId,
+      note: `Set status to ${status}`,
+      metadata: { status }
+    });
+
     response.json({ ticket: serializeTicket(ticket, true) });
   }
 );
@@ -413,7 +423,7 @@ supportRouter.patch(
   requireAuth,
   requireRole("ADMIN"),
   validate(updateSupportTicketAssignmentSchema),
-  async (request, response) => {
+  async (request: AuthenticatedRequest, response) => {
     const { ticketId } = request.params as { ticketId: string };
     const { assignedToUserId } = request.body as { assignedToUserId: string | null };
 
@@ -441,6 +451,15 @@ supportRouter.patch(
           select: { replies: true }
         }
       }
+    });
+
+    void writeAuditLog({
+      adminId: request.auth!.userId,
+      action: "support.ticket_assigned",
+      targetType: "support_ticket",
+      targetId: ticketId,
+      note: assignedToUserId ? `Assigned to ${assignedToUserId}` : "Assignment cleared",
+      metadata: { assignedToUserId }
     });
 
     response.json({ ticket: serializeTicket(ticket, true) });
@@ -535,6 +554,18 @@ supportRouter.post(
       data: {
         status: "IN_PROGRESS",
         assignedToUserId: request.auth!.userId
+      }
+    });
+
+    void writeAuditLog({
+      adminId: request.auth!.userId,
+      action: "support.ticket_replied",
+      targetType: "support_ticket",
+      targetId: ticketId,
+      note: body.isInternal ? "Internal note added" : "Admin reply added",
+      metadata: {
+        isInternal: Boolean(body.isInternal),
+        messageLength: body.message.trim().length
       }
     });
 

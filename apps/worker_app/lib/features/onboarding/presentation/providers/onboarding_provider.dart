@@ -25,6 +25,7 @@ class WorkerOnboardingSkillItem {
   final String categoryName;
   final String? categorySlug;
   final String? categoryIconUrl;
+
   /// True when the server has a certification document on file for this skill.
   /// The actual URL is never sent to the client; use the authenticated
   /// document-access endpoint if the document itself needs to be viewed.
@@ -35,8 +36,10 @@ class WorkerOnboardingSkillItem {
         ? json['category'] as Map<String, dynamic>
         : const <String, dynamic>{};
     return WorkerOnboardingSkillItem(
-      categoryId: json['categoryId'] as String? ?? category['id'] as String? ?? '',
-      categoryName: category['name'] as String? ?? json['name'] as String? ?? '',
+      categoryId:
+          json['categoryId'] as String? ?? category['id'] as String? ?? '',
+      categoryName:
+          category['name'] as String? ?? json['name'] as String? ?? '',
       categorySlug: category['slug'] as String?,
       categoryIconUrl: category['iconUrl'] as String?,
       // New field from the API; backward-compat: fall back to checking the
@@ -83,6 +86,7 @@ class WorkerOnboardingProfile {
   final String? city;
   final String? pincode;
   final String? aadhaarNumber;
+
   /// True when the server has an Aadhaar document on file.
   /// The raw URL is never sent to the client; use the authenticated
   /// document-access endpoint if the document itself needs to be viewed.
@@ -106,13 +110,20 @@ class WorkerOnboardingProfile {
       if (value is! List) {
         return const [];
       }
-      return value.whereType<String>().map((item) => item.trim()).where((item) => item.isNotEmpty).toList(growable: false);
+      return value
+          .whereType<String>()
+          .map((item) => item.trim())
+          .where((item) => item.isNotEmpty)
+          .toList(growable: false);
     }
 
-    final user = json['user'] is Map<String, dynamic> ? json['user'] as Map<String, dynamic> : const <String, dynamic>{};
+    final user = json['user'] is Map<String, dynamic>
+        ? json['user'] as Map<String, dynamic>
+        : const <String, dynamic>{};
 
     return WorkerOnboardingProfile(
-      onboardingStatus: json['onboardingStatus'] as String? ?? 'pending_documents',
+      onboardingStatus:
+          json['onboardingStatus'] as String? ?? 'pending_documents',
       fullName: json['fullName'] as String?,
       gender: json['gender'] as String?,
       dateOfBirth: DateTime.tryParse(json['dateOfBirth'] as String? ?? ''),
@@ -132,8 +143,10 @@ class WorkerOnboardingProfile {
       toolsOwned: decodeToolsOwned(json['toolsOwned']),
       emergencyContactName: json['emergencyContactName'] as String?,
       emergencyContactPhone: json['emergencyContactPhone'] as String?,
-      agreementAcceptedAt: DateTime.tryParse(json['agreementAcceptedAt'] as String? ?? ''),
-      dataConsentAcceptedAt: DateTime.tryParse(json['dataConsentAcceptedAt'] as String? ?? ''),
+      agreementAcceptedAt:
+          DateTime.tryParse(json['agreementAcceptedAt'] as String? ?? ''),
+      dataConsentAcceptedAt:
+          DateTime.tryParse(json['dataConsentAcceptedAt'] as String? ?? ''),
       phone: user['phone'] as String?,
       email: user['email'] as String?,
       rejectionReason: json['rejectionReason'] as String?,
@@ -141,8 +154,10 @@ class WorkerOnboardingProfile {
     );
   }
 
-  Set<String> get selectedCategoryIds =>
-      skills.map((skill) => skill.categoryId).where((value) => value.isNotEmpty).toSet();
+  Set<String> get selectedCategoryIds => skills
+      .map((skill) => skill.categoryId)
+      .where((value) => value.isNotEmpty)
+      .toSet();
 
   String? maskedAadhaar() {
     final raw = aadhaarNumber?.replaceAll(RegExp(r'[^0-9]'), '') ?? '';
@@ -150,7 +165,8 @@ class WorkerOnboardingProfile {
       return null;
     }
 
-    final last4 = raw.length >= 4 ? raw.substring(raw.length - 4) : raw.padLeft(4, '0');
+    final last4 =
+        raw.length >= 4 ? raw.substring(raw.length - 4) : raw.padLeft(4, '0');
     return 'XXXX-XXXX-$last4';
   }
 }
@@ -200,6 +216,7 @@ class WorkerOnboardingDraft {
   final Set<String> selectedCategoryIds;
   final Set<String> selectedServiceIds;
   final Map<String, XFile> certificationFiles;
+
   /// Maps categoryId → true for skills that have a certification document on
   /// the server. The raw URL is never sent to the client; use the
   /// authenticated document-access endpoint when the document must be viewed.
@@ -234,7 +251,9 @@ class WorkerOnboardingDraft {
     return WorkerOnboardingDraft(
       fullName: fullName ?? this.fullName,
       gender: identical(gender, _unset) ? this.gender : gender as String?,
-      dateOfBirth: identical(dateOfBirth, _unset) ? this.dateOfBirth : dateOfBirth as DateTime?,
+      dateOfBirth: identical(dateOfBirth, _unset)
+          ? this.dateOfBirth
+          : dateOfBirth as DateTime?,
       addressLine1: addressLine1 ?? this.addressLine1,
       alternatePhone: alternatePhone ?? this.alternatePhone,
       city: city ?? this.city,
@@ -245,7 +264,8 @@ class WorkerOnboardingDraft {
       bankIfsc: bankIfsc ?? this.bankIfsc,
       toolsOwned: toolsOwned ?? this.toolsOwned,
       emergencyContactName: emergencyContactName ?? this.emergencyContactName,
-      emergencyContactPhone: emergencyContactPhone ?? this.emergencyContactPhone,
+      emergencyContactPhone:
+          emergencyContactPhone ?? this.emergencyContactPhone,
       agreementAccepted: agreementAccepted ?? this.agreementAccepted,
       dataConsentAccepted: dataConsentAccepted ?? this.dataConsentAccepted,
       selectedCategoryIds: selectedCategoryIds ?? this.selectedCategoryIds,
@@ -301,7 +321,12 @@ class WorkerOnboardingState {
   String? get rejectionReason => profile?.rejectionReason;
 
   bool get isBusy =>
-      isLoadingProfile || isLoadingCategories || isSavingProfile || isUploadingDocument || isSavingSkills || isSubmitting;
+      isLoadingProfile ||
+      isLoadingCategories ||
+      isSavingProfile ||
+      isUploadingDocument ||
+      isSavingSkills ||
+      isSubmitting;
 
   WorkerOnboardingState copyWith({
     Object? profile = _unset,
@@ -320,7 +345,9 @@ class WorkerOnboardingState {
     List<String>? missingFields,
   }) {
     return WorkerOnboardingState(
-      profile: identical(profile, _unset) ? this.profile : profile as WorkerOnboardingProfile?,
+      profile: identical(profile, _unset)
+          ? this.profile
+          : profile as WorkerOnboardingProfile?,
       categories: categories ?? this.categories,
       draft: draft ?? this.draft,
       currentStep: currentStep ?? this.currentStep,
@@ -331,8 +358,12 @@ class WorkerOnboardingState {
       isSavingSkills: isSavingSkills ?? this.isSavingSkills,
       isSubmitting: isSubmitting ?? this.isSubmitting,
       isEditMode: isEditMode ?? this.isEditMode,
-      errorMessage: identical(errorMessage, _unset) ? this.errorMessage : errorMessage as String?,
-      submitError: identical(submitError, _unset) ? this.submitError : submitError as String?,
+      errorMessage: identical(errorMessage, _unset)
+          ? this.errorMessage
+          : errorMessage as String?,
+      submitError: identical(submitError, _unset)
+          ? this.submitError
+          : submitError as String?,
       missingFields: missingFields ?? this.missingFields,
     );
   }
@@ -344,13 +375,14 @@ class WorkerOnboardingApi {
   final Dio _dio;
 
   Future<WorkerOnboardingProfile> fetchStatus() async {
-    final response = await _dio.get<Map<String, dynamic>>('/worker/onboarding/status');
+    final response =
+        await _dio.get<Map<String, dynamic>>('/worker/onboarding/status');
     final payload = response.data ?? <String, dynamic>{};
     final profile = payload['profile'];
     if (profile is Map<String, dynamic>) {
       return WorkerOnboardingProfile.fromJson(profile);
     }
-    throw StateError('Onboarding status response was malformed.');
+    throw Exception('Onboarding status response was malformed.');
   }
 
   Future<WorkerOnboardingProfile> updateProfile({
@@ -372,22 +404,54 @@ class WorkerOnboardingApi {
     bool? dataConsentAccepted,
   }) async {
     final body = <String, dynamic>{};
-    if (fullName != null) body['fullName'] = fullName;
-    if (gender != null) body['gender'] = gender;
-    if (dateOfBirth != null) body['dateOfBirth'] = dateOfBirth.toIso8601String();
-    if (addressLine1 != null) body['addressLine1'] = addressLine1;
-    if (alternatePhone != null) body['alternatePhone'] = alternatePhone;
-    if (city != null) body['city'] = city;
-    if (pincode != null) body['pincode'] = pincode;
-    if (upiId != null) body['upiId'] = upiId;
-    if (bankAccountNumber != null) body['bankAccountNumber'] = bankAccountNumber;
-    if (bankIfsc != null) body['bankIfsc'] = bankIfsc;
-    if (aadhaarNumber != null) body['aadhaarNumber'] = aadhaarNumber;
-    if (toolsOwned != null) body['toolsOwned'] = toolsOwned;
-    if (emergencyContactName != null) body['emergencyContactName'] = emergencyContactName;
-    if (emergencyContactPhone != null) body['emergencyContactPhone'] = emergencyContactPhone;
-    if (agreementAccepted != null) body['agreementAccepted'] = agreementAccepted;
-    if (dataConsentAccepted != null) body['dataConsentAccepted'] = dataConsentAccepted;
+    if (fullName != null) {
+      body['fullName'] = fullName;
+    }
+    if (gender != null) {
+      body['gender'] = gender;
+    }
+    if (dateOfBirth != null) {
+      body['dateOfBirth'] = dateOfBirth.toIso8601String();
+    }
+    if (addressLine1 != null) {
+      body['addressLine1'] = addressLine1;
+    }
+    if (alternatePhone != null) {
+      body['alternatePhone'] = alternatePhone;
+    }
+    if (city != null) {
+      body['city'] = city;
+    }
+    if (pincode != null) {
+      body['pincode'] = pincode;
+    }
+    if (upiId != null) {
+      body['upiId'] = upiId;
+    }
+    if (bankAccountNumber != null) {
+      body['bankAccountNumber'] = bankAccountNumber;
+    }
+    if (bankIfsc != null) {
+      body['bankIfsc'] = bankIfsc;
+    }
+    if (aadhaarNumber != null) {
+      body['aadhaarNumber'] = aadhaarNumber;
+    }
+    if (toolsOwned != null) {
+      body['toolsOwned'] = toolsOwned;
+    }
+    if (emergencyContactName != null) {
+      body['emergencyContactName'] = emergencyContactName;
+    }
+    if (emergencyContactPhone != null) {
+      body['emergencyContactPhone'] = emergencyContactPhone;
+    }
+    if (agreementAccepted != null) {
+      body['agreementAccepted'] = agreementAccepted;
+    }
+    if (dataConsentAccepted != null) {
+      body['dataConsentAccepted'] = dataConsentAccepted;
+    }
 
     final response = await _dio.post<Map<String, dynamic>>(
       '/worker/onboarding/profile',
@@ -448,10 +512,14 @@ class WorkerOnboardingApi {
       return const <CatalogCategory>[];
     }
 
-    final summaryCategories = categories.whereType<Map<String, dynamic>>().map(CatalogCategory.fromJson).toList(growable: false);
+    final summaryCategories = categories
+        .whereType<Map<String, dynamic>>()
+        .map(CatalogCategory.fromJson)
+        .toList(growable: false);
     final detailed = <CatalogCategory>[];
     for (final category in summaryCategories) {
-      final detailResponse = await _dio.get<Map<String, dynamic>>('/catalog/categories/${category.slug}');
+      final detailResponse = await _dio
+          .get<Map<String, dynamic>>('/catalog/categories/${category.slug}');
       final categoryJson = detailResponse.data?['category'];
       if (categoryJson is Map<String, dynamic>) {
         detailed.add(CatalogCategory.fromJson(categoryJson));
@@ -469,26 +537,29 @@ class WorkerOnboardingApi {
   }) async {
     final fileName = file.name.isNotEmpty ? file.name : 'document.jpg';
     return _retryTransient<String>(() async {
-      final signatureResponse = await _dio.post<Map<String, dynamic>>(
-        '/uploads/signature',
-        data: {
-          'bookingId': 'onboarding-$userId',
-          'type': 'before',
-        },
-      );
-
-      final payload = signatureResponse.data ?? <String, dynamic>{};
-      final uploadUrl = payload['uploadUrl'] as String? ?? '';
-      final folder = payload['folder'] as String? ?? '';
-      final apiKey = payload['apiKey'] as String? ?? '';
-      final timestamp = payload['timestamp'];
-      final signature = payload['signature'] as String? ?? '';
-
-      if (uploadUrl.isEmpty || apiKey.isEmpty || folder.isEmpty || signature.isEmpty) {
-        throw StateError('Cloudinary signature response was incomplete.');
-      }
-
       try {
+        final signatureResponse = await _dio.post<Map<String, dynamic>>(
+          '/uploads/signature',
+          data: {
+            'bookingId': 'onboarding-$userId',
+            'type': 'before',
+          },
+        );
+
+        final payload = signatureResponse.data ?? <String, dynamic>{};
+        final uploadUrl = payload['uploadUrl'] as String? ?? '';
+        final folder = payload['folder'] as String? ?? '';
+        final apiKey = payload['apiKey'] as String? ?? '';
+        final timestamp = payload['timestamp'];
+        final signature = payload['signature'] as String? ?? '';
+
+        if (uploadUrl.isEmpty ||
+            apiKey.isEmpty ||
+            folder.isEmpty ||
+            signature.isEmpty) {
+          throw Exception('Cloudinary signature response was incomplete.');
+        }
+
         return await _uploadDirectToCloudinary(
           uploadUrl: uploadUrl,
           apiKey: apiKey,
@@ -499,29 +570,38 @@ class WorkerOnboardingApi {
           fileName: fileName,
         );
       } catch (_) {
-        final fallback = await _dio.post<Map<String, dynamic>>(
-          '/media/workers/document',
-          data: FormData.fromMap({
-            'type': type,
-            'file': await MultipartFile.fromFile(file.path, filename: fileName),
-          }),
-          options: Options(
-            contentType: Headers.multipartFormDataContentType,
-            responseType: ResponseType.json,
-          ),
-        );
-        final fallbackData = fallback.data ?? <String, dynamic>{};
-        final document = fallbackData['document'];
-        if (document is Map<String, dynamic>) {
-          final url = document['url'] as String?;
-          if (url != null && url.isNotEmpty) {
-            return url;
-          }
-        }
-
-        throw StateError('Cloudinary upload failed.');
+        return _uploadViaLegacyEndpoint(
+            file: file, fileName: fileName, type: type);
       }
     });
+  }
+
+  Future<String> _uploadViaLegacyEndpoint({
+    required XFile file,
+    required String fileName,
+    required String type,
+  }) async {
+    final fallback = await _dio.post<Map<String, dynamic>>(
+      '/media/workers/document',
+      data: FormData.fromMap({
+        'type': type,
+        'file': await MultipartFile.fromFile(file.path, filename: fileName),
+      }),
+      options: Options(
+        contentType: Headers.multipartFormDataContentType,
+        responseType: ResponseType.json,
+      ),
+    );
+    final fallbackData = fallback.data ?? <String, dynamic>{};
+    final document = fallbackData['document'];
+    if (document is Map<String, dynamic>) {
+      final url = document['url'] as String?;
+      if (url != null && url.isNotEmpty) {
+        return url;
+      }
+    }
+
+    throw Exception('Document upload failed.');
   }
 
   Future<String> _uploadDirectToCloudinary({
@@ -561,7 +641,7 @@ class WorkerOnboardingApi {
     final data = response.data ?? <String, dynamic>{};
     final secureUrl = data['secure_url'] as String?;
     if (secureUrl == null || secureUrl.isEmpty) {
-      throw StateError('Cloudinary did not return a secure URL.');
+      throw Exception('Cloudinary did not return a secure URL.');
     }
     return secureUrl;
   }
@@ -572,7 +652,7 @@ class WorkerOnboardingApi {
     if (profile is Map<String, dynamic>) {
       return WorkerOnboardingProfile.fromJson(profile);
     }
-    throw StateError('Onboarding response was malformed.');
+    throw Exception('Onboarding response was malformed.');
   }
 }
 
@@ -580,7 +660,8 @@ final workerOnboardingApiProvider = Provider<WorkerOnboardingApi>((ref) {
   return WorkerOnboardingApi(ref.watch(apiClientProvider).dio);
 });
 
-final workerOnboardingStatusProvider = FutureProvider<WorkerOnboardingProfile?>((ref) async {
+final workerOnboardingStatusProvider =
+    FutureProvider<WorkerOnboardingProfile?>((ref) async {
   try {
     return await ref.watch(workerOnboardingApiProvider).fetchStatus();
   } catch (_) {
@@ -588,7 +669,9 @@ final workerOnboardingStatusProvider = FutureProvider<WorkerOnboardingProfile?>(
   }
 });
 
-final onboardingControllerProvider = StateNotifierProvider<WorkerOnboardingController, WorkerOnboardingState>((ref) {
+final onboardingControllerProvider =
+    StateNotifierProvider<WorkerOnboardingController, WorkerOnboardingState>(
+        (ref) {
   return WorkerOnboardingController(ref);
 });
 
@@ -629,7 +712,8 @@ class WorkerOnboardingController extends StateNotifier<WorkerOnboardingState> {
         profile: profile,
         categories: categories,
         draft: _draftFromProfile(profile),
-        currentStep: _resolveInitialStep(profile, editMode: editMode, step: step),
+        currentStep:
+            _resolveInitialStep(profile, editMode: editMode, step: step),
       );
     } catch (error) {
       state = state.copyWith(
@@ -644,15 +728,21 @@ class WorkerOnboardingController extends StateNotifier<WorkerOnboardingState> {
   }
 
   Future<void> refreshStatus() async {
-    final profile = await _api.fetchStatus();
-    state = state.copyWith(
-      profile: profile,
-      draft: _draftFromProfile(profile).copyWith(
-        selectedCategoryIds: state.draft.selectedCategoryIds,
-        selectedServiceIds: state.draft.selectedServiceIds,
-        certificationFiles: state.draft.certificationFiles,
-      ),
-    );
+    try {
+      final profile = await _api.fetchStatus();
+      state = state.copyWith(
+        profile: profile,
+        draft: _draftFromProfile(profile).copyWith(
+          selectedCategoryIds: state.draft.selectedCategoryIds,
+          selectedServiceIds: state.draft.selectedServiceIds,
+          certificationFiles: state.draft.certificationFiles,
+        ),
+      );
+    } catch (error) {
+      state = state.copyWith(
+        errorMessage: _readErrorMessage(error),
+      );
+    }
   }
 
   void setStep(int step) {
@@ -798,7 +888,8 @@ class WorkerOnboardingController extends StateNotifier<WorkerOnboardingState> {
       nextCategories.add(service.categoryId);
     } else {
       nextServices.remove(serviceId);
-      final remainingForCategory = nextServices.any((id) => _findService(id)?.categoryId == service.categoryId);
+      final remainingForCategory = nextServices
+          .any((id) => _findService(id)?.categoryId == service.categoryId);
       if (!remainingForCategory) {
         nextCategories.remove(service.categoryId);
       }
@@ -813,14 +904,16 @@ class WorkerOnboardingController extends StateNotifier<WorkerOnboardingState> {
   }
 
   void setCertificationFile(String categoryId, XFile file) {
-    final files = Map<String, XFile>.from(state.draft.certificationFiles)..[categoryId] = file;
+    final files = Map<String, XFile>.from(state.draft.certificationFiles)
+      ..[categoryId] = file;
     state = state.copyWith(
       draft: state.draft.copyWith(certificationFiles: files),
     );
   }
 
   void clearCertificationFile(String categoryId) {
-    final files = Map<String, XFile>.from(state.draft.certificationFiles)..remove(categoryId);
+    final files = Map<String, XFile>.from(state.draft.certificationFiles)
+      ..remove(categoryId);
     state = state.copyWith(
       draft: state.draft.copyWith(certificationFiles: files),
     );
@@ -866,7 +959,8 @@ class WorkerOnboardingController extends StateNotifier<WorkerOnboardingState> {
   Future<void> saveIdentityDocument(XFile documentFile) async {
     state = state.copyWith(isUploadingDocument: true, errorMessage: null);
     try {
-      final userId = ref.read(authControllerProvider).valueOrNull?.user.id ?? 'worker';
+      final userId =
+          ref.read(authControllerProvider).valueOrNull?.user.id ?? 'worker';
       final fileUrl = await _api.uploadDocumentAsset(
         file: documentFile,
         userId: userId,
@@ -901,7 +995,8 @@ class WorkerOnboardingController extends StateNotifier<WorkerOnboardingState> {
       );
 
       var profile = state.profile;
-      final userId = ref.read(authControllerProvider).valueOrNull?.user.id ?? 'worker';
+      final userId =
+          ref.read(authControllerProvider).valueOrNull?.user.id ?? 'worker';
 
       for (final serviceId in state.draft.selectedServiceIds) {
         profile = await _api.addService(serviceId);
@@ -909,7 +1004,8 @@ class WorkerOnboardingController extends StateNotifier<WorkerOnboardingState> {
 
       final selectedServiceCategoryIds = <String>{
         for (final serviceId in state.draft.selectedServiceIds)
-          if (_findService(serviceId) != null) _findService(serviceId)!.categoryId,
+          if (_findService(serviceId) != null)
+            _findService(serviceId)!.categoryId,
       };
 
       for (final categoryId in {
@@ -985,7 +1081,11 @@ class WorkerOnboardingController extends StateNotifier<WorkerOnboardingState> {
   }
 
   Future<WorkerOnboardingProfile?> submitForReview() async {
-    state = state.copyWith(isSubmitting: true, errorMessage: null, submitError: null, missingFields: const <String>[]);
+    state = state.copyWith(
+        isSubmitting: true,
+        errorMessage: null,
+        submitError: null,
+        missingFields: const <String>[]);
     try {
       final profile = await _api.submitForReview();
       state = state.copyWith(
@@ -1004,7 +1104,9 @@ class WorkerOnboardingController extends StateNotifier<WorkerOnboardingState> {
       state = state.copyWith(
         submitError: message,
         missingFields: missingFields,
-        currentStep: missingFields.isNotEmpty ? _stepForField(missingFields.first) : state.currentStep,
+        currentStep: missingFields.isNotEmpty
+            ? _stepForField(missingFields.first)
+            : state.currentStep,
       );
       rethrow;
     } finally {
@@ -1114,7 +1216,8 @@ class WorkerOnboardingController extends StateNotifier<WorkerOnboardingState> {
   /// that have a certification document on file.  The raw URL is never
   /// available on the client; use the authenticated document-access endpoint
   /// to retrieve the actual document when needed.
-  Map<String, bool> _certificationUrlsFromProfile(WorkerOnboardingProfile profile) {
+  Map<String, bool> _certificationUrlsFromProfile(
+      WorkerOnboardingProfile profile) {
     final result = <String, bool>{};
     for (final skill in profile.skills) {
       if (skill.hasCertificationDoc) {
@@ -1124,7 +1227,8 @@ class WorkerOnboardingController extends StateNotifier<WorkerOnboardingState> {
     return result;
   }
 
-  int _resolveInitialStep(WorkerOnboardingProfile profile, {required bool editMode, int? step}) {
+  int _resolveInitialStep(WorkerOnboardingProfile profile,
+      {required bool editMode, int? step}) {
     if (step != null) {
       return step.clamp(0, 7);
     }
@@ -1154,7 +1258,8 @@ class WorkerOnboardingController extends StateNotifier<WorkerOnboardingState> {
     }
 
     final hasUpi = profile.upiId != null && profile.upiId!.trim().isNotEmpty;
-    final hasBankFallback = (profile.bankAccountNumber != null && profile.bankAccountNumber!.trim().isNotEmpty) &&
+    final hasBankFallback = (profile.bankAccountNumber != null &&
+            profile.bankAccountNumber!.trim().isNotEmpty) &&
         (profile.bankIfsc != null && profile.bankIfsc!.trim().isNotEmpty);
     if (!hasUpi && !hasBankFallback) {
       return 3;
@@ -1164,11 +1269,13 @@ class WorkerOnboardingController extends StateNotifier<WorkerOnboardingState> {
       return 4;
     }
 
-    if (profile.agreementAcceptedAt == null || profile.dataConsentAcceptedAt == null) {
+    if (profile.agreementAcceptedAt == null ||
+        profile.dataConsentAcceptedAt == null) {
       return 5;
     }
 
-    if (profile.emergencyContactName == null || profile.emergencyContactPhone == null) {
+    if (profile.emergencyContactName == null ||
+        profile.emergencyContactPhone == null) {
       return 6;
     }
 
@@ -1249,7 +1356,8 @@ Future<T> _retryTransient<T>(
       if (attempt == attempts) {
         rethrow;
       }
-      await Future.delayed(Duration(milliseconds: delay.inMilliseconds * attempt));
+      await Future.delayed(
+          Duration(milliseconds: delay.inMilliseconds * attempt));
     }
   }
   throw lastError ?? StateError('Retry failed.');

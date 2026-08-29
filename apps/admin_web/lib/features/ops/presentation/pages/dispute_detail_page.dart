@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:marketplace_shared/marketplace_shared.dart';
 
@@ -188,6 +189,9 @@ class _DisputeDetailPageState extends ConsumerState<DisputeDetailPage> {
           final dispute = snapshot.data!.dispute;
           final booking = snapshot.data!.booking;
           final isResolved = dispute.status.startsWith('resolved_');
+          final bookingLookup = booking.code.trim().isNotEmpty ? booking.code.trim() : booking.id;
+          final customerLookup =
+              (booking.customerPhone ?? '').trim().isNotEmpty ? booking.customerPhone!.trim() : booking.id;
 
           return Container(
             color: Colors.transparent,
@@ -251,6 +255,32 @@ class _DisputeDetailPageState extends ConsumerState<DisputeDetailPage> {
                                 onPressed: () => _copyToClipboard(dispute.id, 'Dispute ID'),
                                 icon: const Icon(Icons.copy_rounded),
                                 label: const Text('Copy dispute ID'),
+                              ),
+                              if ((dispute.refundId ?? '').trim().isNotEmpty)
+                                OutlinedButton.icon(
+                                  onPressed: () => context.push('/finance/refunds/${dispute.refundId!.trim()}'),
+                                  icon: const Icon(Icons.receipt_long_rounded),
+                                  label: const Text('Open refund'),
+                                ),
+                              OutlinedButton.icon(
+                                onPressed: () => context.push('/admin-bookings/${booking.id}'),
+                                icon: const Icon(Icons.event_note_rounded),
+                                label: const Text('Open booking'),
+                              ),
+                              OutlinedButton.icon(
+                                onPressed: () => context.push('/admin-bookings?search=${Uri.encodeComponent(bookingLookup)}'),
+                                icon: const Icon(Icons.search_rounded),
+                                label: const Text('Booking search'),
+                              ),
+                              OutlinedButton.icon(
+                                onPressed: () => context.push('/support-tickets?search=${Uri.encodeComponent(customerLookup)}'),
+                                icon: const Icon(Icons.support_agent_rounded),
+                                label: const Text('Support'),
+                              ),
+                              OutlinedButton.icon(
+                                onPressed: () => context.push('/audit-logs?search=${Uri.encodeComponent(dispute.id)}'),
+                                icon: const Icon(Icons.history_rounded),
+                                label: const Text('Audit trail'),
                               ),
                             ],
                           ),
@@ -402,6 +432,12 @@ class _DisputeDetailPageState extends ConsumerState<DisputeDetailPage> {
                                       label: 'Worker',
                                       value: booking.workerName ??
                                           'Not returned by API'),
+                                  _InfoLine(
+                                      label: 'Booking ID',
+                                      value: booking.id),
+                                  _InfoLine(
+                                      label: 'Booking code',
+                                      value: booking.code),
                                   if (booking.completedAt != null)
                                     _InfoLine(
                                         label: 'Completed',
@@ -435,17 +471,23 @@ class _DisputeDetailPageState extends ConsumerState<DisputeDetailPage> {
                                 padding: const EdgeInsets.all(16),
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      'Actions',
-                                      style: GoogleFonts.poppins(
-                                          fontWeight: FontWeight.w800),
-                                    ),
-                                    const SizedBox(height: 12),
-                                    FilledButton.icon(
-                                      onPressed: _busy
-                                          ? null
-                                          : () => _resolve(
+                              children: [
+                                Text(
+                                  'Actions',
+                                  style: GoogleFonts.poppins(
+                                      fontWeight: FontWeight.w800),
+                                ),
+                                const SizedBox(height: 12),
+                                OutlinedButton.icon(
+                                  onPressed: () => context.push('/audit-logs?search=${Uri.encodeComponent(booking.id)}'),
+                                  icon: const Icon(Icons.history_rounded),
+                                  label: const Text('Open booking audit trail'),
+                                ),
+                                const SizedBox(height: 12),
+                                FilledButton.icon(
+                                  onPressed: _busy
+                                      ? null
+                                      : () => _resolve(
                                                 resolution: 'refund',
                                                 title: 'Approve refund',
                                                 buttonLabel: 'Approve',

@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/services.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -161,11 +162,20 @@ class _AdminGlobalSearchPageState extends ConsumerState<AdminGlobalSearchPage> {
             resultsAsync.when(
               loading: () => const Padding(
                 padding: EdgeInsets.all(24),
-                child: Center(child: CircularProgressIndicator()),
+                child: _GlobalSearchSkeleton(),
               ),
               error: (error, _) => Padding(
                 padding: const EdgeInsets.all(24),
-                child: Text('Search failed: $error'),
+                child: PremiumEmptyState(
+                  icon: Icons.cloud_off_rounded,
+                  title: 'Could not load search results',
+                  subtitle:
+                      'Admin search is unavailable right now. Please retry.',
+                  actionLabel: 'Retry',
+                  onAction: () {
+                    unawaited(ref.refresh(adminGlobalSearchProvider(_query).future));
+                  },
+                ),
               ),
               data: (results) {
                 return Column(
@@ -290,6 +300,19 @@ class _SearchSection extends StatelessWidget {
                           ],
                         ),
                       ),
+                      IconButton(
+                        tooltip: 'Copy ID',
+                        visualDensity: VisualDensity.compact,
+                        onPressed: () async {
+                          await Clipboard.setData(ClipboardData(text: item.id));
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('ID copied')),
+                            );
+                          }
+                        },
+                        icon: const Icon(Icons.copy_rounded),
+                      ),
                       const Icon(Icons.chevron_right_rounded),
                     ],
                   ),
@@ -299,5 +322,37 @@ class _SearchSection extends StatelessWidget {
           ),
       ],
     );
+  }
+}
+
+class _GlobalSearchSkeleton extends StatelessWidget {
+  const _GlobalSearchSkeleton();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _SkeletonBlock(width: 220, height: 24),
+        SizedBox(height: 20),
+        _SkeletonBlock(width: double.infinity, height: 84),
+        SizedBox(height: 12),
+        _SkeletonBlock(width: double.infinity, height: 84),
+        SizedBox(height: 12),
+        _SkeletonBlock(width: double.infinity, height: 84),
+      ],
+    );
+  }
+}
+
+class _SkeletonBlock extends StatelessWidget {
+  const _SkeletonBlock({required this.width, required this.height});
+
+  final double width;
+  final double height;
+
+  @override
+  Widget build(BuildContext context) {
+    return ShimmerWidget(width: width, height: height, radius: 12);
   }
 }

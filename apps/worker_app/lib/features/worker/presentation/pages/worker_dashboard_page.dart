@@ -204,6 +204,15 @@ class _WorkerDashboardPageState extends ConsumerState<WorkerDashboardPage> {
             ],
           ),
           const SizedBox(height: 16),
+          _DashboardStatusCard(
+            connected: _connected,
+            todayJobsCount: todayJobsCount,
+            unreadNotifications: unreadNotifications,
+            onOpenJobs: () => context.go('/jobs'),
+            onOpenEarnings: () => context.go('/earnings'),
+            onOpenNotifications: () => context.push('/notifications'),
+          ),
+          const SizedBox(height: 16),
           const _AvailabilityToggleCard(),
           const SizedBox(height: 16),
           PremiumGlassCard(
@@ -311,7 +320,36 @@ class _WorkerDashboardPageState extends ConsumerState<WorkerDashboardPage> {
               ],
             ),
             loading: () => const Center(child: CircularProgressIndicator()),
-            error: (e, s) => Center(child: Text('Error loading stats: $e')),
+            error: (e, s) => PremiumGlassCard(
+              child: Padding(
+                padding: const EdgeInsets.all(18),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Could not load today\'s stats',
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.w800,
+                          ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      'Please try again. Your jobs and live updates are still available below.',
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                            color: Theme.of(context).colorScheme.onSurfaceVariant,
+                            height: 1.45,
+                          ),
+                    ),
+                    const SizedBox(height: 14),
+                    FilledButton.icon(
+                      onPressed: () => ref.refresh(workerDashboardStatsProvider.future),
+                      icon: const Icon(Icons.refresh_rounded, size: 18),
+                      label: const Text('Retry'),
+                    ),
+                  ],
+                ),
+              ),
+            ),
           ),
           const SizedBox(height: 20),
           const PremiumSectionHeader(
@@ -323,11 +361,48 @@ class _WorkerDashboardPageState extends ConsumerState<WorkerDashboardPage> {
             PremiumGlassCard(
               child: Padding(
                 padding: const EdgeInsets.all(18),
-                child: Text(
-                  isSignedIn
-                      ? 'No live events yet. New notifications and booking changes will appear here.'
-                      : 'Sign in to receive live updates.',
-                  style: Theme.of(context).textTheme.bodyMedium,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Container(
+                          width: 50,
+                          height: 50,
+                          decoration: BoxDecoration(
+                            color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          child: Icon(
+                            Icons.notifications_none_rounded,
+                            color: Theme.of(context).colorScheme.primary,
+                          ),
+                        ),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Text(
+                            isSignedIn
+                                ? 'No live events yet'
+                                : 'Sign in to receive live updates',
+                            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                  fontWeight: FontWeight.w800,
+                                ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    Text(
+                      isSignedIn
+                          ? 'New notifications, booking changes, and support updates will appear here in real time.'
+                          : 'Once signed in, new notifications and booking changes will stream into this card.',
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                            color: Theme.of(context).colorScheme.onSurfaceVariant,
+                            height: 1.45,
+                          ),
+                    ),
+                  ],
                 ),
               ),
             )
@@ -350,7 +425,72 @@ class _WorkerDashboardPageState extends ConsumerState<WorkerDashboardPage> {
           statsAsync.when(
             data: (stats) {
               if (stats.todayJobs.isEmpty) {
-                return const Text('No jobs scheduled today', style: TextStyle(color: Colors.grey));
+                return PremiumGlassCard(
+                  child: Padding(
+                    padding: const EdgeInsets.all(18),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Container(
+                              width: 50,
+                              height: 50,
+                              decoration: BoxDecoration(
+                                color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.12),
+                                borderRadius: BorderRadius.circular(16),
+                              ),
+                              child: Icon(
+                                Icons.event_busy_rounded,
+                                color: Theme.of(context).colorScheme.primary,
+                              ),
+                            ),
+                            const SizedBox(width: 14),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'No jobs scheduled today',
+                                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                          fontWeight: FontWeight.w800,
+                                        ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    'Stay available and keep notifications on. New jobs will appear here as soon as they are assigned.',
+                                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                          height: 1.45,
+                                        ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 14),
+                        Wrap(
+                          spacing: 10,
+                          runSpacing: 10,
+                          children: [
+                            FilledButton.icon(
+                              onPressed: () => context.go('/jobs'),
+                              icon: const Icon(Icons.work_history_rounded, size: 18),
+                              label: const Text('Open jobs'),
+                            ),
+                            OutlinedButton.icon(
+                              onPressed: () => context.go('/schedule'),
+                              icon: const Icon(Icons.calendar_month_rounded, size: 18),
+                              label: const Text('Check schedule'),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                );
               }
               return Column(
                 children: stats.todayJobs.map((job) {
@@ -369,7 +509,36 @@ class _WorkerDashboardPageState extends ConsumerState<WorkerDashboardPage> {
               );
             },
             loading: () => const Center(child: CircularProgressIndicator()),
-            error: (e, s) => Center(child: Text('Error: $e')),
+            error: (e, s) => PremiumGlassCard(
+              child: Padding(
+                padding: const EdgeInsets.all(18),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Could not load today\'s route',
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.w800,
+                          ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      'We could not fetch your route just now. Try refreshing the dashboard.',
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                            color: Theme.of(context).colorScheme.onSurfaceVariant,
+                            height: 1.45,
+                          ),
+                    ),
+                    const SizedBox(height: 14),
+                    FilledButton.icon(
+                      onPressed: () => context.go('/jobs'),
+                      icon: const Icon(Icons.refresh_rounded, size: 18),
+                      label: const Text('Open jobs'),
+                    ),
+                  ],
+                ),
+              ),
+            ),
           ),
           const SizedBox(height: 24),
           // â”€â”€ Quick Actions â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -597,6 +766,167 @@ class _JobCard extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _DashboardStatusCard extends StatelessWidget {
+  const _DashboardStatusCard({
+    required this.connected,
+    required this.todayJobsCount,
+    required this.unreadNotifications,
+    required this.onOpenJobs,
+    required this.onOpenEarnings,
+    required this.onOpenNotifications,
+  });
+
+  final bool connected;
+  final int todayJobsCount;
+  final int unreadNotifications;
+  final VoidCallback onOpenJobs;
+  final VoidCallback onOpenEarnings;
+  final VoidCallback onOpenNotifications;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
+
+    return PremiumGlassCard(
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  width: 50,
+                  height: 50,
+                  decoration: BoxDecoration(
+                    color: (connected ? const Color(0xFF0F766E) : cs.outline)
+                        .withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Icon(
+                    connected ? Icons.wifi_rounded : Icons.wifi_off_rounded,
+                    color: connected ? const Color(0xFF0F766E) : cs.outline,
+                  ),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Dashboard pulse',
+                        style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        connected
+                            ? 'Live updates are active. Keep an eye on today’s route and jump into jobs or earnings when needed.'
+                            : 'Live updates are reconnecting. You can still open jobs, earnings, and notifications.',
+                        style: tt.bodyMedium?.copyWith(
+                          color: cs.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: [
+                _DashboardPulsePill(
+                  label: 'Today',
+                  value: '$todayJobsCount jobs',
+                ),
+                _DashboardPulsePill(
+                  label: 'Alerts',
+                  value: unreadNotifications > 0 ? '$unreadNotifications new' : 'Clear',
+                ),
+                _DashboardPulsePill(
+                  label: 'Status',
+                  value: connected ? 'Connected' : 'Offline',
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: [
+                FilledButton.icon(
+                  onPressed: onOpenJobs,
+                  icon: const Icon(Icons.work_history_rounded, size: 18),
+                  label: const Text('Open jobs'),
+                ),
+                OutlinedButton.icon(
+                  onPressed: onOpenEarnings,
+                  icon: const Icon(Icons.payments_rounded, size: 18),
+                  label: const Text('Earnings'),
+                ),
+                TextButton.icon(
+                  onPressed: onOpenNotifications,
+                  icon: const Icon(Icons.notifications_none_rounded, size: 18),
+                  label: const Text('Notifications'),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _DashboardPulsePill extends StatelessWidget {
+  const _DashboardPulsePill({
+    required this.label,
+    required this.value,
+  });
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: cs.surfaceContainerHighest.withValues(alpha: 0.55),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.25)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            label,
+            style: tt.labelMedium?.copyWith(
+              color: cs.onSurfaceVariant,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            value,
+            style: tt.titleMedium?.copyWith(
+              fontWeight: FontWeight.w900,
+              color: cs.onSurface,
+            ),
+          ),
+        ],
       ),
     );
   }

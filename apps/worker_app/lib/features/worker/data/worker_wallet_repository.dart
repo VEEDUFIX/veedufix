@@ -13,8 +13,8 @@ class WorkerWalletRepository {
       return WorkerWallet.fromJson(data);
     } on DioException catch (e) {
       throw _handleError(e);
-    } catch (e) {
-      throw Exception('Failed to load worker wallet: $e');
+    } catch (_) {
+      throw Exception('Failed to load worker wallet.');
     }
   }
 
@@ -24,13 +24,13 @@ class WorkerWalletRepository {
         'amount': amount,
         if (upiId != null) 'upiId': upiId,
       };
-      
+
       // Use the unified payout endpoint. The backend handles this.
       await _api.post('/users/worker/wallet/payout', data: payload);
     } on DioException catch (e) {
       throw _handleError(e);
-    } catch (e) {
-      throw Exception('Failed to request payout: $e');
+    } catch (_) {
+      throw Exception('Failed to request payout.');
     }
   }
 
@@ -43,8 +43,8 @@ class WorkerWalletRepository {
       return response.data ?? const <int>[];
     } on DioException catch (e) {
       throw _handleError(e);
-    } catch (e) {
-      throw Exception('Failed to export statement: $e');
+    } catch (_) {
+      throw Exception('Failed to export statement.');
     }
   }
 

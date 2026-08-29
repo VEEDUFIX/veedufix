@@ -65,6 +65,69 @@ class HomePage extends ConsumerWidget {
                   location: locationLabel,
                 ),
                 const SizedBox(height: 18),
+                PremiumGlassCard(
+                  child: Padding(
+                    padding: const EdgeInsets.all(18),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Container(
+                          width: 52,
+                          height: 52,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF0F766E).withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          child: const Icon(
+                            Icons.auto_awesome_rounded,
+                            color: Color(0xFF0F766E),
+                          ),
+                        ),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Book with confidence',
+                                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                      fontWeight: FontWeight.w800,
+                                    ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                'Compare services, check trusted professionals, and get help instantly if you get stuck.',
+                                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                    ),
+                              ),
+                              const SizedBox(height: 12),
+                              const Wrap(
+                                spacing: 8,
+                                runSpacing: 8,
+                                children: [
+                                  _HomeTrustPill(
+                                    icon: Icons.verified_rounded,
+                                    label: 'Verified pros',
+                                  ),
+                                  _HomeTrustPill(
+                                    icon: Icons.location_on_rounded,
+                                    label: 'Local pricing',
+                                  ),
+                                  _HomeTrustPill(
+                                    icon: Icons.support_agent_rounded,
+                                    label: 'Live support',
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 18),
                 HomeSearchBar(
                   hint: 'What service do you need?',
                   onVoiceTap: () => showAiAssistantSheet(context),
@@ -207,18 +270,18 @@ class HomePage extends ConsumerWidget {
                       : (professionalsAsync.valueOrNull ??
                                     const <HomeProfessional>[])
                                 .isEmpty
-                          ? const Center(
-                              child: Text(
-                                'No professionals available right now.',
-                                style: TextStyle(color: Colors.grey),
-                              ),
+                          ? const PremiumEmptyState(
+                              icon: Icons.groups_rounded,
+                              title: 'No professionals available right now',
+                              subtitle:
+                                  'We’ll show nearby experts here as soon as they come online.',
                             )
                           : ListView.separated(
                               scrollDirection: Axis.horizontal,
                               itemCount: professionalsAsync.valueOrNull!.length,
-                              separatorBuilder: (_, __) =>
+                          separatorBuilder: (_, __) =>
                                   const SizedBox(width: 12),
-                              itemBuilder: (context, index) {
+                          itemBuilder: (context, index) {
                                 return ProfessionalCard(
                                   professional:
                                       professionalsAsync.valueOrNull![index],
@@ -256,6 +319,17 @@ class HomePage extends ConsumerWidget {
                       final professional = professionalsAsync.valueOrNull![index];
                       return TopRatedCard(professional: professional);
                     },
+                  ),
+                if (!professionalsAsync.isLoading &&
+                    (professionalsAsync.valueOrNull ?? const <HomeProfessional>[]).isEmpty)
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 6),
+                    child: PremiumEmptyState(
+                      icon: Icons.star_border_rounded,
+                      title: 'No top-rated professionals yet',
+                      subtitle:
+                          'We’ll highlight highly reviewed experts here once the network grows.',
+                    ),
                   ),
                 const SizedBox(height: 8),
                 const HomeSectionLabel(
@@ -297,5 +371,44 @@ class HomePage extends ConsumerWidget {
       return 'Your selected service area';
     }
     return 'Set your location for local pricing';
+  }
+}
+
+class _HomeTrustPill extends StatelessWidget {
+  const _HomeTrustPill({
+    required this.icon,
+    required this.label,
+  });
+
+  final IconData icon;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: cs.surfaceContainerHighest.withValues(alpha: 0.55),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.25)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 16, color: cs.primary),
+          const SizedBox(width: 6),
+          Text(
+            label,
+            style: tt.labelLarge?.copyWith(
+              fontWeight: FontWeight.w700,
+              color: cs.onSurface,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }

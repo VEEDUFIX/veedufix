@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/widgets/shimmer_placeholder.dart';
 import 'package:go_router/go_router.dart';
-import 'package:firebase_database/firebase_database.dart';
 import 'package:marketplace_shared/marketplace_shared.dart';
 
 class BookingsPage extends ConsumerStatefulWidget {
@@ -73,6 +72,7 @@ class _BookingsPageState extends ConsumerState<BookingsPage> with SingleTickerPr
                           boxShadow: AbzioTheme.eliteShadow,
                         ),
                         child: IconButton(
+                          tooltip: 'Open latest booking or invoice',
                           onPressed: () {
                             if (completedBookings.isNotEmpty) {
                               context.push('/invoice/${completedBookings.first.id}');
@@ -88,6 +88,23 @@ class _BookingsPageState extends ConsumerState<BookingsPage> with SingleTickerPr
                         ),
                       ),
                     ],
+                  ),
+                  const SizedBox(height: 18),
+                  _BookingsOverviewCard(
+                    upcomingCount: upcomingBookings.length,
+                    completedCount: completedBookings.length,
+                    onBookNow: () => context.push('/search'),
+                    onOpenLatest: () {
+                      if (completedBookings.isNotEmpty) {
+                        context.push('/invoice/${completedBookings.first.id}');
+                        return;
+                      }
+                      if (upcomingBookings.isNotEmpty) {
+                        context.push('/booking/${upcomingBookings.first.id}');
+                        return;
+                      }
+                      context.push('/search');
+                    },
                   ),
                   const SizedBox(height: 18),
                   TabBar(
@@ -118,6 +135,167 @@ class _BookingsPageState extends ConsumerState<BookingsPage> with SingleTickerPr
   }
 }
 
+class _BookingsOverviewCard extends StatelessWidget {
+  const _BookingsOverviewCard({
+    required this.upcomingCount,
+    required this.completedCount,
+    required this.onBookNow,
+    required this.onOpenLatest,
+  });
+
+  final int upcomingCount;
+  final int completedCount;
+  final VoidCallback onBookNow;
+  final VoidCallback onOpenLatest;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
+
+    return PremiumGlassCard(
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  width: 50,
+                  height: 50,
+                  decoration: BoxDecoration(
+                    color: cs.primary.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Icon(
+                    Icons.calendar_month_rounded,
+                    color: cs.primary,
+                  ),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Your booking hub',
+                        style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Keep track of active work, revisit finished services, or book the next job without digging through menus.',
+                        style: tt.bodyMedium?.copyWith(
+                          color: cs.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: [
+                _BookingSummaryPill(
+                  label: 'Upcoming',
+                  value: '$upcomingCount',
+                  icon: Icons.event_available_rounded,
+                ),
+                _BookingSummaryPill(
+                  label: 'Completed',
+                  value: '$completedCount',
+                  icon: Icons.task_alt_rounded,
+                ),
+                const _BookingSummaryPill(
+                  label: 'Fast access',
+                  value: 'Invoices',
+                  icon: Icons.receipt_long_rounded,
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: [
+                FilledButton.icon(
+                  onPressed: onBookNow,
+                  icon: const Icon(Icons.search_rounded, size: 18),
+                  label: const Text('Book now'),
+                ),
+                OutlinedButton.icon(
+                  onPressed: onOpenLatest,
+                  icon: const Icon(Icons.open_in_new_rounded, size: 18),
+                  label: const Text('Open latest'),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _BookingSummaryPill extends StatelessWidget {
+  const _BookingSummaryPill({
+    required this.label,
+    required this.value,
+    required this.icon,
+  });
+
+  final String label;
+  final String value;
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: cs.surfaceContainerHighest.withValues(alpha: 0.55),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.25)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 15, color: cs.primary),
+              const SizedBox(width: 6),
+              Text(
+                label,
+                style: tt.labelMedium?.copyWith(
+                  color: cs.onSurfaceVariant,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 2),
+          Text(
+            value,
+            style: tt.titleMedium?.copyWith(
+              fontWeight: FontWeight.w900,
+              color: cs.onSurface,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _BookingsTab extends ConsumerWidget {
   const _BookingsTab({required this.status});
   
@@ -135,22 +313,78 @@ class _BookingsTab extends ConsumerWidget {
             return ListView(
               padding: const EdgeInsets.fromLTRB(20, 24, 20, 24),
               children: [
-                PremiumEmptyState(
-                  icon: status == 'upcoming' 
-                      ? Icons.event_available_rounded 
-                      : status == 'completed' 
-                          ? Icons.task_alt_rounded 
-                          : Icons.event_busy_rounded,
-                  title: status == 'upcoming' 
-                      ? 'No upcoming jobs' 
-                      : status == 'completed' 
-                          ? 'Nothing completed yet' 
-                          : 'No cancelled bookings',
-                  subtitle: status == 'upcoming'
-                      ? 'Book a service and it will appear here.'
-                      : status == 'completed'
-                          ? 'Completed jobs will appear here with invoice access and ratings.'
-                          : 'If a booking is cancelled, the reason and refund status will be shown here.',
+                PremiumGlassCard(
+                  child: Padding(
+                    padding: const EdgeInsets.all(18),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Container(
+                          width: 50,
+                          height: 50,
+                          decoration: BoxDecoration(
+                            color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          child: Icon(
+                            status == 'upcoming'
+                                ? Icons.event_available_rounded
+                                : status == 'completed'
+                                    ? Icons.task_alt_rounded
+                                    : Icons.event_busy_rounded,
+                            color: Theme.of(context).colorScheme.primary,
+                          ),
+                        ),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                status == 'upcoming'
+                                    ? 'No upcoming jobs'
+                                    : status == 'completed'
+                                        ? 'Nothing completed yet'
+                                        : 'No cancelled bookings',
+                                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                      fontWeight: FontWeight.w800,
+                                    ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                status == 'upcoming'
+                                    ? 'Book a service and it will appear here.'
+                                    : status == 'completed'
+                                        ? 'Completed jobs will show here with invoice access and ratings.'
+                                        : 'If a booking is cancelled, the reason and refund status will appear here.',
+                                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                      height: 1.45,
+                                    ),
+                              ),
+                              const SizedBox(height: 12),
+                              Wrap(
+                                spacing: 10,
+                                runSpacing: 10,
+                                children: [
+                                  FilledButton.icon(
+                                    onPressed: () => context.push('/search'),
+                                    icon: const Icon(Icons.search_rounded, size: 18),
+                                    label: const Text('Book now'),
+                                  ),
+                                  OutlinedButton.icon(
+                                    onPressed: () => ref.refresh(customerBookingsProvider(status).future),
+                                    icon: const Icon(Icons.refresh_rounded, size: 18),
+                                    label: const Text('Refresh view'),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
               ],
             );
@@ -171,9 +405,64 @@ class _BookingsTab extends ConsumerWidget {
           itemBuilder: (context, index) => const _SkeletonCard(),
         ),
         error: (error, _) => ListView(
-          padding: const EdgeInsets.all(20),
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.fromLTRB(20, 24, 20, 24),
           children: [
-            Center(child: Text('Error: $error')),
+            PremiumGlassCard(
+              child: Padding(
+                padding: const EdgeInsets.all(18),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Container(
+                          width: 50,
+                          height: 50,
+                          decoration: BoxDecoration(
+                            color: Theme.of(context).colorScheme.error.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          child: Icon(
+                            Icons.cloud_off_rounded,
+                            color: Theme.of(context).colorScheme.error,
+                          ),
+                        ),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Could not load bookings',
+                                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                      fontWeight: FontWeight.w800,
+                                    ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                'We could not fetch your bookings right now. Try again in a moment or pull to refresh.',
+                                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                      height: 1.45,
+                                    ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 14),
+                    FilledButton.icon(
+                      onPressed: () => ref.refresh(customerBookingsProvider(status).future),
+                      icon: const Icon(Icons.refresh_rounded, size: 18),
+                      label: const Text('Try again'),
+                    ),
+                  ],
+                ),
+              ),
+            ),
           ],
         ),
       ),
@@ -256,24 +545,17 @@ class _BookingCard extends ConsumerWidget {
     return '${date.day} $month ${date.year}, $hour:$min $amPm';
   }
 
+  bool get _canBookAgain {
+    final status = booking.status.toUpperCase();
+    return status != 'PENDING' &&
+        status != 'ASSIGNED' &&
+        status != 'IN_PROGRESS';
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final colorScheme = Theme.of(context).colorScheme;
     final statusColor = _getStatusColor(booking.status);
-
-    // Watch Firebase RTDB unread count for this booking's chat
-    final unreadAsync = ref.watch(
-      StreamProvider<int>((r) {
-        return FirebaseDatabase.instance
-            .ref('chats/${booking.id}/unread_customer')
-            .onValue
-            .map((e) {
-          final v = e.snapshot.value;
-          return v is int ? v : 0;
-        });
-      }),
-    );
-    final hasUnread = (unreadAsync.valueOrNull ?? 0) > 0;
 
     return TapScale(
       onTap: () => context.push('/booking/${booking.id}'),
@@ -298,19 +580,6 @@ class _BookingCard extends ConsumerWidget {
                         ),
                         child: Icon(Icons.home_repair_service_rounded, color: statusColor),
                       ),
-                      if (hasUnread)
-                        Positioned(
-                          top: -4,
-                          right: -4,
-                          child: Container(
-                            width: 14,
-                            height: 14,
-                            decoration: const BoxDecoration(
-                              color: Colors.red,
-                              shape: BoxShape.circle,
-                            ),
-                          ),
-                        ),
                     ],
                   ),
                   const SizedBox(width: 14),
@@ -423,10 +692,52 @@ class _BookingCard extends ConsumerWidget {
                   ),
                 ),
               ],
+              if (_canBookAgain) ...[
+                const SizedBox(height: 12),
+                TapScale(
+                  onTap: () => _openRebookBooking(context),
+                  child: Semantics(
+                    button: true,
+                    label: 'Book again for ${booking.serviceName}',
+                    child: Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      decoration: BoxDecoration(
+                        color: colorScheme.primary,
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(Icons.refresh_rounded, color: Colors.white, size: 18),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Book again',
+                            style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ],
           ),
         ),
       ),
     );
+  }
+
+  void _openRebookBooking(BuildContext context) {
+    final serviceSlug = booking.serviceSlug;
+    if (serviceSlug != null && serviceSlug.isNotEmpty) {
+      context.push('/service?id=${Uri.encodeComponent(serviceSlug)}');
+      return;
+    }
+
+    context.push('/search?q=${Uri.encodeComponent(booking.serviceName)}');
   }
 }

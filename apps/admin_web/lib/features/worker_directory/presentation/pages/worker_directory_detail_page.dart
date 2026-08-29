@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:marketplace_shared/marketplace_shared.dart';
 import 'package:url_launcher/url_launcher_string.dart';
 
@@ -194,6 +196,16 @@ class _WorkerDirectoryDetailPageState
     }
   }
 
+  Future<void> _copyToClipboard(String value, String label) async {
+    await Clipboard.setData(ClipboardData(text: value));
+    if (!mounted) {
+      return;
+    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('$label copied')),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final profile = _profile;
@@ -233,6 +245,7 @@ class _WorkerDirectoryDetailPageState
     };
     final canSuspend = profile.onboardingStatus == 'approved';
     final canReinstate = profile.onboardingStatus == 'suspended';
+    final searchLookup = profile.userId.trim().isNotEmpty ? profile.userId.trim() : profile.id;
 
     return Scaffold(
       backgroundColor: const Color(0xFFF9F5EC),
@@ -265,6 +278,7 @@ class _WorkerDirectoryDetailPageState
             final statusEvents =
                 history?.statusEvents ?? const <WorkerDirectoryStatusEvent>[];
             final noShowCount = history?.noShowCount ?? worker.noShowCount;
+            final performance = _WorkerPerformanceSnapshot.fromWorker(worker, noShowCount);
 
             return RefreshIndicator(
               onRefresh: _reload,
@@ -353,6 +367,116 @@ class _WorkerDirectoryDetailPageState
                               accentColor: accent,
                             ),
                           ],
+                        ),
+                        const SizedBox(height: 16),
+                        Wrap(
+                          spacing: 10,
+                          runSpacing: 10,
+                          children: [
+                            OutlinedButton.icon(
+                              onPressed: () => _copyToClipboard(worker.id, 'Profile ID'),
+                              icon: const Icon(Icons.copy_rounded),
+                              label: const Text('Copy profile ID'),
+                            ),
+                            if (worker.userId.isNotEmpty)
+                              OutlinedButton.icon(
+                                onPressed: () => _copyToClipboard(worker.userId, 'User ID'),
+                                icon: const Icon(Icons.person_outline_rounded),
+                                label: const Text('Copy user ID'),
+                              ),
+                            OutlinedButton.icon(
+                              onPressed: () => context.push('/audit-logs?search=${Uri.encodeComponent(worker.id)}'),
+                              icon: const Icon(Icons.manage_search_rounded),
+                              label: const Text('Audit trail'),
+                            ),
+                            OutlinedButton.icon(
+                              onPressed: () => context.push('/admin-bookings?search=${Uri.encodeComponent(searchLookup)}'),
+                              icon: const Icon(Icons.receipt_long_rounded),
+                              label: const Text('Bookings'),
+                            ),
+                            OutlinedButton.icon(
+                              onPressed: () => context.push('/support-tickets?search=${Uri.encodeComponent(searchLookup)}'),
+                              icon: const Icon(Icons.support_agent_rounded),
+                              label: const Text('Support'),
+                            ),
+                            OutlinedButton.icon(
+                              onPressed: () => context.go('/worker-review'),
+                              icon: const Icon(Icons.list_alt_rounded),
+                              label: const Text('Review queue'),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+                        _SurfaceCard(
+                          child: Padding(
+                            padding: const EdgeInsets.all(18),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Icon(Icons.speed_rounded, color: Theme.of(context).colorScheme.primary),
+                                    const SizedBox(width: 8),
+                                    Text(
+                                      'Performance cockpit',
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .titleMedium
+                                          ?.copyWith(fontWeight: FontWeight.w800),
+                                    ),
+                                    const Spacer(),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                      decoration: BoxDecoration(
+                                        color: performance.accent.withValues(alpha: 0.12),
+                                        borderRadius: BorderRadius.circular(999),
+                                      ),
+                                      child: Text(
+                                        performance.label,
+                                        style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                                              fontWeight: FontWeight.w800,
+                                              color: performance.accent,
+                                            ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  performance.summary,
+                                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                        height: 1.45,
+                                      ),
+                                ),
+                                const SizedBox(height: 14),
+                                Wrap(
+                                  spacing: 12,
+                                  runSpacing: 12,
+                                  children: [
+                                    _PerformanceMetricCard(
+                                      label: 'Health score',
+                                      value: '${performance.score}/100',
+                                      icon: Icons.monitor_heart_rounded,
+                                      accent: performance.accent,
+                                    ),
+                                    _PerformanceMetricCard(
+                                      label: 'Reliability',
+                                      value: performance.reliabilityLabel,
+                                      icon: Icons.shield_rounded,
+                                      accent: const Color(0xFF0F766E),
+                                    ),
+                                    _PerformanceMetricCard(
+                                      label: 'Activity',
+                                      value: performance.activityLabel,
+                                      icon: Icons.work_history_rounded,
+                                      accent: const Color(0xFF2563EB),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
                         ),
                         if (_busy) ...[
                           const SizedBox(height: 12),
@@ -712,6 +836,129 @@ class _SurfaceCard extends StatelessWidget {
         boxShadow: AbzioTheme.eliteShadow,
       ),
       child: child,
+    );
+  }
+}
+
+class _PerformanceMetricCard extends StatelessWidget {
+  const _PerformanceMetricCard({
+    required this.label,
+    required this.value,
+    required this.icon,
+    required this.accent,
+  });
+
+  final String label;
+  final String value;
+  final IconData icon;
+  final Color accent;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 180,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: accent.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: accent.withValues(alpha: 0.16)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, color: accent, size: 20),
+          const SizedBox(height: 10),
+          Text(
+            label,
+            style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                  fontWeight: FontWeight.w700,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            value,
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w900,
+                  color: accent,
+                ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _WorkerPerformanceSnapshot {
+  const _WorkerPerformanceSnapshot({
+    required this.score,
+    required this.label,
+    required this.summary,
+    required this.reliabilityLabel,
+    required this.activityLabel,
+    required this.accent,
+  });
+
+  final int score;
+  final String label;
+  final String summary;
+  final String reliabilityLabel;
+  final String activityLabel;
+  final Color accent;
+
+  factory _WorkerPerformanceSnapshot.fromWorker(
+    WorkerDirectoryProfile worker,
+    int noShowCount,
+  ) {
+    final ratingScore = ((worker.ratingAvg / 5.0) * 55).clamp(0, 55);
+    final volumeScore = worker.jobsCompletedCount >= 100
+        ? 25
+        : worker.jobsCompletedCount >= 25
+            ? 18
+            : worker.jobsCompletedCount > 0
+                ? 10
+                : 0;
+    final penalty = (noShowCount * 12).clamp(0, 30);
+    final score = (ratingScore + volumeScore - penalty).round().clamp(0, 100);
+
+    final label = score >= 80
+        ? 'Healthy'
+        : score >= 60
+            ? 'Watch'
+            : 'At risk';
+    final accent = score >= 80
+        ? const Color(0xFF10B981)
+        : score >= 60
+            ? const Color(0xFFF59E0B)
+            : const Color(0xFFEF4444);
+    final summary = score >= 80
+        ? 'Strong customer signals, healthy completion volume, and minimal review risk.'
+        : score >= 60
+            ? 'The worker is active, but moderation should keep an eye on recent signals.'
+            : 'This profile needs attention from the ops team before more jobs are assigned.';
+
+    final reliabilityLabel = noShowCount == 0
+        ? 'Excellent'
+        : noShowCount == 1
+            ? 'Good'
+            : noShowCount == 2
+                ? 'Watch'
+                : 'Needs review';
+    final activityLabel = worker.jobsCompletedCount == 0
+        ? 'No jobs yet'
+        : worker.jobsCompletedCount < 10
+            ? '${worker.jobsCompletedCount} completed'
+            : worker.jobsCompletedCount < 50
+                ? 'Growing'
+                : 'High volume';
+
+    return _WorkerPerformanceSnapshot(
+      score: score,
+      label: label,
+      summary: summary,
+      reliabilityLabel: reliabilityLabel,
+      activityLabel: activityLabel,
+      accent: accent,
     );
   }
 }

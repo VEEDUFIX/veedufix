@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:marketplace_shared/marketplace_shared.dart';
 
 class AdminQuickActionsPage extends StatelessWidget {
   const AdminQuickActionsPage({super.key});
@@ -23,11 +24,52 @@ class AdminQuickActionsPage extends StatelessWidget {
       body: ListView(
         padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
         children: [
-          Text(
-            'Jump straight to the tasks you use most often.',
-            style: tt.bodyMedium?.copyWith(color: cs.onSurfaceVariant),
+          PremiumGlassCard(
+            child: Padding(
+              padding: const EdgeInsets.all(18),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    width: 52,
+                    height: 52,
+                    decoration: BoxDecoration(
+                      color: cs.primary.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: Icon(Icons.tune_rounded, color: cs.primary),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Quick actions',
+                          style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Jump straight to the tasks you use most often without losing the bigger dashboard context.',
+                          style: tt.bodyMedium?.copyWith(
+                            color: cs.onSurfaceVariant,
+                            height: 1.45,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ),
           const SizedBox(height: 16),
+          _QuickActionTile(
+            icon: Icons.inbox_rounded,
+            label: 'Action inbox',
+            onTap: () => context.go('/admin/action-inbox'),
+          ),
+          const SizedBox(height: 10),
           _QuickActionTile(
             icon: Icons.support_agent_rounded,
             label: 'Open support tickets',
@@ -101,8 +143,21 @@ class _QuickActionTile extends StatelessWidget {
       child: ListTile(
         tileColor: Colors.black.withValues(alpha: 0.03),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-        leading: Icon(icon, color: const Color(0xFF0F766E)),
-        title: Text(label),
+        leading: Container(
+          width: 40,
+          height: 40,
+          decoration: BoxDecoration(
+            color: const Color(0xFF0F766E).withValues(alpha: 0.12),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Icon(icon, color: const Color(0xFF0F766E)),
+        ),
+        title: Text(
+          label,
+          style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                fontWeight: FontWeight.w700,
+              ),
+        ),
         trailing: const Icon(Icons.chevron_right_rounded),
         onTap: onTap,
       ),

@@ -11,8 +11,8 @@ class WorkerJobRepository {
       await _api.acceptJob(bookingId);
     } on DioException catch (e) {
       throw _handleError(e);
-    } catch (e) {
-      throw Exception('Failed to accept job: $e');
+    } catch (_) {
+      throw Exception('Failed to accept job.');
     }
   }
 
@@ -21,8 +21,8 @@ class WorkerJobRepository {
       await _api.declineJob(offerId);
     } on DioException catch (e) {
       throw _handleError(e);
-    } catch (e) {
-      throw Exception('Failed to decline job: $e');
+    } catch (_) {
+      throw Exception('Failed to decline job.');
     }
   }
 
@@ -31,28 +31,30 @@ class WorkerJobRepository {
       await _api.startEnRoute(bookingId);
     } on DioException catch (e) {
       throw _handleError(e);
-    } catch (e) {
-      throw Exception('Failed to start en-route: $e');
+    } catch (_) {
+      throw Exception('Failed to start en-route.');
     }
   }
 
-  Future<void> addSpareParts(String bookingId, Map<String, dynamic> data) async {
+  Future<void> addSpareParts(
+      String bookingId, Map<String, dynamic> data) async {
     try {
       await _api.addSpareParts(bookingId, data);
     } on DioException catch (e) {
       throw _handleError(e);
-    } catch (e) {
-      throw Exception('Failed to add spare parts: $e');
+    } catch (_) {
+      throw Exception('Failed to add spare parts.');
     }
   }
 
-  Future<void> generateQuote(String bookingId, Map<String, dynamic> data) async {
+  Future<void> generateQuote(
+      String bookingId, Map<String, dynamic> data) async {
     try {
       await _api.generateQuote(bookingId, data);
     } on DioException catch (e) {
       throw _handleError(e);
-    } catch (e) {
-      throw Exception('Failed to generate quote: $e');
+    } catch (_) {
+      throw Exception('Failed to generate quote.');
     }
   }
 

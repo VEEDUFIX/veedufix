@@ -1,4 +1,5 @@
 import { type Request, type Response } from "express";
+import { type AuthenticatedRequest } from "../../middleware/auth.js";
 import {
   deleteCommission,
   getPlatformSettings,
@@ -14,7 +15,11 @@ export async function getPlatformSettingsHandler(_request: Request, response: Re
 }
 
 export async function savePlatformSettingsHandler(request: Request, response: Response): Promise<void> {
-  const result = await savePlatformSettings(request.body as Record<string, unknown>);
+  const authRequest = request as AuthenticatedRequest;
+  const result = await savePlatformSettings(
+    request.body as Record<string, unknown>,
+    authRequest.auth?.userId
+  );
   response.status(200).json(result);
 }
 
@@ -24,16 +29,19 @@ export async function listCommissionsHandler(_request: Request, response: Respon
 }
 
 export async function saveCommissionHandler(request: Request, response: Response): Promise<void> {
+  const authRequest = request as AuthenticatedRequest;
   const commissionId = typeof request.params.commissionId === "string" ? request.params.commissionId : null;
 
   const result = await saveCommission(
     commissionId,
-    request.body as Record<string, unknown>
+    request.body as Record<string, unknown>,
+    authRequest.auth?.userId
   );
   response.status(200).json(result);
 }
 
 export async function deleteCommissionHandler(request: Request, response: Response): Promise<void> {
+  const authRequest = request as AuthenticatedRequest;
   const commissionId = typeof request.params.commissionId === "string" ? request.params.commissionId : null;
 
   if (!commissionId) {
@@ -41,7 +49,7 @@ export async function deleteCommissionHandler(request: Request, response: Respon
     return;
   }
 
-  await deleteCommission(commissionId);
+  await deleteCommission(commissionId, authRequest.auth?.userId);
   response.status(200).json({ success: true });
 }
 

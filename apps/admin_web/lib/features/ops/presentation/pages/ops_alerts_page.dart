@@ -118,33 +118,23 @@ class _OpsAlertsPageState extends ConsumerState<OpsAlertsPage> {
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting &&
               !snapshot.hasData) {
-            return const Center(child: CircularProgressIndicator());
+            return const Padding(
+              padding: EdgeInsets.all(24),
+              child: _AlertsSkeleton(),
+            );
           }
 
           if (snapshot.hasError) {
             return Center(
               child: Padding(
                 padding: const EdgeInsets.all(24),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(Icons.error_outline_rounded, size: 48),
-                    const SizedBox(height: 12),
-                    Text(
-                      'Unable to load operations alerts',
-                      style: Theme.of(context)
-                          .textTheme
-                          .titleLarge
-                          ?.copyWith(fontWeight: FontWeight.w800),
-                      textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(height: 8),
-                    Text(snapshot.error.toString(),
-                        textAlign: TextAlign.center),
-                    const SizedBox(height: 16),
-                    FilledButton(
-                        onPressed: _reload, child: const Text('Retry')),
-                  ],
+                child: PremiumEmptyState(
+                  icon: Icons.cloud_off_rounded,
+                  title: 'Could not load operations alerts',
+                  subtitle:
+                      'The unified alerts queue is unavailable right now. Please retry.',
+                  actionLabel: 'Retry',
+                  onAction: _reload,
                 ),
               ),
             );
@@ -497,28 +487,23 @@ class _OpsAlertDetailPageState extends ConsumerState<OpsAlertDetailPage> {
         future: _alertFuture,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting && !snapshot.hasData) {
-            return const Center(child: CircularProgressIndicator());
+            return const Padding(
+              padding: EdgeInsets.all(24),
+              child: _AlertDetailSkeleton(),
+            );
           }
 
           if (snapshot.hasError) {
             return Center(
               child: Padding(
                 padding: const EdgeInsets.all(24),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(Icons.error_outline_rounded, size: 48),
-                    const SizedBox(height: 12),
-                    Text(
-                      'Unable to load alert',
-                      style: tt.titleLarge?.copyWith(fontWeight: FontWeight.w800),
-                      textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(height: 8),
-                    Text(snapshot.error.toString(), textAlign: TextAlign.center),
-                    const SizedBox(height: 16),
-                    FilledButton(onPressed: _reload, child: const Text('Retry')),
-                  ],
+                child: PremiumEmptyState(
+                  icon: Icons.cloud_off_rounded,
+                  title: 'Could not load alert',
+                  subtitle:
+                      'The selected alert details are unavailable right now. Please retry.',
+                  actionLabel: 'Retry',
+                  onAction: _reload,
                 ),
               ),
             );
@@ -736,5 +721,55 @@ class _SurfacePanel extends StatelessWidget {
       ),
       child: child,
     );
+  }
+}
+
+class _AlertsSkeleton extends StatelessWidget {
+  const _AlertsSkeleton();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _SkeletonBlock(width: 280, height: 28),
+        SizedBox(height: 12),
+        _SkeletonBlock(width: 500, height: 16),
+        SizedBox(height: 24),
+        _SkeletonBlock(width: double.infinity, height: 48),
+        SizedBox(height: 12),
+        _SkeletonBlock(width: double.infinity, height: 280),
+      ],
+    );
+  }
+}
+
+class _AlertDetailSkeleton extends StatelessWidget {
+  const _AlertDetailSkeleton();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _SkeletonBlock(width: 220, height: 24),
+        SizedBox(height: 12),
+        _SkeletonBlock(width: 320, height: 14),
+        SizedBox(height: 24),
+        _SkeletonBlock(width: double.infinity, height: 200),
+      ],
+    );
+  }
+}
+
+class _SkeletonBlock extends StatelessWidget {
+  const _SkeletonBlock({required this.width, required this.height});
+
+  final double width;
+  final double height;
+
+  @override
+  Widget build(BuildContext context) {
+    return ShimmerWidget(width: width, height: height, radius: 10);
   }
 }

@@ -1,6 +1,6 @@
 import bcrypt from "bcryptjs";
 import { AppError } from "../../lib/app-error.js";
-import { createHash, randomInt } from "crypto";
+import { createHash, randomInt, randomUUID } from "crypto";
 import { env } from "../../config/env.js";
 import { prisma } from "../../lib/prisma.js";
 import { redis } from "../../lib/redis.js";
@@ -57,25 +57,20 @@ function hashToken(token: string): string {
   return createHash("sha256").update(token).digest("hex");
 }
 
-async function upsertAuthSession(
+async function createAuthSession(
   userId: string,
   provider: SessionProvider,
   providerId: string,
+  sessionId: string,
   accessToken: string,
   refreshToken: string
 ): Promise<string> {
-  const session = await prisma.authSession.upsert({
-    where: { providerId },
-    create: {
+  const session = await prisma.authSession.create({
+    data: {
+      id: sessionId,
       userId,
       provider,
       providerId,
-      accessToken: hashToken(accessToken),
-      refreshToken: hashToken(refreshToken)
-    },
-    update: {
-      userId,
-      provider,
       accessToken: hashToken(accessToken),
       refreshToken: hashToken(refreshToken)
     }
@@ -212,14 +207,15 @@ export async function verifyOtp(input: {
     }
   }
 
-  const sessionId = await createSession(user.id, user.role);
+  const sessionId = createSessionId();
   const accessToken = signAccessToken({ sub: user.id, role: user.role, sessionId });
   const refreshToken = signRefreshToken({ sub: user.id, role: user.role, sessionId });
   await persistRefreshToken(user.id, refreshToken, extractExpirySeconds(process.env.JWT_REFRESH_TTL ?? "30d"));
-  await upsertAuthSession(
+  await createAuthSession(
     user.id,
     input.channel,
     `${input.channel.toLowerCase()}:${normalized}`,
+    sessionId,
     accessToken,
     refreshToken
   );
@@ -238,8 +234,8 @@ export async function verifyOtp(input: {
   };
 }
 
-async function createSession(userId: string, role: LoginRole): Promise<string> {
-  return `sess_${userId}_${role}_${Date.now()}`;
+function createSessionId(): string {
+  return randomUUID();
 }
 
 export async function refreshSession(refreshToken: string): Promise<AuthResult> {
@@ -312,11 +308,11 @@ export async function signInWithGoogle(input: {
     }
   });
 
-  const sessionId = await createSession(user.id, user.role);
+  const sessionId = createSessionId();
   const accessToken = signAccessToken({ sub: user.id, role: user.role, sessionId });
   const refreshToken = signRefreshToken({ sub: user.id, role: user.role, sessionId });
   await persistRefreshToken(user.id, refreshToken, extractExpirySeconds(process.env.JWT_REFRESH_TTL ?? "30d"));
-  await upsertAuthSession(user.id, "GOOGLE", providerId, accessToken, refreshToken);
+  await createAuthSession(user.id, "GOOGLE", providerId, sessionId, accessToken, refreshToken);
 
   return {
     user: {

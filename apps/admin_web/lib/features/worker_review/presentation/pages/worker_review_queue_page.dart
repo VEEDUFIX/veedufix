@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:marketplace_shared/marketplace_shared.dart';
@@ -458,6 +459,35 @@ class _WorkerReviewQueuePageState extends ConsumerState<WorkerReviewQueuePage> {
                                             ),
                                         ],
                                 ),
+                                const SizedBox(height: 12),
+                                Wrap(
+                                  spacing: 8,
+                                  runSpacing: 8,
+                                  children: [
+                                    TextButton.icon(
+                                      onPressed: () => _openReview(profile),
+                                      icon: const Icon(Icons.open_in_new_rounded, size: 16),
+                                      label: const Text('Open review'),
+                                    ),
+                                    TextButton.icon(
+                                      onPressed: () async {
+                                        await Clipboard.setData(ClipboardData(text: profile.id));
+                                        if (context.mounted) {
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                            const SnackBar(content: Text('Profile ID copied')),
+                                          );
+                                        }
+                                      },
+                                      icon: const Icon(Icons.copy_rounded, size: 16),
+                                      label: const Text('Copy ID'),
+                                    ),
+                                    TextButton.icon(
+                                      onPressed: () => context.push('/workers/${profile.id}'),
+                                      icon: const Icon(Icons.badge_rounded, size: 16),
+                                      label: const Text('Worker profile'),
+                                    ),
+                                  ],
+                                ),
                                 const SizedBox(height: 14),
                                 Row(
                                   children: [
@@ -567,4 +597,3 @@ class _SurfaceCard extends StatelessWidget {
     );
   }
 }
-

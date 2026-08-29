@@ -90,7 +90,7 @@ class _WorkerProfileEditPageState extends ConsumerState<WorkerProfileEditPage> {
       ),
       body: profileAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, _) => Center(child: Text('Error: $error')),
+        error: (error, _) => const Center(child: Text('Unable to load profile.')),
         data: (profile) {
           _initFromProfile(profile);
           final workerId = profile['id'] as String? ?? '';
@@ -211,7 +211,48 @@ class _WorkerProfileEditPageState extends ConsumerState<WorkerProfileEditPage> {
                       padding: EdgeInsets.symmetric(vertical: 12),
                       child: LinearProgressIndicator(minHeight: 2),
                     ),
-                    error: (error, _) => Text('Unable to load skills: $error'),
+                    error: (error, _) => Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      child: PremiumGlassCard(
+                        child: Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Container(
+                                width: 44,
+                                height: 44,
+                                decoration: BoxDecoration(
+                                  color: cs.error.withValues(alpha: 0.12),
+                                  borderRadius: BorderRadius.circular(14),
+                                ),
+                                child: Icon(Icons.badge_rounded, color: cs.error),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'Unable to load skills',
+                                      style: tt.titleSmall?.copyWith(fontWeight: FontWeight.w800),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      'Please try again. Your existing profile details can still be edited and saved.',
+                                      style: tt.bodyMedium?.copyWith(
+                                        color: cs.onSurfaceVariant,
+                                        height: 1.45,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
                     data: (publicProfile) {
                       final skills = publicProfile.skills;
                       if (skills.isEmpty) {
@@ -255,12 +296,78 @@ class _WorkerProfileEditPageState extends ConsumerState<WorkerProfileEditPage> {
                       padding: EdgeInsets.symmetric(vertical: 12),
                       child: LinearProgressIndicator(minHeight: 2),
                     ),
-                    error: (error, _) => Text('Unable to load portfolio: $error'),
+                    error: (error, _) => Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      child: PremiumGlassCard(
+                        child: Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Container(
+                                width: 44,
+                                height: 44,
+                                decoration: BoxDecoration(
+                                  color: cs.error.withValues(alpha: 0.12),
+                                  borderRadius: BorderRadius.circular(14),
+                                ),
+                                child: Icon(Icons.photo_library_rounded, color: cs.error),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'Unable to load portfolio',
+                                      style: tt.titleSmall?.copyWith(fontWeight: FontWeight.w800),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      'Your profile is safe. Try again when the connection is stable to view and manage portfolio photos.',
+                                      style: tt.bodyMedium?.copyWith(
+                                        color: cs.onSurfaceVariant,
+                                        height: 1.45,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
                     data: (publicProfile) {
                       if (publicProfile.portfolioPhotos.isEmpty) {
-                        return Text(
-                          'No portfolio photos yet.',
-                          style: tt.bodyMedium?.copyWith(color: cs.onSurfaceVariant),
+                        return Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          child: Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: cs.surfaceContainerHighest.withValues(alpha: 0.35),
+                              borderRadius: BorderRadius.circular(18),
+                              border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.25)),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'No portfolio photos yet',
+                                  style: tt.titleSmall?.copyWith(fontWeight: FontWeight.w800),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  'Add a few recent work shots to help customers trust your quality before they book.',
+                                  style: tt.bodyMedium?.copyWith(
+                                    color: cs.onSurfaceVariant,
+                                    height: 1.45,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
                         );
                       }
 
@@ -379,13 +486,13 @@ class _WorkerProfileEditPageState extends ConsumerState<WorkerProfileEditPage> {
         return;
       }
 
-      throw StateError('Avatar upload did not return a URL.');
+      throw Exception('Avatar upload did not return a URL.');
     } catch (error) {
       if (!mounted) {
         return;
       }
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Photo upload failed: $error')),
+        const SnackBar(content: Text('Photo upload failed.')),
       );
     }
   }
@@ -418,7 +525,7 @@ class _WorkerProfileEditPageState extends ConsumerState<WorkerProfileEditPage> {
         return;
       }
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Portfolio upload failed: $error')),
+        const SnackBar(content: Text('Portfolio upload failed.')),
       );
     }
   }
@@ -527,7 +634,7 @@ class _WorkerProfileEditPageState extends ConsumerState<WorkerProfileEditPage> {
         return;
       }
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Unable to add skill: $error')),
+        const SnackBar(content: Text('Unable to add skill.')),
       );
     }
   }

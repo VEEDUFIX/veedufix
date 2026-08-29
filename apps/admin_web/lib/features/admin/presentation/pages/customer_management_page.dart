@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
@@ -165,8 +166,25 @@ class _CustomerManagementPageState extends ConsumerState<CustomerManagementPage>
           // ── List ─────────────────────────────────────────────────────
           Expanded(
             child: customersAsync.when(
-              loading: () => const Center(child: CircularProgressIndicator()),
-              error: (e, _) => Center(child: Text('Error: $e')),
+              loading: () => ListView.separated(
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+                itemCount: 4,
+                separatorBuilder: (_, __) => const SizedBox(height: 10),
+                itemBuilder: (_, __) => const _CustomerSkeletonCard(),
+              ),
+              error: (e, _) => Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: PremiumEmptyState(
+                    icon: Icons.cloud_off_rounded,
+                    title: 'Could not load customers',
+                    subtitle: 'The customer list is unavailable right now. Please retry.',
+                    actionLabel: 'Retry',
+                    onAction: () => ref.refresh(adminCustomersProvider(_search).future),
+                  ),
+                ),
+              ),
               data: (customers) {
                 if (customers.isEmpty) {
                   return const PremiumEmptyState(
@@ -235,6 +253,7 @@ class _CustomerCard extends StatelessWidget {
     final cs = Theme.of(context).colorScheme;
     final tt = Theme.of(context).textTheme;
     final isActive = customer.isActive;
+    final searchTerm = customer.phone.trim().isNotEmpty ? customer.phone.trim() : customer.id;
 
     return TapScale(
       onTap: () => context.go('/customers/${customer.id}'),
@@ -297,6 +316,65 @@ class _CustomerCard extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 12),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                TextButton.icon(
+                  onPressed: () async {
+                    await Clipboard.setData(ClipboardData(text: customer.id));
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Customer ID copied')),
+                      );
+                    }
+                  },
+                  icon: const Icon(Icons.copy_rounded, size: 16),
+                  label: const Text('Copy ID'),
+                ),
+                TextButton.icon(
+                  onPressed: () async {
+                    await Clipboard.setData(ClipboardData(text: customer.phone));
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Phone copied')),
+                      );
+                    }
+                  },
+                  icon: const Icon(Icons.phone_rounded, size: 16),
+                  label: const Text('Copy phone'),
+                ),
+                if ((customer.email ?? '').trim().isNotEmpty)
+                  TextButton.icon(
+                    onPressed: () async {
+                      await Clipboard.setData(ClipboardData(text: customer.email!.trim()));
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Email copied')),
+                        );
+                      }
+                    },
+                    icon: const Icon(Icons.mail_outline_rounded, size: 16),
+                    label: const Text('Copy email'),
+                  ),
+                TextButton.icon(
+                  onPressed: () => context.push('/audit-logs?search=${Uri.encodeComponent(customer.id)}'),
+                  icon: const Icon(Icons.manage_search_rounded, size: 16),
+                  label: const Text('Audit'),
+                ),
+                TextButton.icon(
+                  onPressed: () => context.push('/admin-bookings?search=${Uri.encodeComponent(searchTerm)}'),
+                  icon: const Icon(Icons.receipt_long_rounded, size: 16),
+                  label: const Text('Bookings'),
+                ),
+                TextButton.icon(
+                  onPressed: () => context.push('/support-tickets?search=${Uri.encodeComponent(searchTerm)}'),
+                  icon: const Icon(Icons.support_agent_rounded, size: 16),
+                  label: const Text('Support'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
             const Divider(height: 1),
             const SizedBox(height: 12),
             Row(
@@ -329,6 +407,35 @@ class _CustomerCard extends StatelessWidget {
             ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _CustomerSkeletonCard extends StatelessWidget {
+  const _CustomerSkeletonCard();
+
+  @override
+  Widget build(BuildContext context) {
+    return const PremiumGlassCard(
+      child: Padding(
+        padding: EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            ShimmerWidget(width: 180, height: 16, radius: 8),
+            SizedBox(height: 8),
+            ShimmerWidget(width: 120, height: 12, radius: 6),
+            SizedBox(height: 16),
+            Row(
+              children: [
+                ShimmerWidget(width: 72, height: 28, radius: 999),
+                SizedBox(width: 10),
+                ShimmerWidget(width: 72, height: 28, radius: 999),
+              ],
+            ),
+          ],
         ),
       ),
     );
