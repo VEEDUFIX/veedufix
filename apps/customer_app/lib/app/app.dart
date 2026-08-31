@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:marketplace_shared/marketplace_shared.dart';
+import 'package:marketplace_shared/features/splash/presentation/pages/splash_page.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
 import '../core/realtime/realtime_socket_service.dart';
@@ -214,7 +215,7 @@ class _AppBootstrapState extends ConsumerState<AppBootstrap> {
       scaffoldMessengerKey: _messengerKey,
       builder: (context, child) => AppBackdrop(
         variant: AppBackdropVariant.customer,
-        child: child ?? const SizedBox.shrink(),
+        child: child ?? const SplashPage(mode: AppMode.customer),
       ),
       routerConfig: router,
     );

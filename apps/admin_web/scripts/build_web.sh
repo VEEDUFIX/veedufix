@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+cd "$PROJECT_DIR"
+
 if ! command -v flutter >/dev/null 2>&1; then
   export FLUTTER_HOME="${FLUTTER_HOME:-$HOME/flutter}"
   if [ ! -d "$FLUTTER_HOME" ]; then
