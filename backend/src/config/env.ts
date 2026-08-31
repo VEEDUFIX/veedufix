@@ -6,6 +6,8 @@
  * missing or blank the process exits immediately with a clear error
  * message so developers know instantly what is misconfigured.
  *
+ * Optional feature keys may be omitted until that feature is enabled.
+ *
  * Optional keys (e.g. GOOGLE_MAPS_API_KEY) are fine to omit locally
  * if you don't need that specific feature.
  */
@@ -113,18 +115,15 @@ const envSchema = z.object({
 
   // ── Razorpay ─────────────────────────────────────────────────────────────
   /**
-   * Razorpay keys are REQUIRED in every environment.
-   * Payments, payouts and webhook verification all depend on these.
-   * Without them, booking creation (which creates a Razorpay order) will
-   * crash at the point of the API call rather than at boot — hiding the
-   * misconfiguration until a real customer tries to pay.
+   * Razorpay payment credentials are required because booking checkout and
+   * webhook verification depend on them.
    *
-   * For local dev without real payments, use Razorpay test credentials:
-   *   https://razorpay.com/docs/payments/dashboard/account-settings/api-keys/
+   * The payout account number is optional at boot because worker payout flows
+   * can remain disabled until the business is ready to use them.
    */
   RAZORPAY_KEY_ID: reqStr.default("rzp_test_not_configured"),
   RAZORPAY_KEY_SECRET: reqStr.default("not_configured"),
-  RAZORPAY_ACCOUNT_NUMBER: reqStr.default("not_configured"),
+  RAZORPAY_ACCOUNT_NUMBER: z.string().optional().transform((v) => v ?? ""),
   RAZORPAY_WEBHOOK_URL: z
     .string()
     .url("RAZORPAY_WEBHOOK_URL must be a valid URL")
@@ -152,7 +151,6 @@ const envSchema = z.object({
     "CLOUDINARY_API_SECRET",
     "RAZORPAY_KEY_ID",
     "RAZORPAY_KEY_SECRET",
-    "RAZORPAY_ACCOUNT_NUMBER",
     "RAZORPAY_WEBHOOK_SECRET",
     "JWT_ACCESS_SECRET",
     "JWT_REFRESH_SECRET",
