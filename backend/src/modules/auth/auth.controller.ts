@@ -5,6 +5,7 @@ import {
   revokeAuthSession,
   requestOtp,
   refreshSession,
+  signInWithFirebasePhone,
   signInWithGoogle,
   signOut,
   verifyOtp
@@ -38,6 +39,15 @@ export async function refreshTokenHandler(request: Request, response: Response):
 export async function googleAuthHandler(request: Request, response: Response): Promise<void> {
   const result = await signInWithGoogle({
     idToken: request.body.idToken
+  });
+  response.status(200).json(result);
+}
+
+export async function firebasePhoneAuthHandler(request: Request, response: Response): Promise<void> {
+  const result = await signInWithFirebasePhone({
+    idToken: request.body.idToken,
+    name: request.body.name,
+    referralCode: request.body.referralCode
   });
   response.status(200).json(result);
 }

@@ -30,6 +30,14 @@ export const authProviderSchema = z.object({
   })
 });
 
+export const firebasePhoneAuthSchema = z.object({
+  body: z.object({
+    idToken: z.string().min(20),
+    name: z.string().min(2).max(120).optional(),
+    referralCode: z.string().optional()
+  })
+});
+
 export const signOutSchema = z.object({
   body: z.object({
     refreshToken: z.string().min(20)

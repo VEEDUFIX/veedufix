@@ -1,3 +1,29 @@
+import { env } from "./env.js";
+
+async function firebaseAdmin() {
+  const { default: admin } = await import("firebase-admin") as any;
+
+  if (!admin.apps || admin.apps.length === 0) {
+    const serviceAccountEnv = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
+    const credential = serviceAccountEnv
+      ? admin.credential.cert(JSON.parse(serviceAccountEnv))
+      : admin.credential.cert({
+          projectId: env.FIREBASE_PROJECT_ID,
+          clientEmail: env.FIREBASE_CLIENT_EMAIL,
+          privateKey: env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, "\n")
+        });
+    admin.initializeApp({ credential });
+  }
+
+  return admin;
+}
+
+export async function verifyFirebaseIdToken(idToken: string): Promise<{ uid: string; phoneNumber?: string }> {
+  const admin = await firebaseAdmin();
+  const claims = await admin.auth().verifyIdToken(idToken);
+  return { uid: claims.uid, phoneNumber: claims.phone_number };
+}
+
 export async function sendPushNotification(
   tokens: string[],
   title: string,
@@ -9,16 +35,7 @@ export async function sendPushNotification(
   }
 
   try {
-    const { default: admin } = await import("firebase-admin") as any;
-
-    if (!admin.apps || admin.apps.length === 0) {
-      const serviceAccountEnv = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
-      if (serviceAccountEnv) {
-        admin.initializeApp({ credential: admin.credential.cert(JSON.parse(serviceAccountEnv)) });
-      } else {
-        admin.initializeApp({ credential: admin.credential.applicationDefault() });
-      }
-    }
+    const admin = await firebaseAdmin();
 
     const message = {
       tokens,

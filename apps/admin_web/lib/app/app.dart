@@ -5,7 +5,6 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:marketplace_shared/marketplace_shared.dart';
-import 'package:marketplace_shared/features/splash/presentation/pages/splash_page.dart';
 import 'router.dart';
 
 class AppBootstrap extends ConsumerStatefulWidget {

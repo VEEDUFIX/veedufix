@@ -86,6 +86,21 @@ class AuthController extends AsyncNotifier<AuthSession?> {
     });
   }
 
+  Future<void> signInWithFirebasePhone({
+    required String idToken,
+    String? name,
+    String? referralCode,
+  }) async {
+    state = const AsyncLoading();
+    state = await AsyncValue.guard(() async {
+      return _repository.signInWithFirebasePhone(
+        idToken: idToken,
+        name: name,
+        referralCode: referralCode,
+      );
+    });
+  }
+
   Future<void> signOut() async {
     await _repository.signOut();
     state = const AsyncData(null);

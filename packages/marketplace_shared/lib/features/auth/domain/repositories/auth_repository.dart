@@ -20,6 +20,12 @@ abstract class AuthRepository {
     required String role,
   });
 
+  Future<AuthSession> signInWithFirebasePhone({
+    required String idToken,
+    String? name,
+    String? referralCode,
+  });
+
   Future<AuthSession?> restoreSession();
 
   Future<void> signOut();

@@ -1,3 +1,4 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -30,22 +31,36 @@ class _LoginPageState extends ConsumerState<LoginPage> {
     }
     setState(() => _isLoading = true);
     try {
-      final result = await ref.read(authControllerProvider.notifier).requestOtp(
-            channel: 'PHONE',
-            identifier: _identifierController.text.trim(),
-          );
-      if (!mounted) return;
-      final debugOtp = result['debugOtp'] as String?;
-      if (debugOtp != null && debugOtp.isNotEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Development OTP: $debugOtp')),
-        );
+      final firebaseApp = await initializeFirebaseIfConfigured(
+        ref.read(environmentProvider),
+      );
+      if (firebaseApp == null) {
+        throw StateError('Firebase is not configured for this app build');
       }
-      context.go('/otp', extra: {
-        'channel': 'PHONE',
-        'identifier': _identifierController.text.trim(),
-        'role': 'CUSTOMER',
-        'name': _nameController.text.trim(),
+
+      final phoneNumber = _identifierController.text.replaceAll(RegExp(r'\s+'), '');
+      await FirebaseAuth.instance.verifyPhoneNumber(
+        phoneNumber: phoneNumber,
+        verificationCompleted: (credential) => _finishFirebaseSignIn(credential),
+        verificationFailed: (error) {
+          if (!mounted) return;
+          setState(() => _isLoading = false);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(error.message ?? 'Unable to send SMS verification code')),
+          );
+        },
+        codeSent: (verificationId, _) {
+          if (!mounted) return;
+          setState(() => _isLoading = false);
+          context.go('/otp', extra: {
+            'identifier': phoneNumber,
+            'name': _nameController.text.trim(),
+            'verificationId': verificationId,
+          });
+        },
+        codeAutoRetrievalTimeout: (_) {
+          if (mounted) setState(() => _isLoading = false);
+        },
       });
     } catch (error) {
       if (!mounted) return;
@@ -54,6 +69,25 @@ class _LoginPageState extends ConsumerState<LoginPage> {
       );
     } finally {
       if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _finishFirebaseSignIn(PhoneAuthCredential credential) async {
+    try {
+      final userCredential = await FirebaseAuth.instance.signInWithCredential(credential);
+      final idToken = await userCredential.user?.getIdToken();
+      if (idToken == null) throw StateError('Firebase did not return a sign-in token');
+      await ref.read(authControllerProvider.notifier).signInWithFirebasePhone(
+            idToken: idToken,
+            name: _nameController.text.trim(),
+          );
+      if (mounted) context.go('/app');
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Unable to sign in: $error')),
+      );
     }
   }
 

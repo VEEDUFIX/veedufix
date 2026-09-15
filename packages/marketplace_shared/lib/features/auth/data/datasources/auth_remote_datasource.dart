@@ -61,6 +61,23 @@ class AuthRemoteDataSource {
     return AuthSessionModel.fromJson(response.data ?? <String, dynamic>{});
   }
 
+  Future<AuthSessionModel> signInWithFirebasePhone({
+    required String idToken,
+    String? name,
+    String? referralCode,
+  }) async {
+    final response = await _dio.post<Map<String, dynamic>>(
+      '/auth/firebase-phone',
+      data: {
+        'idToken': idToken,
+        if (name != null && name.isNotEmpty) 'name': name,
+        if (referralCode != null && referralCode.isNotEmpty)
+          'referralCode': referralCode,
+      },
+    );
+    return AuthSessionModel.fromJson(response.data ?? <String, dynamic>{});
+  }
+
   Future<AuthSessionModel> refreshSession(String refreshToken) async {
     final response = await _dio.post<Map<String, dynamic>>(
       '/auth/refresh',

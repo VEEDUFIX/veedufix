@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:marketplace_shared/marketplace_shared.dart';
@@ -48,39 +50,59 @@ void _handleNotificationTap(RemoteMessage message, GoRouter router) {
   }
 }
 
-Future<void> main() async {
+void main() {
   WidgetsFlutterBinding.ensureInitialized();
 
   final container = ProviderContainer();
+  final environment = AppEnvironment.fromDartDefines();
 
-  // Defer Firebase and Messaging init so they do not block the first frame
-  Future.microtask(() async {
+  // Paint the Flutter shell immediately. Monitoring and push setup must never
+  // hold the native launch screen open.
+  runApp(UncontrolledProviderScope(
+    container: container,
+    child: const AppBootstrap(),
+  ));
 
-  FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
-  await initializeFirebaseIfConfigured(AppEnvironment.fromDartDefines());
-  await FirebaseMessagingService.create().initialize();
+  unawaited(_initializeSentry());
+  unawaited(_initializePushNotifications(container, environment));
+}
 
-
-  // Handle notification tap when app is in background/terminated
-  FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
-    _handleNotificationTap(message, container.read(routerProvider));
-  });
-
-  // Handle notification tap when app was terminated
-  FirebaseMessaging.instance.getInitialMessage().then((message) {
-    if (message != null) _handleNotificationTap(message, container.read(routerProvider));
-  });
-
-    });
-
-  await SentryFlutter.init(
-    (options) {
+Future<void> _initializeSentry() async {
+  try {
+    await SentryFlutter.init((options) {
       options.dsn = const String.fromEnvironment('SENTRY_DSN', defaultValue: '');
       options.tracesSampleRate = 1.0;
-    },
-    appRunner: () => runApp(UncontrolledProviderScope(
-      container: container,
-      child: const AppBootstrap(),
-    )),
-  );
+    });
+  } catch (_) {
+    // Observability is optional and must never prevent app startup.
+  }
+}
+
+Future<void> _initializePushNotifications(
+  ProviderContainer container,
+  AppEnvironment environment,
+) async {
+  if (!environment.hasFirebaseConfig) {
+    return;
+  }
+
+  try {
+    FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
+    await initializeFirebaseIfConfigured(environment);
+    await FirebaseMessagingService.create().initialize();
+
+    // Handle notification tap when app is in background/terminated.
+    FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
+      _handleNotificationTap(message, container.read(routerProvider));
+    });
+
+    // Handle notification tap when app was terminated.
+    FirebaseMessaging.instance.getInitialMessage().then((message) {
+      if (message != null) {
+        _handleNotificationTap(message, container.read(routerProvider));
+      }
+    });
+  } catch (_) {
+    // Push is an enhancement; keep the core booking app usable without it.
+  }
 }

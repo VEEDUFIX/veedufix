@@ -10,6 +10,7 @@ import {
 } from "../../lib/rate-limit.js";
 import {
   authProviderSchema,
+  firebasePhoneAuthSchema,
   refreshTokenSchema,
   requestOtpSchema,
   sessionIdParamsSchema,
@@ -18,6 +19,7 @@ import {
 } from "./auth.schemas.js";
 import {
   googleAuthHandler,
+  firebasePhoneAuthHandler,
   listSessionsHandler,
   refreshTokenHandler,
   requestOtpHandler,
@@ -53,6 +55,10 @@ authRouter.post("/otp/verify", validate(verifyOtpSchema), otpVerifyLimiter, veri
 // POST /api/auth/google
 // Limit: 10 req / min per IP  — general abuse protection for token exchange
 authRouter.post("/google", validate(authProviderSchema), googleAuthLimiter, googleAuthHandler);
+
+// Firebase verifies the SMS on-device; this endpoint verifies the resulting
+// Firebase ID token before granting an application session.
+authRouter.post("/firebase-phone", validate(firebasePhoneAuthSchema), googleAuthLimiter, firebasePhoneAuthHandler);
 
 // POST /api/auth/refresh
 // Limit: 20 req / min per IP  — prevents automated refresh-token grinding

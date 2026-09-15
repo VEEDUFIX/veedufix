@@ -65,6 +65,24 @@ class AuthRepositoryImpl implements AuthRepository {
   }
 
   @override
+  Future<AuthSession> signInWithFirebasePhone({
+    required String idToken,
+    String? name,
+    String? referralCode,
+  }) async {
+    final session = await _remoteDataSource.signInWithFirebasePhone(
+      idToken: idToken,
+      name: name,
+      referralCode: referralCode,
+    );
+    await _secureStore.saveTokens(
+      accessToken: session.accessToken,
+      refreshToken: session.refreshToken,
+    );
+    return session;
+  }
+
+  @override
   Future<AuthSession?> restoreSession() async {
     final refreshToken = await _secureStore.readRefreshToken();
     if (refreshToken == null) {

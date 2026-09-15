@@ -1,3 +1,4 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -28,11 +29,21 @@ class _OtpPageState extends ConsumerState<OtpPage> {
 
     setState(() => _isLoading = true);
     try {
-      await ref.read(authControllerProvider.notifier).verifyOtp(
-            channel: args['channel'] as String,
-            identifier: args['identifier'] as String,
-            otp: _otpController.text.trim(),
-            role: args['role'] as String,
+      final verificationId = args['verificationId'] as String?;
+      if (verificationId == null || verificationId.isEmpty) {
+        throw StateError('The verification session has expired. Request a new code.');
+      }
+      final credential = PhoneAuthProvider.credential(
+        verificationId: verificationId,
+        smsCode: _otpController.text.trim(),
+      );
+      final userCredential = await FirebaseAuth.instance.signInWithCredential(credential);
+      final idToken = await userCredential.user?.getIdToken();
+      if (idToken == null) {
+        throw StateError('Firebase did not return a sign-in token');
+      }
+      await ref.read(authControllerProvider.notifier).signInWithFirebasePhone(
+            idToken: idToken,
             name: args['name'] as String?,
           );
       if (!mounted) return;
@@ -51,10 +62,9 @@ class _OtpPageState extends ConsumerState<OtpPage> {
   Widget build(BuildContext context) {
     final args = (GoRouterState.of(context).extra as Map<String, dynamic>?) ??
         <String, dynamic>{
-          'channel': 'PHONE',
           'identifier': '',
-          'role': 'CUSTOMER',
           'name': null,
+          'verificationId': '',
         };
 
     return Scaffold(

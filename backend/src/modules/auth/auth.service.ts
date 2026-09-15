@@ -12,6 +12,7 @@ import {
 } from "../../lib/jwt.js";
 import { logger } from "../../lib/logger.js";
 import { verifyGoogleIdToken } from "../../lib/firebase.js";
+import { verifyFirebaseIdToken } from "../../config/firebase-admin.js";
 import { applyReferralCode } from "../wallet/wallet.service.js";
 
 type LoginChannel = "PHONE" | "EMAIL";
@@ -313,6 +314,58 @@ export async function signInWithGoogle(input: {
   const refreshToken = signRefreshToken({ sub: user.id, role: user.role, sessionId });
   await persistRefreshToken(user.id, refreshToken, extractExpirySeconds(process.env.JWT_REFRESH_TTL ?? "30d"));
   await createAuthSession(user.id, "GOOGLE", providerId, sessionId, accessToken, refreshToken);
+
+  return {
+    user: {
+      id: user.id,
+      role: user.role,
+      name: user.name,
+      email: user.email,
+      phone: user.phone,
+      avatarUrl: user.avatarUrl
+    },
+    accessToken,
+    refreshToken
+  };
+}
+
+export async function signInWithFirebasePhone(input: {
+  idToken: string;
+  name?: string;
+  referralCode?: string;
+}): Promise<AuthResult> {
+  const claims = await verifyFirebaseIdToken(input.idToken);
+  if (!claims.phoneNumber) {
+    throw AppError.badRequest("Firebase token does not contain a phone number");
+  }
+
+  const phone = normalizeIdentifier(claims.phoneNumber, "PHONE");
+  const user = await prisma.user.upsert({
+    where: { phone },
+    update: { name: input.name || undefined, phoneVerifiedAt: new Date() },
+    create: {
+      role: "CUSTOMER",
+      name: input.name || "New User",
+      phone,
+      email: null,
+      phoneVerifiedAt: new Date()
+    }
+  });
+
+  const isNewUser = Date.now() - user.createdAt.getTime() < 5000;
+  if (isNewUser && input.referralCode) {
+    try {
+      await applyReferralCode(user.id, input.referralCode);
+    } catch (err) {
+      logger.warn({ userId: user.id, referralCode: input.referralCode, err }, "Referral code could not be applied on signup");
+    }
+  }
+
+  const sessionId = createSessionId();
+  const accessToken = signAccessToken({ sub: user.id, role: user.role, sessionId });
+  const refreshToken = signRefreshToken({ sub: user.id, role: user.role, sessionId });
+  await persistRefreshToken(user.id, refreshToken, extractExpirySeconds(process.env.JWT_REFRESH_TTL ?? "30d"));
+  await createAuthSession(user.id, "PHONE", `firebase:${claims.uid}`, sessionId, accessToken, refreshToken);
 
   return {
     user: {
