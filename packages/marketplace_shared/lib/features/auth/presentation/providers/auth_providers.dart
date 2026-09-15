@@ -92,13 +92,17 @@ class AuthController extends AsyncNotifier<AuthSession?> {
     String? referralCode,
   }) async {
     state = const AsyncLoading();
-    state = await AsyncValue.guard(() async {
-      return _repository.signInWithFirebasePhone(
+    try {
+      final session = await _repository.signInWithFirebasePhone(
         idToken: idToken,
         name: name,
         referralCode: referralCode,
       );
-    });
+      state = AsyncData(session);
+    } catch (error, stackTrace) {
+      state = AsyncError(error, stackTrace);
+      rethrow;
+    }
   }
 
   Future<void> signOut() async {

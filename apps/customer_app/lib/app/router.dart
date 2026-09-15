@@ -46,7 +46,9 @@ final routerProvider = Provider<GoRouter>((ref) {
       final session = authState.valueOrNull;
 
       if (authState.isLoading) {
-        return location == '/splash' ? null : '/splash';
+        // Do not discard an in-progress phone verification by redirecting
+        // away from /otp while its backend session is being created.
+        return null;
       }
 
       final isAuthRoute = location == '/login' || location == '/otp';
