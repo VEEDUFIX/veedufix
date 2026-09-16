@@ -133,9 +133,10 @@ class HomePage extends ConsumerWidget {
                   onVoiceTap: () => showAiAssistantSheet(context),
                 ),
                 const SizedBox(height: 18),
-                const HomeSectionLabel(
+                HomeSectionLabel(
                   title: 'Quick categories',
                   subtitle: 'The most requested services in your area.',
+                  onSeeAll: () => context.push('/search'),
                 ),
                 const SizedBox(height: 12),
                 if (catalogAsync.isLoading)
@@ -201,9 +202,10 @@ class HomePage extends ConsumerWidget {
                   onAction: () => context.push('/search'),
                 ),
                 const SizedBox(height: 20),
-                const HomeSectionLabel(
+                HomeSectionLabel(
                   title: 'Popular services',
                   subtitle: 'Curated for fast booking and transparent pricing.',
+                  onSeeAll: () => context.push('/search'),
                 ),
                 const SizedBox(height: 12),
                 catalogAsync.isLoading

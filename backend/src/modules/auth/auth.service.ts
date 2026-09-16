@@ -258,6 +258,14 @@ async function withTimeout<T>(
   }
 }
 
+async function runBestEffort(task: Promise<unknown>, message: string): Promise<void> {
+  try {
+    await task;
+  } catch (err) {
+    logger.warn({ err }, message);
+  }
+}
+
 export async function refreshSession(refreshToken: string): Promise<AuthResult> {
   const payload = verifyRefreshToken(refreshToken) as TokenPayload;
   const stored = await prisma.refreshToken.findUnique({
@@ -393,15 +401,21 @@ export async function signInWithFirebasePhone(input: {
   const sessionId = createSessionId();
   const accessToken = signAccessToken({ sub: user.id, role: user.role, sessionId });
   const refreshToken = signRefreshToken({ sub: user.id, role: user.role, sessionId });
-  await withTimeout(
-    persistRefreshToken(user.id, refreshToken, extractExpirySeconds(process.env.JWT_REFRESH_TTL ?? "30d")),
-    10000,
-    "Refresh token creation timed out"
+  await runBestEffort(
+    withTimeout(
+      persistRefreshToken(user.id, refreshToken, extractExpirySeconds(process.env.JWT_REFRESH_TTL ?? "30d")),
+      10000,
+      "Refresh token creation timed out"
+    ),
+    "Firebase phone auth refresh token persistence failed"
   );
-  await withTimeout(
-    createAuthSession(user.id, "PHONE", `firebase:${claims.uid}`, sessionId, accessToken, refreshToken),
-    10000,
-    "Auth session creation timed out"
+  await runBestEffort(
+    withTimeout(
+      createAuthSession(user.id, "PHONE", `firebase:${claims.uid}`, sessionId, accessToken, refreshToken),
+      10000,
+      "Auth session creation timed out"
+    ),
+    "Firebase phone auth session persistence failed"
   );
   logger.info({ userId: user.id }, "Firebase phone auth completed");
 

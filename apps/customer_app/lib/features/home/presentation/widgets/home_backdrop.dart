@@ -1,35 +1,34 @@
 import 'package:flutter/material.dart';
+import 'package:marketplace_shared/marketplace_shared.dart';
 
 class HomeBackdrop extends StatelessWidget {
   const HomeBackdrop({super.key});
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
     return IgnorePointer(
       child: Container(
-        decoration: BoxDecoration(
+        decoration: const BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
             colors: [
-              cs.primary.withValues(alpha: 0.07),
-              cs.surface,
-              cs.secondary.withValues(alpha: 0.05),
+              Color(0xFFF5EDD8), // warm amber top
+              AbzioTheme.lightBackground,
+              AbzioTheme.lightBackground,
             ],
+            stops: [0.0, 0.35, 1.0],
           ),
         ),
         child: Stack(
           children: [
             Positioned(
-              top: -72,
-              right: -48,
-              child: AmbientOrb(color: cs.primary.withValues(alpha: 0.12), size: 180),
-            ),
-            Positioned(
-              top: 180,
-              left: -64,
-              child: AmbientOrb(color: const Color(0xFF10B981).withValues(alpha: 0.10), size: 140),
+              top: -60,
+              right: -40,
+              child: _AmbientOrb(
+                color: AbzioTheme.accentColor.withValues(alpha: 0.09),
+                size: 200,
+              ),
             ),
           ],
         ),
@@ -38,12 +37,8 @@ class HomeBackdrop extends StatelessWidget {
   }
 }
 
-class AmbientOrb extends StatelessWidget {
-  const AmbientOrb({
-    super.key,
-    required this.color,
-    required this.size,
-  });
+class _AmbientOrb extends StatelessWidget {
+  const _AmbientOrb({required this.color, required this.size});
 
   final Color color;
   final double size;
@@ -58,7 +53,7 @@ class AmbientOrb extends StatelessWidget {
         color: color,
         boxShadow: [
           BoxShadow(
-            color: color.withValues(alpha: 0.18),
+            color: color.withValues(alpha: 0.3),
             blurRadius: 60,
             spreadRadius: 10,
           ),

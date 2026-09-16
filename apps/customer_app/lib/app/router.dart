@@ -6,6 +6,7 @@ import 'package:marketplace_shared/marketplace_shared.dart';
 
 import '../features/auth/presentation/pages/login_page.dart';
 import '../features/auth/presentation/pages/otp_page.dart';
+import '../features/auth/providers/guest_mode_provider.dart';
 import '../features/home/presentation/pages/home_page.dart';
 import '../features/booking/presentation/pages/bookings_page.dart';
 import '../features/booking/presentation/pages/arrival_otp_page.dart';
@@ -44,6 +45,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       final authState = ref.read(authControllerProvider);
       final location = state.matchedLocation;
       final session = authState.valueOrNull;
+      final isGuest = ref.read(guestModeProvider);
 
       if (authState.isLoading) {
         // Do not discard an in-progress phone verification by redirecting
@@ -54,7 +56,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       final isAuthRoute = location == '/login' || location == '/otp';
       final homeRoute = homeRouteForMode(AppMode.customer);
 
-      if (session == null) {
+      if (session == null && !isGuest) {
         return isAuthRoute ? null : '/login';
       }
 
@@ -142,9 +144,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/cart',
-        builder: (context, state) {
-          return const CartPage();
-        },
+        builder: (context, state) => const CartPage(),
       ),
       GoRoute(
         path: '/checkout',
@@ -234,21 +234,11 @@ final routerProvider = Provider<GoRouter>((ref) {
           return SupportPage(
             autoCompose: autoCompose,
             bookingId: bookingId?.trim().isNotEmpty == true ? bookingId!.trim() : null,
-            bookingCode: bookingCode?.trim().isNotEmpty == true
-                ? bookingCode!.trim()
-                : null,
-            serviceName: serviceName?.trim().isNotEmpty == true
-                ? serviceName!.trim()
-                : null,
-            initialCategory: initialCategory?.trim().isNotEmpty == true
-                ? initialCategory!.trim()
-                : null,
-            initialSubject: initialSubject?.trim().isNotEmpty == true
-                ? initialSubject!.trim()
-                : null,
-            initialMessage: initialMessage?.trim().isNotEmpty == true
-                ? initialMessage!.trim()
-                : null,
+            bookingCode: bookingCode?.trim().isNotEmpty == true ? bookingCode!.trim() : null,
+            serviceName: serviceName?.trim().isNotEmpty == true ? serviceName!.trim() : null,
+            initialCategory: initialCategory?.trim().isNotEmpty == true ? initialCategory!.trim() : null,
+            initialSubject: initialSubject?.trim().isNotEmpty == true ? initialSubject!.trim() : null,
+            initialMessage: initialMessage?.trim().isNotEmpty == true ? initialMessage!.trim() : null,
           );
         },
       ),
@@ -293,6 +283,7 @@ final routerProvider = Provider<GoRouter>((ref) {
 class _RouterRefreshNotifier extends ChangeNotifier {
   _RouterRefreshNotifier(this.ref) {
     ref.listen(authControllerProvider, (_, __) => notifyListeners());
+    ref.listen(guestModeProvider, (_, __) => notifyListeners());
   }
 
   final Ref ref;
