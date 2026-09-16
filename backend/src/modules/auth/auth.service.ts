@@ -239,6 +239,25 @@ function createSessionId(): string {
   return randomUUID();
 }
 
+async function withTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  message: string
+): Promise<T> {
+  let timeout: NodeJS.Timeout | undefined;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeout = setTimeout(() => reject(new AppError(504, message)), timeoutMs);
+  });
+
+  try {
+    return await Promise.race([promise, timeoutPromise]);
+  } finally {
+    if (timeout) {
+      clearTimeout(timeout);
+    }
+  }
+}
+
 export async function refreshSession(refreshToken: string): Promise<AuthResult> {
   const payload = verifyRefreshToken(refreshToken) as TokenPayload;
   const stored = await prisma.refreshToken.findUnique({
@@ -334,23 +353,33 @@ export async function signInWithFirebasePhone(input: {
   name?: string;
   referralCode?: string;
 }): Promise<AuthResult> {
-  const claims = await verifyFirebaseIdToken(input.idToken);
+  logger.info("Firebase phone auth started");
+  const claims = await withTimeout(
+    verifyFirebaseIdToken(input.idToken),
+    10000,
+    "Firebase token verification timed out"
+  );
   if (!claims.phoneNumber) {
     throw AppError.badRequest("Firebase token does not contain a phone number");
   }
 
   const phone = normalizeIdentifier(claims.phoneNumber, "PHONE");
-  const user = await prisma.user.upsert({
-    where: { phone },
-    update: { name: input.name || undefined, phoneVerifiedAt: new Date() },
-    create: {
-      role: "CUSTOMER",
-      name: input.name || "New User",
-      phone,
-      email: null,
-      phoneVerifiedAt: new Date()
-    }
-  });
+  logger.info({ phone }, "Firebase phone token verified");
+  const user = await withTimeout(
+    prisma.user.upsert({
+      where: { phone },
+      update: { name: input.name || undefined, phoneVerifiedAt: new Date() },
+      create: {
+        role: "CUSTOMER",
+        name: input.name || "New User",
+        phone,
+        email: null,
+        phoneVerifiedAt: new Date()
+      }
+    }),
+    10000,
+    "User session lookup timed out"
+  );
 
   const isNewUser = Date.now() - user.createdAt.getTime() < 5000;
   if (isNewUser && input.referralCode) {
@@ -364,8 +393,17 @@ export async function signInWithFirebasePhone(input: {
   const sessionId = createSessionId();
   const accessToken = signAccessToken({ sub: user.id, role: user.role, sessionId });
   const refreshToken = signRefreshToken({ sub: user.id, role: user.role, sessionId });
-  await persistRefreshToken(user.id, refreshToken, extractExpirySeconds(process.env.JWT_REFRESH_TTL ?? "30d"));
-  await createAuthSession(user.id, "PHONE", `firebase:${claims.uid}`, sessionId, accessToken, refreshToken);
+  await withTimeout(
+    persistRefreshToken(user.id, refreshToken, extractExpirySeconds(process.env.JWT_REFRESH_TTL ?? "30d")),
+    10000,
+    "Refresh token creation timed out"
+  );
+  await withTimeout(
+    createAuthSession(user.id, "PHONE", `firebase:${claims.uid}`, sessionId, accessToken, refreshToken),
+    10000,
+    "Auth session creation timed out"
+  );
+  logger.info({ userId: user.id }, "Firebase phone auth completed");
 
   return {
     user: {

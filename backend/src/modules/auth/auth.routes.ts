@@ -58,7 +58,7 @@ authRouter.post("/google", validate(authProviderSchema), googleAuthLimiter, goog
 
 // Firebase verifies the SMS on-device; this endpoint verifies the resulting
 // Firebase ID token before granting an application session.
-authRouter.post("/firebase-phone", validate(firebasePhoneAuthSchema), googleAuthLimiter, firebasePhoneAuthHandler);
+authRouter.post("/firebase-phone", validate(firebasePhoneAuthSchema), firebasePhoneAuthHandler);
 
 // POST /api/auth/refresh
 // Limit: 20 req / min per IP  — prevents automated refresh-token grinding
