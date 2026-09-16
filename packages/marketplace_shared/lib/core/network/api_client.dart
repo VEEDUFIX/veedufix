@@ -13,9 +13,9 @@ class ApiClient {
         dio = Dio(
           BaseOptions(
             baseUrl: environment.apiBaseUrl,
-            connectTimeout: const Duration(seconds: 20),
-            receiveTimeout: const Duration(seconds: 20),
-            sendTimeout: const Duration(seconds: 20),
+            connectTimeout: const Duration(seconds: 60),
+            receiveTimeout: const Duration(seconds: 60),
+            sendTimeout: const Duration(seconds: 60),
             headers: {'Content-Type': 'application/json'},
           ),
         ) {
@@ -129,4 +129,3 @@ class ApiClient {
     return res.data ?? <String, dynamic>{};
   }
 }
-

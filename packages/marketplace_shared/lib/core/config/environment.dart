@@ -1,5 +1,4 @@
 import 'package:firebase_core/firebase_core.dart';
-import 'package:flutter/foundation.dart';
 
 class AppEnvironment {
   const AppEnvironment({
@@ -19,9 +18,7 @@ class AppEnvironment {
   });
 
   factory AppEnvironment.fromDartDefines() {
-    final String defaultApiUrl = (!kIsWeb && defaultTargetPlatform == TargetPlatform.android)
-        ? 'http://10.0.2.2:4000/api'
-        : 'http://localhost:4000/api';
+    const defaultApiUrl = 'https://veedufix.onrender.com/api';
 
     final apiBaseUrl = String.fromEnvironment(
       'API_BASE_URL',
