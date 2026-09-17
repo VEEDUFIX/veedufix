@@ -48,6 +48,12 @@ class _LoginPageState extends ConsumerState<LoginPage> {
     if (message.contains('500') || message.contains('503')) {
       return 'Google sign-in is temporarily unavailable.';
     }
+    if (message.isNotEmpty && message != 'null') {
+      final compact = message.replaceAll(RegExp(r'\s+'), ' ').trim();
+      return compact.length > 180
+          ? '${compact.substring(0, 177)}...'
+          : compact;
+    }
     return 'Unable to sign in right now.';
   }
 
