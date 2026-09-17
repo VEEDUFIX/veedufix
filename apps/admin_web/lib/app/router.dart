@@ -115,7 +115,9 @@ final routerProvider = Provider<GoRouter>((ref) {
           ),
           GoRoute(
             path: '/catalog',
-            builder: (context, state) => const CatalogManagerPage(),
+            builder: (context, state) => CatalogManagerPage(
+              showFeaturedOnly: state.uri.queryParameters['view'] == 'hero',
+            ),
           ),
           GoRoute(
             path: '/catalog/categories/:categoryId',

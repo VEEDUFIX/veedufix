@@ -39,7 +39,11 @@ export function requireRole(...roles: Array<"CUSTOMER" | "WORKER" | "ADMIN">) {
     }
 
     if (!roles.includes(request.auth.role)) {
-      response.status(403).json({ message: "Insufficient permissions" });
+      response.status(403).json({
+        message: "Insufficient permissions",
+        requiredRoles: roles,
+        actualRole: request.auth.role
+      });
       return;
     }
 

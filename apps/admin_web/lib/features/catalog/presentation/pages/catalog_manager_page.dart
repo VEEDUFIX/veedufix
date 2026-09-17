@@ -8,7 +8,9 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:marketplace_shared/marketplace_shared.dart';
 
 class CatalogManagerPage extends ConsumerStatefulWidget {
-  const CatalogManagerPage({super.key});
+  const CatalogManagerPage({super.key, this.showFeaturedOnly = false});
+
+  final bool showFeaturedOnly;
 
   @override
   ConsumerState<CatalogManagerPage> createState() => _CatalogManagerPageState();
@@ -26,6 +28,9 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
     super.initState();
     _api = _CatalogAdminApi(ref.read(apiClientProvider).dio);
     _snapshotFuture = _loadSnapshot();
+    if (widget.showFeaturedOnly) {
+      _catalogFilter = _CatalogFilter.featured;
+    }
   }
 
   Future<_CatalogSnapshot> _loadSnapshot() async {

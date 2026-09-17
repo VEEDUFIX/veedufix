@@ -440,6 +440,7 @@ class _AppShellPageState extends ConsumerState<AppShellPage> {
       _QuickAction('Worker Review', '/worker-review', Icons.how_to_reg_rounded),
       _QuickAction('Workers', '/workers', Icons.people_rounded),
       _QuickAction('Catalog', '/catalog', Icons.category_rounded),
+      _QuickAction('Hero carousel', '/catalog?view=hero', Icons.view_carousel_rounded),
       _QuickAction(
           'Service Areas', '/service-areas', Icons.my_location_rounded),
       _QuickAction('Finance', '/finance', Icons.account_balance_rounded),
