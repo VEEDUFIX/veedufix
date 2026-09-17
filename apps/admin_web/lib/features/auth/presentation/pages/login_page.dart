@@ -25,6 +25,24 @@ class _LoginPageState extends ConsumerState<LoginPage> {
   bool _suppressNextSignOut = false;
   String? _initError;
 
+  String _friendlyAuthError(Object? error) {
+    final message = error?.toString() ?? '';
+    if (message.contains('Google sign-in is not configured')) {
+      return 'Google sign-in is not configured on the server.';
+    }
+    if (message.contains('not configured for this app') ||
+        message.contains('audience')) {
+      return 'Google sign-in is using the wrong client ID.';
+    }
+    if (message.contains('Unauthorized') || message.contains('401')) {
+      return 'This Google account could not be verified.';
+    }
+    if (message.contains('500') || message.contains('503')) {
+      return 'Google sign-in is temporarily unavailable.';
+    }
+    return 'Unable to sign in right now.';
+  }
+
   @override
   void initState() {
     super.initState();
@@ -149,15 +167,16 @@ class _LoginPageState extends ConsumerState<LoginPage> {
         return;
       }
 
+      final message = _friendlyAuthError(error);
       setState(() {
-        _initError = 'Unable to complete Google sign-in.';
+        _initError = message;
       });
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text('Unable to sign in right now.'),
-            backgroundColor: Theme.of(context).colorScheme.error,
-          ),
-        );
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(message),
+          backgroundColor: Theme.of(context).colorScheme.error,
+        ),
+      );
 
       _suppressNextSignOut = true;
       await _googleSignIn.signOut();
@@ -177,7 +196,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
       if (next.hasError) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Authentication failed: ${next.error}'),
+            content: Text(_friendlyAuthError(next.error)),
             backgroundColor: Theme.of(context).colorScheme.error,
           ),
         );

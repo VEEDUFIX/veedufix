@@ -46,4 +46,9 @@ export class AppError extends Error {
   static gone(message: string): AppError {
     return new AppError(410, message);
   }
+
+  /** 503 Service Unavailable */
+  static serviceUnavailable(message: string): AppError {
+    return new AppError(503, message);
+  }
 }
