@@ -38,7 +38,10 @@ export function requireRole(...roles: Array<"CUSTOMER" | "WORKER" | "ADMIN">) {
       return;
     }
 
-    const isAdminApiRoute = request.originalUrl.startsWith("/api/admin/");
+    const isAdminApiRoute =
+      request.originalUrl.startsWith("/api/admin/") ||
+      request.baseUrl.startsWith("/api/admin/") ||
+      request.baseUrl.includes("/admin/");
     const isAuthorizedAdminRoute = isAdminApiRoute && request.auth.role === "ADMIN";
     if (!roles.includes(request.auth.role) && !isAuthorizedAdminRoute) {
       response.status(403).json({
