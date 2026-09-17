@@ -34,29 +34,34 @@ Future<void> main() async {
 
   final container = ProviderContainer();
 
-  // Defer Firebase and Messaging init so they do not block the first frame
+  // Defer optional messaging setup so an absent web Firebase configuration
+  // never prevents the admin dashboard from starting.
   Future.microtask(() async {
+    try {
+      final environment = AppEnvironment.fromDartDefines();
+      if (!environment.hasFirebaseConfig) {
+        return;
+      }
 
-  FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
-  await initializeFirebaseIfConfigured(AppEnvironment.fromDartDefines());
-  await FirebaseMessagingService.create().initialize();
+      FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
+      await initializeFirebaseIfConfigured(environment);
+      await FirebaseMessagingService.create().initialize();
 
+      FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
+        _handleAdminNotificationTap(message, container.read(routerProvider));
+      });
 
-  FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
-    _handleAdminNotificationTap(message, container.read(routerProvider));
-  });
-
-  FirebaseMessaging.instance.getInitialMessage().then((message) {
-    if (message != null) {
-      _handleAdminNotificationTap(message, container.read(routerProvider));
+      final message = await FirebaseMessaging.instance.getInitialMessage();
+      if (message != null) {
+        _handleAdminNotificationTap(message, container.read(routerProvider));
+      }
+    } catch (_) {
+      // Notifications are non-critical for first render.
     }
   });
-
-    });
 
   runApp(UncontrolledProviderScope(
     container: container,
     child: const AppBootstrap(),
   ));
 }
-

@@ -335,17 +335,25 @@ class _BookingSummaryPill extends StatelessWidget {
   }
 }
 
-class _BookingsTab extends ConsumerWidget {
+class _BookingsTab extends ConsumerStatefulWidget {
   const _BookingsTab({required this.status});
 
   final String status;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final bookingsAsync = ref.watch(customerBookingsProvider(status));
+  ConsumerState<_BookingsTab> createState() => _BookingsTabState();
+}
+
+class _BookingsTabState extends ConsumerState<_BookingsTab> {
+  bool _autoRestoreAttempted = false;
+  bool _isRestoringSession = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final bookingsAsync = ref.watch(customerBookingsProvider(widget.status));
 
     return RefreshIndicator(
-      onRefresh: () => ref.refresh(customerBookingsProvider(status).future),
+      onRefresh: () => ref.refresh(customerBookingsProvider(widget.status).future),
       child: bookingsAsync.when(
         data: (bookings) {
           if (bookings.isEmpty) {
@@ -368,9 +376,9 @@ class _BookingsTab extends ConsumerWidget {
                             borderRadius: BorderRadius.circular(16),
                           ),
                           child: Icon(
-                            status == 'upcoming'
+                            widget.status == 'upcoming'
                                 ? Icons.event_available_rounded
-                                : status == 'completed'
+                                : widget.status == 'completed'
                                 ? Icons.task_alt_rounded
                                 : Icons.event_busy_rounded,
                             color: Theme.of(context).colorScheme.primary,
@@ -382,9 +390,9 @@ class _BookingsTab extends ConsumerWidget {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                status == 'upcoming'
+                                widget.status == 'upcoming'
                                     ? 'No upcoming jobs'
-                                    : status == 'completed'
+                                    : widget.status == 'completed'
                                     ? 'Nothing completed yet'
                                     : 'No cancelled bookings',
                                 style: Theme.of(context).textTheme.titleMedium
@@ -392,9 +400,9 @@ class _BookingsTab extends ConsumerWidget {
                               ),
                               const SizedBox(height: 4),
                               Text(
-                                status == 'upcoming'
+                                widget.status == 'upcoming'
                                     ? 'Book a service and it will appear here.'
-                                    : status == 'completed'
+                                    : widget.status == 'completed'
                                     ? 'Completed jobs will show here with invoice access and ratings.'
                                     : 'If a booking is cancelled, the reason and refund status will appear here.',
                                 style: Theme.of(context).textTheme.bodyMedium
@@ -420,7 +428,7 @@ class _BookingsTab extends ConsumerWidget {
                                   ),
                                   OutlinedButton.icon(
                                     onPressed: () => ref.refresh(
-                                      customerBookingsProvider(status).future,
+                                      customerBookingsProvider(widget.status).future,
                                     ),
                                     icon: const Icon(
                                       Icons.refresh_rounded,
@@ -445,7 +453,7 @@ class _BookingsTab extends ConsumerWidget {
             itemCount: bookings.length,
             separatorBuilder: (_, __) => const SizedBox(height: 16),
             itemBuilder: (context, index) {
-              return _BookingCard(booking: bookings[index], statusType: status);
+              return _BookingCard(booking: bookings[index], statusType: widget.status);
             },
           );
         },
@@ -455,7 +463,19 @@ class _BookingsTab extends ConsumerWidget {
           separatorBuilder: (_, __) => const SizedBox(height: 16),
           itemBuilder: (context, index) => const _SkeletonCard(),
         ),
-        error: (error, _) => ListView(
+        error: (error, _) {
+          if (_isUnauthorized(error) && !_autoRestoreAttempted && !_isRestoringSession) {
+            _autoRestoreAttempted = true;
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted) {
+                _restoreSession(automatic: true);
+              }
+            });
+          }
+          if (_isRestoringSession) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          return ListView(
           physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.fromLTRB(20, 24, 20, 24),
           children: [
@@ -513,7 +533,7 @@ class _BookingsTab extends ConsumerWidget {
                       children: [
                         FilledButton.icon(
                           onPressed: () => ref.refresh(
-                            customerBookingsProvider(status).future,
+                            customerBookingsProvider(widget.status).future,
                           ),
                           icon: const Icon(Icons.refresh_rounded, size: 18),
                           label: const Text('Try again'),
@@ -521,7 +541,7 @@ class _BookingsTab extends ConsumerWidget {
                         if (_isUnauthorized(error)) ...[
                           const SizedBox(width: 10),
                           OutlinedButton(
-                            onPressed: () => _restoreSession(context, ref),
+                            onPressed: () => _restoreSession(),
                             child: const Text('Restore session'),
                           ),
                         ],
@@ -532,7 +552,8 @@ class _BookingsTab extends ConsumerWidget {
               ),
             ),
           ],
-        ),
+          );
+        },
       ),
     );
   }
@@ -568,10 +589,14 @@ class _BookingsTab extends ConsumerWidget {
     return error is DioException && error.response?.statusCode == 401;
   }
 
-  Future<void> _restoreSession(BuildContext context, WidgetRef ref) async {
+  Future<void> _restoreSession({bool automatic = false}) async {
+    if (_isRestoringSession) {
+      return;
+    }
+    setState(() => _isRestoringSession = true);
     final firebaseUser = FirebaseAuth.instance.currentUser;
     if (firebaseUser == null) {
-      if (context.mounted) {
+      if (mounted) {
         context.go('/login');
       }
       return;
@@ -585,11 +610,16 @@ class _BookingsTab extends ConsumerWidget {
       await ref
           .read(authControllerProvider.notifier)
           .refreshFirebasePhoneSession(idToken: idToken);
-      ref.invalidate(customerBookingsProvider(status));
+      ref.invalidate(customerBookingsProvider(widget.status));
     } catch (_) {
-      await ref.read(authControllerProvider.notifier).signOut();
-      if (context.mounted) {
-        context.go('/login');
+      if (!automatic && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not restore your session. Please try again.')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isRestoringSession = false);
       }
     }
   }

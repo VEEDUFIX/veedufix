@@ -16,13 +16,31 @@ class AppBootstrap extends ConsumerStatefulWidget {
 
 class _AppBootstrapState extends ConsumerState<AppBootstrap> {
   StreamSubscription<String>? _tokenRefreshSubscription;
+  late final bool _isFirebaseConfigured;
 
   @override
   void initState() {
     super.initState();
-    _tokenRefreshSubscription = FirebaseMessaging.instance.onTokenRefresh.listen((_) {
-      unawaited(_registerDeviceToken());
-    });
+    _isFirebaseConfigured = ref.read(environmentProvider).hasFirebaseConfig;
+    if (_isFirebaseConfigured) {
+      unawaited(_startFirebaseMessaging());
+    }
+  }
+
+  Future<void> _startFirebaseMessaging() async {
+    try {
+      await initializeFirebaseIfConfigured(ref.read(environmentProvider));
+      if (!mounted) {
+        return;
+      }
+      _tokenRefreshSubscription =
+          FirebaseMessaging.instance.onTokenRefresh.listen((_) {
+        unawaited(_registerDeviceToken());
+      });
+    } catch (_) {
+      // Firebase is optional for the admin web app. A messaging setup problem
+      // must never prevent the dashboard from rendering.
+    }
   }
 
   @override
@@ -33,6 +51,9 @@ class _AppBootstrapState extends ConsumerState<AppBootstrap> {
   }
 
   Future<void> _registerDeviceToken() async {
+    if (!_isFirebaseConfigured) {
+      return;
+    }
     final session = ref.read(authControllerProvider).valueOrNull;
     if (session == null) {
       return;
@@ -46,12 +67,12 @@ class _AppBootstrapState extends ConsumerState<AppBootstrap> {
     final platform = kIsWeb ? 'web' : defaultTargetPlatform.name;
     try {
       await ref.read(apiClientProvider).post(
-            '/device-tokens',
-            data: {
-              'token': token,
-              'platform': platform,
-            },
-          );
+        '/device-tokens',
+        data: {
+          'token': token,
+          'platform': platform,
+        },
+      );
     } catch (_) {
       // Best-effort only.
     }
