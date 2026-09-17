@@ -74,9 +74,13 @@ export function createApp() {
     })
   );
   app.use(helmet());
+  const corsOrigins = new Set([
+    ...env.APP_CORS_ORIGIN.split(",").map((origin) => origin.trim()).filter(Boolean),
+    "https://veedufix.vercel.app"
+  ]);
   app.use(
     cors({
-      origin: env.APP_CORS_ORIGIN.split(",").map((origin) => origin.trim()),
+      origin: Array.from(corsOrigins),
       credentials: true
     })
   );
