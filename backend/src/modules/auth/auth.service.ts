@@ -215,7 +215,7 @@ export async function verifyOtp(input: {
   await createAuthSession(
     user.id,
     input.channel,
-    `${input.channel.toLowerCase()}:${normalized}`,
+    `${input.channel.toLowerCase()}:${normalized}:${sessionId}`,
     sessionId,
     accessToken,
     refreshToken
@@ -317,7 +317,8 @@ export async function signInWithGoogle(input: {
     `google-${googleClaims.sub}@veedufix.local`;
   const name = googleClaims.name ?? "Google User";
   const avatarUrl = googleClaims.picture ?? null;
-  const providerId = `google:${googleClaims.sub}`;
+  const sessionId = createSessionId();
+  const providerId = `google:${googleClaims.sub}:${sessionId}`;
 
   const user = await prisma.user.upsert({
     where: { email },
@@ -336,7 +337,6 @@ export async function signInWithGoogle(input: {
     }
   });
 
-  const sessionId = createSessionId();
   const accessToken = signAccessToken({ sub: user.id, role: user.role, sessionId });
   const refreshToken = signRefreshToken({ sub: user.id, role: user.role, sessionId });
   await persistRefreshToken(user.id, refreshToken, extractExpirySeconds(process.env.JWT_REFRESH_TTL ?? "30d"));
@@ -411,7 +411,7 @@ export async function signInWithFirebasePhone(input: {
   );
   await runBestEffort(
     withTimeout(
-      createAuthSession(user.id, "PHONE", `firebase:${claims.uid}`, sessionId, accessToken, refreshToken),
+      createAuthSession(user.id, "PHONE", `firebase:${claims.uid}:${sessionId}`, sessionId, accessToken, refreshToken),
       10000,
       "Auth session creation timed out"
     ),
