@@ -7,7 +7,12 @@ export async function verifyGoogleIdToken(idToken: string): Promise<{
   name?: string;
   picture?: string;
 }> {
-  if (!env.GOOGLE_SERVER_CLIENT_ID) {
+  const allowedClientIds = (env.GOOGLE_SERVER_CLIENT_ID ?? "")
+    .split(",")
+    .map((clientId) => clientId.trim())
+    .filter(Boolean);
+
+  if (allowedClientIds.length === 0) {
     throw AppError.serviceUnavailable("Google sign-in is not configured on the server");
   }
 
@@ -27,7 +32,7 @@ export async function verifyGoogleIdToken(idToken: string): Promise<{
     picture?: string;
   };
 
-  if (decoded.aud !== env.GOOGLE_SERVER_CLIENT_ID) {
+  if (!decoded.aud || !allowedClientIds.includes(decoded.aud)) {
     throw AppError.unauthorized("Google account is not configured for this app");
   }
 

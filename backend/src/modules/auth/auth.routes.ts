@@ -18,6 +18,7 @@ import {
   verifyOtpSchema
 } from "./auth.schemas.js";
 import {
+  googleConfigHandler,
   googleAuthHandler,
   firebasePhoneAuthHandler,
   listSessionsHandler,
@@ -43,6 +44,8 @@ const otpVerifyLimiter = makeOtpVerifyLimiter();
 const googleAuthLimiter = makeGoogleAuthLimiter();
 const refreshLimiter = makeRefreshLimiter();
 const signOutLimiter = makeSignOutLimiter();
+
+authRouter.get("/google-config", googleConfigHandler);
 
 // POST /api/auth/otp/request
 // Limit: 3 req / 10 min per (IP + identifier)  — prevents OTP spam / SMS-cost abuse

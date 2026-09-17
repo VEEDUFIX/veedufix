@@ -3,6 +3,7 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:dio/dio.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:google_sign_in_platform_interface/google_sign_in_platform_interface.dart';
@@ -27,7 +28,13 @@ class _LoginPageState extends ConsumerState<LoginPage> {
   String? _initError;
 
   String _friendlyAuthError(Object? error) {
-    final message = error?.toString() ?? '';
+    var message = error?.toString() ?? '';
+    if (error is DioException) {
+      final data = error.response?.data;
+      if (data is Map) {
+        message = data['message']?.toString() ?? message;
+      }
+    }
     if (message.contains('Google sign-in is not configured')) {
       return 'Google sign-in is not configured on the server.';
     }

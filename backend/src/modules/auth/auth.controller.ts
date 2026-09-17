@@ -1,4 +1,5 @@
 import { Request, Response } from "express";
+import { env } from "../../config/env.js";
 import {
   listAuthSessions,
   revokeAllAuthSessions,
@@ -10,6 +11,19 @@ import {
   signOut,
   verifyOtp
 } from "./auth.service.js";
+
+export async function googleConfigHandler(_request: Request, response: Response): Promise<void> {
+  const clientIds = (env.GOOGLE_SERVER_CLIENT_ID ?? "")
+    .split(",")
+    .map((clientId) => clientId.trim())
+    .filter(Boolean);
+  response.status(200).json({
+    configured: clientIds.length > 0,
+    clientIdCount: clientIds.length,
+    clientIdTails: clientIds.map((clientId) => clientId.slice(-24)),
+    clientIdLengths: clientIds.map((clientId) => clientId.length)
+  });
+}
 
 export async function requestOtpHandler(request: Request, response: Response): Promise<void> {
   const result = await requestOtp(request.body.channel, request.body.identifier);
