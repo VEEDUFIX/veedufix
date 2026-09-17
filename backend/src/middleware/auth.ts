@@ -38,7 +38,9 @@ export function requireRole(...roles: Array<"CUSTOMER" | "WORKER" | "ADMIN">) {
       return;
     }
 
-    if (!roles.includes(request.auth.role)) {
+    const isAdminApiRoute = request.originalUrl.startsWith("/api/admin/");
+    const isAuthorizedAdminRoute = isAdminApiRoute && request.auth.role === "ADMIN";
+    if (!roles.includes(request.auth.role) && !isAuthorizedAdminRoute) {
       response.status(403).json({
         message: "Insufficient permissions",
         requiredRoles: roles,
