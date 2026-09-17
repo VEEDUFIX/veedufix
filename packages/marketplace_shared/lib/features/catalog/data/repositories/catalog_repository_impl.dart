@@ -14,6 +14,7 @@ class CatalogRepositoryImpl implements CatalogRepository {
     final data = await remoteDataSource.getHomeCatalog();
     return HomeCatalogResult(
       categories: _decodeList(data['categories'], CatalogCategory.fromJson),
+      featured: _decodeList(data['featuredServices'] ?? data['featured'], CatalogService.fromJson),
       trending: _decodeList(data['trendingServices'] ?? data['trending'], CatalogService.fromJson),
       recommended: _decodeList(data['recommendedServices'] ?? data['recommended'], CatalogService.fromJson),
     );

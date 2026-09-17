@@ -104,9 +104,14 @@ class AuthRepositoryImpl implements AuthRepository {
   @override
   Future<void> signOut() async {
     final refreshToken = await _secureStore.readRefreshToken();
-    if (refreshToken != null) {
-      await _remoteDataSource.signOut(refreshToken);
+    try {
+      if (refreshToken != null) {
+        await _remoteDataSource.signOut(refreshToken);
+      }
+    } finally {
+      // Local logout must succeed even when an expired server session cannot
+      // be revoked. Otherwise the app can keep showing a stale signed-in UI.
+      await _secureStore.clearTokens();
     }
-    await _secureStore.clearTokens();
   }
 }

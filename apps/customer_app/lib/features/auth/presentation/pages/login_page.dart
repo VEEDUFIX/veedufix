@@ -101,6 +101,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
       final idToken = await userCred.user?.getIdToken();
       if (idToken == null) throw StateError('No sign-in token');
       await ref.read(authControllerProvider.notifier).signInWithFirebasePhone(idToken: idToken);
+      ref.read(guestModeProvider.notifier).state = false;
       if (mounted) context.go('/app');
     } catch (e) {
       if (mounted) setState(() { _isLoading = false; _errorText = 'Sign-in failed. Please try again.'; });

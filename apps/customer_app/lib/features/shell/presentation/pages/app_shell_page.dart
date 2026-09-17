@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'dart:ui';
+import 'package:google_fonts/google_fonts.dart';
 
 class AppShellPage extends StatelessWidget {
   const AppShellPage({
@@ -13,60 +13,108 @@ class AppShellPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final location = GoRouterState.of(context).matchedLocation;
-    final destinations = const ['/app', '/bookings', '/profile'];
-
+    const destinations = ['/app', '/bookings', '/profile'];
     final matchedIndex = destinations.indexWhere((path) => path == location);
     final index = matchedIndex < 0 ? 0 : matchedIndex;
 
     return Scaffold(
+      backgroundColor: const Color(0xFFFAFAF7),
       body: child,
       bottomNavigationBar: SafeArea(
         top: false,
-        minimum: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(28),
-          child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
-            child: Container(
-              decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.88),
-                borderRadius: BorderRadius.circular(28),
-                border: Border.all(color: Theme.of(context).colorScheme.outlineVariant.withValues(alpha: 0.35)),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.06),
-                    blurRadius: 24,
-                    offset: const Offset(0, 8),
-                  ),
-                ],
-              ),
-              child: NavigationBar(
-                backgroundColor: Colors.transparent,
-                elevation: 0,
-                selectedIndex: index,
-                onDestinationSelected: (selected) {
-                  context.go(destinations[selected]);
-                },
-                destinations: const [
-                  NavigationDestination(
-                    icon: Icon(Icons.explore_outlined),
-                    selectedIcon: Icon(Icons.explore_rounded),
-                    label: 'Home',
-                  ),
-                  NavigationDestination(
-                    icon: Icon(Icons.receipt_long_outlined),
-                    selectedIcon: Icon(Icons.receipt_long_rounded),
-                    label: 'Bookings',
-                  ),
-                  NavigationDestination(
-                    icon: Icon(Icons.person_outline_rounded),
-                    selectedIcon: Icon(Icons.person_rounded),
-                    label: 'Profile',
-                  ),
-                ],
+        child: Container(
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            border: Border(
+              top: BorderSide(
+                color: Color(0xFFE8E5DE),
+                width: 0.5,
               ),
             ),
           ),
+          child: Row(
+            children: [
+              Expanded(
+                child: _NavItem(
+                  label: 'Home',
+                  activeIcon: Icons.explore_rounded,
+                  inactiveIcon: Icons.explore_outlined,
+                  isSelected: index == 0,
+                  destination: destinations[0],
+                ),
+              ),
+              Expanded(
+                child: _NavItem(
+                  label: 'Bookings',
+                  activeIcon: Icons.receipt_long_rounded,
+                  inactiveIcon: Icons.receipt_long_outlined,
+                  isSelected: index == 1,
+                  destination: destinations[1],
+                ),
+              ),
+              Expanded(
+                child: _NavItem(
+                  label: 'Profile',
+                  activeIcon: Icons.person_rounded,
+                  inactiveIcon: Icons.person_outline_rounded,
+                  isSelected: index == 2,
+                  destination: destinations[2],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _NavItem extends StatelessWidget {
+  const _NavItem({
+    required this.label,
+    required this.activeIcon,
+    required this.inactiveIcon,
+    required this.isSelected,
+    required this.destination,
+  });
+
+  final String label;
+  final IconData activeIcon;
+  final IconData inactiveIcon;
+  final bool isSelected;
+  final String destination;
+
+  @override
+  Widget build(BuildContext context) {
+    const activeColor = Color(0xFFC6A769);
+    const inactiveColor = Color(0xFF999999);
+    final color = isSelected ? activeColor : inactiveColor;
+
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () => context.go(destination),
+      child: Container(
+        height: 56,
+        alignment: Alignment.center,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              isSelected ? activeIcon : inactiveIcon,
+              size: 22,
+              color: color,
+            ),
+            const SizedBox(height: 4),
+            Text(
+              label,
+              style: GoogleFonts.inter(
+                fontSize: 10.5,
+                fontWeight: FontWeight.w600,
+                color: color,
+              ),
+            ),
+          ],
         ),
       ),
     );

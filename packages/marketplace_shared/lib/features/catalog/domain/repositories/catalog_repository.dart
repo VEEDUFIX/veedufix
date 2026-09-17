@@ -5,11 +5,13 @@ class HomeCatalogResult {
     required this.categories,
     required this.trending,
     required this.recommended,
+    this.featured = const [],
   });
 
   final List<CatalogCategory> categories;
   final List<CatalogService> trending;
   final List<CatalogService> recommended;
+  final List<CatalogService> featured;
 }
 
 abstract class CatalogRepository {

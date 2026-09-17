@@ -10,6 +10,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../data/saved_addresses_api.dart';
 import 'map_location_picker_page.dart';
+import '../providers/selected_location_provider.dart';
 
 class SavedAddressesPage extends ConsumerStatefulWidget {
   const SavedAddressesPage({super.key});
@@ -90,11 +91,14 @@ class _SavedAddressesPageState extends ConsumerState<SavedAddressesPage> {
         _isSaving = true;
       });
 
-      if (existing == null) {
-        await _api.createAddress(result.toJson());
-      } else {
-        await _api.updateAddress(existing.id, result.toJson());
-      }
+      final savedAddress = existing == null
+          ? await _api.createAddress(result.toJson())
+          : await _api.updateAddress(existing.id, result.toJson());
+      await ref.read(selectedLocationProvider.notifier).setLocation(
+            latitude: savedAddress.lat,
+            longitude: savedAddress.lng,
+            label: '${savedAddress.addressLine1}, ${savedAddress.city}',
+          );
       await _loadAddresses();
     } catch (error) {
       if (!mounted) {
@@ -144,7 +148,12 @@ class _SavedAddressesPageState extends ConsumerState<SavedAddressesPage> {
 
   Future<void> _setDefaultAddress(SavedAddressItem address) async {
     try {
-      await _api.setDefaultAddress(address.id);
+      final selectedAddress = await _api.setDefaultAddress(address.id);
+      await ref.read(selectedLocationProvider.notifier).setLocation(
+            latitude: selectedAddress.lat,
+            longitude: selectedAddress.lng,
+            label: '${selectedAddress.addressLine1}, ${selectedAddress.city}',
+          );
       await _loadAddresses();
     } catch (error) {
       if (!mounted) {

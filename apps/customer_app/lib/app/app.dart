@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -9,6 +10,7 @@ import 'package:marketplace_shared/marketplace_shared.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
 import '../core/realtime/realtime_socket_service.dart';
+import '../features/auth/providers/guest_mode_provider.dart';
 import 'router.dart';
 
 class AppBootstrap extends ConsumerStatefulWidget {
@@ -24,6 +26,9 @@ class _AppBootstrapState extends ConsumerState<AppBootstrap> {
   StreamSubscription? _notificationSubscription;
   StreamSubscription<Map<String, dynamic>>? _notificationTapSubscription;
   StreamSubscription<String>? _tokenRefreshSubscription;
+  StreamSubscription<User?>? _firebaseAuthSubscription;
+  Timer? _backendSessionRenewalTimer;
+  bool _isRecoveringBackendSession = false;
   String? _activeUserId;
   Map<String, dynamic>? _pendingNotificationTap;
   late final bool _isFirebaseConfigured;
@@ -46,6 +51,14 @@ class _AppBootstrapState extends ConsumerState<AppBootstrap> {
     _tokenRefreshSubscription = FirebaseMessaging.instance.onTokenRefresh.listen((_) {
       unawaited(_registerDeviceToken());
     });
+    _firebaseAuthSubscription = FirebaseAuth.instance.idTokenChanges().listen((_) {
+      unawaited(_restoreBackendSessionFromFirebase());
+    });
+    // The API access token expires after 15 minutes. Renew it while the app
+    // is active so the customer never reaches a forced-login state.
+    _backendSessionRenewalTimer = Timer.periodic(const Duration(minutes: 10), (_) {
+      unawaited(_restoreBackendSessionFromFirebase(force: true));
+    });
   }
 
   @override
@@ -54,8 +67,41 @@ class _AppBootstrapState extends ConsumerState<AppBootstrap> {
     _notificationTapSubscription = null;
     _tokenRefreshSubscription?.cancel();
     _tokenRefreshSubscription = null;
+    _firebaseAuthSubscription?.cancel();
+    _firebaseAuthSubscription = null;
+    _backendSessionRenewalTimer?.cancel();
+    _backendSessionRenewalTimer = null;
     _disposeNotificationSocket();
     super.dispose();
+  }
+
+  Future<void> _restoreBackendSessionFromFirebase({bool force = false}) async {
+    if (!_isFirebaseConfigured || _isRecoveringBackendSession) {
+      return;
+    }
+    if (ref.read(guestModeProvider) ||
+        (!force && ref.read(authControllerProvider).valueOrNull != null)) {
+      return;
+    }
+
+    final firebaseUser = FirebaseAuth.instance.currentUser;
+    if (firebaseUser == null) {
+      return;
+    }
+
+    _isRecoveringBackendSession = true;
+    try {
+      final idToken = await firebaseUser.getIdToken(true);
+      if (idToken != null) {
+        await ref
+            .read(authControllerProvider.notifier)
+            .refreshFirebasePhoneSession(idToken: idToken);
+      }
+    } catch (_) {
+      // The login screen remains available if Firebase cannot restore the API session.
+    } finally {
+      _isRecoveringBackendSession = false;
+    }
   }
 
   void _disposeNotificationSocket() {
@@ -210,6 +256,8 @@ class _AppBootstrapState extends ConsumerState<AppBootstrap> {
     ref.listen<AsyncValue<AuthSession?>>(authControllerProvider, (_, next) {
       if (next.valueOrNull != null) {
         _tryHandlePendingNotificationTap();
+      } else if (next.hasValue) {
+        unawaited(_restoreBackendSessionFromFirebase());
       }
     });
     final router = ref.watch(routerProvider);

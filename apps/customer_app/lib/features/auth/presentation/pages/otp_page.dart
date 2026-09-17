@@ -9,6 +9,8 @@ import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:marketplace_shared/marketplace_shared.dart';
 
+import '../../providers/guest_mode_provider.dart';
+
 class OtpPage extends ConsumerStatefulWidget {
   const OtpPage({super.key});
 
@@ -85,6 +87,9 @@ class _OtpPageState extends ConsumerState<OtpPage> {
   String _friendlyError(Object error) {
     if (error is DioException) {
       final data = error.response?.data;
+      if (error.response?.statusCode == 429) {
+        return 'Too many requests in a short time. Please wait a few minutes, then try again.';
+      }
       if (data is Map && data['message'] != null) {
         return data['message'].toString();
       }
@@ -212,6 +217,7 @@ class _OtpPageState extends ConsumerState<OtpPage> {
             idToken: idToken,
             name: args['name'] as String?,
           );
+      ref.read(guestModeProvider.notifier).state = false;
       if (!mounted) return;
       context.go('/app');
     } catch (e) {
@@ -249,6 +255,7 @@ class _OtpPageState extends ConsumerState<OtpPage> {
           idToken: idToken,
           name: args['name'] as String?,
         );
+    ref.read(guestModeProvider.notifier).state = false;
     if (mounted) context.go('/app');
   }
 

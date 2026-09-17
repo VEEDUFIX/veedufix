@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:marketplace_shared/marketplace_shared.dart';
@@ -100,9 +101,12 @@ class SettingsPage extends ConsumerWidget {
           const SizedBox(height: 48),
           Center(
             child: TapScale(
-              onTap: () {
-                ref.read(authControllerProvider.notifier).signOut();
-                context.go('/login');
+              onTap: () async {
+                await FirebaseAuth.instance.signOut();
+                await ref.read(authControllerProvider.notifier).signOut();
+                if (context.mounted) {
+                  context.go('/login');
+                }
               },
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
@@ -48,15 +49,25 @@ class ProfilePage extends ConsumerWidget {
     final completion = user == null ? 0.72 : 0.88;
     final unreadNotifications = ref.watch(notificationsUnreadCountProvider).valueOrNull ?? 0;
 
+    if (user == null) {
+      return const _GuestProfileSignIn();
+    }
+
     return Scaffold(
+      backgroundColor: const Color(0xFFFAFAF7),
       body: ListView(
-        padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+        padding: EdgeInsets.fromLTRB(
+          20,
+          MediaQuery.paddingOf(context).top + 16,
+          20,
+          24,
+        ),
         children: [
           Row(
             children: [
               Expanded(
                 child: Text(
-                  'Profile',
+                  'Account',
                   style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                         fontWeight: FontWeight.w900,
                         letterSpacing: -0.5,
@@ -78,56 +89,9 @@ class ProfilePage extends ConsumerWidget {
             ],
           ),
           const SizedBox(height: 18),
-          PremiumCard(
-            child: Padding(
-              padding: const EdgeInsets.all(18),
-              child: Row(
-                children: [
-                  CircleAvatar(
-                    radius: 30,
-                    backgroundColor: Theme.of(context).colorScheme.primaryContainer,
-                    child: Text(
-                      _initial(user?.name),
-                      style: TextStyle(
-                        fontWeight: FontWeight.w900,
-                        color: Theme.of(context).colorScheme.primary,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Expanded(
-                              child: Text(
-                                user?.name ?? 'Guest',
-                                style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                                      fontWeight: FontWeight.w900,
-                                    ),
-                              ),
-                            ),
-                            const Icon(Icons.verified_rounded, size: 18, color: Color(0xFF10B981)),
-                          ],
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          user?.role ?? 'CUSTOMER',
-                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                color: Theme.of(context).colorScheme.onSurfaceVariant,
-                              ),
-                        ),
-                        const SizedBox(height: 10),
-                        LinearProgressIndicator(value: completion, minHeight: 8),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
+          _ProfileHeroCard(user: user, completion: completion),
+          const SizedBox(height: 12),
+          _AccountStatsRow(completion: completion),
           const SizedBox(height: 14),
           _CompletionCard(value: completion),
           const SizedBox(height: 18),
@@ -137,7 +101,7 @@ class ProfilePage extends ConsumerWidget {
           ),
           const SizedBox(height: 12),
           _ProfileTile(
-            icon: Icons.location_on_outlined,
+            icon: Icons.location_on_rounded,
             title: 'Saved addresses',
             subtitle: 'Home, work, and alternate locations',
             onTap: () => context.push('/addresses'),
@@ -154,18 +118,6 @@ class ProfilePage extends ConsumerWidget {
             title: 'My Wallet',
             subtitle: 'View your credits, debits, and balance',
             onTap: () => context.push('/wallet'),
-          ),
-          _ProfileTile(
-            icon: Icons.card_giftcard_rounded,
-            title: 'Wallet & Referrals',
-            subtitle: 'Credits, rewards, and referral code',
-            onTap: () => context.push('/referral'),
-          ),
-          _ProfileTile(
-            icon: Icons.home_outlined,
-            title: 'Saved addresses',
-            subtitle: 'Manage delivery and service locations',
-            onTap: () => context.push('/addresses'),
           ),
           _ProfileTile(
             icon: Icons.bookmark_outline_rounded,
@@ -189,13 +141,16 @@ class ProfilePage extends ConsumerWidget {
           ),
           const SizedBox(height: 18),
           const PremiumSectionHeader(
-            title: 'Preferences',
-            subtitle: 'Control how the experience feels and behaves.',
+            title: 'Rewards',
+            subtitle: 'Credits, referrals, and offers for repeat bookings.',
           ),
           const SizedBox(height: 12),
-          const _PreferenceRow(label: 'Notifications', value: 'Enabled'),
-          const _PreferenceRow(label: 'Language', value: 'English'),
-          const _PreferenceRow(label: 'Theme', value: 'System'),
+          _ProfileTile(
+            icon: Icons.card_giftcard_rounded,
+            title: 'Wallet & Referrals',
+            subtitle: 'Credits, rewards, and referral code',
+            onTap: () => context.push('/referral'),
+          ),
           const SizedBox(height: 18),
           const PremiumSectionHeader(
             title: 'Security',
@@ -207,7 +162,10 @@ class ProfilePage extends ConsumerWidget {
           ),
           const SizedBox(height: 18),
           FilledButton.icon(
-            onPressed: () => ref.read(authControllerProvider.notifier).signOut(),
+            onPressed: () async {
+              await FirebaseAuth.instance.signOut();
+              await ref.read(authControllerProvider.notifier).signOut();
+            },
             icon: const Icon(Icons.logout_rounded),
             label: const Text('Sign out'),
           ),
@@ -216,12 +174,6 @@ class ProfilePage extends ConsumerWidget {
     );
   }
 
-  String _initial(String? name) {
-    if (name == null || name.isEmpty) {
-      return 'U';
-    }
-    return name[0].toUpperCase();
-  }
 }
 
 class _SecuritySessionsCard extends ConsumerWidget {
@@ -317,6 +269,250 @@ class _SecuritySessionsCard extends ConsumerWidget {
                 ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _GuestProfileSignIn extends StatelessWidget {
+  const _GuestProfileSignIn();
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFFFAFAF7),
+      body: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Spacer(),
+              Container(
+                width: 78,
+                height: 78,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF111111),
+                  borderRadius: BorderRadius.circular(24),
+                ),
+                child: const Icon(
+                  Icons.person_rounded,
+                  color: Color(0xFFC6A769),
+                  size: 38,
+                ),
+              ),
+              const SizedBox(height: 24),
+              Text(
+                'Sign in to manage your account',
+                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                      fontWeight: FontWeight.w900,
+                      color: const Color(0xFF111111),
+                    ),
+              ),
+              const SizedBox(height: 10),
+              Text(
+                'View bookings, saved addresses, wallet credits, referrals, and support in one place.',
+                style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                      color: const Color(0xFF666666),
+                      height: 1.45,
+                    ),
+              ),
+              const SizedBox(height: 28),
+              FilledButton(
+                onPressed: () => context.go('/login'),
+                child: const Text('Sign in'),
+              ),
+              const SizedBox(height: 12),
+              TextButton(
+                onPressed: () => context.go('/app'),
+                child: const Text('Continue browsing'),
+              ),
+              const Spacer(),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ProfileHeroCard extends StatelessWidget {
+  const _ProfileHeroCard({
+    required this.user,
+    required this.completion,
+  });
+
+  final AuthUser user;
+  final double completion;
+
+  @override
+  Widget build(BuildContext context) {
+    final phone = user.phone?.trim();
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: const Color(0xFF111111),
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.14),
+            blurRadius: 24,
+            offset: const Offset(0, 12),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          CircleAvatar(
+            radius: 34,
+            backgroundColor: const Color(0xFFC6A769),
+            backgroundImage:
+                user.avatarUrl?.isNotEmpty == true ? NetworkImage(user.avatarUrl!) : null,
+            child: user.avatarUrl?.isNotEmpty == true
+                ? null
+                : Text(
+                    _initial(user.name),
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w900,
+                      color: Color(0xFF111111),
+                      fontSize: 24,
+                    ),
+                  ),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        user.name.trim().isEmpty ? 'Customer' : user.name.trim(),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                              fontWeight: FontWeight.w900,
+                              color: Colors.white,
+                            ),
+                      ),
+                    ),
+                    const Icon(Icons.verified_rounded, size: 18, color: Color(0xFF22C55E)),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  phone?.isNotEmpty == true ? phone! : 'Phone verified customer',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: Colors.white.withValues(alpha: 0.72),
+                        fontWeight: FontWeight.w600,
+                      ),
+                ),
+                const SizedBox(height: 14),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(99),
+                  child: LinearProgressIndicator(
+                    value: completion,
+                    minHeight: 7,
+                    backgroundColor: Colors.white.withValues(alpha: 0.14),
+                    valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFFC6A769)),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _initial(String? name) {
+    if (name == null || name.trim().isEmpty) {
+      return 'U';
+    }
+    return name.trim()[0].toUpperCase();
+  }
+}
+
+class _AccountStatsRow extends StatelessWidget {
+  const _AccountStatsRow({required this.completion});
+
+  final double completion;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(
+          child: _AccountStatCard(
+            label: 'Profile',
+            value: '${(completion * 100).round()}%',
+            icon: Icons.insights_rounded,
+          ),
+        ),
+        const SizedBox(width: 10),
+        const Expanded(
+          child: _AccountStatCard(
+            label: 'Support',
+            value: '24/7',
+            icon: Icons.support_agent_rounded,
+          ),
+        ),
+        const SizedBox(width: 10),
+        const Expanded(
+          child: _AccountStatCard(
+            label: 'Rewards',
+            value: 'Live',
+            icon: Icons.card_giftcard_rounded,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _AccountStatCard extends StatelessWidget {
+  const _AccountStatCard({
+    required this.label,
+    required this.value,
+    required this.icon,
+  });
+
+  final String label;
+  final String value;
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) {
+    return PremiumCard(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+        child: Column(
+          children: [
+            Icon(icon, size: 18, color: const Color(0xFFC6A769)),
+            const SizedBox(height: 7),
+            Text(
+              value,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w900,
+                  ),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    fontWeight: FontWeight.w700,
+                  ),
+            ),
+          ],
         ),
       ),
     );
@@ -449,35 +645,3 @@ class _ProfileTile extends StatelessWidget {
   }
 }
 
-class _PreferenceRow extends StatelessWidget {
-  const _PreferenceRow({
-    required this.label,
-    required this.value,
-  });
-
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: PremiumCard(
-        child: ListTile(
-          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-          title: Text(
-            label,
-            style: const TextStyle(fontWeight: FontWeight.w800),
-          ),
-          trailing: Text(
-            value,
-            style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                  fontWeight: FontWeight.w700,
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                ),
-          ),
-        ),
-      ),
-    );
-  }
-}

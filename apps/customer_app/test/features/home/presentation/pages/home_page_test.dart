@@ -6,8 +6,8 @@ import 'package:mocktail/mocktail.dart';
 import 'package:marketplace_shared/marketplace_shared.dart';
 
 import 'package:customer_app/features/home/presentation/pages/home_page.dart';
-import 'package:customer_app/features/home/presentation/widgets/home_category_chips.dart';
-import 'package:customer_app/features/home/presentation/widgets/home_service_grid.dart';
+import 'package:customer_app/features/home/presentation/widgets/home_category_tile.dart';
+import 'package:customer_app/features/home/presentation/widgets/home_service_card.dart';
 import 'package:customer_app/features/home/presentation/widgets/home_professionals_section.dart';
 
 class FakeAuthRepository extends Fake implements AuthRepository {
@@ -65,10 +65,7 @@ void main() {
       await tester.pump();
 
       // Verify header is present
-      expect(find.text('What service do you need?'), findsOneWidget);
-      expect(find.text('Quick categories'), findsOneWidget);
-
-      expect(find.byType(CategoryChip), findsNothing);
+      expect(find.byType(HomeCategoryTile), findsNothing);
       expect(find.byType(HomeServiceCard), findsNothing);
       expect(find.byType(ProfessionalCard), findsNothing);
     });
@@ -142,8 +139,8 @@ void main() {
       await tester.pumpAndSettle();
 
       // Check if categories are rendered (near the top)
-      final categoryChipFinder = find.byType(CategoryChip, skipOffstage: false);
-      expect(categoryChipFinder, findsOneWidget);
+      final categoryTileFinder = find.byType(HomeCategoryTile, skipOffstage: false);
+      expect(categoryTileFinder, findsOneWidget);
       expect(find.text('Cleaning', skipOffstage: false), findsWidgets);
 
       // Scroll down to services
@@ -163,12 +160,12 @@ void main() {
       expect(find.text('John Cleaning Services', skipOffstage: false), findsWidgets);
     });
 
-    testWidgets('renders empty state when data is empty', (tester) async {
+    testWidgets('hides empty sections when data is empty', (tester) async {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
             authRepositoryProvider.overrideWithValue(FakeEmptyAuthRepository()),
-            homeCatalogProvider.overrideWith((ref) => 
+            homeCatalogProvider.overrideWith((ref) =>
                   const HomeCatalogResult(categories: [], trending: [], recommended: []),
                 ),
             homeProfessionalsProvider.overrideWith((ref) => const <HomeProfessional>[]),
@@ -181,15 +178,13 @@ void main() {
 
       await tester.pumpAndSettle();
 
-      expect(find.text('No featured categories right now', skipOffstage: false), findsOneWidget);
-      
-      await tester.drag(find.byType(Scrollable).first, const Offset(0, -500));
-      await tester.pumpAndSettle();
-      expect(find.text('No featured services right now', skipOffstage: false), findsOneWidget);
+      // Empty sections should be hidden — no empty state text
+      expect(find.text('No featured categories right now', skipOffstage: false), findsNothing);
+      expect(find.text('No featured services right now', skipOffstage: false), findsNothing);
+      expect(find.text('No professionals available right now', skipOffstage: false), findsNothing);
 
-      await tester.drag(find.byType(Scrollable).first, const Offset(0, -800));
-      await tester.pumpAndSettle();
-      expect(find.text('No professionals available right now.', skipOffstage: false), findsOneWidget);
+      // But trust section should always be visible
+      expect(find.text('Why Veedufix?', skipOffstage: false), findsOneWidget);
     });
   });
 }

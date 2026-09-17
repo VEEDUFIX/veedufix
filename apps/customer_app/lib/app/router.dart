@@ -56,8 +56,22 @@ final routerProvider = Provider<GoRouter>((ref) {
       final isAuthRoute = location == '/login' || location == '/otp';
       final homeRoute = homeRouteForMode(AppMode.customer);
 
+      final requiresCustomerSession =
+          location == '/profile' ||
+          location == '/bookings' ||
+          location.startsWith('/booking/') ||
+          location.startsWith('/invoice/');
+
+      if (session == null && isGuest && requiresCustomerSession) {
+        return '/login';
+      }
+
       if (session == null && !isGuest) {
         return isAuthRoute ? null : '/login';
+      }
+
+      if (session == null && isGuest && isAuthRoute) {
+        return null;
       }
 
       if (location == '/login' || location == '/otp' || location == '/splash') {

@@ -1,3 +1,5 @@
+import 'package:dio/dio.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/widgets/shimmer_placeholder.dart';
@@ -11,7 +13,8 @@ class BookingsPage extends ConsumerStatefulWidget {
   ConsumerState<BookingsPage> createState() => _BookingsPageState();
 }
 
-class _BookingsPageState extends ConsumerState<BookingsPage> with SingleTickerProviderStateMixin {
+class _BookingsPageState extends ConsumerState<BookingsPage>
+    with SingleTickerProviderStateMixin {
   late TabController _tabController;
 
   @override
@@ -29,9 +32,14 @@ class _BookingsPageState extends ConsumerState<BookingsPage> with SingleTickerPr
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    final upcomingBookings = ref.watch(customerBookingsProvider('upcoming')).valueOrNull ?? const <CustomerBooking>[];
-    final completedBookings = ref.watch(customerBookingsProvider('completed')).valueOrNull ?? const <CustomerBooking>[];
+    final upcomingBookings =
+        ref.watch(customerBookingsProvider('upcoming')).valueOrNull ??
+        const <CustomerBooking>[];
+    final completedBookings =
+        ref.watch(customerBookingsProvider('completed')).valueOrNull ??
+        const <CustomerBooking>[];
     return Scaffold(
+      backgroundColor: const Color(0xFFFAFAF7),
       body: SafeArea(
         child: Column(
           children: [
@@ -48,7 +56,8 @@ class _BookingsPageState extends ConsumerState<BookingsPage> with SingleTickerPr
                           children: [
                             Text(
                               'Bookings',
-                              style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                              style: Theme.of(context).textTheme.headlineMedium
+                                  ?.copyWith(
                                     fontWeight: FontWeight.w900,
                                     letterSpacing: -0.5,
                                   ),
@@ -56,7 +65,8 @@ class _BookingsPageState extends ConsumerState<BookingsPage> with SingleTickerPr
                             const SizedBox(height: 4),
                             Text(
                               'Manage active services, track progress, and review past jobs.',
-                              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                              style: Theme.of(context).textTheme.bodyMedium
+                                  ?.copyWith(
                                     color: colorScheme.onSurfaceVariant,
                                   ),
                             ),
@@ -68,18 +78,24 @@ class _BookingsPageState extends ConsumerState<BookingsPage> with SingleTickerPr
                         width: 48,
                         decoration: BoxDecoration(
                           color: colorScheme.surface,
-                          borderRadius: BorderRadius.circular(AbzioTheme.buttonRadius),
+                          borderRadius: BorderRadius.circular(
+                            AbzioTheme.buttonRadius,
+                          ),
                           boxShadow: AbzioTheme.eliteShadow,
                         ),
                         child: IconButton(
                           tooltip: 'Open latest booking or invoice',
                           onPressed: () {
                             if (completedBookings.isNotEmpty) {
-                              context.push('/invoice/${completedBookings.first.id}');
+                              context.push(
+                                '/invoice/${completedBookings.first.id}',
+                              );
                               return;
                             }
                             if (upcomingBookings.isNotEmpty) {
-                              context.push('/booking/${upcomingBookings.first.id}');
+                              context.push(
+                                '/booking/${upcomingBookings.first.id}',
+                              );
                               return;
                             }
                             context.push('/search');
@@ -89,7 +105,7 @@ class _BookingsPageState extends ConsumerState<BookingsPage> with SingleTickerPr
                       ),
                     ],
                   ),
-                  const SizedBox(height: 18),
+                  const SizedBox(height: 16),
                   _BookingsOverviewCard(
                     upcomingCount: upcomingBookings.length,
                     completedCount: completedBookings.length,
@@ -106,14 +122,43 @@ class _BookingsPageState extends ConsumerState<BookingsPage> with SingleTickerPr
                       context.push('/search');
                     },
                   ),
-                  const SizedBox(height: 18),
-                  TabBar(
-                    controller: _tabController,
-                    tabs: const [
-                      Tab(text: 'Upcoming'),
-                      Tab(text: 'Completed'),
-                      Tab(text: 'Cancelled'),
-                    ],
+                  const SizedBox(height: 20),
+                  Container(
+                    height: 46,
+                    padding: const EdgeInsets.all(4),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF0ECE4),
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: TabBar(
+                      controller: _tabController,
+                      dividerColor: Colors.transparent,
+                      indicatorSize: TabBarIndicatorSize.tab,
+                      indicator: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(10),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.06),
+                            blurRadius: 8,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                      labelColor: const Color(0xFF111111),
+                      unselectedLabelColor: const Color(0xFF77736C),
+                      labelStyle: Theme.of(context).textTheme.labelLarge
+                          ?.copyWith(fontWeight: FontWeight.w800),
+                      unselectedLabelStyle: Theme.of(context)
+                          .textTheme
+                          .labelLarge
+                          ?.copyWith(fontWeight: FontWeight.w700),
+                      tabs: const [
+                        Tab(text: 'Upcoming'),
+                        Tab(text: 'Completed'),
+                        Tab(text: 'Cancelled'),
+                      ],
+                    ),
                   ),
                 ],
               ),
@@ -150,10 +195,13 @@ class _BookingsOverviewCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
     final tt = Theme.of(context).textTheme;
 
-    return PremiumGlassCard(
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFF171512),
+        borderRadius: BorderRadius.circular(20),
+      ),
       child: Padding(
         padding: const EdgeInsets.all(18),
         child: Column(
@@ -166,12 +214,12 @@ class _BookingsOverviewCard extends StatelessWidget {
                   width: 50,
                   height: 50,
                   decoration: BoxDecoration(
-                    color: cs.primary.withValues(alpha: 0.12),
+                    color: const Color(0xFFC6A769),
                     borderRadius: BorderRadius.circular(16),
                   ),
                   child: Icon(
                     Icons.calendar_month_rounded,
-                    color: cs.primary,
+                    color: const Color(0xFF171512),
                   ),
                 ),
                 const SizedBox(width: 14),
@@ -180,14 +228,17 @@ class _BookingsOverviewCard extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Your booking hub',
-                        style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+                        'Your services, in one place',
+                        style: tt.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w900,
+                          color: Colors.white,
+                        ),
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        'Keep track of active work, revisit finished services, or book the next job without digging through menus.',
+                        'Track active jobs and revisit completed services.',
                         style: tt.bodyMedium?.copyWith(
-                          color: cs.onSurfaceVariant,
+                          color: Colors.white.withValues(alpha: 0.70),
                         ),
                       ),
                     ],
@@ -196,41 +247,37 @@ class _BookingsOverviewCard extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 14),
-            Wrap(
-              spacing: 10,
-              runSpacing: 10,
+            Row(
               children: [
-                _BookingSummaryPill(
-                  label: 'Upcoming',
-                  value: '$upcomingCount',
-                  icon: Icons.event_available_rounded,
-                ),
+                _BookingSummaryPill(label: 'Upcoming', value: '$upcomingCount'),
+                const SizedBox(width: 10),
                 _BookingSummaryPill(
                   label: 'Completed',
                   value: '$completedCount',
-                  icon: Icons.task_alt_rounded,
                 ),
-                const _BookingSummaryPill(
-                  label: 'Fast access',
-                  value: 'Invoices',
-                  icon: Icons.receipt_long_rounded,
-                ),
+                const SizedBox(width: 10),
+                const _BookingSummaryPill(label: 'Invoices', value: 'Ready'),
               ],
             ),
             const SizedBox(height: 14),
-            Wrap(
-              spacing: 10,
-              runSpacing: 10,
+            Row(
               children: [
-                FilledButton.icon(
-                  onPressed: onBookNow,
-                  icon: const Icon(Icons.search_rounded, size: 18),
-                  label: const Text('Book now'),
+                Expanded(
+                  child: FilledButton.icon(
+                    onPressed: onBookNow,
+                    icon: const Icon(Icons.search_rounded, size: 18),
+                    label: const Text('Book a service'),
+                  ),
                 ),
-                OutlinedButton.icon(
+                const SizedBox(width: 10),
+                IconButton(
+                  tooltip: 'Open latest booking',
                   onPressed: onOpenLatest,
-                  icon: const Icon(Icons.open_in_new_rounded, size: 18),
-                  label: const Text('Open latest'),
+                  style: IconButton.styleFrom(
+                    foregroundColor: Colors.white,
+                    backgroundColor: Colors.white.withValues(alpha: 0.12),
+                  ),
+                  icon: const Icon(Icons.arrow_forward_rounded),
                 ),
               ],
             ),
@@ -242,55 +289,47 @@ class _BookingsOverviewCard extends StatelessWidget {
 }
 
 class _BookingSummaryPill extends StatelessWidget {
-  const _BookingSummaryPill({
-    required this.label,
-    required this.value,
-    required this.icon,
-  });
+  const _BookingSummaryPill({required this.label, required this.value});
 
   final String label;
   final String value;
-  final IconData icon;
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
     final tt = Theme.of(context).textTheme;
 
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
-        color: cs.surfaceContainerHighest.withValues(alpha: 0.55),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.25)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(icon, size: 15, color: cs.primary),
-              const SizedBox(width: 6),
-              Text(
-                label,
-                style: tt.labelMedium?.copyWith(
-                  color: cs.onSurfaceVariant,
-                  fontWeight: FontWeight.w700,
-                ),
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: tt.labelSmall?.copyWith(
+                color: Colors.white.withValues(alpha: 0.60),
+                fontWeight: FontWeight.w700,
               ),
-            ],
-          ),
-          const SizedBox(height: 2),
-          Text(
-            value,
-            style: tt.titleMedium?.copyWith(
-              fontWeight: FontWeight.w900,
-              color: cs.onSurface,
             ),
-          ),
-        ],
+            const SizedBox(height: 2),
+            Text(
+              value,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: tt.titleMedium?.copyWith(
+                fontWeight: FontWeight.w900,
+                color: Colors.white,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -298,7 +337,7 @@ class _BookingSummaryPill extends StatelessWidget {
 
 class _BookingsTab extends ConsumerWidget {
   const _BookingsTab({required this.status});
-  
+
   final String status;
 
   @override
@@ -323,15 +362,17 @@ class _BookingsTab extends ConsumerWidget {
                           width: 50,
                           height: 50,
                           decoration: BoxDecoration(
-                            color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.12),
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.primary.withValues(alpha: 0.12),
                             borderRadius: BorderRadius.circular(16),
                           ),
                           child: Icon(
                             status == 'upcoming'
                                 ? Icons.event_available_rounded
                                 : status == 'completed'
-                                    ? Icons.task_alt_rounded
-                                    : Icons.event_busy_rounded,
+                                ? Icons.task_alt_rounded
+                                : Icons.event_busy_rounded,
                             color: Theme.of(context).colorScheme.primary,
                           ),
                         ),
@@ -344,21 +385,23 @@ class _BookingsTab extends ConsumerWidget {
                                 status == 'upcoming'
                                     ? 'No upcoming jobs'
                                     : status == 'completed'
-                                        ? 'Nothing completed yet'
-                                        : 'No cancelled bookings',
-                                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                      fontWeight: FontWeight.w800,
-                                    ),
+                                    ? 'Nothing completed yet'
+                                    : 'No cancelled bookings',
+                                style: Theme.of(context).textTheme.titleMedium
+                                    ?.copyWith(fontWeight: FontWeight.w800),
                               ),
                               const SizedBox(height: 4),
                               Text(
                                 status == 'upcoming'
                                     ? 'Book a service and it will appear here.'
                                     : status == 'completed'
-                                        ? 'Completed jobs will show here with invoice access and ratings.'
-                                        : 'If a booking is cancelled, the reason and refund status will appear here.',
-                                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                    ? 'Completed jobs will show here with invoice access and ratings.'
+                                    : 'If a booking is cancelled, the reason and refund status will appear here.',
+                                style: Theme.of(context).textTheme.bodyMedium
+                                    ?.copyWith(
+                                      color: Theme.of(
+                                        context,
+                                      ).colorScheme.onSurfaceVariant,
                                       height: 1.45,
                                     ),
                               ),
@@ -369,12 +412,20 @@ class _BookingsTab extends ConsumerWidget {
                                 children: [
                                   FilledButton.icon(
                                     onPressed: () => context.push('/search'),
-                                    icon: const Icon(Icons.search_rounded, size: 18),
+                                    icon: const Icon(
+                                      Icons.search_rounded,
+                                      size: 18,
+                                    ),
                                     label: const Text('Book now'),
                                   ),
                                   OutlinedButton.icon(
-                                    onPressed: () => ref.refresh(customerBookingsProvider(status).future),
-                                    icon: const Icon(Icons.refresh_rounded, size: 18),
+                                    onPressed: () => ref.refresh(
+                                      customerBookingsProvider(status).future,
+                                    ),
+                                    icon: const Icon(
+                                      Icons.refresh_rounded,
+                                      size: 18,
+                                    ),
                                     label: const Text('Refresh view'),
                                   ),
                                 ],
@@ -421,7 +472,9 @@ class _BookingsTab extends ConsumerWidget {
                           width: 50,
                           height: 50,
                           decoration: BoxDecoration(
-                            color: Theme.of(context).colorScheme.error.withValues(alpha: 0.12),
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.error.withValues(alpha: 0.12),
                             borderRadius: BorderRadius.circular(16),
                           ),
                           child: Icon(
@@ -436,15 +489,17 @@ class _BookingsTab extends ConsumerWidget {
                             children: [
                               Text(
                                 'Could not load bookings',
-                                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                      fontWeight: FontWeight.w800,
-                                    ),
+                                style: Theme.of(context).textTheme.titleMedium
+                                    ?.copyWith(fontWeight: FontWeight.w800),
                               ),
                               const SizedBox(height: 4),
                               Text(
-                                'We could not fetch your bookings right now. Try again in a moment or pull to refresh.',
-                                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                _bookingErrorMessage(error),
+                                style: Theme.of(context).textTheme.bodyMedium
+                                    ?.copyWith(
+                                      color: Theme.of(
+                                        context,
+                                      ).colorScheme.onSurfaceVariant,
                                       height: 1.45,
                                     ),
                               ),
@@ -454,10 +509,23 @@ class _BookingsTab extends ConsumerWidget {
                       ],
                     ),
                     const SizedBox(height: 14),
-                    FilledButton.icon(
-                      onPressed: () => ref.refresh(customerBookingsProvider(status).future),
-                      icon: const Icon(Icons.refresh_rounded, size: 18),
-                      label: const Text('Try again'),
+                    Row(
+                      children: [
+                        FilledButton.icon(
+                          onPressed: () => ref.refresh(
+                            customerBookingsProvider(status).future,
+                          ),
+                          icon: const Icon(Icons.refresh_rounded, size: 18),
+                          label: const Text('Try again'),
+                        ),
+                        if (_isUnauthorized(error)) ...[
+                          const SizedBox(width: 10),
+                          OutlinedButton(
+                            onPressed: () => _restoreSession(context, ref),
+                            child: const Text('Restore session'),
+                          ),
+                        ],
+                      ],
                     ),
                   ],
                 ),
@@ -467,6 +535,63 @@ class _BookingsTab extends ConsumerWidget {
         ),
       ),
     );
+  }
+
+  String _bookingErrorMessage(Object error) {
+    if (error is DioException) {
+      final statusCode = error.response?.statusCode;
+      final data = error.response?.data;
+      final serverMessage = data is Map ? data['message']?.toString() : null;
+
+      if (statusCode == 401) {
+        return 'Your sign-in session has expired. Please sign in again to see your bookings.';
+      }
+      if (statusCode == 403) {
+        return 'This account does not have access to customer bookings.';
+      }
+      if (statusCode != null && statusCode >= 500) {
+        return 'Our booking service is temporarily unavailable. Please try again shortly.';
+      }
+      if (error.type == DioExceptionType.connectionTimeout ||
+          error.type == DioExceptionType.receiveTimeout ||
+          error.type == DioExceptionType.connectionError) {
+        return 'Check your internet connection, then try again.';
+      }
+      if (serverMessage != null && serverMessage.trim().isNotEmpty) {
+        return serverMessage;
+      }
+    }
+    return 'We could not fetch your bookings right now. Pull down to refresh or try again.';
+  }
+
+  bool _isUnauthorized(Object error) {
+    return error is DioException && error.response?.statusCode == 401;
+  }
+
+  Future<void> _restoreSession(BuildContext context, WidgetRef ref) async {
+    final firebaseUser = FirebaseAuth.instance.currentUser;
+    if (firebaseUser == null) {
+      if (context.mounted) {
+        context.go('/login');
+      }
+      return;
+    }
+
+    try {
+      final idToken = await firebaseUser.getIdToken(true);
+      if (idToken == null) {
+        throw StateError('Firebase did not return an identity token');
+      }
+      await ref
+          .read(authControllerProvider.notifier)
+          .refreshFirebasePhoneSession(idToken: idToken);
+      ref.invalidate(customerBookingsProvider(status));
+    } catch (_) {
+      await ref.read(authControllerProvider.notifier).signOut();
+      if (context.mounted) {
+        context.go('/login');
+      }
+    }
   }
 }
 
@@ -489,9 +614,17 @@ class _SkeletonCard extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      ShimmerPlaceholder(width: 120, height: 16, borderRadius: 4),
+                      ShimmerPlaceholder(
+                        width: 120,
+                        height: 16,
+                        borderRadius: 4,
+                      ),
                       SizedBox(height: 8),
-                      ShimmerPlaceholder(width: 80, height: 12, borderRadius: 4),
+                      ShimmerPlaceholder(
+                        width: 80,
+                        height: 12,
+                        borderRadius: 4,
+                      ),
                     ],
                   ),
                 ),
@@ -499,7 +632,11 @@ class _SkeletonCard extends StatelessWidget {
               ],
             ),
             SizedBox(height: 16),
-            ShimmerPlaceholder(width: double.infinity, height: 1, borderRadius: 0),
+            ShimmerPlaceholder(
+              width: double.infinity,
+              height: 1,
+              borderRadius: 0,
+            ),
             SizedBox(height: 16),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -537,9 +674,24 @@ class _BookingCard extends ConsumerWidget {
   }
 
   String _formatDate(DateTime date) {
-    final months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    final months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
     final month = months[date.month - 1];
-    final hour = date.hour == 0 ? 12 : (date.hour > 12 ? date.hour - 12 : date.hour);
+    final hour = date.hour == 0
+        ? 12
+        : (date.hour > 12 ? date.hour - 12 : date.hour);
     final amPm = date.hour >= 12 ? 'PM' : 'AM';
     final min = date.minute.toString().padLeft(2, '0');
     return '${date.day} $month ${date.year}, $hour:$min $amPm';
@@ -576,9 +728,14 @@ class _BookingCard extends ConsumerWidget {
                         width: 52,
                         decoration: BoxDecoration(
                           color: statusColor.withValues(alpha: 0.12),
-                          borderRadius: BorderRadius.circular(AbzioTheme.buttonRadius),
+                          borderRadius: BorderRadius.circular(
+                            AbzioTheme.buttonRadius,
+                          ),
                         ),
-                        child: Icon(Icons.home_repair_service_rounded, color: statusColor),
+                        child: Icon(
+                          Icons.home_repair_service_rounded,
+                          color: statusColor,
+                        ),
                       ),
                     ],
                   ),
@@ -589,18 +746,22 @@ class _BookingCard extends ConsumerWidget {
                       children: [
                         Text(
                           booking.serviceName,
-                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                fontWeight: FontWeight.w800,
-                              ),
+                          style: Theme.of(context).textTheme.titleMedium
+                              ?.copyWith(fontWeight: FontWeight.w800),
                         ),
                         const SizedBox(height: 4),
                         Row(
                           children: [
-                            Icon(Icons.calendar_today_rounded, size: 14, color: colorScheme.onSurfaceVariant),
+                            Icon(
+                              Icons.calendar_today_rounded,
+                              size: 14,
+                              color: colorScheme.onSurfaceVariant,
+                            ),
                             const SizedBox(width: 6),
                             Text(
                               _formatDate(booking.scheduledAt.toLocal()),
-                              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                              style: Theme.of(context).textTheme.bodyMedium
+                                  ?.copyWith(
                                     color: colorScheme.onSurfaceVariant,
                                   ),
                             ),
@@ -610,7 +771,10 @@ class _BookingCard extends ConsumerWidget {
                     ),
                   ),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 6,
+                    ),
                     decoration: BoxDecoration(
                       color: statusColor.withValues(alpha: 0.12),
                       borderRadius: BorderRadius.circular(999),
@@ -618,9 +782,9 @@ class _BookingCard extends ConsumerWidget {
                     child: Text(
                       booking.status,
                       style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                            fontWeight: FontWeight.w800,
-                            color: statusColor,
-                          ),
+                        fontWeight: FontWeight.w800,
+                        color: statusColor,
+                      ),
                     ),
                   ),
                 ],
@@ -630,14 +794,20 @@ class _BookingCard extends ConsumerWidget {
               const SizedBox(height: 12),
               Row(
                 children: [
-                  Icon(Icons.location_on_outlined, size: 16, color: colorScheme.onSurfaceVariant),
+                  Icon(
+                    Icons.location_on_outlined,
+                    size: 16,
+                    color: colorScheme.onSurfaceVariant,
+                  ),
                   const SizedBox(width: 6),
                   Expanded(
                     child: Text(
-                      booking.addressLabel ?? booking.cityName ?? 'Address not specified',
+                      booking.addressLabel ??
+                          booking.cityName ??
+                          'Address not specified',
                       style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                            color: colorScheme.onSurfaceVariant,
-                          ),
+                        color: colorScheme.onSurfaceVariant,
+                      ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -645,9 +815,9 @@ class _BookingCard extends ConsumerWidget {
                   Text(
                     '₹${booking.totalAmount.toStringAsFixed(0)}',
                     style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.w900,
-                          color: colorScheme.primary,
-                        ),
+                      fontWeight: FontWeight.w900,
+                      color: colorScheme.primary,
+                    ),
                   ),
                 ],
               ),
@@ -665,26 +835,32 @@ class _BookingCard extends ConsumerWidget {
                         imageUrl: booking.worker!.avatarUrl,
                         radius: 16,
                         backgroundColor: colorScheme.primaryContainer,
-                        fallback: Icon(Icons.person_rounded, size: 18, color: colorScheme.primary),
+                        fallback: Icon(
+                          Icons.person_rounded,
+                          size: 18,
+                          color: colorScheme.primary,
+                        ),
                       ),
                       const SizedBox(width: 10),
                       Expanded(
                         child: Text(
                           booking.worker!.name,
-                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                fontWeight: FontWeight.w600,
-                              ),
+                          style: Theme.of(context).textTheme.bodyMedium
+                              ?.copyWith(fontWeight: FontWeight.w600),
                         ),
                       ),
                       Row(
                         children: [
-                          Icon(Icons.star_rounded, size: 16, color: Colors.amber.shade600),
+                          Icon(
+                            Icons.star_rounded,
+                            size: 16,
+                            color: Colors.amber.shade600,
+                          ),
                           const SizedBox(width: 4),
                           Text(
                             booking.worker!.rating.toStringAsFixed(1),
-                            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                  fontWeight: FontWeight.w700,
-                                ),
+                            style: Theme.of(context).textTheme.bodyMedium
+                                ?.copyWith(fontWeight: FontWeight.w700),
                           ),
                         ],
                       ),
@@ -709,11 +885,16 @@ class _BookingCard extends ConsumerWidget {
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          const Icon(Icons.refresh_rounded, color: Colors.white, size: 18),
+                          const Icon(
+                            Icons.refresh_rounded,
+                            color: Colors.white,
+                            size: 18,
+                          ),
                           const SizedBox(width: 8),
                           Text(
                             'Book again',
-                            style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                            style: Theme.of(context).textTheme.titleSmall
+                                ?.copyWith(
                                   color: Colors.white,
                                   fontWeight: FontWeight.w800,
                                 ),

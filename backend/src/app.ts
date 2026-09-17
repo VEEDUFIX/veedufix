@@ -94,7 +94,10 @@ export function createApp() {
     app.use(
       rateLimit({
         windowMs: 15 * 60 * 1000,
-        limit: env.NODE_ENV === "production" ? 100 : 1000,
+        // Mobile clients make several parallel catalog, notification, and
+        // session calls. Keep the global guard broad and rely on the tighter
+        // endpoint-specific limits for OTP and token abuse protection.
+        limit: env.NODE_ENV === "production" ? 1000 : 1000,
         standardHeaders: true,
         legacyHeaders: false
       })
