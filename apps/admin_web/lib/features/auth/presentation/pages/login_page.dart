@@ -23,6 +23,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
   StreamSubscription<GoogleSignInAccount?>? _authSubscription;
   bool _isSigningIn = false;
   bool _suppressNextSignOut = false;
+  bool _isGoogleButtonAvailable = true;
   String? _initError;
 
   String _friendlyAuthError(Object? error) {
@@ -63,6 +64,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
         }
         setState(() {
           _isSigningIn = false;
+          _isGoogleButtonAvailable = false;
           _initError = 'Google sign-in failed to initialize.';
         });
         ScaffoldMessenger.of(context).showSnackBar(
@@ -75,6 +77,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
     );
 
     if (environment.googleServerClientId.isEmpty) {
+      _isGoogleButtonAvailable = false;
       _initError = 'Google sign-in is not configured for this environment.';
       return;
     }
@@ -85,6 +88,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
           return null;
         }
         setState(() {
+          _isGoogleButtonAvailable = false;
           _initError = 'Unable to initialize Google sign-in.';
         });
         return null;
@@ -334,7 +338,8 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                                     children: [
                                       Positioned.fill(
                                         child: IgnorePointer(
-                                          ignoring: _isSigningIn || _initError != null,
+                                          ignoring: _isSigningIn ||
+                                              !_isGoogleButtonAvailable,
                                           child: Opacity(
                                             opacity: _isSigningIn ? 0.35 : 1,
                                             child: (GoogleSignInPlatform.instance
