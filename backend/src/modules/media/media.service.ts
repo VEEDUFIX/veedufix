@@ -53,6 +53,13 @@ async function uploadMediaAsset(
   };
 }
 
+export async function uploadCatalogImage(userId: string, file: UploadedFile) {
+  return uploadMediaAsset(file, {
+    folder: cloudinaryFolder("catalog", userId),
+    publicId: buildPublicId("catalog-image", userId)
+  });
+}
+
 export async function uploadAvatarImage(userId: string, file: UploadedFile) {
   const result = await uploadMediaAsset(file, {
     folder: cloudinaryFolder("avatars", userId),

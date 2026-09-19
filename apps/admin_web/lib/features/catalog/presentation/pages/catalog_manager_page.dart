@@ -1,6 +1,8 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -1156,15 +1158,18 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
             FilledButton(
               onPressed: () {
                 if (!formKey.currentState!.validate()) return;
-                Navigator.of(dialogContext).pop({
+                final payload = <String, dynamic>{
                   'type': typeController.text,
                   'title': titleController.text.trim(),
-                  'cityId': cityIdController.text.trim().isEmpty ? null : cityIdController.text.trim(),
-                  'description': descriptionController.text.trim().isEmpty ? null : descriptionController.text.trim(),
                   'currency': 'INR',
                   'price': double.tryParse(priceController.text.trim()) ?? service.startingPrice,
                   'priority': int.tryParse(priorityController.text.trim()) ?? 0,
-                });
+                };
+                final cityId = cityIdController.text.trim();
+                final description = descriptionController.text.trim();
+                if (cityId.isNotEmpty) payload['cityId'] = cityId;
+                if (description.isNotEmpty) payload['description'] = description;
+                Navigator.of(dialogContext).pop(payload);
               },
               child: const Text('Save'),
             ),
@@ -2939,6 +2944,66 @@ class _ServiceDetailPageState extends ConsumerState<ServiceDetailPage> {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
   }
 
+  Future<void> _addServiceImage(_AdminService service) async {
+    final altController = TextEditingController(text: service.name);
+    try {
+      final payload = await showDialog<Map<String, dynamic>>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('Add service image'),
+          content: SizedBox(
+            width: 520,
+            child: TextField(
+              controller: altController,
+              decoration: const InputDecoration(labelText: 'Alt text'),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () {
+                Navigator.pop(dialogContext, {
+                  'altText': altController.text.trim().isEmpty
+                      ? service.name
+                      : altController.text.trim(),
+                });
+              },
+              child: const Text('Choose image'),
+            ),
+          ],
+        ),
+      );
+      if (payload == null) return;
+
+      final picked = await FilePicker.platform.pickFiles(
+        type: FileType.image,
+        withData: true,
+      );
+      if (picked == null || picked.files.single.bytes == null) return;
+
+      final upload = await _api.uploadCatalogImage(
+        picked.files.single.bytes!,
+        picked.files.single.name,
+      );
+      await _api.addServiceImages(service.id, [
+        {
+          'url': upload['url'],
+          'altText': payload['altText'],
+          'isPrimary': true,
+        },
+      ]);
+      await _reload();
+      await _showMessage('Service image added');
+    } catch (error) {
+      await _showMessage('Unable to add service image: $error');
+    } finally {
+      altController.dispose();
+    }
+  }
+
   Future<Map<String, dynamic>?> _showServiceEditor(_CatalogSnapshot snapshot, _AdminService existing) {
     final formKey = GlobalKey<FormState>();
     final selectedCategoryId = ValueNotifier<String>(existing.categoryId);
@@ -3339,6 +3404,11 @@ class _ServiceDetailPageState extends ConsumerState<ServiceDetailPage> {
                     icon: Icon(service.isActive ? Icons.visibility_off_rounded : Icons.visibility_rounded),
                     label: Text(service.isActive ? 'Disable' : 'Enable'),
                   ),
+                  OutlinedButton.icon(
+                    onPressed: () => _addServiceImage(service),
+                    icon: const Icon(Icons.add_photo_alternate_rounded),
+                    label: const Text('Add image'),
+                  ),
                 ],
               ),
               const SizedBox(height: 18),
@@ -3609,6 +3679,20 @@ class _CatalogAdminApi {
 
   Future<void> addPricingRule(String serviceId, Map<String, dynamic> data) async {
     await _dio.post('/admin/catalog/services/$serviceId/pricing-rules', data: data);
+  }
+
+  Future<void> addServiceImages(String serviceId, List<Map<String, dynamic>> images) async {
+    await _dio.post('/admin/catalog/services/$serviceId/images', data: {'images': images});
+  }
+
+  Future<Map<String, dynamic>> uploadCatalogImage(Uint8List bytes, String fileName) async {
+    final response = await _dio.post<Map<String, dynamic>>(
+      '/media/catalog',
+      data: FormData.fromMap({
+        'file': MultipartFile.fromBytes(bytes, filename: fileName),
+      }),
+    );
+    return response.data ?? <String, dynamic>{};
   }
 
   Future<Map<String, dynamic>> exportCatalog() async {

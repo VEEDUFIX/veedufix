@@ -88,6 +88,7 @@ class AuthController extends AsyncNotifier<AuthSession?> {
 
   Future<void> signInWithFirebasePhone({
     required String idToken,
+    String role = 'CUSTOMER',
     String? name,
     String? referralCode,
   }) async {
@@ -95,6 +96,7 @@ class AuthController extends AsyncNotifier<AuthSession?> {
     try {
       final session = await _repository.signInWithFirebasePhone(
         idToken: idToken,
+        role: role,
         name: name,
         referralCode: referralCode,
       );

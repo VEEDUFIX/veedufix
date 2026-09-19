@@ -12,6 +12,7 @@ export const verifyOtpSchema = z.object({
     channel: z.enum(["PHONE", "EMAIL"]),
     identifier: z.string().min(3).max(128),
     otp: z.string().min(4).max(8),
+    role: z.enum(["CUSTOMER", "WORKER"]).default("CUSTOMER"),
     name: z.string().min(2).max(120).optional(),
     referralCode: z.string().optional()
   })
@@ -33,6 +34,7 @@ export const authProviderSchema = z.object({
 export const firebasePhoneAuthSchema = z.object({
   body: z.object({
     idToken: z.string().min(20),
+    role: z.enum(["CUSTOMER", "WORKER"]).default("CUSTOMER"),
     name: z.string().min(2).max(120).optional(),
     referralCode: z.string().optional()
   })

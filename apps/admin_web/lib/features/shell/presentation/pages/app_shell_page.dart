@@ -1,6 +1,7 @@
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -57,7 +58,11 @@ class _AppShellPageState extends ConsumerState<AppShellPage> {
     final textPrimary = cs.onSurface;
     final textMuted = cs.onSurfaceVariant;
 
-    return Scaffold(
+    return CallbackShortcuts(
+      bindings: <ShortcutActivator, VoidCallback>{
+        const SingleActivator(LogicalKeyboardKey.keyK, control: true): () => _openQuickLauncher(context),
+      },
+      child: Scaffold(
       backgroundColor: Colors.transparent,
       body: Row(
         children: [
@@ -229,6 +234,24 @@ class _AppShellPageState extends ConsumerState<AppShellPage> {
                             Icons.my_location_outlined,
                             Icons.my_location_rounded,
                             'Service Areas',
+                            location,
+                            showExpanded,
+                          ),
+                          _buildCategoryHeader(
+                              'Marketing', showExpanded, textMuted),
+                          _buildNavItem(
+                            '/marketing/hero-carousel',
+                            Icons.view_carousel_outlined,
+                            Icons.view_carousel_rounded,
+                            'Hero Carousel',
+                            location,
+                            showExpanded,
+                          ),
+                          _buildNavItem(
+                            '/marketing/advertisements',
+                            Icons.campaign_outlined,
+                            Icons.campaign_rounded,
+                            'Advertisements',
                             location,
                             showExpanded,
                           ),
@@ -425,6 +448,7 @@ class _AppShellPageState extends ConsumerState<AppShellPage> {
           ),
         ],
       ),
+      ),
     );
   }
 
@@ -440,7 +464,8 @@ class _AppShellPageState extends ConsumerState<AppShellPage> {
       _QuickAction('Worker Review', '/worker-review', Icons.how_to_reg_rounded),
       _QuickAction('Workers', '/workers', Icons.people_rounded),
       _QuickAction('Catalog', '/catalog', Icons.category_rounded),
-      _QuickAction('Hero carousel', '/catalog?view=hero', Icons.view_carousel_rounded),
+      _QuickAction('Hero carousel', '/marketing/hero-carousel', Icons.view_carousel_rounded),
+      _QuickAction('Advertisements', '/marketing/advertisements', Icons.campaign_rounded),
       _QuickAction(
           'Service Areas', '/service-areas', Icons.my_location_rounded),
       _QuickAction('Finance', '/finance', Icons.account_balance_rounded),

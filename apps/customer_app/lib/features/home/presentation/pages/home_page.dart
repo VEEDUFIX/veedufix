@@ -4,18 +4,17 @@ import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:marketplace_shared/marketplace_shared.dart';
 
-import '../../../../core/widgets/shimmer_placeholder.dart';
 import '../../../../core/widgets/liquid_refresh.dart';
-import '../../../search/presentation/widgets/ai_assistant_sheet.dart';
+import '../../../../core/widgets/shimmer_placeholder.dart';
 import '../../../profile/presentation/providers/selected_location_provider.dart';
-
-import '../widgets/home_header.dart';
-import '../widgets/home_search_bar.dart';
-import '../widgets/home_section_label.dart';
+import '../../../search/presentation/widgets/ai_assistant_sheet.dart';
 import '../widgets/home_category_tile.dart';
-import '../widgets/home_service_card.dart';
+import '../widgets/home_header.dart';
 import '../widgets/home_hero_banner.dart';
 import '../widgets/home_professionals_section.dart';
+import '../widgets/home_search_bar.dart';
+import '../widgets/home_section_label.dart';
+import '../widgets/home_service_card.dart';
 
 class HomePage extends ConsumerWidget {
   const HomePage({super.key});
@@ -79,7 +78,6 @@ class HomePage extends ConsumerWidget {
               ),
             ),
             const SizedBox(height: 22),
-
             if (isLoading || categories.isNotEmpty) ...[
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -97,13 +95,11 @@ class HomePage extends ConsumerWidget {
               ),
               const SizedBox(height: 28),
             ],
-
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20),
               child: _BigOfferCard(onTap: () => context.push('/search')),
             ),
             const SizedBox(height: 28),
-
             if (isLoading || trending.isNotEmpty) ...[
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -134,7 +130,6 @@ class HomePage extends ConsumerWidget {
                 ),
               const SizedBox(height: 28),
             ],
-
             if (!isLoading && trending.length > 2) ...[
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -154,16 +149,17 @@ class HomePage extends ConsumerWidget {
                   separatorBuilder: (_, __) => const SizedBox(width: 14),
                   itemBuilder: (context, i) => SizedBox(
                     width: 168,
-                    child: HomeServiceCard(service: trending.skip(2).toList()[i]),
+                    child: HomeServiceCard(
+                      service: trending.skip(2).toList()[i],
+                    ),
                   ),
                 ),
               ),
               const SizedBox(height: 28),
             ],
-
             if (!professionalsAsync.isLoading && professionals.isNotEmpty) ...[
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 20),
                 child: HomeSectionLabel(title: 'Nearby professionals'),
               ),
               const SizedBox(height: 16),
@@ -174,7 +170,8 @@ class HomePage extends ConsumerWidget {
                   padding: const EdgeInsets.symmetric(horizontal: 20),
                   itemCount: professionals.length,
                   separatorBuilder: (_, __) => const SizedBox(width: 12),
-                  itemBuilder: (context, i) => ProfessionalCard(professional: professionals[i]),
+                  itemBuilder: (context, i) =>
+                      ProfessionalCard(professional: professionals[i]),
                 ),
               ),
               const SizedBox(height: 28),
@@ -199,7 +196,11 @@ class HomePage extends ConsumerWidget {
       ),
       itemBuilder: (context, _) => const Column(
         children: [
-          ShimmerPlaceholder(width: double.infinity, height: 70, borderRadius: 18),
+          ShimmerPlaceholder(
+            width: double.infinity,
+            height: 70,
+            borderRadius: 18,
+          ),
           SizedBox(height: 9),
           ShimmerPlaceholder(width: 58, height: 12, borderRadius: 6),
         ],
@@ -224,16 +225,31 @@ class HomePage extends ConsumerWidget {
   }
 
   Widget _buildServiceShimmerRail() {
-    return Row(
+    return const Row(
       children: [
-        const Expanded(child: ShimmerPlaceholder(width: double.infinity, height: 232, borderRadius: 18)),
-        const SizedBox(width: 14),
-        const Expanded(child: ShimmerPlaceholder(width: double.infinity, height: 232, borderRadius: 18)),
+        Expanded(
+          child: ShimmerPlaceholder(
+            width: double.infinity,
+            height: 232,
+            borderRadius: 18,
+          ),
+        ),
+        SizedBox(width: 14),
+        Expanded(
+          child: ShimmerPlaceholder(
+            width: double.infinity,
+            height: 232,
+            borderRadius: 18,
+          ),
+        ),
       ],
     );
   }
 
-  String _locationLabel(AuthSession? session, SelectedLocation? selectedLocation) {
+  String _locationLabel(
+    AuthSession? session,
+    SelectedLocation? selectedLocation,
+  ) {
     if (selectedLocation != null) {
       return selectedLocation.title;
     }

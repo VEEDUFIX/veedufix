@@ -34,7 +34,7 @@ class HomeSearchBar extends StatelessWidget {
         ),
         child: Row(
           children: [
-            Icon(
+            const Icon(
               Icons.search_rounded,
               color: AbzioTheme.lightTextSecondary,
               size: 22,

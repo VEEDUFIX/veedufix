@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -60,7 +61,8 @@ class _OtpPageState extends ConsumerState<OtpPage> {
   String get _otpValue => _controllers.map((c) => c.text).join();
 
   Future<void> _verifyOtp(Map<String, dynamic> args) async {
-    if (_otpValue.length < 4) {
+    if (_isLoading) return;
+    if (_otpValue.length < 6) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please enter the complete OTP')),
       );
@@ -69,12 +71,16 @@ class _OtpPageState extends ConsumerState<OtpPage> {
 
     setState(() => _isLoading = true);
     try {
-      await ref.read(authControllerProvider.notifier).verifyOtp(
-            channel: args['channel'] as String,
-            identifier: args['identifier'] as String,
-            otp: _otpValue,
-            role: args['role'] as String,
-            name: args['name'] as String?,
+      final credential = PhoneAuthProvider.credential(
+        verificationId: args['verificationId'] as String,
+        smsCode: _otpValue,
+      );
+      final result = await FirebaseAuth.instance.signInWithCredential(credential);
+      final idToken = await result.user?.getIdToken();
+      if (idToken == null) throw StateError('No Firebase sign-in token');
+      await ref.read(authControllerProvider.notifier).signInWithFirebasePhone(
+            idToken: idToken,
+            role: 'WORKER',
           );
       if (!mounted) return;
       context.go('/worker');
@@ -94,10 +100,9 @@ class _OtpPageState extends ConsumerState<OtpPage> {
     final tt = Theme.of(context).textTheme;
     final args = (GoRouterState.of(context).extra as Map<String, dynamic>?) ??
         <String, dynamic>{
-          'channel': 'PHONE',
           'identifier': '',
           'role': 'WORKER',
-          'name': null,
+          'verificationId': '',
         };
 
     return Scaffold(
@@ -176,10 +181,6 @@ class _OtpPageState extends ConsumerState<OtpPage> {
                         }
                         if (value.isEmpty && i > 0) {
                           _focusNodes[i - 1].requestFocus();
-                        }
-                        // Auto-verify when all 6 digits entered
-                        if (_otpValue.length == 6) {
-                          _verifyOtp(args);
                         }
                       },
                     ),

@@ -67,11 +67,13 @@ class AuthRepositoryImpl implements AuthRepository {
   @override
   Future<AuthSession> signInWithFirebasePhone({
     required String idToken,
+    String role = 'CUSTOMER',
     String? name,
     String? referralCode,
   }) async {
     final session = await _remoteDataSource.signInWithFirebasePhone(
       idToken: idToken,
+      role: role,
       name: name,
       referralCode: referralCode,
     );

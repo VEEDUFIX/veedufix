@@ -63,6 +63,7 @@ class AuthRemoteDataSource {
 
   Future<AuthSessionModel> signInWithFirebasePhone({
     required String idToken,
+    String role = 'CUSTOMER',
     String? name,
     String? referralCode,
   }) async {
@@ -70,6 +71,7 @@ class AuthRemoteDataSource {
       '/auth/firebase-phone',
       data: {
         'idToken': idToken,
+        'role': role,
         if (name != null && name.isNotEmpty) 'name': name,
         if (referralCode != null && referralCode.isNotEmpty)
           'referralCode': referralCode,

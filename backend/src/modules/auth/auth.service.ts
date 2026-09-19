@@ -131,6 +131,7 @@ export async function verifyOtp(input: {
   channel: LoginChannel;
   identifier: string;
   otp: string;
+  role?: "CUSTOMER" | "WORKER";
   name?: string;
   referralCode?: string;
 }): Promise<AuthResult> {
@@ -189,7 +190,7 @@ export async function verifyOtp(input: {
       ...(input.channel === "EMAIL" ? { emailVerifiedAt: new Date() } : { phoneVerifiedAt: new Date() })
     },
     create: {
-      role: "CUSTOMER",
+      role: input.role ?? "CUSTOMER",
       name: input.name ?? "New User",
       ...baseData,
       ...(input.channel === "EMAIL" ? { emailVerifiedAt: new Date() } : { phoneVerifiedAt: new Date() })
@@ -358,6 +359,7 @@ export async function signInWithGoogle(input: {
 
 export async function signInWithFirebasePhone(input: {
   idToken: string;
+  role?: "CUSTOMER" | "WORKER";
   name?: string;
   referralCode?: string;
 }): Promise<AuthResult> {
@@ -378,7 +380,7 @@ export async function signInWithFirebasePhone(input: {
       where: { phone },
       update: { name: input.name || undefined, phoneVerifiedAt: new Date() },
       create: {
-        role: "CUSTOMER",
+        role: input.role ?? "CUSTOMER",
         name: input.name || "New User",
         phone,
         email: null,

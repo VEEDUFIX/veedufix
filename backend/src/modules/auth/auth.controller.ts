@@ -38,6 +38,7 @@ export async function verifyOtpHandler(request: Request, response: Response): Pr
     channel: request.body.channel,
     identifier: request.body.identifier,
     otp: request.body.otp,
+    role: request.body.role,
     name: request.body.name,
     referralCode: request.body.referralCode
   });
@@ -60,6 +61,7 @@ export async function googleAuthHandler(request: Request, response: Response): P
 export async function firebasePhoneAuthHandler(request: Request, response: Response): Promise<void> {
   const result = await signInWithFirebasePhone({
     idToken: request.body.idToken,
+    role: request.body.role,
     name: request.body.name,
     referralCode: request.body.referralCode
   });

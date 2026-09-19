@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 import {
   uploadAvatarImage,
+  uploadCatalogImage,
   uploadWorkerDocumentImage,
   uploadWorkerPortfolioImage
 } from "./media.service.js";
@@ -46,6 +47,19 @@ export async function uploadAvatarHandler(request: Request, response: Response):
   try {
     const result = await uploadAvatarImage(authRequest.auth.userId, authRequest.file);
     response.status(200).json(result);
+  } catch (error) {
+    sendMediaError(response, error);
+  }
+}
+
+export async function uploadCatalogImageHandler(request: Request, response: Response): Promise<void> {
+  const authRequest = request as RequestWithFile;
+  if (!authRequest.file) {
+    response.status(400).json({ message: "A file is required (field name: file)" });
+    return;
+  }
+  try {
+    response.status(201).json(await uploadCatalogImage(authRequest.auth!.userId, authRequest.file));
   } catch (error) {
     sendMediaError(response, error);
   }

@@ -217,9 +217,9 @@ class _BookingsOverviewCard extends StatelessWidget {
                     color: const Color(0xFFC6A769),
                     borderRadius: BorderRadius.circular(16),
                   ),
-                  child: Icon(
+                  child: const Icon(
                     Icons.calendar_month_rounded,
-                    color: const Color(0xFF171512),
+                    color: Color(0xFF171512),
                   ),
                 ),
                 const SizedBox(width: 14),

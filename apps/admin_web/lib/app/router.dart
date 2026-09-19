@@ -120,6 +120,14 @@ final routerProvider = Provider<GoRouter>((ref) {
             ),
           ),
           GoRoute(
+            path: '/marketing/hero-carousel',
+            builder: (context, state) => const CatalogManagerPage(showFeaturedOnly: true),
+          ),
+          GoRoute(
+            path: '/marketing/advertisements',
+            redirect: (context, state) => '/push',
+          ),
+          GoRoute(
             path: '/catalog/categories/:categoryId',
             builder: (context, state) {
               final categoryId = state.pathParameters['categoryId'] ?? '';

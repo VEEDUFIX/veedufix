@@ -746,7 +746,7 @@ class WorkerOnboardingController extends StateNotifier<WorkerOnboardingState> {
   }
 
   void setStep(int step) {
-    state = state.copyWith(currentStep: step.clamp(0, 7));
+    state = state.copyWith(currentStep: step.clamp(0, 13));
   }
 
   void nextStep() {

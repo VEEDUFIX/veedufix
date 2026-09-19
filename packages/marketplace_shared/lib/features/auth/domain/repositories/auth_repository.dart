@@ -22,6 +22,7 @@ abstract class AuthRepository {
 
   Future<AuthSession> signInWithFirebasePhone({
     required String idToken,
+    String role = 'CUSTOMER',
     String? name,
     String? referralCode,
   });

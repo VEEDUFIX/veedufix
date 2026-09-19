@@ -4,6 +4,7 @@ import { requireAuth, requireRole } from "../../middleware/auth.js";
 import { validate } from "../../middleware/validate.js";
 import {
   uploadAvatarHandler,
+  uploadCatalogImageHandler,
   uploadWorkerDocumentHandler,
   uploadWorkerPortfolioHandler
 } from "./media.controller.js";
@@ -73,6 +74,15 @@ mediaRouter.post(
   handleMulterError,
   validate(avatarUploadSchema),
   uploadAvatarHandler
+);
+
+mediaRouter.post(
+  "/catalog",
+  requireAuth,
+  requireRole("ADMIN"),
+  upload.single("file"),
+  handleMulterError,
+  uploadCatalogImageHandler
 );
 
 mediaRouter.post(

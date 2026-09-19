@@ -170,7 +170,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                   const SizedBox(height: 56),
 
                   // ─── Logo ────────────────────────────────────────
-                  Center(
+                  const Center(
                     child: SizedBox(
                       height: 36,
                       child: CustomerLogo(
@@ -205,7 +205,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                   const SizedBox(height: 36),
 
                   // ─── Trust items ─────────────────────────────────
-                  _TrustRow(),
+                  const _TrustRow(),
                   const SizedBox(height: 40),
 
                   // ─── Phone label ─────────────────────────────────
@@ -409,9 +409,9 @@ class _TrustRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
+    return const Column(
       crossAxisAlignment: CrossAxisAlignment.start,
-      children: const [
+      children: [
         _TrustItem(label: 'Verified professionals'),
         SizedBox(height: 8),
         _TrustItem(label: 'Real-time job updates'),
