@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -124,7 +125,13 @@ class _OnboardingFlowPageState extends ConsumerState<OnboardingFlowPage> {
     _fullName.text = profile.fullName ?? '';
     _dateOfBirth = profile.dateOfBirth;
     _dob.text = profile.dateOfBirth == null ? '' : DateFormat.yMMMd().format(profile.dateOfBirth!);
-    _gender = profile.gender;
+    _gender = switch (profile.gender) {
+      'MALE' => 'Male',
+      'FEMALE' => 'Female',
+      'OTHER' => 'Other',
+      'PREFER_NOT_TO_SAY' => 'Prefer not to say',
+      _ => profile.gender,
+    };
     _whatsapp.text = profile.alternatePhone ?? '';
     _emergencyName.text = profile.emergencyContactName ?? '';
     _emergencyPhone.text = profile.emergencyContactPhone ?? '';
@@ -156,7 +163,7 @@ class _OnboardingFlowPageState extends ConsumerState<OnboardingFlowPage> {
       if (step == 2) {
         controller.updatePersonalDetails(
           fullName: _fullName.text.trim(),
-          gender: _gender,
+          gender: _gender?.toUpperCase().replaceAll(' ', '_'),
           dateOfBirth: _dateOfBirth,
           alternatePhone: _whatsapp.text.trim(),
         );
@@ -165,7 +172,10 @@ class _OnboardingFlowPageState extends ConsumerState<OnboardingFlowPage> {
           emergencyContactPhone: _emergencyPhone.text.trim(),
         );
         await controller.savePersonalDetails();
-        await controller.saveEmergencyContact();
+        await controller.saveEmergencyContact(
+          emergencyContactName: _emergencyName.text.trim(),
+          emergencyContactPhone: _emergencyPhone.text.trim(),
+        );
         controller.nextStep();
         return;
       }
@@ -259,11 +269,34 @@ class _OnboardingFlowPageState extends ConsumerState<OnboardingFlowPage> {
         if (skills.isNotEmpty) 'Skills: ${skills.join(', ')}',
         if (qualifications.isNotEmpty) 'Qualifications: ${qualifications.join(', ')}',
         if ((_expertise[category.id]?.text ?? '').trim().isNotEmpty) _expertise[category.id]!.text.trim(),
-      ].join(' - ');
+      ].join(' - ').substring(0, 500);
     }).toList();
   }
 
   String _friendlyError(Object error) {
+    if (error is DioException) {
+      final data = error.response?.data;
+      if (data is Map) {
+        final message = data['message']?.toString().trim();
+        final issues = data['issues'];
+        if (issues is List && issues.isNotEmpty) {
+          final details = issues.map((issue) {
+            if (issue is Map) {
+              final path = issue['path'] ?? issue['field'];
+              final detail = issue['message'] ?? issue['error'];
+              if (path != null && detail != null) return '$path: $detail';
+              return detail?.toString() ?? issue.toString();
+            }
+            return issue.toString();
+          }).join(', ');
+          return message == null || message.isEmpty ? details : '$message: $details';
+        }
+        if (message != null && message.isNotEmpty) return message;
+      }
+      if (error.response?.statusCode == 401 || error.response?.statusCode == 403) {
+        return 'Please sign in again to continue.';
+      }
+    }
     final text = error.toString();
     if (text.contains('401') || text.contains('403')) return 'Please sign in again to continue.';
     if (text.toLowerCase().contains('missing')) return 'Some required details are still missing.';
@@ -307,7 +340,7 @@ class _OnboardingFlowPageState extends ConsumerState<OnboardingFlowPage> {
       context: context,
       initialDate: _dateOfBirth ?? DateTime(now.year - 25, now.month, now.day),
       firstDate: DateTime(now.year - 70),
-      lastDate: DateTime(now.year - 16, now.month, now.day),
+      lastDate: DateTime(now.year - 18, now.month, now.day),
     );
     if (picked == null) return;
     setState(() {
@@ -368,20 +401,20 @@ class _OnboardingFlowPageState extends ConsumerState<OnboardingFlowPage> {
                 controller: _pageController,
                 physics: const NeverScrollableScrollPhysics(),
                 children: [
-                  _screen(state, 'Become a Veedufix Partner', 'Get local service jobs, grow your business, and earn with Veedufix.', Icons.engineering_rounded, _welcome()),
-                  _screen(state, 'Mobile number verified', 'Your OTP sign-in is complete. You can change the number from sign in.', Icons.verified_rounded, _verifiedPhone(state)),
-                  _screen(state, 'Tell us about yourself', 'Keep this simple. Required fields are marked.', Icons.person_rounded, _basicProfile()),
-                  _screen(state, 'What services do you provide?', 'Select all services you are qualified to provide.', Icons.grid_view_rounded, _services(state)),
-                  _screen(state, 'Tell us about your experience', 'Add experience and relevant skills for every selected service.', Icons.workspace_premium_rounded, _experience(state)),
-                  _screen(state, 'Where and when do you work?', 'Set your service area, pincodes, travel radius, and weekly availability.', Icons.location_on_rounded, _workPreferences()),
-                  _screen(state, 'Verify your identity', 'We verify partners to keep Veedufix safe and trustworthy.', Icons.security_rounded, _kyc(state)),
-                  _screen(state, 'Add professional documents', 'Only upload certificates relevant to selected services.', Icons.badge_rounded, _professionalDocs(state)),
-                  _screen(state, 'Set up your payouts', 'Add bank details so Veedufix can send your earnings.', Icons.account_balance_rounded, _bank()),
-                  _screen(state, 'Business information', 'Optional. You can continue as an individual worker.', Icons.storefront_rounded, _business()),
-                  _screen(state, 'Set your service pricing', 'Review platform pricing or add partner charges when enabled.', Icons.currency_rupee_rounded, _pricing()),
-                  _screen(state, 'Safety & trust', 'Confirm these declarations before profile review.', Icons.health_and_safety_rounded, _safety()),
-                  _screen(state, 'Review your information', 'Check everything before submitting for verification.', Icons.fact_check_rounded, _review(state)),
-                  _screen(state, 'Your Partner Profile has been submitted', 'Our team is reviewing your information. We will notify you once verification is complete.', Icons.hourglass_top_rounded, _submitted()),
+                  _screen(0, state, 'Become a Veedufix Partner', 'Get local service jobs, grow your business, and earn with Veedufix.', Icons.engineering_rounded, _welcome()),
+                  _screen(1, state, 'Mobile number verified', 'Your OTP sign-in is complete. You can change the number from sign in.', Icons.verified_rounded, _verifiedPhone(state)),
+                  _screen(2, state, 'Tell us about yourself', 'Keep this simple. Required fields are marked.', Icons.person_rounded, _basicProfile()),
+                  _screen(3, state, 'What services do you provide?', 'Select all services you are qualified to provide.', Icons.grid_view_rounded, _services(state)),
+                  _screen(4, state, 'Tell us about your experience', 'Add experience and relevant skills for every selected service.', Icons.workspace_premium_rounded, _experience(state)),
+                  _screen(5, state, 'Where and when do you work?', 'Set your service area, pincodes, travel radius, and weekly availability.', Icons.location_on_rounded, _workPreferences()),
+                  _screen(6, state, 'Verify your identity', 'We verify partners to keep Veedufix safe and trustworthy.', Icons.security_rounded, _kyc(state)),
+                  _screen(7, state, 'Add professional documents', 'Only upload certificates relevant to selected services.', Icons.badge_rounded, _professionalDocs(state)),
+                  _screen(8, state, 'Set up your payouts', 'Add bank details so Veedufix can send your earnings.', Icons.account_balance_rounded, _bank()),
+                  _screen(9, state, 'Business information', 'Optional. You can continue as an individual worker.', Icons.storefront_rounded, _business()),
+                  _screen(10, state, 'Set your service pricing', 'Review platform pricing or add partner charges when enabled.', Icons.currency_rupee_rounded, _pricing()),
+                  _screen(11, state, 'Safety & trust', 'Confirm these declarations before profile review.', Icons.health_and_safety_rounded, _safety()),
+                  _screen(12, state, 'Review your information', 'Check everything before submitting for verification.', Icons.fact_check_rounded, _review(state)),
+                  _screen(13, state, 'Your Partner Profile has been submitted', 'Our team is reviewing your information. We will notify you once verification is complete.', Icons.hourglass_top_rounded, _submitted()),
                 ],
               ),
             ),
@@ -419,9 +452,9 @@ class _OnboardingFlowPageState extends ConsumerState<OnboardingFlowPage> {
     );
   }
 
-  Widget _screen(WorkerOnboardingState state, String title, String subtitle, IconData icon, Widget child) {
+  Widget _screen(int step, WorkerOnboardingState state, String title, String subtitle, IconData icon, Widget child) {
     return Form(
-      key: _formKeys[state.currentStep],
+      key: _formKeys[step],
       child: ListView(
         padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
         children: [
@@ -493,7 +526,7 @@ class _OnboardingFlowPageState extends ConsumerState<OnboardingFlowPage> {
               readOnly: true,
               onTap: _pickDate,
               decoration: const InputDecoration(labelText: 'Date of birth / age *', prefixIcon: Icon(Icons.cake_rounded)),
-              validator: _required,
+              validator: (value) => _adultDate(value, _dateOfBirth),
             ),
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
@@ -511,11 +544,11 @@ class _OnboardingFlowPageState extends ConsumerState<OnboardingFlowPage> {
               onChanged: (value) => setState(() => _language = value ?? _language),
             ),
             const SizedBox(height: 12),
-            _field(_whatsapp, 'WhatsApp number (optional)', Icons.chat_rounded, keyboardType: TextInputType.phone, requiredMark: false),
+            _field(_whatsapp, 'WhatsApp number (optional)', Icons.chat_rounded, keyboardType: TextInputType.phone, inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(10)], requiredMark: false, validator: _optionalPhone),
             const SizedBox(height: 12),
-            _field(_emergencyName, 'Emergency contact name', Icons.contact_emergency_rounded, validator: _required),
+            _field(_emergencyName, 'Emergency contact name', Icons.contact_emergency_rounded, validator: _contactName),
             const SizedBox(height: 12),
-            _field(_emergencyPhone, 'Emergency contact number', Icons.phone_rounded, keyboardType: TextInputType.phone, validator: _phone),
+            _field(_emergencyPhone, 'Emergency contact number', Icons.phone_rounded, keyboardType: TextInputType.phone, inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(10)], validator: _phone),
           ],
         ),
       );
@@ -1048,7 +1081,17 @@ TextFormField _field(
 }
 
 String? _required(String? value) => (value ?? '').trim().isEmpty ? 'Required' : null;
-String? _phone(String? value) => (value ?? '').replaceAll(RegExp(r'[^0-9]'), '').length < 10 ? 'Enter a valid phone number' : null;
+String? _contactName(String? value) => (value ?? '').trim().length < 2 ? 'Enter at least 2 characters' : null;
+String? _adultDate(String? value, DateTime? dob) {
+  if ((value ?? '').trim().isEmpty) return 'Required';
+  if (dob == null) return 'Select a valid date of birth';
+  final today = DateTime.now();
+  var age = today.year - dob.year;
+  if (today.month < dob.month || (today.month == dob.month && today.day < dob.day)) age--;
+  return age < 18 ? 'You must be at least 18 years old' : null;
+}
+String? _phone(String? value) => (value ?? '').length != 10 ? 'Enter a valid 10-digit phone number' : null;
+String? _optionalPhone(String? value) => (value ?? '').isEmpty || value!.length == 10 ? null : 'Enter a valid 10-digit phone number';
 
 IconData _iconFor(CatalogCategory category) {
   final text = '${category.slug} ${category.name}'.toLowerCase();

@@ -923,6 +923,9 @@ class WorkerOnboardingController extends StateNotifier<WorkerOnboardingState> {
     state = state.copyWith(isSavingProfile: true, errorMessage: null);
     try {
       final alternatePhone = state.draft.alternatePhone.trim();
+      final addressLine1 = state.draft.addressLine1.trim();
+      final city = state.draft.city.trim();
+      final pincode = state.draft.pincode.trim();
       final upiId = state.draft.upiId.trim();
       final bankAccountNumber = state.draft.bankAccountNumber.trim();
       final bankIfsc = state.draft.bankIfsc.trim();
@@ -931,10 +934,10 @@ class WorkerOnboardingController extends StateNotifier<WorkerOnboardingState> {
         fullName: state.draft.fullName.trim(),
         gender: state.draft.gender,
         dateOfBirth: state.draft.dateOfBirth,
-        addressLine1: state.draft.addressLine1.trim(),
+        addressLine1: addressLine1.isEmpty ? null : addressLine1,
         alternatePhone: alternatePhone.isEmpty ? null : alternatePhone,
-        city: state.draft.city.trim(),
-        pincode: state.draft.pincode.trim(),
+        city: city.isEmpty ? null : city,
+        pincode: pincode.isEmpty ? null : pincode,
         upiId: upiId.isEmpty ? null : upiId,
         bankAccountNumber: bankAccountNumber.isEmpty ? null : bankAccountNumber,
         bankIfsc: bankIfsc.isEmpty ? null : bankIfsc,
@@ -1064,12 +1067,17 @@ class WorkerOnboardingController extends StateNotifier<WorkerOnboardingState> {
     }
   }
 
-  Future<void> saveEmergencyContact() async {
+  Future<void> saveEmergencyContact({
+    String? emergencyContactName,
+    String? emergencyContactPhone,
+  }) async {
     state = state.copyWith(isSavingProfile: true, errorMessage: null);
     try {
       final profile = await _api.updateProfile(
-        emergencyContactName: state.draft.emergencyContactName.trim(),
-        emergencyContactPhone: state.draft.emergencyContactPhone.trim(),
+        emergencyContactName:
+            (emergencyContactName ?? state.draft.emergencyContactName).trim(),
+        emergencyContactPhone:
+            (emergencyContactPhone ?? state.draft.emergencyContactPhone).trim(),
       );
       state = state.copyWith(profile: profile);
     } catch (error) {

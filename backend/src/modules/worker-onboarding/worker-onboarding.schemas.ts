@@ -12,7 +12,10 @@ const baseProfileBodySchema = z.object({
   bankIfsc: z.string().trim().min(6).max(20).optional(),
   upiId: z.string().trim().min(3).max(128).optional(),
   aadhaarNumber: z.string().trim().regex(/^\d{12}$/, "Aadhaar number must contain exactly 12 digits").optional(),
-  toolsOwned: z.array(z.string().trim().min(1).max(80)).max(20).optional(),
+  // The worker app stores each selected service's experience summary here.
+  // Keep a generous bound for expertise and qualification text while still
+  // preventing unbounded payloads.
+  toolsOwned: z.array(z.string().trim().min(1).max(500)).max(20).optional(),
   emergencyContactName: z.string().trim().min(2).max(120).optional(),
   emergencyContactPhone: z.string().trim().min(7).max(20).optional(),
   agreementAccepted: z.boolean().optional(),
