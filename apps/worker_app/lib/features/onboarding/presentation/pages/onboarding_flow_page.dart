@@ -138,8 +138,10 @@ class _OnboardingFlowPageState extends ConsumerState<OnboardingFlowPage> {
     _city.text = profile.city ?? '';
     _pincodes.text = profile.pincode ?? '';
     _upi.text = profile.upiId ?? '';
-    _bankAccount.text = profile.bankAccountNumber ?? '';
-    _confirmBankAccount.text = profile.bankAccountNumber ?? '';
+    final bankAccount = profile.bankAccountNumber ?? '';
+    final validBankAccount = RegExp(r'^\d{9,18}$').hasMatch(bankAccount);
+    _bankAccount.text = validBankAccount ? bankAccount : '';
+    _confirmBankAccount.text = validBankAccount ? bankAccount : '';
     _ifsc.text = profile.bankIfsc ?? '';
     _accountHolder.text = profile.fullName ?? '';
     _infoAccurate = profile.agreementAcceptedAt != null;
@@ -734,7 +736,7 @@ class _OnboardingFlowPageState extends ConsumerState<OnboardingFlowPage> {
           children: [
             _field(_accountHolder, 'Account holder name', Icons.person_pin_rounded, validator: _required),
             const SizedBox(height: 12),
-            _field(_bankAccount, 'Bank account number', Icons.account_balance_rounded, keyboardType: TextInputType.number, validator: _required),
+            _field(_bankAccount, 'Bank account number', Icons.account_balance_rounded, keyboardType: TextInputType.number, validator: _bankAccountValidator),
             const SizedBox(height: 12),
             _field(_confirmBankAccount, 'Confirm account number', Icons.check_circle_outline_rounded, keyboardType: TextInputType.number, validator: _required),
             const SizedBox(height: 12),
@@ -1081,6 +1083,11 @@ TextFormField _field(
 }
 
 String? _required(String? value) => (value ?? '').trim().isEmpty ? 'Required' : null;
+String? _bankAccountValidator(String? value) {
+  return RegExp(r'^\d{9,18}$').hasMatch((value ?? '').trim())
+      ? null
+      : 'Enter 9 to 18 digits';
+}
 String? _contactName(String? value) => (value ?? '').trim().length < 2 ? 'Enter at least 2 characters' : null;
 String? _adultDate(String? value, DateTime? dob) {
   if ((value ?? '').trim().isEmpty) return 'Required';

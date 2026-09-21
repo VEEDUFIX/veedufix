@@ -928,6 +928,7 @@ class WorkerOnboardingController extends StateNotifier<WorkerOnboardingState> {
       final pincode = state.draft.pincode.trim();
       final upiId = state.draft.upiId.trim();
       final bankAccountNumber = state.draft.bankAccountNumber.trim();
+      final validBankAccount = RegExp(r'^\d{9,18}$').hasMatch(bankAccountNumber);
       final bankIfsc = state.draft.bankIfsc.trim();
       final aadhaarNumber = state.draft.aadhaarNumber.trim();
       final profile = await _api.updateProfile(
@@ -939,7 +940,7 @@ class WorkerOnboardingController extends StateNotifier<WorkerOnboardingState> {
         city: city.isEmpty ? null : city,
         pincode: pincode.isEmpty ? null : pincode,
         upiId: upiId.isEmpty ? null : upiId,
-        bankAccountNumber: bankAccountNumber.isEmpty ? null : bankAccountNumber,
+        bankAccountNumber: validBankAccount ? bankAccountNumber : null,
         bankIfsc: bankIfsc.isEmpty ? null : bankIfsc,
         aadhaarNumber: aadhaarNumber.isEmpty ? null : aadhaarNumber,
       );
@@ -1204,7 +1205,9 @@ class WorkerOnboardingController extends StateNotifier<WorkerOnboardingState> {
       pincode: profile.pincode ?? '',
       aadhaarNumber: '',
       upiId: profile.upiId ?? '',
-      bankAccountNumber: profile.bankAccountNumber ?? '',
+      bankAccountNumber: RegExp(r'^\d{9,18}$').hasMatch(profile.bankAccountNumber ?? '')
+          ? profile.bankAccountNumber!
+          : '',
       bankIfsc: profile.bankIfsc ?? '',
       toolsOwned: profile.toolsOwned,
       emergencyContactName: profile.emergencyContactName ?? '',
@@ -1267,7 +1270,7 @@ class WorkerOnboardingController extends StateNotifier<WorkerOnboardingState> {
 
     final hasUpi = profile.upiId != null && profile.upiId!.trim().isNotEmpty;
     final hasBankFallback = (profile.bankAccountNumber != null &&
-            profile.bankAccountNumber!.trim().isNotEmpty) &&
+            RegExp(r'^\d{9,18}$').hasMatch(profile.bankAccountNumber!.trim())) &&
         (profile.bankIfsc != null && profile.bankIfsc!.trim().isNotEmpty);
     if (!hasUpi && !hasBankFallback) {
       return 3;

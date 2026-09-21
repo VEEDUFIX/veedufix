@@ -292,7 +292,11 @@ async function getWorkerProfileByIdOrThrow(workerProfileId: string) {
 function missingProfileFields(profile: MinimalWorkerProfile): string[] {
   const missingFields: string[] = [];
   const hasUpi = Boolean(profile.upiId?.trim());
-  const hasBankFallback = Boolean(profile.bankAccountNumber?.trim() && profile.bankIfsc?.trim());
+  const hasBankFallback = Boolean(
+    profile.bankAccountNumber &&
+      /^\d{9,18}$/.test(profile.bankAccountNumber.trim()) &&
+      profile.bankIfsc?.trim()
+  );
 
   if (!profile.fullName?.trim()) missingFields.push("fullName");
   if (!profile.aadhaarNumber?.trim()) missingFields.push("aadhaarNumber");
