@@ -127,7 +127,7 @@ class _AppBootstrapState extends ConsumerState<AppBootstrap>
       scaffoldMessengerKey: _messengerKey,
       builder: (context, child) => AppBackdrop(
         variant: AppBackdropVariant.worker,
-        child: child ?? const SplashPage(mode: AppMode.worker),
+        child: child ?? const SizedBox.shrink(),
       ),
       routerConfig: router,
     );

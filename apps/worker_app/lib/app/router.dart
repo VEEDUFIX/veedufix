@@ -82,7 +82,10 @@ final routerProvider = Provider<GoRouter>((ref) {
     routes: [
       GoRoute(
         path: '/splash',
-        builder: (context, state) => const SplashPage(mode: AppMode.worker),
+        // Authentication still needs a short holding route, but the worker
+        // app already has a native splash. Avoid showing a second branded
+        // splash screen while the session is restored.
+        builder: (context, state) => const SizedBox.shrink(),
       ),
       GoRoute(
         path: '/login',

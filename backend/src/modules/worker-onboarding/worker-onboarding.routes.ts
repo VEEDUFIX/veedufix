@@ -57,8 +57,10 @@ workerOnboardingRouter.get("/documents/aadhaar", validate(workerDocAadhaarSchema
 workerOnboardingRouter.get("/documents/skills/:skillId/certification", validate(workerDocSkillParamsSchema), getOwnSkillCertDocHandler);
 
 adminWorkerReviewRouter.use(requireAuth, requireRole("ADMIN"));
-adminWorkerReviewRouter.get("/:profileId", validate(adminProfileParamsSchema), workerReviewDetailHandler);
+// Static paths must be registered before /:profileId, otherwise Express
+// interprets "pending" as a profile id.
 adminWorkerReviewRouter.get("/pending", validate(pendingReviewQuerySchema), pendingReviewHandler);
+adminWorkerReviewRouter.get("/:profileId", validate(adminProfileParamsSchema), workerReviewDetailHandler);
 adminWorkerReviewRouter.post("/:profileId/approve", validate(adminProfileParamsSchema), approveWorkerHandler);
 adminWorkerReviewRouter.post("/:profileId/reject", validate(rejectProfileSchema), rejectWorkerHandler);
 adminWorkerReviewRouter.post("/:profileId/suspend", validate(suspendProfileSchema), suspendWorkerHandler);

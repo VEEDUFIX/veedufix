@@ -755,7 +755,7 @@ class WorkerOnboardingController extends StateNotifier<WorkerOnboardingState> {
   }
 
   void setStep(int step) {
-    state = state.copyWith(currentStep: step.clamp(0, 13));
+    state = state.copyWith(currentStep: step.clamp(0, 12));
   }
 
   void nextStep() {
@@ -1262,7 +1262,7 @@ class WorkerOnboardingController extends StateNotifier<WorkerOnboardingState> {
   int _resolveInitialStep(WorkerOnboardingProfile profile,
       {required bool editMode, int? step}) {
     if (step != null) {
-      return step.clamp(0, 13);
+      return step.clamp(0, 12);
     }
 
     if (editMode) {

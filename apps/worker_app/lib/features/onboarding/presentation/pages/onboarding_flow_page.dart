@@ -27,7 +27,7 @@ class OnboardingFlowPage extends ConsumerStatefulWidget {
 }
 
 class _OnboardingFlowPageState extends ConsumerState<OnboardingFlowPage> {
-  static const _totalSteps = 14;
+  static const _totalSteps = 13;
 
   final _pageController = PageController();
   final _formKeys = List.generate(_totalSteps, (_) => GlobalKey<FormState>());
@@ -158,11 +158,11 @@ class _OnboardingFlowPageState extends ConsumerState<OnboardingFlowPage> {
     if (!(_formKeys[step].currentState?.validate() ?? true)) return;
 
     try {
-      if (step == 0 || step == 1 || step == 9 || step == 10) {
+      if (step == 0 || step == 8 || step == 9) {
         controller.nextStep();
         return;
       }
-      if (step == 2) {
+      if (step == 1) {
         controller.updatePersonalDetails(
           fullName: _fullName.text.trim(),
           gender: _gender?.toUpperCase().replaceAll(' ', '_'),
@@ -181,7 +181,7 @@ class _OnboardingFlowPageState extends ConsumerState<OnboardingFlowPage> {
         controller.nextStep();
         return;
       }
-      if (step == 3) {
+      if (step == 2) {
         if (state.draft.selectedCategoryIds.isEmpty) {
           _toast('Select at least one service.');
           return;
@@ -190,13 +190,13 @@ class _OnboardingFlowPageState extends ConsumerState<OnboardingFlowPage> {
         controller.nextStep();
         return;
       }
-      if (step == 4) {
+      if (step == 3) {
         controller.updateSkillsDetails(toolsOwned: _experienceSummary(state));
         await controller.saveSkills();
         controller.nextStep();
         return;
       }
-      if (step == 5) {
+      if (step == 4) {
         if (_workingDays.isEmpty) {
           _toast('Select at least one working day.');
           return;
@@ -216,6 +216,7 @@ class _OnboardingFlowPageState extends ConsumerState<OnboardingFlowPage> {
           'FRI': 5,
           'SAT': 6,
         };
+        final formattedHours = '${_from.format(context)}-${_to.format(context)}';
         await controller.saveAvailability(
           slots: _workingDays
               .map((day) => {
@@ -229,7 +230,7 @@ class _OnboardingFlowPageState extends ConsumerState<OnboardingFlowPage> {
           _areas.text.trim(),
           '${_travelKm.text.trim()} km radius',
           _workingDays.join(', '),
-          '${_from.format(context)}-${_to.format(context)}',
+          formattedHours,
           _workType,
           _urgentJobs ? 'Urgent jobs accepted' : 'No urgent jobs',
         ].where((item) => item.trim().isNotEmpty).join(' | ');
@@ -244,7 +245,7 @@ class _OnboardingFlowPageState extends ConsumerState<OnboardingFlowPage> {
         controller.nextStep();
         return;
       }
-      if (step == 6) {
+      if (step == 5) {
         controller.updateIdentityDetails(aadhaarNumber: _aadhaar.text.trim());
         await controller.savePersonalDetails();
         final file = state.draft.aadhaarDocumentFile;
@@ -252,12 +253,12 @@ class _OnboardingFlowPageState extends ConsumerState<OnboardingFlowPage> {
         controller.nextStep();
         return;
       }
-      if (step == 7) {
+      if (step == 6) {
         await controller.saveSkills();
         controller.nextStep();
         return;
       }
-      if (step == 8) {
+      if (step == 7) {
         if (_bankAccount.text.trim() != _confirmBankAccount.text.trim()) {
           _toast('Bank account numbers do not match.');
           return;
@@ -271,7 +272,7 @@ class _OnboardingFlowPageState extends ConsumerState<OnboardingFlowPage> {
         controller.nextStep();
         return;
       }
-      if (step == 11) {
+      if (step == 10) {
         if (!_infoAccurate || !_safetyGuidelines || !_termsAccepted) {
           _toast('Accept the safety declarations.');
           return;
@@ -281,7 +282,7 @@ class _OnboardingFlowPageState extends ConsumerState<OnboardingFlowPage> {
         controller.nextStep();
         return;
       }
-      if (step == 12) {
+      if (step == 11) {
         await controller.submitForReview();
         if (mounted) context.go('/onboarding/status');
         return;
@@ -443,19 +444,18 @@ class _OnboardingFlowPageState extends ConsumerState<OnboardingFlowPage> {
                 physics: const NeverScrollableScrollPhysics(),
                 children: [
                   _screen(0, state, 'Become a Veedufix Partner', 'Get local service jobs, grow your business, and earn with Veedufix.', Icons.engineering_rounded, _welcome()),
-                  _screen(1, state, 'Mobile number verified', 'Your OTP sign-in is complete. You can change the number from sign in.', Icons.verified_rounded, _verifiedPhone(state)),
-                  _screen(2, state, 'Tell us about yourself', 'Keep this simple. Required fields are marked.', Icons.person_rounded, _basicProfile()),
-                  _screen(3, state, 'What services do you provide?', 'Select all services you are qualified to provide.', Icons.grid_view_rounded, _services(state)),
-                  _screen(4, state, 'Tell us about your experience', 'Add experience and relevant skills for every selected service.', Icons.workspace_premium_rounded, _experience(state)),
-                  _screen(5, state, 'Where and when do you work?', 'Set your service area, pincodes, travel radius, and weekly availability.', Icons.location_on_rounded, _workPreferences()),
-                  _screen(6, state, 'Verify your identity', 'We verify partners to keep Veedufix safe and trustworthy.', Icons.security_rounded, _kyc(state)),
-                  _screen(7, state, 'Add professional documents', 'Only upload certificates relevant to selected services.', Icons.badge_rounded, _professionalDocs(state)),
-                  _screen(8, state, 'Set up your payouts', 'Add bank details so Veedufix can send your earnings.', Icons.account_balance_rounded, _bank()),
-                  _screen(9, state, 'Business information', 'Optional. You can continue as an individual worker.', Icons.storefront_rounded, _business()),
-                  _screen(10, state, 'Set your service pricing', 'Review platform pricing or add partner charges when enabled.', Icons.currency_rupee_rounded, _pricing()),
-                  _screen(11, state, 'Safety & trust', 'Confirm these declarations before profile review.', Icons.health_and_safety_rounded, _safety()),
-                  _screen(12, state, 'Review your information', 'Check everything before submitting for verification.', Icons.fact_check_rounded, _review(state)),
-                  _screen(13, state, 'Your Partner Profile has been submitted', 'Our team is reviewing your information. We will notify you once verification is complete.', Icons.hourglass_top_rounded, _submitted()),
+                  _screen(1, state, 'Tell us about yourself', 'Keep this simple. Required fields are marked.', Icons.person_rounded, _basicProfile()),
+                  _screen(2, state, 'What services do you provide?', 'Select all services you are qualified to provide.', Icons.grid_view_rounded, _services(state)),
+                  _screen(3, state, 'Tell us about your experience', 'Add experience and relevant skills for every selected service.', Icons.workspace_premium_rounded, _experience(state)),
+                  _screen(4, state, 'Where and when do you work?', 'Set your service area, pincodes, travel radius, and weekly availability.', Icons.location_on_rounded, _workPreferences()),
+                  _screen(5, state, 'Verify your identity', 'We verify partners to keep Veedufix safe and trustworthy.', Icons.security_rounded, _kyc(state)),
+                  _screen(6, state, 'Add professional documents', 'Only upload certificates relevant to selected services.', Icons.badge_rounded, _professionalDocs(state)),
+                  _screen(7, state, 'Set up your payouts', 'Add bank details so Veedufix can send your earnings.', Icons.account_balance_rounded, _bank()),
+                  _screen(8, state, 'Business information', 'Optional. You can continue as an individual worker.', Icons.storefront_rounded, _business()),
+                  _screen(9, state, 'Set your service pricing', 'Review Veedufix standard pricing before continuing.', Icons.currency_rupee_rounded, _pricing()),
+                  _screen(10, state, 'Safety & trust', 'Confirm these declarations before profile review.', Icons.health_and_safety_rounded, _safety()),
+                  _screen(11, state, 'Review your information', 'Check everything before submitting for verification.', Icons.fact_check_rounded, _review(state)),
+                  _screen(12, state, 'You are almost ready!', 'Your Partner profile has been submitted for verification.', Icons.hourglass_top_rounded, _submitted()),
                 ],
               ),
             ),
@@ -477,9 +477,9 @@ class _OnboardingFlowPageState extends ConsumerState<OnboardingFlowPage> {
                         ? 'Saving...'
                         : state.currentStep == 0
                             ? 'Get Started'
-                            : state.currentStep == 12
+                            : state.currentStep == 11
                                 ? 'Submit for Verification'
-                                : state.currentStep == 13
+                                : state.currentStep == 12
                                     ? 'Go to Dashboard'
                                     : 'Continue',
                     style: const TextStyle(fontWeight: FontWeight.w900),
@@ -526,24 +526,6 @@ class _OnboardingFlowPageState extends ConsumerState<OnboardingFlowPage> {
             const _Benefit(icon: Icons.groups_rounded, label: 'Grow your customer base'),
             const _Benefit(icon: Icons.verified_rounded, label: 'Secure digital payouts'),
             TextButton(onPressed: () => context.go('/login'), child: const Text('Already registered? Sign In')),
-          ],
-        ),
-      );
-
-  Widget _verifiedPhone(WorkerOnboardingState state) => _Panel(
-        child: Column(
-          children: [
-            const _RoundIcon(icon: Icons.check_rounded, color: Color(0xFF16A34A)),
-            const SizedBox(height: 12),
-            Text('Mobile number verified', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900)),
-            const SizedBox(height: 8),
-            Text(state.profile?.phone ?? 'Your mobile number is linked to this account.', textAlign: TextAlign.center),
-            const SizedBox(height: 12),
-            OutlinedButton.icon(
-              onPressed: () => context.go('/login'),
-              icon: const Icon(Icons.edit_rounded),
-              label: const Text('Change mobile number'),
-            ),
           ],
         ),
       );
@@ -1092,14 +1074,6 @@ class _Timeline extends StatelessWidget {
       child: Row(children: [Icon(done ? Icons.check_circle_rounded : active ? Icons.hourglass_top_rounded : Icons.radio_button_unchecked_rounded, color: color), const SizedBox(width: 12), Expanded(child: Text(label, style: const TextStyle(fontWeight: FontWeight.w800)))]),
     );
   }
-}
-
-class _RoundIcon extends StatelessWidget {
-  const _RoundIcon({required this.icon, required this.color});
-  final IconData icon;
-  final Color color;
-  @override
-  Widget build(BuildContext context) => CircleAvatar(radius: 34, backgroundColor: color.withValues(alpha: 0.12), child: Icon(icon, color: color, size: 34));
 }
 
 TextFormField _field(
