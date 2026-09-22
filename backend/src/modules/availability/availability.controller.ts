@@ -21,29 +21,11 @@ function sendError(response: Response, error: unknown): void {
   response.status(500).json({ message: "Unexpected error" });
 }
 
-function requireWorker(request: AuthenticatedRequest, response: Response): boolean {
-  if (!request.auth) {
-    response.status(401).json({ message: "Authentication required" });
-    return false;
-  }
-
-  if (request.auth.role !== "WORKER") {
-    response.status(403).json({ message: "Insufficient permissions" });
-    return false;
-  }
-
-  return true;
-}
-
 export async function setWeeklyAvailabilityHandler(
   request: AuthenticatedRequest,
   response: Response,
   _next: NextFunction
 ): Promise<void> {
-  if (!requireWorker(request, response)) {
-    return;
-  }
-
   try {
     const workerId = await getWorkerProfileIdByUserId(request.auth!.userId);
     const slots = await setWeeklyAvailability(workerId, request.body.slots);
@@ -58,10 +40,6 @@ export async function getMyAvailabilityHandler(
   response: Response,
   _next: NextFunction
 ): Promise<void> {
-  if (!requireWorker(request, response)) {
-    return;
-  }
-
   try {
     const workerId = await getWorkerProfileIdByUserId(request.auth!.userId);
     const slots = await getWorkerAvailability(workerId);
@@ -89,10 +67,6 @@ export async function toggleAvailabilityHandler(
   response: Response,
   _next: NextFunction
 ): Promise<void> {
-  if (!requireWorker(request, response)) {
-    return;
-  }
-
   try {
     const { isAvailable } = request.body as { isAvailable: boolean };
     if (typeof isAvailable !== "boolean") {
