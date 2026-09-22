@@ -15,15 +15,21 @@ export const earningsRouter = Router();
 
 const workerOnly = [requireAuth, requireRole("WORKER")] as const;
 
-earningsRouter.use(...workerOnly);
-earningsRouter.get("/worker/earnings/summary", validate(workerEarningsSummaryQuerySchema), getWorkerEarningsSummaryHandler);
+earningsRouter.get(
+  "/worker/earnings/summary",
+  ...workerOnly,
+  validate(workerEarningsSummaryQuerySchema),
+  getWorkerEarningsSummaryHandler
+);
 earningsRouter.get(
   "/worker/earnings/transactions",
+  ...workerOnly,
   validate(workerEarningsTransactionsQuerySchema),
   getWorkerTransactionHistoryHandler
 );
 earningsRouter.get(
   "/worker/earnings/export/csv",
+  ...workerOnly,
   validate(workerEarningsTransactionsQuerySchema),
   exportWorkerEarningsCsvHandler
 );

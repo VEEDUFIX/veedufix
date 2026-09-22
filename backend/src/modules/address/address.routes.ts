@@ -18,13 +18,15 @@ import {
 
 export const addressRouter = Router();
 
-addressRouter.use(requireAuth, requireRole("CUSTOMER"));
-addressRouter.post("/customer/addresses", validate(createAddressSchema), createAddressHandler);
-addressRouter.get("/customer/addresses", validate(listAddressesSchema), listAddressesHandler);
-addressRouter.put("/customer/addresses/:addressId", validate(updateAddressSchema), updateAddressHandler);
-addressRouter.delete("/customer/addresses/:addressId", validate(deleteAddressSchema), deleteAddressHandler);
+const customerOnly = [requireAuth, requireRole("CUSTOMER")] as const;
+
+addressRouter.post("/customer/addresses", ...customerOnly, validate(createAddressSchema), createAddressHandler);
+addressRouter.get("/customer/addresses", ...customerOnly, validate(listAddressesSchema), listAddressesHandler);
+addressRouter.put("/customer/addresses/:addressId", ...customerOnly, validate(updateAddressSchema), updateAddressHandler);
+addressRouter.delete("/customer/addresses/:addressId", ...customerOnly, validate(deleteAddressSchema), deleteAddressHandler);
 addressRouter.post(
   "/customer/addresses/:addressId/set-default",
+  ...customerOnly,
   validate(setDefaultAddressSchema),
   setDefaultAddressHandler
 );
