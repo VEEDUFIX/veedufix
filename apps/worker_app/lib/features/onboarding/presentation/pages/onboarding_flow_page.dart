@@ -197,17 +197,48 @@ class _OnboardingFlowPageState extends ConsumerState<OnboardingFlowPage> {
         return;
       }
       if (step == 5) {
+        if (_workingDays.isEmpty) {
+          _toast('Select at least one working day.');
+          return;
+        }
+        final startTime = _timeValue(_from);
+        final endTime = _timeValue(_to);
+        if (_minutes(_from) >= _minutes(_to)) {
+          _toast('End time must be later than start time.');
+          return;
+        }
+        const dayNumbers = <String, int>{
+          'SUN': 0,
+          'MON': 1,
+          'TUE': 2,
+          'WED': 3,
+          'THU': 4,
+          'FRI': 5,
+          'SAT': 6,
+        };
+        await controller.saveAvailability(
+          slots: _workingDays
+              .map((day) => {
+                    'dayOfWeek': dayNumbers[day],
+                    'startTime': startTime,
+                    'endTime': endTime,
+                  })
+              .toList(growable: false),
+        );
+        final serviceAreaSummary = [
+          _areas.text.trim(),
+          '${_travelKm.text.trim()} km radius',
+          _workingDays.join(', '),
+          '${_from.format(context)}-${_to.format(context)}',
+          _workType,
+          _urgentJobs ? 'Urgent jobs accepted' : 'No urgent jobs',
+        ].where((item) => item.trim().isNotEmpty).join(' | ');
         controller.updatePersonalDetails(
           city: _city.text.trim(),
           pincode: _pincodes.text.trim(),
-          addressLine1: [
-            _areas.text.trim(),
-            '${_travelKm.text.trim()} km radius',
-            _workingDays.join(', '),
-            '${_from.format(context)}-${_to.format(context)}',
-            _workType,
-            _urgentJobs ? 'Urgent jobs accepted' : 'No urgent jobs',
-          ].where((item) => item.trim().isNotEmpty).join(' | '),
+          addressLine1: serviceAreaSummary.length > 255
+              ? serviceAreaSummary.substring(0, 255)
+              : serviceAreaSummary,
         );
         await controller.savePersonalDetails();
         controller.nextStep();
@@ -261,17 +292,24 @@ class _OnboardingFlowPageState extends ConsumerState<OnboardingFlowPage> {
     }
   }
 
+  String _timeValue(TimeOfDay time) =>
+      '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
+
+  int _minutes(TimeOfDay time) => time.hour * 60 + time.minute;
+
   List<String> _experienceSummary(WorkerOnboardingState state) {
     return _selectedCategories(state).map((category) {
       final skills = _skills[category.id] ?? {};
       final qualifications = _qualifications[category.id] ?? [];
-      return [
+      final summary = [
         category.name,
         if ((_years[category.id]?.text ?? '').trim().isNotEmpty) '${_years[category.id]!.text.trim()} years',
         if (skills.isNotEmpty) 'Skills: ${skills.join(', ')}',
         if (qualifications.isNotEmpty) 'Qualifications: ${qualifications.join(', ')}',
         if ((_expertise[category.id]?.text ?? '').trim().isNotEmpty) _expertise[category.id]!.text.trim(),
-      ].join(' - ').substring(0, 500);
+      ].join(' - ');
+      final limit = summary.length < 500 ? summary.length : 500;
+      return summary.substring(0, limit);
     }).toList();
   }
 
@@ -302,7 +340,8 @@ class _OnboardingFlowPageState extends ConsumerState<OnboardingFlowPage> {
     final text = error.toString();
     if (text.contains('401') || text.contains('403')) return 'Please sign in again to continue.';
     if (text.toLowerCase().contains('missing')) return 'Some required details are still missing.';
-    return 'Could not save this step. Please try again.';
+    final detail = error.toString().replaceFirst('Exception: ', '').trim();
+    return detail.isEmpty ? 'Could not save this step. Please try again.' : detail;
   }
 
   void _toast(String message) {
@@ -697,7 +736,7 @@ class _OnboardingFlowPageState extends ConsumerState<OnboardingFlowPage> {
   Widget _kyc(WorkerOnboardingState state) => _Panel(
         child: Column(
           children: [
-            _field(_aadhaar, 'Aadhaar / accepted ID number', Icons.credit_card_rounded, keyboardType: TextInputType.number, inputFormatters: [FilteringTextInputFormatter.digitsOnly], validator: _required),
+            _field(_aadhaar, 'Aadhaar / accepted ID number', Icons.credit_card_rounded, keyboardType: TextInputType.number, inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(12)], validator: _aadhaarValidator),
             const SizedBox(height: 12),
             _field(_pan, 'PAN (optional)', Icons.badge_outlined, requiredMark: false),
             const SizedBox(height: 12),
@@ -1087,6 +1126,11 @@ String? _bankAccountValidator(String? value) {
   return RegExp(r'^\d{9,18}$').hasMatch((value ?? '').trim())
       ? null
       : 'Enter 9 to 18 digits';
+}
+String? _aadhaarValidator(String? value) {
+  return RegExp(r'^\d{12}$').hasMatch((value ?? '').trim())
+      ? null
+      : 'Enter exactly 12 digits';
 }
 String? _contactName(String? value) => (value ?? '').trim().length < 2 ? 'Enter at least 2 characters' : null;
 String? _adultDate(String? value, DateTime? dob) {

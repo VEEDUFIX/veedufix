@@ -496,6 +496,15 @@ class WorkerOnboardingApi {
     return _parseProfileResponse(response.data);
   }
 
+  Future<void> setWeeklyAvailability({
+    required List<Map<String, dynamic>> slots,
+  }) async {
+    await _dio.post<Map<String, dynamic>>(
+      '/worker/availability',
+      data: {'slots': slots},
+    );
+  }
+
   Future<WorkerOnboardingProfile> submitForReview() async {
     final response = await _dio.post<Map<String, dynamic>>(
       '/worker/onboarding/submit',
@@ -1052,6 +1061,18 @@ class WorkerOnboardingController extends StateNotifier<WorkerOnboardingState> {
     await savePersonalDetails();
   }
 
+  Future<void> saveAvailability({
+    required List<Map<String, dynamic>> slots,
+  }) async {
+    try {
+      await _api.setWeeklyAvailability(slots: slots);
+      await refreshStatus();
+    } catch (error) {
+      state = state.copyWith(errorMessage: _readErrorMessage(error));
+      rethrow;
+    }
+  }
+
   Future<void> saveComplianceDetails() async {
     state = state.copyWith(isSavingProfile: true, errorMessage: null);
     try {
@@ -1241,7 +1262,7 @@ class WorkerOnboardingController extends StateNotifier<WorkerOnboardingState> {
   int _resolveInitialStep(WorkerOnboardingProfile profile,
       {required bool editMode, int? step}) {
     if (step != null) {
-      return step.clamp(0, 7);
+      return step.clamp(0, 13);
     }
 
     if (editMode) {
