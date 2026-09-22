@@ -34,13 +34,13 @@ const calendarDateSchema = z
   });
 
 export const workerEarningsSummaryQuerySchema = z.object({
-  body: emptyObjectSchema,
+  body: emptyObjectSchema.optional().default({}),
   query: emptyObjectSchema,
-  params: emptyObjectSchema
+  params: emptyObjectSchema.optional().default({})
 });
 
 export const workerEarningsTransactionsQuerySchema = z.object({
-  body: emptyObjectSchema,
+  body: emptyObjectSchema.optional().default({}),
   query: z
     .object({
       fromDate: calendarDateSchema.optional(),
@@ -59,5 +59,5 @@ export const workerEarningsTransactionsQuerySchema = z.object({
         });
       }
     }),
-  params: emptyObjectSchema
+  params: emptyObjectSchema.optional().default({})
 });

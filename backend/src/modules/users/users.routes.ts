@@ -84,7 +84,12 @@ usersRouter.get("/me", requireAuth, async (request: AuthenticatedRequest, respon
     where: { id: request.auth!.userId },
     include: {
       city: true,
-      workerProfile: true,
+      workerProfile: {
+        include: {
+          skills: { include: { category: true } },
+          availability: true,
+        },
+      },
       addresses: true
     }
   });
