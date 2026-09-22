@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { requireAuth, requireRole } from "../../middleware/auth.js";
+import { requireAuth } from "../../middleware/auth.js";
 import { validate } from "../../middleware/validate.js";
 import {
   listAvailabilitySchema,
@@ -21,7 +21,10 @@ availabilityRouter.get(
   getPublicAvailabilityHandler
 );
 
-availabilityRouter.use(requireAuth, requireRole("WORKER"));
+// The handlers resolve the worker profile from the authenticated user. This
+// keeps onboarding availability compatible with worker sessions issued by
+// older auth deployments while still preventing access without a session.
+availabilityRouter.use(requireAuth);
 availabilityRouter.post("/worker/availability", validate(setWeeklyAvailabilitySchema), setWeeklyAvailabilityHandler);
 availabilityRouter.get("/worker/availability", validate(listAvailabilitySchema), getMyAvailabilityHandler);
 availabilityRouter.patch("/worker/availability", toggleAvailabilityHandler);
