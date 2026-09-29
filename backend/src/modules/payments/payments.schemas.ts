@@ -3,7 +3,8 @@ import { z } from "zod";
 export const createPaymentOrderSchema = z.object({
   body: z
     .object({
-      cityId: z.string().min(1),
+      cityId: z.string().min(1).optional(),
+      addressId: z.string().trim().min(1).optional(),
       couponCode: z.string().trim().min(1).max(64).optional(),
       items: z
         .array(

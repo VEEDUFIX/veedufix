@@ -198,6 +198,30 @@ function resolveBookingCategoryId(booking: BookingWithDispatchData): string {
   return categoryId;
 }
 
+function resolveBookingCategoryIds(booking: BookingWithDispatchData): string[] {
+  const categoryIds: string[] = booking.services.flatMap((item: any) => {
+    const categoryId: unknown = item.service?.categoryId ?? item.serviceSubcategory?.categoryId;
+    return typeof categoryId === "string" ? [categoryId] : [];
+  });
+  return [...new Set(categoryIds)];
+}
+
+function getIndiaScheduleParts(dateTime: Date): { dayOfWeek: number; minuteOfDay: number } {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Kolkata",
+    weekday: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23"
+  }).formatToParts(dateTime);
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  const dayOfWeek = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].indexOf(values.weekday);
+  return {
+    dayOfWeek,
+    minuteOfDay: Number(values.hour) * 60 + Number(values.minute)
+  };
+}
+
 function resolveBookingLocation(booking: BookingWithDispatchData): { latitude: number; longitude: number } {
   const latitude = toNumber(booking.address.latitude);
   const longitude = toNumber(booking.address.longitude);
@@ -546,8 +570,7 @@ async function filterWorkersAvailableAt(
   }
 
   const workerIds = workers.map((worker) => worker.id);
-  const dayOfWeek = dateTime.getDay();
-  const minuteOfDay = dateTime.getHours() * 60 + dateTime.getMinutes();
+  const { dayOfWeek, minuteOfDay } = getIndiaScheduleParts(dateTime);
 
   // ── Weekly slot check (unchanged) ──────────────────────────────────────────
   const slots = await prisma.workerAvailability.findMany({
@@ -685,7 +708,7 @@ async function getCandidateWorkers(
     includeBusyWorkers?: boolean;
   } = {}
 ): Promise<WorkerPoolCandidate[]> {
-  const categoryId = resolveBookingCategoryId(booking);
+  const categoryIds = resolveBookingCategoryIds(booking);
   const excludedWorkerIds = new Set(excludeWorkerIds);
   const bookingLocation = resolveBookingLocation(booking);
   const searchBounds = getBoundingBox(bookingLocation, RADIUS_STEPS_KM[RADIUS_STEPS_KM.length - 1]);
@@ -709,12 +732,9 @@ async function getCandidateWorkers(
         gte: searchBounds.minLongitude,
         lte: searchBounds.maxLongitude
       },
-      skills: {
-        some: {
-          categoryId,
-          verifiedByAdmin: true
-        }
-      }
+      AND: categoryIds.map((categoryId) => ({
+        skills: { some: { categoryId, verifiedByAdmin: true } }
+      }))
     },
     include: {
       user: {
@@ -1072,6 +1092,105 @@ export async function findAvailableWorkersForSchedule(
   );
 
   return ranked;
+}
+
+export async function previewCustomerScheduleSlots(input: {
+  categoryIds: string[];
+  latitude: number;
+  longitude: number;
+  cityName: string;
+  startDate: string;
+  days: number;
+}): Promise<Array<{ scheduledFor: string; availableProviders: number }>> {
+  const [year, month, day] = input.startDate.split("-").map(Number);
+  const start = new Date(Date.UTC(year, month - 1, day));
+  const previewBooking = {
+    services: input.categoryIds.map((categoryId) => ({ service: { categoryId } })),
+    address: { latitude: input.latitude, longitude: input.longitude },
+    city: { name: input.cityName }
+  } as unknown as BookingWithDispatchData;
+  const candidates = await getCandidateWorkers(previewBooking, [], { includeBusyWorkers: true });
+  if (candidates.length === 0) return [];
+
+  const slotHours = [9, 11, 13, 15, 17];
+  const leadTimeMs = 3 * 60 * 60 * 1000;
+  const proposedTimes: Date[] = [];
+
+  for (let offset = 0; offset < input.days; offset += 1) {
+    const localDate = new Date(start);
+    localDate.setUTCDate(start.getUTCDate() + offset);
+    for (const hour of slotHours) {
+      const scheduledAt = new Date(Date.UTC(
+        localDate.getUTCFullYear(),
+        localDate.getUTCMonth(),
+        localDate.getUTCDate(),
+        hour - 5,
+        -30
+      ));
+      if (scheduledAt.getTime() < Date.now() + leadTimeMs) continue;
+      proposedTimes.push(scheduledAt);
+    }
+  }
+
+  if (proposedTimes.length === 0) return [];
+
+  const workerIds = candidates.map((worker) => worker.id);
+  const dayOfWeeks = [...new Set(proposedTimes.map((dateTime) => getIndiaScheduleParts(dateTime).dayOfWeek))];
+  const rangeStart = new Date(Math.min(...proposedTimes.map((dateTime) => dateTime.getTime())) - 30 * 60 * 1000);
+  const rangeEnd = new Date(Math.max(...proposedTimes.map((dateTime) => dateTime.getTime())) + 30 * 60 * 1000);
+  const [availability, nearbyBookings] = await Promise.all([
+    prisma.workerAvailability.findMany({
+      where: { workerId: { in: workerIds }, dayOfWeek: { in: dayOfWeeks } },
+      select: { workerId: true, dayOfWeek: true, startTime: true, endTime: true }
+    }),
+    prisma.booking.findMany({
+      where: {
+        workerId: { in: workerIds },
+        bookingType: "scheduled",
+        scheduledFor: { gte: rangeStart, lte: rangeEnd },
+        status: { notIn: [...NON_ACTIVE_BOOKING_STATUSES] }
+      },
+      select: { workerId: true, scheduledFor: true }
+    })
+  ]);
+
+  const availabilityByWorkerAndDay = new Map<string, typeof availability>();
+  for (const slot of availability) {
+    const key = `${slot.workerId}:${slot.dayOfWeek}`;
+    const workerSlots = availabilityByWorkerAndDay.get(key) ?? [];
+    workerSlots.push(slot);
+    availabilityByWorkerAndDay.set(key, workerSlots);
+  }
+  const bookingsByWorker = new Map<string, Date[]>();
+  for (const booking of nearbyBookings) {
+    if (!booking.workerId) continue;
+    const workerBookings = bookingsByWorker.get(booking.workerId) ?? [];
+    workerBookings.push(booking.scheduledFor);
+    bookingsByWorker.set(booking.workerId, workerBookings);
+  }
+
+  const slots: Array<{ scheduledFor: string; availableProviders: number }> = [];
+  for (const scheduledAt of proposedTimes) {
+    const { dayOfWeek, minuteOfDay } = getIndiaScheduleParts(scheduledAt);
+    const availableProviders = candidates.filter((worker) => {
+      const workerSlots = availabilityByWorkerAndDay.get(`${worker.id}:${dayOfWeek}`) ?? [];
+      const withinWorkingHours = workerSlots.some((slot) => {
+        const [startHour, startMinute] = slot.startTime.split(":").map(Number);
+        const [endHour, endMinute] = slot.endTime.split(":").map(Number);
+        return minuteOfDay >= startHour * 60 + startMinute && minuteOfDay < endHour * 60 + endMinute;
+      });
+      if (!withinWorkingHours) return false;
+
+      return !(bookingsByWorker.get(worker.id) ?? []).some(
+        (bookingTime) => Math.abs(scheduledAt.getTime() - bookingTime.getTime()) <= 30 * 60 * 1000
+      );
+    }).length;
+    if (availableProviders > 0) {
+      slots.push({ scheduledFor: scheduledAt.toISOString(), availableProviders });
+    }
+  }
+
+  return slots;
 }
 
 async function dispatchWithFallback(

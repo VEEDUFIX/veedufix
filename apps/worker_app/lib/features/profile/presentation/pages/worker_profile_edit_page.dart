@@ -94,6 +94,7 @@ class _WorkerProfileEditPageState extends ConsumerState<WorkerProfileEditPage> {
         data: (profile) {
           _initFromProfile(profile);
           final workerId = profile['id'] as String? ?? '';
+          final isIdentityVerified = profile['verificationStatus'] == 'VERIFIED';
           final publicProfileAsync =
               workerId.isEmpty ? const AsyncValue<WorkerPublicProfile>.loading() : ref.watch(workerPublicProfileProvider(workerId));
           final categoriesAsync = ref.watch(workerSkillCategoriesProvider);
@@ -154,7 +155,11 @@ class _WorkerProfileEditPageState extends ConsumerState<WorkerProfileEditPage> {
                 const SizedBox(height: 8),
                 TextFormField(
                   controller: _nameCtrl,
-                  decoration: _inputDeco(context, hint: 'Your legal full name', icon: Icons.person_rounded),
+                  enabled: !isIdentityVerified,
+                  decoration: _inputDeco(context, hint: 'Your legal full name', icon: Icons.person_rounded).copyWith(
+                    suffixIcon: isIdentityVerified ? const Icon(Icons.lock_outline_rounded) : null,
+                    helperText: isIdentityVerified ? 'Verified identity changes require support review.' : null,
+                  ),
                   validator: (value) => value == null || value.isEmpty ? 'Required' : null,
                 ),
                 const SizedBox(height: 16),
@@ -644,7 +649,8 @@ class _WorkerProfileEditPageState extends ConsumerState<WorkerProfileEditPage> {
       return;
     }
     await ref.read(workerProfileUpdateProvider.notifier).update({
-      'fullName': _nameCtrl.text.trim(),
+      if (ref.read(workerEditProfileProvider).valueOrNull?['verificationStatus'] != 'VERIFIED')
+        'fullName': _nameCtrl.text.trim(),
       if (_displayNameCtrl.text.isNotEmpty) 'displayName': _displayNameCtrl.text.trim(),
       'bio': _bioCtrl.text.trim().isEmpty ? null : _bioCtrl.text.trim(),
       if (_expCtrl.text.isNotEmpty) 'experienceYears': int.parse(_expCtrl.text),

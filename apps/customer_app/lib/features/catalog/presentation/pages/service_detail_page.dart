@@ -310,7 +310,7 @@ class _ServiceDetailView extends ConsumerWidget {
                     child: Text(
                       service.cancellationPolicy?.trim().isNotEmpty == true
                           ? service.cancellationPolicy!.trim()
-                          : 'Free cancellation before 2 hours of your scheduled slot. Late cancellations may incur a charge.',
+                          : 'You can cancel from My Bookings. If a payment was captured, refund eligibility is reviewed separately; cancellation does not issue a refund automatically.',
                       style: textTheme.bodyMedium?.copyWith(height: 1.5),
                     ),
                   ),

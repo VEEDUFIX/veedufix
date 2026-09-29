@@ -50,6 +50,18 @@ class ApiClient {
                   final retryResponse = await dio.fetch(request);
                   handler.resolve(retryResponse);
                   return;
+                } on DioException catch (retryError) {
+                  if (retryError.response?.statusCode == 401) {
+                    try {
+                      await _secureStore.clearTokens();
+                    } catch (_) {
+                      // Session expiry still needs to be surfaced to the app.
+                    }
+                    if (!_sessionExpiredController.isClosed) {
+                      _sessionExpiredController.add(null);
+                    }
+                  }
+                  // Fall through to reject.
                 } catch (_) {
                   // Fall through to reject.
                 }
@@ -58,42 +70,77 @@ class ApiClient {
               return;
             }
 
-            _refreshCompleter = Completer<String?>();
+            final refreshCompleter = Completer<String?>();
+            _refreshCompleter = refreshCompleter;
+            String? nextAccessToken;
+            var invalidateSession = false;
             try {
               final refreshToken = await _secureStore.readRefreshToken();
-              if (refreshToken != null && refreshToken.isNotEmpty) {
+              if (refreshToken == null || refreshToken.isEmpty) {
+                invalidateSession = true;
+              } else {
                 final response = await dio.post<Map<String, dynamic>>(
                   '/auth/refresh',
                   data: {'refreshToken': refreshToken},
                   options: Options(extra: {'skipAuth': true}),
                 );
                 final data = response.data ?? <String, dynamic>{};
-                final nextAccessToken = data['accessToken'] as String?;
+                final accessToken = data['accessToken'] as String?;
                 final nextRefreshToken = data['refreshToken'] as String?;
-                if (nextAccessToken != null && nextRefreshToken != null) {
+                if (accessToken != null && nextRefreshToken != null) {
                   await _secureStore.saveTokens(
-                    accessToken: nextAccessToken,
+                    accessToken: accessToken,
                     refreshToken: nextRefreshToken,
                   );
-                  _refreshCompleter!.complete(nextAccessToken);
-                  _refreshCompleter = null;
-
-                  final request = error.requestOptions;
-                  request.headers['Authorization'] = 'Bearer $nextAccessToken';
-                  request.extra['skipAuth'] = true;
-                  final retryResponse = await dio.fetch(request);
-                  handler.resolve(retryResponse);
-                  return;
+                  nextAccessToken = accessToken;
+                } else {
+                  invalidateSession = true;
                 }
               }
-              // Refresh failed — clear tokens and reject.
-              await _secureStore.clearTokens();
-              _refreshCompleter!.complete(null);
-              _refreshCompleter = null;
+            } on DioException catch (refreshError) {
+              final statusCode = refreshError.response?.statusCode;
+              // Network errors and 5xx responses do not prove the refresh token
+              // is invalid, so retain it for the next request.
+              invalidateSession = statusCode == 401 || statusCode == 403;
             } catch (_) {
-              await _secureStore.clearTokens();
-              _refreshCompleter?.complete(null);
-              _refreshCompleter = null;
+              // Storage and transport failures are transient session failures.
+            }
+
+            if (invalidateSession) {
+              try {
+                await _secureStore.clearTokens();
+              } catch (_) {
+                // Still notify the app; no usable backend session remains.
+              }
+              if (!_sessionExpiredController.isClosed) {
+                _sessionExpiredController.add(null);
+              }
+            }
+
+            _refreshCompleter = null;
+            refreshCompleter.complete(nextAccessToken);
+            if (nextAccessToken != null) {
+              final request = error.requestOptions;
+              request.headers['Authorization'] = 'Bearer $nextAccessToken';
+              request.extra['skipAuth'] = true;
+              try {
+                final retryResponse = await dio.fetch(request);
+                handler.resolve(retryResponse);
+                return;
+              } on DioException catch (retryError) {
+                if (retryError.response?.statusCode == 401) {
+                  try {
+                    await _secureStore.clearTokens();
+                  } catch (_) {
+                    // Session expiry still needs to be surfaced to the app.
+                  }
+                  if (!_sessionExpiredController.isClosed) {
+                    _sessionExpiredController.add(null);
+                  }
+                }
+              } catch (_) {
+                // Keep refreshed credentials when the retried request fails transiently.
+              }
             }
           }
           handler.next(error);
@@ -104,6 +151,10 @@ class ApiClient {
 
   final SecureStore _secureStore;
   final Dio dio;
+  final StreamController<void> _sessionExpiredController =
+      StreamController<void>.broadcast();
+
+  Stream<void> get sessionExpired => _sessionExpiredController.stream;
 
   /// Non-null while a token refresh is in-flight.  Concurrent 401s wait on
   /// this Completer rather than starting a parallel refresh request.

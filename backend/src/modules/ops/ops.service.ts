@@ -1,6 +1,7 @@
 import { BookingStatus, Prisma } from "@prisma/client";
 import { prisma } from "../../lib/prisma.js";
 import { publishNotificationEvent } from "../../lib/realtime.js";
+import { AppError } from "../../lib/app-error.js";
 
 const ACTIVE_JOB_EXECUTION_STATUSES = ["assigned", "arrived", "in_progress"] as const;
 const DEFAULT_ALERT_PAGE_SIZE = 50;
@@ -69,8 +70,15 @@ export type OpsAlert = {
   customerName: string | null;
   amount: number | null;
   createdAt: Date;
+  updatedAt: Date;
+  status: OpsAlertStatus;
+  resolutionNote: string | null;
+  acknowledgedAt: Date | null;
+  resolvedAt: Date | null;
   retryAvailable: boolean;
 };
+
+export type OpsAlertStatus = "open" | "acknowledged" | "resolved";
 
 export type OpsAlertRecord = Prisma.OpsAlertGetPayload<{
   select: {
@@ -83,6 +91,10 @@ export type OpsAlertRecord = Prisma.OpsAlertGetPayload<{
     severity: true;
     status: true;
     createdAt: true;
+    updatedAt: true;
+    resolutionNote: true;
+    acknowledgedAt: true;
+    resolvedAt: true;
   };
 }>;
 
@@ -277,6 +289,11 @@ function mapOpsAlert(alert: OpsAlertRecord): OpsAlert {
     customerName: typeof metadata.customerName === "string" ? metadata.customerName : null,
     amount: typeof metadata.amount === "number" ? metadata.amount : null,
     createdAt: alert.createdAt,
+    updatedAt: alert.updatedAt,
+    status: alert.status as OpsAlertStatus,
+    resolutionNote: alert.resolutionNote,
+    acknowledgedAt: alert.acknowledgedAt,
+    resolvedAt: alert.resolvedAt,
     retryAvailable
   };
 }
@@ -345,7 +362,11 @@ export async function raiseOpsAlert(input: {
       metadata: true,
       severity: true,
       status: true,
-      createdAt: true
+      createdAt: true,
+      updatedAt: true,
+      resolutionNote: true,
+      acknowledgedAt: true,
+      resolvedAt: true
     }
   });
 
@@ -395,7 +416,11 @@ export async function listOpsAlerts(filters: OpsAlertListFilters = {}): Promise<
         metadata: true,
         severity: true,
         status: true,
-        createdAt: true
+        createdAt: true,
+        updatedAt: true,
+        resolutionNote: true,
+        acknowledgedAt: true,
+        resolvedAt: true
       }
     }),
     prisma.opsAlert.count({ where })
@@ -407,6 +432,51 @@ export async function listOpsAlerts(filters: OpsAlertListFilters = {}): Promise<
     page,
     pageSize
   };
+}
+
+export async function updateOpsAlertStatus(input: {
+  alertId: string;
+  status: OpsAlertStatus;
+  adminId: string;
+  resolutionNote?: string;
+}): Promise<OpsAlert> {
+  const current = await prisma.opsAlert.findUnique({
+    where: { id: input.alertId },
+    select: { id: true, status: true }
+  });
+  if (!current) {
+    throw AppError.notFound("Ops alert not found");
+  }
+
+  const now = new Date();
+  const updated = await prisma.opsAlert.update({
+    where: { id: input.alertId },
+    data: {
+      status: input.status,
+      resolutionNote: input.status === "resolved" ? input.resolutionNote ?? null : null,
+      acknowledgedAt: input.status === "acknowledged" ? now : null,
+      acknowledgedById: input.status === "acknowledged" ? input.adminId : null,
+      resolvedAt: input.status === "resolved" ? now : null,
+      resolvedById: input.status === "resolved" ? input.adminId : null
+    },
+    select: {
+      id: true,
+      sourceId: true,
+      type: true,
+      bookingId: true,
+      message: true,
+      metadata: true,
+      severity: true,
+      status: true,
+      createdAt: true,
+      updatedAt: true,
+      resolutionNote: true,
+      acknowledgedAt: true,
+      resolvedAt: true
+    }
+  });
+
+  return mapOpsAlert(updated);
 }
 
 function mapLiveJob(
@@ -509,6 +579,11 @@ function mapDispatchFailureAlert(
     customerName: booking.customer.name,
     amount: null,
     createdAt: booking.updatedAt,
+    updatedAt: booking.updatedAt,
+    status: "open",
+    resolutionNote: null,
+    acknowledgedAt: null,
+    resolvedAt: null,
     retryAvailable: true
   };
 }
@@ -539,6 +614,11 @@ function mapPayoutFailureAlert(
     customerName: payout.booking.customer.name,
     amount: toNumber(payout.amount),
     createdAt: payout.createdAt,
+    updatedAt: payout.updatedAt,
+    status: "open",
+    resolutionNote: null,
+    acknowledgedAt: null,
+    resolvedAt: null,
     retryAvailable: true
   };
 }
@@ -569,6 +649,11 @@ function mapRefundFailureAlert(
     customerName: refund.booking.customer.name,
     amount: refund.amount,
     createdAt: refund.createdAt,
+    updatedAt: refund.updatedAt,
+    status: "open",
+    resolutionNote: null,
+    acknowledgedAt: null,
+    resolvedAt: null,
     retryAvailable: true
   };
 }

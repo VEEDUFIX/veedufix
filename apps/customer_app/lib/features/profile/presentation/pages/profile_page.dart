@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:marketplace_shared/marketplace_shared.dart';
 
+import '../../../../core/notifications/customer_device_token.dart';
 final customerAuthSessionsProvider = FutureProvider.autoDispose<List<CustomerAuthSession>>((ref) async {
   final api = ref.watch(apiClientProvider);
   final data = await api.get('/auth/sessions');
@@ -46,13 +47,11 @@ class ProfilePage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final user = ref.watch(authControllerProvider.select((s) => s.valueOrNull?.user));
-    final completion = user == null ? 0.72 : 0.88;
     final unreadNotifications = ref.watch(notificationsUnreadCountProvider).valueOrNull ?? 0;
 
     if (user == null) {
       return const _GuestProfileSignIn();
     }
-
     return Scaffold(
       backgroundColor: const Color(0xFFFAFAF7),
       body: ListView(
@@ -89,11 +88,7 @@ class ProfilePage extends ConsumerWidget {
             ],
           ),
           const SizedBox(height: 18),
-          _ProfileHeroCard(user: user, completion: completion),
-          const SizedBox(height: 12),
-          _AccountStatsRow(completion: completion),
-          const SizedBox(height: 14),
-          _CompletionCard(value: completion),
+          _ProfileHeroCard(user: user),
           const SizedBox(height: 18),
           const PremiumSectionHeader(
             title: 'Account',
@@ -163,6 +158,7 @@ class ProfilePage extends ConsumerWidget {
           const SizedBox(height: 18),
           FilledButton.icon(
             onPressed: () async {
+              await unregisterCustomerDeviceToken(ref.read(apiClientProvider));
               await FirebaseAuth.instance.signOut();
               await ref.read(authControllerProvider.notifier).signOut();
             },
@@ -195,7 +191,18 @@ class _SecuritySessionsCard extends ConsumerWidget {
             padding: EdgeInsets.all(12),
             child: CircularProgressIndicator(),
           )),
-          error: (error, _) => Text('Could not load sessions: $error'),
+          error: (_, __) => Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Could not load signed-in devices.'),
+              TextButton.icon(
+                onPressed: () => ref.invalidate(customerAuthSessionsProvider),
+                icon: const Icon(Icons.refresh_rounded),
+                label: const Text('Try again'),
+              ),
+            ],
+          ),
           data: (sessions) => Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -206,15 +213,9 @@ class _SecuritySessionsCard extends ConsumerWidget {
                   Text('Signed-in devices', style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
                   const Spacer(),
                   TextButton(
-                    onPressed: () async {
-                      await onSignOutOthers();
-                      ref.invalidate(customerAuthSessionsProvider);
-                      if (context.mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Other sessions signed out')),
-                        );
-                      }
-                    },
+                    onPressed: sessions.any((session) => !session.isCurrent && session.isActive)
+                        ? () => _confirmSignOutOthers(context, ref)
+                        : null,
                     child: const Text('Sign out others'),
                   ),
                 ],
@@ -272,6 +273,42 @@ class _SecuritySessionsCard extends ConsumerWidget {
         ),
       ),
     );
+  }
+
+  Future<void> _confirmSignOutOthers(BuildContext context, WidgetRef ref) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Sign out other devices?'),
+        content: const Text('Other devices will need to sign in again to use your account.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Sign out'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !context.mounted) return;
+    try {
+      await onSignOutOthers();
+      ref.invalidate(customerAuthSessionsProvider);
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Other sessions signed out')),
+        );
+      }
+    } catch (_) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not sign out other devices. Try again.')),
+        );
+      }
+    }
   }
 }
 
@@ -338,13 +375,9 @@ class _GuestProfileSignIn extends StatelessWidget {
 }
 
 class _ProfileHeroCard extends StatelessWidget {
-  const _ProfileHeroCard({
-    required this.user,
-    required this.completion,
-  });
+  const _ProfileHeroCard({required this.user});
 
   final AuthUser user;
-  final double completion;
 
   @override
   Widget build(BuildContext context) {
@@ -398,7 +431,6 @@ class _ProfileHeroCard extends StatelessWidget {
                             ),
                       ),
                     ),
-                    const Icon(Icons.verified_rounded, size: 18, color: Color(0xFF22C55E)),
                   ],
                 ),
                 const SizedBox(height: 4),
@@ -410,16 +442,6 @@ class _ProfileHeroCard extends StatelessWidget {
                         color: Colors.white.withValues(alpha: 0.72),
                         fontWeight: FontWeight.w600,
                       ),
-                ),
-                const SizedBox(height: 14),
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(99),
-                  child: LinearProgressIndicator(
-                    value: completion,
-                    minHeight: 7,
-                    backgroundColor: Colors.white.withValues(alpha: 0.14),
-                    valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFFC6A769)),
-                  ),
                 ),
               ],
             ),
@@ -434,140 +456,6 @@ class _ProfileHeroCard extends StatelessWidget {
       return 'U';
     }
     return name.trim()[0].toUpperCase();
-  }
-}
-
-class _AccountStatsRow extends StatelessWidget {
-  const _AccountStatsRow({required this.completion});
-
-  final double completion;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Expanded(
-          child: _AccountStatCard(
-            label: 'Profile',
-            value: '${(completion * 100).round()}%',
-            icon: Icons.insights_rounded,
-          ),
-        ),
-        const SizedBox(width: 10),
-        const Expanded(
-          child: _AccountStatCard(
-            label: 'Support',
-            value: '24/7',
-            icon: Icons.support_agent_rounded,
-          ),
-        ),
-        const SizedBox(width: 10),
-        const Expanded(
-          child: _AccountStatCard(
-            label: 'Rewards',
-            value: 'Live',
-            icon: Icons.card_giftcard_rounded,
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _AccountStatCard extends StatelessWidget {
-  const _AccountStatCard({
-    required this.label,
-    required this.value,
-    required this.icon,
-  });
-
-  final String label;
-  final String value;
-  final IconData icon;
-
-  @override
-  Widget build(BuildContext context) {
-    return PremiumCard(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
-        child: Column(
-          children: [
-            Icon(icon, size: 18, color: const Color(0xFFC6A769)),
-            const SizedBox(height: 7),
-            Text(
-              value,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w900,
-                  ),
-            ),
-            const SizedBox(height: 2),
-            Text(
-              label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    fontWeight: FontWeight.w700,
-                  ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _CompletionCard extends StatelessWidget {
-  const _CompletionCard({required this.value});
-
-  final double value;
-
-  @override
-  Widget build(BuildContext context) {
-    return PremiumCard(
-      child: Padding(
-        padding: const EdgeInsets.all(18),
-        child: Row(
-          children: [
-            Container(
-              height: 56,
-              width: 56,
-              decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.85),
-                borderRadius: BorderRadius.circular(AbzioTheme.buttonRadius),
-              ),
-              child: Icon(
-                Icons.insights_rounded,
-                color: Theme.of(context).colorScheme.primary,
-              ),
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Profile completion',
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.w800,
-                        ),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    '${(value * 100).round()}% complete. Add more details to speed up future bookings.',
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: Theme.of(context).colorScheme.onSurfaceVariant,
-                        ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
   }
 }
 

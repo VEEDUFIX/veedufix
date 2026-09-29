@@ -829,7 +829,9 @@ class _BookingDetailBody extends ConsumerWidget {
                   padding: const EdgeInsets.symmetric(vertical: 14),
                   decoration: BoxDecoration(
                     color: cs.primary,
-                    borderRadius: BorderRadius.circular(AbzioTheme.buttonRadius),
+                    borderRadius: BorderRadius.circular(
+                      AbzioTheme.buttonRadius,
+                    ),
                   ),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.center,
@@ -891,10 +893,7 @@ class _BookingDetailBody extends ConsumerWidget {
 }
 
 class _BookingHelpCard extends StatelessWidget {
-  const _BookingHelpCard({
-    required this.booking,
-    required this.canEdit,
-  });
+  const _BookingHelpCard({required this.booking, required this.canEdit});
 
   final BookingDetail booking;
   final bool canEdit;
@@ -930,12 +929,16 @@ class _BookingHelpCard extends StatelessWidget {
                     children: [
                       Text(
                         'Need help with this booking?',
-                        style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+                        style: tt.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w800,
+                        ),
                       ),
                       const SizedBox(height: 2),
                       Text(
                         'Get help with timing, payment, or the professional without leaving this page.',
-                        style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+                        style: tt.bodySmall?.copyWith(
+                          color: cs.onSurfaceVariant,
+                        ),
                       ),
                     ],
                   ),
@@ -1064,7 +1067,7 @@ Future<void> _confirmCancelBooking(
   BookingDetail booking,
 ) async {
   final controller = TextEditingController();
-  final refundPreview = _refundPreviewForBooking(booking);
+  final cancellationInformation = _cancellationInformationForBooking(booking);
   try {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -1080,27 +1083,37 @@ Future<void> _confirmCancelBooking(
                   width: double.infinity,
                   padding: const EdgeInsets.all(14),
                   decoration: BoxDecoration(
-                    color: Theme.of(dialogContext).colorScheme.primaryContainer.withValues(alpha: 0.45),
+                    color: Theme.of(
+                      dialogContext,
+                    ).colorScheme.primaryContainer.withValues(alpha: 0.45),
                     borderRadius: BorderRadius.circular(16),
                     border: Border.all(
-                      color: Theme.of(dialogContext).colorScheme.primary.withValues(alpha: 0.16),
+                      color: Theme.of(
+                        dialogContext,
+                      ).colorScheme.primary.withValues(alpha: 0.16),
                     ),
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Refund preview',
-                        style: Theme.of(dialogContext).textTheme.labelLarge?.copyWith(
+                        'Cancellation & refund',
+                        style: Theme.of(dialogContext).textTheme.labelLarge
+                            ?.copyWith(
                               fontWeight: FontWeight.w800,
-                              color: Theme.of(dialogContext).colorScheme.primary,
+                              color: Theme.of(
+                                dialogContext,
+                              ).colorScheme.primary,
                             ),
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        refundPreview,
-                        style: Theme.of(dialogContext).textTheme.bodyMedium?.copyWith(
-                              color: Theme.of(dialogContext).colorScheme.onSurfaceVariant,
+                        cancellationInformation,
+                        style: Theme.of(dialogContext).textTheme.bodyMedium
+                            ?.copyWith(
+                              color: Theme.of(
+                                dialogContext,
+                              ).colorScheme.onSurfaceVariant,
                               height: 1.4,
                             ),
                       ),
@@ -1155,23 +1168,28 @@ Future<void> _confirmCancelBooking(
       return;
     }
 
-    await ref.read(apiClientProvider).post(
-      '/bookings/${booking.id}/cancel',
-      data: {'reason': reason},
-    );
+    await ref
+        .read(apiClientProvider)
+        .post('/bookings/${booking.id}/cancel', data: {'reason': reason});
     ref.invalidate(bookingDetailPageProvider(booking.id));
     if (!context.mounted) {
       return;
     }
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text('Booking cancelled.')));
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text(
+          'Booking cancelled. Any eligible refund is handled separately.',
+        ),
+      ),
+    );
     context.go('/bookings');
   } catch (error) {
     if (!context.mounted) {
       return;
     }
-    final message = error is DioException ? _errorMessageFromDio(error) : error.toString();
+    final message = error is DioException
+        ? _errorMessageFromDio(error)
+        : error.toString();
     ScaffoldMessenger.of(
       context,
     ).showSnackBar(SnackBar(content: Text(message)));
@@ -1206,37 +1224,12 @@ String _errorMessageFromDio(DioException error) {
   return error.message ?? 'Could not cancel booking.';
 }
 
-String _refundPreviewForBooking(BookingDetail booking) {
-  final status = booking.status.toUpperCase();
-  final now = DateTime.now();
-  final scheduledAt = booking.scheduledAt.toLocal();
-  final hoursUntilBooking = scheduledAt.difference(now).inHours;
-
-  if (status == 'CANCELLED') {
-    return 'This booking is already cancelled, so no additional refund applies.';
+String _cancellationInformationForBooking(BookingDetail booking) {
+  if (booking.status.toUpperCase() == 'COMPLETED') {
+    return 'This booking is complete. Contact support to ask whether a refund can be reviewed.';
   }
 
-  if (status == 'COMPLETED') {
-    return 'This booking is complete. Refunds are usually unavailable after completion.';
-  }
-
-  if (status == 'PENDING' || status == 'REQUESTED') {
-    return 'A full refund is usually expected while the booking is still waiting for confirmation.';
-  }
-
-  if (status == 'ASSIGNED' || status == 'IN_PROGRESS') {
-    return 'A partial refund may apply because the job is already assigned or underway.';
-  }
-
-  if (hoursUntilBooking > 6) {
-    return 'A full refund is likely if you cancel now.';
-  }
-
-  if (hoursUntilBooking > 2) {
-    return 'A partial refund may apply this close to the scheduled time.';
-  }
-
-  return 'Refund eligibility is limited because the scheduled time is very near.';
+  return 'Cancelling stops this booking. If a payment was captured, refund eligibility is reviewed separately; this action does not issue a refund automatically.';
 }
 
 // ─── Supporting widgets ───────────────────────────────────────────────────────
@@ -1431,9 +1424,7 @@ Future<void> _raiseDisputeDialog(
     if (!context.mounted) return;
     ScaffoldMessenger.of(
       context,
-    ).showSnackBar(
-      const SnackBar(content: Text('Could not submit dispute.')),
-    );
+    ).showSnackBar(const SnackBar(content: Text('Could not submit dispute.')));
   }
 }
 
@@ -1463,16 +1454,20 @@ class _BookingEditSheetState extends ConsumerState<_BookingEditSheet> {
   late final SavedAddressesApi _addressesApi;
   List<SavedAddressItem> _addresses = const [];
   String? _selectedAddressId;
-  DateTime _selectedDateTime = DateTime.now();
+  DateTime _selectedDate = DateTime.now();
+  String? _selectedSlotIso;
+  List<DateTime> _availableSlots = const [];
   bool _loading = true;
+  bool _loadingSlots = false;
   bool _saving = false;
   String? _error;
+  String? _slotError;
+  String? _slotNotice;
 
   @override
   void initState() {
     super.initState();
     _addressesApi = SavedAddressesApi(ref.read(apiClientProvider).dio);
-    _selectedDateTime = widget.booking.scheduledAt;
     _loadAddresses();
   }
 
@@ -1482,9 +1477,22 @@ class _BookingEditSheetState extends ConsumerState<_BookingEditSheet> {
       if (!mounted) return;
       setState(() {
         _addresses = addresses;
-        _selectedAddressId = addresses.isNotEmpty ? addresses.first.id : null;
+        final matchingAddresses = addresses.where(
+          (address) =>
+              address.pincode == widget.booking.addressPincode &&
+              address.addressLine1.trim().toLowerCase() ==
+                  (widget.booking.addressLine1 ?? '').trim().toLowerCase() &&
+              address.city.trim().toLowerCase() ==
+                  (widget.booking.cityName ?? '').trim().toLowerCase(),
+        );
+        _selectedAddressId = matchingAddresses.isNotEmpty
+            ? matchingAddresses.first.id
+            : addresses.isNotEmpty
+            ? addresses.first.id
+            : null;
         _loading = false;
       });
+      await _loadSlots();
     } catch (error) {
       if (!mounted) return;
       setState(() {
@@ -1494,46 +1502,79 @@ class _BookingEditSheetState extends ConsumerState<_BookingEditSheet> {
     }
   }
 
+  Future<void> _loadSlots() async {
+    final addressId = _selectedAddressId;
+    if (addressId == null || widget.booking.serviceIds.isEmpty) return;
+    setState(() {
+      _loadingSlots = true;
+      _slotError = null;
+      _slotNotice = null;
+      _availableSlots = const [];
+      _selectedSlotIso = null;
+    });
+    try {
+      final data = await ref
+          .read(apiClientProvider)
+          .get(
+            '/users/bookings/${widget.booking.id}/reschedule-slots',
+            queryParameters: {
+              'addressId': addressId,
+              'startDate': DateFormat('yyyy-MM-dd').format(_selectedDate),
+              'days': 7,
+            },
+          );
+      final rows = data['slots'];
+      final slots = rows is List
+          ? rows.whereType<Map>().map((row) {
+              final slot = Map<String, dynamic>.from(row);
+              return DateTime.parse(slot['scheduledFor'] as String).toLocal();
+            }).toList()
+          : <DateTime>[];
+      if (!mounted) return;
+      final currentTime = widget.booking.scheduledAt.toLocal();
+      DateTime? currentSlot;
+      for (final slot in slots) {
+        if (slot.isAtSameMomentAs(currentTime)) {
+          currentSlot = slot;
+          break;
+        }
+      }
+      setState(() {
+        _availableSlots = slots;
+        _selectedSlotIso = currentSlot?.toUtc().toIso8601String();
+      });
+    } catch (error) {
+      if (mounted) {
+        setState(
+          () => _slotError =
+              'Could not load available appointment times. Please retry.',
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _loadingSlots = false);
+    }
+  }
+
   Future<void> _pickDate() async {
     final date = await showDatePicker(
       context: context,
-      initialDate: _selectedDateTime,
-      firstDate: DateTime.now().subtract(const Duration(days: 1)),
+      initialDate: _selectedDate,
+      firstDate: DateTime.now(),
       lastDate: DateTime.now().add(const Duration(days: 365)),
     );
-    if (date == null) return;
+    if (!mounted || date == null) return;
     setState(() {
-      _selectedDateTime = DateTime(
-        date.year,
-        date.month,
-        date.day,
-        _selectedDateTime.hour,
-        _selectedDateTime.minute,
-      );
+      _selectedDate = date;
     });
-  }
-
-  Future<void> _pickTime() async {
-    final time = await showTimePicker(
-      context: context,
-      initialTime: TimeOfDay.fromDateTime(_selectedDateTime),
-    );
-    if (time == null) return;
-    setState(() {
-      _selectedDateTime = DateTime(
-        _selectedDateTime.year,
-        _selectedDateTime.month,
-        _selectedDateTime.day,
-        time.hour,
-        time.minute,
-      );
-    });
+    await _loadSlots();
   }
 
   Future<void> _save() async {
-    if (_selectedAddressId == null) {
+    if (_selectedAddressId == null || _selectedSlotIso == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please choose an address.')),
+        const SnackBar(
+          content: Text('Choose an address and an available time.'),
+        ),
       );
       return;
     }
@@ -1546,19 +1587,46 @@ class _BookingEditSheetState extends ConsumerState<_BookingEditSheet> {
             '/bookings/${widget.booking.id}',
             data: {
               'addressId': _selectedAddressId,
-              'scheduledAt': _selectedDateTime.toIso8601String(),
+              'scheduledAt': DateTime.parse(
+                _selectedSlotIso!,
+              ).toUtc().toIso8601String(),
             },
           );
-      ref.invalidate(bookingDetailPageProvider(widget.booking.id));
       if (!mounted) return;
+      ref.invalidate(bookingDetailPageProvider(widget.booking.id));
       Navigator.of(context).pop();
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text('Booking updated.')));
-    } catch (error) {
+    } on DioException catch (error) {
+      if (!mounted) return;
+      final responseBody = error.response?.data;
+      final responseMessage = responseBody is Map
+          ? responseBody['message']?.toString()
+          : null;
+      if (error.response?.statusCode == 409 &&
+          responseMessage?.toLowerCase().contains('appointment slot') == true) {
+        await _loadSlots();
+        if (!mounted) return;
+        setState(
+          () => _slotNotice =
+              'That time was just booked. Available times have been refreshed; choose another time.',
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              responseMessage ?? 'Could not update booking. Please try again.',
+            ),
+          ),
+        );
+      }
+    } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Could not update booking.')),
+        const SnackBar(
+          content: Text('Could not update booking. Please try again.'),
+        ),
       );
     } finally {
       if (mounted) {
@@ -1626,8 +1694,10 @@ class _BookingEditSheetState extends ConsumerState<_BookingEditSheet> {
                 const SizedBox(height: 8),
                 RadioGroup<String>(
                   groupValue: _selectedAddressId,
-                  onChanged: (value) =>
-                      setState(() => _selectedAddressId = value),
+                  onChanged: (value) async {
+                    setState(() => _selectedAddressId = value);
+                    await _loadSlots();
+                  },
                   child: Column(
                     children: [
                       ..._addresses.map((address) {
@@ -1647,29 +1717,82 @@ class _BookingEditSheetState extends ConsumerState<_BookingEditSheet> {
                   ),
                 ),
                 const SizedBox(height: 8),
-                Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: _pickDate,
-                        icon: const Icon(Icons.calendar_month_rounded),
-                        label: Text(
-                          DateFormat('d MMM y').format(_selectedDateTime),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: _pickTime,
-                        icon: const Icon(Icons.schedule_rounded),
-                        label: Text(
-                          DateFormat('h:mm a').format(_selectedDateTime),
-                        ),
-                      ),
-                    ),
-                  ],
+                OutlinedButton.icon(
+                  onPressed: _pickDate,
+                  icon: const Icon(Icons.calendar_month_rounded),
+                  label: Text(
+                    'Starting ${DateFormat('d MMM y').format(_selectedDate)}',
+                  ),
                 ),
+                const SizedBox(height: 10),
+                if (_loadingSlots)
+                  const LinearProgressIndicator()
+                else if (_slotError != null)
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          _slotError!,
+                          style: tt.bodySmall?.copyWith(color: cs.error),
+                        ),
+                      ),
+                      TextButton(
+                        onPressed: _loadSlots,
+                        child: const Text('Retry'),
+                      ),
+                    ],
+                  )
+                else ...[
+                  if (_slotNotice != null) ...[
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Icon(
+                          Icons.info_outline_rounded,
+                          size: 18,
+                          color: cs.primary,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            _slotNotice!,
+                            style: tt.bodySmall?.copyWith(
+                              color: cs.onSurfaceVariant,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                  ],
+                  if (_availableSlots.isEmpty)
+                    Text(
+                      'No available appointment times for this date range.',
+                      style: tt.bodySmall?.copyWith(color: cs.error),
+                    )
+                  else
+                    DropdownButtonFormField<String>(
+                      initialValue: _selectedSlotIso,
+                      decoration: const InputDecoration(
+                        labelText: 'Available appointment time',
+                      ),
+                      items: _availableSlots.map((slot) {
+                        final value = slot.toUtc().toIso8601String();
+                        return DropdownMenuItem(
+                          value: value,
+                          child: Text(
+                            DateFormat('EEE, d MMM · h:mm a').format(slot),
+                          ),
+                        );
+                      }).toList(),
+                      onChanged: _saving
+                          ? null
+                          : (value) => setState(() {
+                              _selectedSlotIso = value;
+                              _slotNotice = null;
+                            }),
+                    ),
+                ],
                 const SizedBox(height: 18),
                 FilledButton(
                   onPressed: _saving ? null : _save,
@@ -1910,6 +2033,12 @@ class BookingDetail {
     this.sparePartItems,
     this.sparePartReceiptUrl,
     this.completedAt,
+    this.bookingType,
+    this.addressId,
+    this.serviceIds = const [],
+    this.addressLine1,
+    this.addressPincode,
+    this.cityName,
   });
 
   final String id;
@@ -1932,6 +2061,12 @@ class BookingDetail {
   final List<Map<String, dynamic>>? sparePartItems;
   final String? sparePartReceiptUrl;
   final DateTime? completedAt;
+  final String? bookingType;
+  final String? addressId;
+  final List<String> serviceIds;
+  final String? addressLine1;
+  final String? addressPincode;
+  final String? cityName;
 
   /// Returns true if booking can still be disputed (within 48-hour window).
   bool get canDispute {
@@ -1945,6 +2080,14 @@ class BookingDetail {
     id: json['id'] as String? ?? '',
     code: json['code'] as String? ?? '',
     status: json['status'] as String? ?? 'PENDING',
+    bookingType: json['bookingType'] as String?,
+    addressId: json['addressId'] as String?,
+    serviceIds: (json['serviceIds'] as List<dynamic>? ?? const [])
+        .whereType<String>()
+        .toList(),
+    addressLine1: json['addressLine1'] as String?,
+    addressPincode: json['addressPincode'] as String?,
+    cityName: json['cityName'] as String?,
     scheduledAt:
         DateTime.tryParse(json['scheduledAt'] as String? ?? '') ??
         DateTime.now(),
@@ -2066,10 +2209,10 @@ class _SparePartsBannerState extends ConsumerState<_SparePartsBanner> {
       }
     } catch (_) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(
-          const SnackBar(content: Text('Verification failed. Please try again.')),
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Verification failed. Please try again.'),
+          ),
         );
       }
     } finally {
@@ -2128,10 +2271,10 @@ class _SparePartsBannerState extends ConsumerState<_SparePartsBanner> {
       _pendingOrderId = null;
       if (mounted) {
         setState(() => _loading = false);
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(
-          const SnackBar(content: Text('Could not start payment. Please try again.')),
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Could not start payment. Please try again.'),
+          ),
         );
       }
     }
@@ -2150,10 +2293,10 @@ class _SparePartsBannerState extends ConsumerState<_SparePartsBanner> {
       }
     } catch (_) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(
-          const SnackBar(content: Text('Could not reject spare parts request.')),
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Could not reject spare parts request.'),
+          ),
         );
       }
     } finally {
@@ -2366,9 +2509,7 @@ class _CustomQuoteBannerState extends ConsumerState<_CustomQuoteBanner> {
       }
     } catch (_) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(
+        ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Unable to complete verification.')),
         );
       }

@@ -115,21 +115,31 @@ export async function uploadWorkerDocumentImage(
   type: string
 ) {
   const workerProfile = await ensureWorkerProfile(userId);
-  const result = await uploadMediaAsset(file, {
+  const uploaded = await uploadBufferToCloudinary(file.buffer, {
     folder: cloudinaryFolder("documents", userId),
-    publicId: buildPublicId("document", userId)
+    public_id: buildPublicId("document", userId),
+    resource_type: "image",
+    type: "authenticated",
+    overwrite: true
   });
 
   const document = await prisma.workerDocument.create({
     data: {
       workerId: workerProfile.id,
       type,
-      url: result.url
+      url: uploaded.secure_url,
+      publicId: uploaded.public_id
     }
   });
 
   return {
     workerId: workerProfile.id,
-    document
+    document: {
+      ...document,
+      // The onboarding API validates this authenticated upload URL and stores
+      // its public ID. It is not a delivery URL; document reads use expiring
+      // private-download links from the authorized read endpoints.
+      url: uploaded.secure_url
+    }
   };
 }

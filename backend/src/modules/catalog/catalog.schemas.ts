@@ -279,3 +279,11 @@ export const importCatalogSchema = z.object({
     )
   })
 });
+
+export const bulkCatalogStatusSchema = z.object({
+  body: z.object({
+    entityType: z.enum(["categories", "subcategories", "services"]),
+    ids: z.array(id).min(1).max(500),
+    isActive: z.boolean()
+  })
+});

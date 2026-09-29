@@ -5,6 +5,8 @@ import {
   getArrivalOtpForCustomer,
   getCompletionOtpForCustomer,
   IncompleteJobError,
+  OtpAttemptLimitError,
+  JobStateConflictError,
   OtpExpiredError,
   OtpInvalidError,
   UnauthorizedError,
@@ -23,6 +25,16 @@ type AuthenticatedRequest = Request & {
 };
 
 function handleKnownError(response: Response, error: unknown): boolean {
+  if (error instanceof OtpAttemptLimitError) {
+    response.status(429).json({ message: error.message });
+    return true;
+  }
+
+  if (error instanceof JobStateConflictError) {
+    response.status(409).json({ message: error.message });
+    return true;
+  }
+
   if (error instanceof UnauthorizedError) {
     response.status(403).json({ message: "You are not authorized to perform this action" });
     return true;

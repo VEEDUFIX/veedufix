@@ -50,3 +50,18 @@ export const publicAvailabilityParamsSchema = z.object({
     workerId: z.string().trim().min(1)
   })
 });
+
+export const customerScheduleSlotsSchema = z.object({
+  body: emptyObjectSchema,
+  params: emptyObjectSchema,
+  query: z.object({
+    addressId: z.string().trim().min(1),
+    serviceIds: z.string().trim().min(1).transform((value) => [...new Set(value.split(",").map((id) => id.trim()).filter(Boolean))]).pipe(z.array(z.string().min(1)).min(1).max(10)),
+    startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine((value) => {
+      const [year, month, day] = value.split("-").map(Number);
+      const parsed = new Date(Date.UTC(year, month - 1, day));
+      return parsed.getUTCFullYear() === year && parsed.getUTCMonth() === month - 1 && parsed.getUTCDate() === day;
+    }, "startDate must be a valid calendar date"),
+    days: z.coerce.number().int().min(1).max(7).default(7)
+  }).strict()
+});

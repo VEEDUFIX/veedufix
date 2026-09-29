@@ -4,7 +4,7 @@ import { BookingStatus } from '@prisma/client';
 // ─── Mocks ────────────────────────────────────────────────────────────────────
 vi.mock('../lib/prisma.js', () => ({
   prisma: {
-    opsAlert: { findMany: vi.fn(), count: vi.fn(), upsert: vi.fn() },
+    opsAlert: { findMany: vi.fn(), count: vi.fn(), upsert: vi.fn(), findUnique: vi.fn(), update: vi.fn() },
     user: { findMany: vi.fn() },
     jobExecution: { count: vi.fn() },
     booking: { count: vi.fn(), aggregate: vi.fn(), findMany: vi.fn() },
@@ -21,7 +21,7 @@ vi.mock('../lib/realtime.js', () => ({
 }));
 
 // ─── Imports ──────────────────────────────────────────────────────────────────
-import { getOpsOverview, listOpsAlerts, raiseOpsAlert } from '../modules/ops/ops.service.js';
+import { getOpsOverview, listOpsAlerts, raiseOpsAlert, updateOpsAlertStatus } from '../modules/ops/ops.service.js';
 import { prisma } from '../lib/prisma.js';
 
 describe('Ops Service', () => {
@@ -61,6 +61,32 @@ describe('Ops Service', () => {
       expect(res.total).toBe(1);
       expect(res.items.length).toBe(1);
       expect(res.items[0].bookingCode).toBe('B-1');
+    });
+  });
+
+  describe('updateOpsAlertStatus', () => {
+    it('records the acknowledging admin and timestamp', async () => {
+      const now = new Date();
+      vi.mocked(prisma.opsAlert.findUnique).mockResolvedValue({ id: 'alert1', status: 'open' } as any);
+      vi.mocked(prisma.opsAlert.update).mockResolvedValue({
+        id: 'alert1', sourceId: 'src1', type: 'dispatch_failure', bookingId: null,
+        message: 'Dispatch failed', metadata: {}, severity: 'high', status: 'acknowledged',
+        createdAt: now, updatedAt: now, resolutionNote: null, acknowledgedAt: now, resolvedAt: null
+      } as any);
+
+      const result = await updateOpsAlertStatus({ alertId: 'alert1', status: 'acknowledged', adminId: 'admin1' });
+
+      expect(result.status).toBe('acknowledged');
+      expect(prisma.opsAlert.update).toHaveBeenCalledWith(expect.objectContaining({
+        where: { id: 'alert1' },
+        data: expect.objectContaining({ acknowledgedById: 'admin1', status: 'acknowledged' })
+      }));
+    });
+
+    it('returns 404 for an alert that does not exist', async () => {
+      vi.mocked(prisma.opsAlert.findUnique).mockResolvedValue(null);
+      await expect(updateOpsAlertStatus({ alertId: 'missing', status: 'resolved', adminId: 'admin1' }))
+        .rejects.toMatchObject({ statusCode: 404 });
     });
   });
 

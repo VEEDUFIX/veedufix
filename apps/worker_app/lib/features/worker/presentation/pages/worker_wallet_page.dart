@@ -41,7 +41,8 @@ class WorkerWalletPage extends ConsumerWidget {
             ),
           ),
         ),
-        title: Text('Wallet & Earnings', style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
+        title: Text('Wallet & Earnings',
+            style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
       ),
       body: walletAsync.when(
         loading: () => const _WalletLoadingView(),
@@ -98,35 +99,44 @@ class _WalletBody extends ConsumerWidget {
             children: [
               Row(
                 children: [
-                  const Icon(Icons.account_balance_wallet_rounded, color: Colors.white70, size: 18),
+                  const Icon(Icons.account_balance_wallet_rounded,
+                      color: Colors.white70, size: 18),
                   const SizedBox(width: 8),
-                  Text('Available Balance', style: tt.labelMedium?.copyWith(color: Colors.white70)),
+                  Text('Available Balance',
+                      style: tt.labelMedium?.copyWith(color: Colors.white70)),
                 ],
               ),
               const SizedBox(height: 10),
               Text(
                 '₹${wallet.balance.toStringAsFixed(2)}',
-                style: tt.displaySmall?.copyWith(color: Colors.white, fontWeight: FontWeight.w900),
+                style: tt.displaySmall?.copyWith(
+                    color: Colors.white, fontWeight: FontWeight.w900),
               ),
               const SizedBox(height: 20),
               Row(
                 children: [
-                  _StatChip(label: 'Total Earned', value: '₹${wallet.totalEarnings.toStringAsFixed(0)}'),
+                  _StatChip(
+                      label: 'Total Earned',
+                      value: '₹${wallet.totalEarnings.toStringAsFixed(0)}'),
                   const SizedBox(width: 12),
-                  _StatChip(label: 'Pending', value: '₹${wallet.pendingPayout.toStringAsFixed(0)}'),
+                  _StatChip(
+                      label: 'Pending',
+                      value: '₹${wallet.pendingPayout.toStringAsFixed(0)}'),
                 ],
               ),
               const SizedBox(height: 14),
               Text(
                 'Withdrawals start at ₹100 and are usually processed within 24 hours.',
-                style: tt.bodySmall?.copyWith(color: Colors.white70, height: 1.3),
+                style:
+                    tt.bodySmall?.copyWith(color: Colors.white70, height: 1.3),
               ),
               const SizedBox(height: 10),
               Text(
                 hasPayoutDetails
                     ? 'Payouts will be sent to your saved UPI: $payoutUpiId'
                     : 'Add a payout UPI in your profile before requesting withdrawals.',
-                style: tt.bodySmall?.copyWith(color: Colors.white70, height: 1.3),
+                style:
+                    tt.bodySmall?.copyWith(color: Colors.white70, height: 1.3),
               ),
             ],
           ),
@@ -136,20 +146,28 @@ class _WalletBody extends ConsumerWidget {
         // ── Withdraw CTA ─────────────────────────────────────────────────
         TapScale(
           onTap: hasPayoutDetails
-              ? () => _showPayoutSheet(context, ref, wallet.balance, payoutUpiId)
-              : () => context.push('/profile/edit'),
+              ? () =>
+                  _showPayoutSheet(context, ref, wallet.balance, payoutUpiId)
+              : () => context.push('/profile/bank-details'),
           child: Container(
             padding: const EdgeInsets.symmetric(vertical: 16),
             decoration: BoxDecoration(
-              color: hasPayoutDetails ? cs.primaryContainer.withValues(alpha: 0.4) : cs.surfaceContainerHighest.withValues(alpha: 0.55),
+              color: hasPayoutDetails
+                  ? cs.primaryContainer.withValues(alpha: 0.4)
+                  : cs.surfaceContainerHighest.withValues(alpha: 0.55),
               borderRadius: BorderRadius.circular(AbzioTheme.buttonRadius),
-              border: Border.all(color: hasPayoutDetails ? cs.primary.withValues(alpha: 0.3) : cs.outlineVariant),
+              border: Border.all(
+                  color: hasPayoutDetails
+                      ? cs.primary.withValues(alpha: 0.3)
+                      : cs.outlineVariant),
             ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Icon(
-                  hasPayoutDetails ? Icons.payments_rounded : Icons.person_rounded,
+                  hasPayoutDetails
+                      ? Icons.payments_rounded
+                      : Icons.person_rounded,
                   color: hasPayoutDetails ? cs.primary : cs.onSurfaceVariant,
                   size: 20,
                 ),
@@ -187,18 +205,21 @@ class _WalletBody extends ConsumerWidget {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(Icons.receipt_long_rounded, color: cs.onSurfaceVariant, size: 20),
+                Icon(Icons.receipt_long_rounded,
+                    color: cs.onSurfaceVariant, size: 20),
                 const SizedBox(width: 10),
                 Text(
                   'Export statement CSV',
-                  style: tt.titleSmall?.copyWith(color: cs.onSurface, fontWeight: FontWeight.w800),
+                  style: tt.titleSmall?.copyWith(
+                      color: cs.onSurface, fontWeight: FontWeight.w800),
                 ),
               ],
             ),
           ),
         ),
         const SizedBox(height: 20),
-        Text('Transaction History', style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
+        Text('Transaction History',
+            style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
         const SizedBox(height: 12),
 
         if (wallet.transactions.isEmpty)
@@ -222,7 +243,8 @@ class _WalletBody extends ConsumerWidget {
     );
   }
 
-  void _showPayoutSheet(BuildContext context, WidgetRef ref, double balance, String? payoutUpiId) {
+  void _showPayoutSheet(BuildContext context, WidgetRef ref, double balance,
+      String? payoutUpiId) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -287,9 +309,17 @@ class _StatChip extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(label, style: Theme.of(context).textTheme.labelSmall?.copyWith(color: Colors.white70)),
+          Text(label,
+              style: Theme.of(context)
+                  .textTheme
+                  .labelSmall
+                  ?.copyWith(color: Colors.white70)),
           const SizedBox(height: 2),
-          Text(value, style: Theme.of(context).textTheme.titleSmall?.copyWith(color: Colors.white, fontWeight: FontWeight.w800)),
+          Text(value,
+              style: Theme.of(context)
+                  .textTheme
+                  .titleSmall
+                  ?.copyWith(color: Colors.white, fontWeight: FontWeight.w800)),
         ],
       ),
     );
@@ -322,7 +352,9 @@ class _TxCard extends StatelessWidget {
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Icon(
-                  isCredit ? Icons.arrow_downward_rounded : Icons.arrow_upward_rounded,
+                  isCredit
+                      ? Icons.arrow_downward_rounded
+                      : Icons.arrow_upward_rounded,
                   color: color,
                   size: 20,
                 ),
@@ -332,7 +364,9 @@ class _TxCard extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(tx.label, style: tt.bodyMedium?.copyWith(fontWeight: FontWeight.w700)),
+                    Text(tx.label,
+                        style: tt.bodyMedium
+                            ?.copyWith(fontWeight: FontWeight.w700)),
                     const SizedBox(height: 2),
                     Text(
                       DateFormat('d MMM y, h:mm a').format(tx.createdAt),
@@ -346,7 +380,8 @@ class _TxCard extends StatelessWidget {
                 children: [
                   Text(
                     '${isCredit ? '+' : ''}₹${tx.amount.abs().toStringAsFixed(2)}',
-                    style: tt.titleSmall?.copyWith(color: color, fontWeight: FontWeight.w800),
+                    style: tt.titleSmall
+                        ?.copyWith(color: color, fontWeight: FontWeight.w800),
                   ),
                   const SizedBox(height: 2),
                   Text(
@@ -363,8 +398,10 @@ class _TxCard extends StatelessWidget {
   }
 }
 
-Future<void> _showTransactionDetails(BuildContext context, WorkerWalletTransaction tx) {
-  final amountColor = tx.isCredit ? const Color(0xFF10B981) : const Color(0xFFEF4444);
+Future<void> _showTransactionDetails(
+    BuildContext context, WorkerWalletTransaction tx) {
+  final amountColor =
+      tx.isCredit ? const Color(0xFF10B981) : const Color(0xFFEF4444);
   return showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
@@ -387,10 +424,13 @@ Future<void> _showTransactionDetails(BuildContext context, WorkerWalletTransacti
                     width: 52,
                     decoration: BoxDecoration(
                       color: amountColor.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(AbzioTheme.buttonRadius),
+                      borderRadius:
+                          BorderRadius.circular(AbzioTheme.buttonRadius),
                     ),
                     child: Icon(
-                      tx.isCredit ? Icons.arrow_downward_rounded : Icons.arrow_upward_rounded,
+                      tx.isCredit
+                          ? Icons.arrow_downward_rounded
+                          : Icons.arrow_upward_rounded,
                       color: amountColor,
                     ),
                   ),
@@ -399,11 +439,14 @@ Future<void> _showTransactionDetails(BuildContext context, WorkerWalletTransacti
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(tx.label, style: tt.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
+                        Text(tx.label,
+                            style: tt.titleLarge
+                                ?.copyWith(fontWeight: FontWeight.w800)),
                         const SizedBox(height: 4),
                         Text(
                           DateFormat('d MMM y, h:mm a').format(tx.createdAt),
-                          style: tt.bodyMedium?.copyWith(color: cs.onSurfaceVariant),
+                          style: tt.bodyMedium
+                              ?.copyWith(color: cs.onSurfaceVariant),
                         ),
                       ],
                     ),
@@ -412,9 +455,15 @@ Future<void> _showTransactionDetails(BuildContext context, WorkerWalletTransacti
               ),
               const SizedBox(height: 16),
               _DetailRow(label: 'Transaction ID', value: tx.id),
-              _DetailRow(label: 'Amount', value: '${tx.isCredit ? '+' : '-'}₹${tx.amount.abs().toStringAsFixed(2)}'),
-              _DetailRow(label: 'Balance after', value: '₹${tx.balanceAfter.toStringAsFixed(2)}'),
-              if (tx.note != null && tx.note!.trim().isNotEmpty) _DetailRow(label: 'Note', value: tx.note!.trim()),
+              _DetailRow(
+                  label: 'Amount',
+                  value:
+                      '${tx.isCredit ? '+' : '-'}₹${tx.amount.abs().toStringAsFixed(2)}'),
+              _DetailRow(
+                  label: 'Balance after',
+                  value: '₹${tx.balanceAfter.toStringAsFixed(2)}'),
+              if (tx.note != null && tx.note!.trim().isNotEmpty)
+                _DetailRow(label: 'Note', value: tx.note!.trim()),
               const SizedBox(height: 12),
               SizedBox(
                 width: double.infinity,
@@ -455,9 +504,13 @@ class _DetailRow extends StatelessWidget {
         children: [
           SizedBox(
             width: 104,
-            child: Text(label, style: tt.bodyMedium?.copyWith(color: cs.onSurfaceVariant, fontWeight: FontWeight.w700)),
+            child: Text(label,
+                style: tt.bodyMedium?.copyWith(
+                    color: cs.onSurfaceVariant, fontWeight: FontWeight.w700)),
           ),
-          Expanded(child: Text(value, style: tt.bodyMedium?.copyWith(fontWeight: FontWeight.w600))),
+          Expanded(
+              child: Text(value,
+                  style: tt.bodyMedium?.copyWith(fontWeight: FontWeight.w600))),
         ],
       ),
     );
@@ -502,7 +555,8 @@ class _PayoutSheetState extends ConsumerState<_PayoutSheet> {
         !presetAmounts.any((amount) => amount == widget.availableBalance);
 
     return Padding(
-      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+      padding:
+          EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
       child: Container(
         padding: const EdgeInsets.fromLTRB(24, 24, 24, 32),
         decoration: BoxDecoration(
@@ -517,7 +571,8 @@ class _PayoutSheetState extends ConsumerState<_PayoutSheet> {
             children: [
               Center(
                 child: Container(
-                  width: 40, height: 4,
+                  width: 40,
+                  height: 4,
                   decoration: BoxDecoration(
                     color: cs.outlineVariant,
                     borderRadius: BorderRadius.circular(2),
@@ -525,7 +580,8 @@ class _PayoutSheetState extends ConsumerState<_PayoutSheet> {
                 ),
               ),
               const SizedBox(height: 20),
-              Text('Withdraw Earnings', style: tt.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
+              Text('Withdraw Earnings',
+                  style: tt.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
               const SizedBox(height: 4),
               Text(
                 'Available: ₹${widget.availableBalance.toStringAsFixed(2)}',
@@ -544,12 +600,14 @@ class _PayoutSheetState extends ConsumerState<_PayoutSheet> {
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Icon(Icons.info_outline_rounded, color: cs.error, size: 20),
+                      Icon(Icons.info_outline_rounded,
+                          color: cs.error, size: 20),
                       const SizedBox(width: 10),
                       Expanded(
                         child: Text(
                           'You need at least ₹100 to request a payout. Keep earning and come back once your balance crosses the threshold.',
-                          style: tt.bodySmall?.copyWith(color: cs.onSurface, height: 1.35),
+                          style: tt.bodySmall
+                              ?.copyWith(color: cs.onSurface, height: 1.35),
                         ),
                       ),
                     ],
@@ -563,28 +621,33 @@ class _PayoutSheetState extends ConsumerState<_PayoutSheet> {
                 decoration: BoxDecoration(
                   color: cs.surfaceContainerHighest.withValues(alpha: 0.4),
                   borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.6)),
+                  border: Border.all(
+                      color: cs.outlineVariant.withValues(alpha: 0.6)),
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Payout destination', style: tt.labelLarge?.copyWith(fontWeight: FontWeight.w800)),
+                    Text('Payout destination',
+                        style: tt.labelLarge
+                            ?.copyWith(fontWeight: FontWeight.w800)),
                     const SizedBox(height: 6),
                     Text(
                       widget.payoutUpiId ?? 'No UPI saved yet',
-                      style: tt.titleSmall?.copyWith(fontWeight: FontWeight.w700),
+                      style:
+                          tt.titleSmall?.copyWith(fontWeight: FontWeight.w700),
                     ),
                     const SizedBox(height: 6),
                     Text(
                       widget.payoutUpiId != null
                           ? 'This request will be sent to the UPI saved in your profile.'
                           : 'Add a UPI in your profile before you can request a payout.',
-                      style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant, height: 1.3),
+                      style: tt.bodySmall
+                          ?.copyWith(color: cs.onSurfaceVariant, height: 1.3),
                     ),
                     if (widget.payoutUpiId == null) ...[
                       const SizedBox(height: 12),
                       FilledButton.tonal(
-                        onPressed: () => context.push('/profile/edit'),
+                        onPressed: () => context.push('/profile/bank-details'),
                         child: const Text('Open profile'),
                       ),
                     ],
@@ -598,15 +661,23 @@ class _PayoutSheetState extends ConsumerState<_PayoutSheet> {
                   labelText: 'Amount (₹)',
                   hintText: '500',
                   prefixIcon: const Icon(Icons.currency_rupee_rounded),
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+                  border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(14)),
                 ),
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                keyboardType:
+                    const TextInputType.numberWithOptions(decimal: true),
                 textInputAction: TextInputAction.done,
                 validator: (v) {
                   final amount = double.tryParse(v ?? '');
-                  if (amount == null || amount <= 0) { return 'Enter a valid amount'; }
-                  if (amount > widget.availableBalance) { return 'Insufficient balance'; }
-                  if (amount < 100) { return 'Minimum withdrawal is ₹100'; }
+                  if (amount == null || amount <= 0) {
+                    return 'Enter a valid amount';
+                  }
+                  if (amount > widget.availableBalance) {
+                    return 'Insufficient balance';
+                  }
+                  if (amount < 100) {
+                    return 'Minimum withdrawal is ₹100';
+                  }
                   return null;
                 },
               ),
@@ -624,13 +695,15 @@ class _PayoutSheetState extends ConsumerState<_PayoutSheet> {
                     ActionChip(
                       label: Text('₹${_formatPresetAmount(amount)}'),
                       onPressed: () => _setAmount(amount),
-                      labelStyle: tt.labelLarge?.copyWith(fontWeight: FontWeight.w700),
+                      labelStyle:
+                          tt.labelLarge?.copyWith(fontWeight: FontWeight.w700),
                     ),
                   if (showFullBalanceChip)
                     ActionChip(
                       label: const Text('Full balance'),
                       onPressed: () => _setAmount(widget.availableBalance),
-                      labelStyle: tt.labelLarge?.copyWith(fontWeight: FontWeight.w700),
+                      labelStyle:
+                          tt.labelLarge?.copyWith(fontWeight: FontWeight.w700),
                     ),
                 ],
               ),
@@ -641,11 +714,19 @@ class _PayoutSheetState extends ConsumerState<_PayoutSheet> {
                   onPressed: isLoading ? null : _submit,
                   style: FilledButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14)),
                   ),
                   child: isLoading
-                      ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                      : Text('Request payout', style: tt.titleSmall?.copyWith(color: Colors.white, fontWeight: FontWeight.w800)),
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                              color: Colors.white, strokeWidth: 2))
+                      : Text('Request payout',
+                          style: tt.titleSmall?.copyWith(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w800)),
                 ),
               ),
               const SizedBox(height: 12),
@@ -667,21 +748,32 @@ class _PayoutSheetState extends ConsumerState<_PayoutSheet> {
   }
 
   String _formatPresetAmount(double amount) {
-    return amount == amount.truncateToDouble() ? amount.toStringAsFixed(0) : amount.toStringAsFixed(2);
+    return amount == amount.truncateToDouble()
+        ? amount.toStringAsFixed(0)
+        : amount.toStringAsFixed(2);
   }
 
   void _setAmount(double amount) {
-    final formatted = amount == amount.truncateToDouble() ? amount.toStringAsFixed(0) : amount.toStringAsFixed(2);
+    final formatted = amount == amount.truncateToDouble()
+        ? amount.toStringAsFixed(0)
+        : amount.toStringAsFixed(2);
     _amountController.text = formatted;
-    _amountController.selection = TextSelection.collapsed(offset: formatted.length);
+    _amountController.selection =
+        TextSelection.collapsed(offset: formatted.length);
   }
 
   Future<void> _submit() async {
-    if (!_formKey.currentState!.validate()) { return; }
+    if (!_formKey.currentState!.validate()) {
+      return;
+    }
     final amount = double.parse(_amountController.text);
     final messenger = ScaffoldMessenger.of(context);
-    await ref.read(payoutRequestProvider.notifier).requestPayout(amount, upiId: widget.payoutUpiId);
-    if (!mounted) { return; }
+    // The API resolves the verified payout destination from the stored profile.
+    // Never send the (masked) display value as a payout destination.
+    await ref.read(payoutRequestProvider.notifier).requestPayout(amount);
+    if (!mounted) {
+      return;
+    }
     final error = ref.read(payoutRequestProvider).error;
     if (error != null) {
       messenger.showSnackBar(
@@ -693,7 +785,9 @@ class _PayoutSheetState extends ConsumerState<_PayoutSheet> {
     } else {
       Navigator.of(context).pop();
       messenger.showSnackBar(
-        const SnackBar(content: Text('Payout request submitted! Usually processed in 24h.')),
+        const SnackBar(
+            content:
+                Text('Payout request submitted! Usually processed in 24h.')),
       );
     }
   }

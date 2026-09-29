@@ -11,8 +11,8 @@ import 'app/router.dart';
 
 void _handleWorkerNotificationTap(RemoteMessage message, GoRouter router) {
   final data = message.data;
-  final type = data['type'] as String?;
-  final bookingId = data['bookingId'] as String?;
+  final type = data['type'] is String ? data['type'] as String : null;
+  final bookingId = data['bookingId'] is String ? data['bookingId'] as String : null;
 
   switch (type) {
     case 'NEW_JOB':
@@ -30,8 +30,14 @@ void _handleWorkerNotificationTap(RemoteMessage message, GoRouter router) {
       router.push('/reviews');
       break;
     default:
-      final route = data['route'] as String?;
-      router.push(route ?? '/notifications');
+      final requestedRoute = data['route'] is String ? data['route'] as String : null;
+      final routeUri = requestedRoute == null ? null : Uri.tryParse(requestedRoute);
+      final isInternalRoute = routeUri != null &&
+          !routeUri.hasScheme &&
+          !routeUri.hasAuthority &&
+          routeUri.path.startsWith('/') &&
+          allowedRoutesForMode(AppMode.worker).contains(routeUri.path);
+      router.push(isInternalRoute ? routeUri.toString() : '/notifications');
   }
 }
 
@@ -54,9 +60,24 @@ void main() {
 
 Future<void> _initializeSentry() async {
   try {
+    const dsn = String.fromEnvironment('SENTRY_DSN', defaultValue: '');
+    if (dsn.isEmpty) return;
+
+    const configuredSampleRate = String.fromEnvironment(
+      'SENTRY_TRACES_SAMPLE_RATE',
+      defaultValue: '0.1',
+    );
+    final sampleRate = (double.tryParse(configuredSampleRate) ?? 0.1)
+        .clamp(0.0, 1.0)
+        .toDouble();
     await SentryFlutter.init((options) {
-      options.dsn = const String.fromEnvironment('SENTRY_DSN', defaultValue: '');
-      options.tracesSampleRate = 1.0;
+      options.dsn = dsn;
+      options.tracesSampleRate = sampleRate;
+      options.environment = const String.fromEnvironment(
+        'APP_ENV',
+        defaultValue: 'production',
+      );
+      options.release = const String.fromEnvironment('APP_RELEASE', defaultValue: '');
     });
   } catch (_) {
     // Observability is optional and must never prevent app startup.

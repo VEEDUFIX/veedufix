@@ -1,13 +1,80 @@
 import cron from "node-cron";
+import { createHash, randomUUID } from "node:crypto";
 import { BookingStatus } from "@prisma/client";
 import { prisma } from "../../lib/prisma.js";
 import { logger } from "../../lib/logger.js";
-import { sendMulticastPush } from "../../lib/fcm.js";
+import { sendPushNotification } from "../../lib/fcm.js";
+import { redis } from "../../lib/redis.js";
 
-const sentReminders = new Set<string>();
-const sentReviewRequests = new Set<string>();
-const sentQuoteReady = new Set<string>();
+const DEDUPE_TTL_SECONDS = 60 * 60 * 24 * 30;
+const CLAIM_TTL_SECONDS = 60 * 5;
 let lifecycleNotificationsStarted = false;
+
+async function claimNotification(key: string): Promise<string | null> {
+  const claimId = randomUUID();
+  const claimKey = `${key}:claim`;
+  if ((await redis.set(claimKey, claimId, "EX", CLAIM_TTL_SECONDS, "NX")) !== "OK") return null;
+  if (await redis.exists(`${key}:sent`) || await redis.exists(key)) {
+    await releaseNotification(key, claimId);
+    return null;
+  }
+  return claimId;
+}
+
+async function releaseNotification(key: string, claimId: string): Promise<void> {
+  await redis.eval(
+    "if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) else return 0 end",
+    1,
+    `${key}:claim`,
+    claimId
+  );
+}
+
+async function completeNotification(key: string, claimId: string): Promise<void> {
+  const completed = await redis.eval(
+    "if redis.call('get', KEYS[1]) == ARGV[1] then redis.call('set', KEYS[2], '1', 'EX', ARGV[2]); return redis.call('del', KEYS[1]) else return 0 end",
+    2,
+    `${key}:claim`,
+    `${key}:sent`,
+    claimId,
+    DEDUPE_TTL_SECONDS
+  );
+  if (completed !== 1) throw new Error("Lifecycle notification claim expired before completion");
+}
+
+async function sendToRecipient(input: {
+  key: string;
+  userId: string;
+  title: string;
+  body: string;
+  data: Record<string, string>;
+}): Promise<void> {
+  const devices = await prisma.deviceToken.findMany({
+    where: { userId: input.userId },
+    select: { token: true }
+  });
+  const tokens = [...new Set(devices.map((device) => device.token).filter(Boolean))];
+  for (const token of tokens) {
+    const tokenHash = createHash("sha256").update(token).digest("hex");
+    const dedupeKey = `${input.key}:device:${tokenHash}`;
+    const claimId = await claimNotification(dedupeKey);
+    if (!claimId) continue;
+
+    try {
+      const result = await sendPushNotification({
+        token,
+        title: input.title,
+        body: input.body,
+        data: input.data
+      });
+      if (!result.success) throw new Error(result.error || "Push delivery failed");
+      await completeNotification(dedupeKey, claimId);
+    } catch (error) {
+      await releaseNotification(dedupeKey, claimId).catch(() => undefined);
+      throw error;
+    }
+  }
+}
 
 async function sendBookingReminders() {
   const now = new Date();
@@ -16,7 +83,7 @@ async function sendBookingReminders() {
 
   const bookings = await prisma.booking.findMany({
     where: {
-      status: BookingStatus.ACCEPTED,
+      status: { in: [BookingStatus.ACCEPTED, BookingStatus.WORKER_ASSIGNED] },
       scheduledAt: {
         gte: minTime,
         lte: maxTime,
@@ -33,25 +100,19 @@ async function sendBookingReminders() {
   });
 
   for (const booking of bookings) {
-    if (sentReminders.has(booking.id)) continue;
-    
+    const dedupeKey = `lifecycle:booking-reminder:${booking.id}:${booking.scheduledAt.getTime()}`;
     try {
       const serviceName = booking.services[0]?.serviceSubcategory?.name || "Service";
       const timeStr = booking.scheduledAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
       // Notify customer
-      const customerTokens = await prisma.deviceToken.findMany({
-        where: { userId: booking.customerId },
-        select: { token: true }
+      await sendToRecipient({
+        key: dedupeKey,
+        userId: booking.customerId,
+        title: "Your booking is in 1 hour! ⏰",
+        body: `${serviceName} is scheduled for ${timeStr}. Your worker is on the way.`,
+        data: { type: "BOOKING_DETAIL", bookingId: booking.id }
       });
-      const cTokenStrings = customerTokens.map(t => t.token).filter(Boolean);
-      if (cTokenStrings.length > 0) {
-        await sendMulticastPush({
-          tokens: cTokenStrings,
-          title: "Your booking is in 1 hour! ⏰",
-          body: `${serviceName} is scheduled for ${timeStr}. Your worker is on the way.`,
-        });
-      }
 
       // Notify worker
       if (booking.workerId) {
@@ -61,23 +122,17 @@ async function sendBookingReminders() {
         });
 
         if (workerProfile?.userId) {
-          const workerTokens = await prisma.deviceToken.findMany({
-            where: { userId: workerProfile.userId },
-            select: { token: true }
+          const customerAddress = booking.address?.line1 || "Customer location";
+          await sendToRecipient({
+            key: dedupeKey,
+            userId: workerProfile.userId,
+            title: "Job in 1 hour 🔧",
+            body: `Reminder: ${serviceName} at ${customerAddress} starts at ${timeStr}.`,
+            data: { type: "JOB_ASSIGNED", bookingId: booking.id }
           });
-          const wTokenStrings = workerTokens.map(t => t.token).filter(Boolean);
-          if (wTokenStrings.length > 0) {
-            const customerAddress = booking.address?.line1 || "Customer location";
-            await sendMulticastPush({
-              tokens: wTokenStrings,
-              title: "Job in 1 hour 🔧",
-              body: `Reminder: ${serviceName} at ${customerAddress} starts at ${timeStr}.`,
-            });
-          }
         }
       }
 
-      sentReminders.add(booking.id);
     } catch (err) {
       logger.error({ error: err, bookingId: booking.id }, "Failed to send booking reminder");
     }
@@ -86,8 +141,8 @@ async function sendBookingReminders() {
 
 async function sendReviewRequests() {
   const now = new Date();
-  const minTime = new Date(now.getTime() - 35 * 60 * 1000);
   const maxTime = new Date(now.getTime() - 25 * 60 * 1000);
+  const minTime = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
 
   const bookings = await prisma.booking.findMany({
     where: {
@@ -112,25 +167,17 @@ async function sendReviewRequests() {
   });
 
   for (const booking of bookings) {
-    if (sentReviewRequests.has(booking.id)) continue;
+    const dedupeKey = `lifecycle:review-request:${booking.id}`;
     try {
       const serviceName = booking.services[0]?.serviceSubcategory?.name || "Service";
-      
-      const tokens = await prisma.deviceToken.findMany({
-        where: { userId: booking.customerId },
-        select: { token: true }
+
+      await sendToRecipient({
+        key: dedupeKey,
+        userId: booking.customerId,
+        title: "How was your experience? ⭐",
+        body: `Rate your ${serviceName} session and help us improve.`,
+        data: { type: "REVIEW_REQUEST", bookingId: booking.id }
       });
-      const tokenStrings = tokens.map(t => t.token).filter(Boolean);
-      if (tokenStrings.length > 0) {
-        await sendMulticastPush({
-          tokens: tokenStrings,
-          title: "How was your experience? ⭐",
-          body: `Rate your ${serviceName} session and help us improve.`,
-          data: { type: 'REVIEW_REQUEST', bookingId: booking.id }
-        });
-      }
-      
-      sentReviewRequests.add(booking.id);
     } catch (err) {
       logger.error({ error: err, bookingId: booking.id }, "Failed to send review request");
     }
@@ -139,13 +186,15 @@ async function sendReviewRequests() {
 
 async function sendCustomQuoteReady() {
   const now = new Date();
-  const minTime = new Date(now.getTime() - 2 * 60 * 1000);
+  const maxAge = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+  const readyBefore = new Date(now.getTime() - 2 * 60 * 1000);
 
   const bookings = await prisma.booking.findMany({
     where: {
       customQuoteStatus: 'SUBMITTED',
       updatedAt: {
-        gte: minTime
+        gte: maxAge,
+        lte: readyBefore
       }
     },
     include: {
@@ -158,25 +207,17 @@ async function sendCustomQuoteReady() {
   });
 
   for (const booking of bookings) {
-    if (sentQuoteReady.has(booking.id)) continue;
+    const dedupeKey = `lifecycle:quote-ready:${booking.id}:${booking.updatedAt.getTime()}`;
     try {
       const serviceName = booking.services[0]?.serviceSubcategory?.name || "Service";
-      
-      const tokens = await prisma.deviceToken.findMany({
-        where: { userId: booking.customerId },
-        select: { token: true }
+
+      await sendToRecipient({
+        key: dedupeKey,
+        userId: booking.customerId,
+        title: "Your custom quote is ready! 💰",
+        body: `Review and accept your quote for ${serviceName}.`,
+        data: { type: "CUSTOM_QUOTE_READY", bookingId: booking.id }
       });
-      const tokenStrings = tokens.map(t => t.token).filter(Boolean);
-      if (tokenStrings.length > 0) {
-        await sendMulticastPush({
-          tokens: tokenStrings,
-          title: "Your custom quote is ready! 💰",
-          body: `Review and accept your quote for ${serviceName}.`,
-          data: { type: 'CUSTOM_QUOTE_READY', bookingId: booking.id }
-        });
-      }
-      
-      sentQuoteReady.add(booking.id);
     } catch (err) {
       logger.error({ error: err, bookingId: booking.id }, "Failed to send quote ready notification");
     }

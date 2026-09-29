@@ -32,6 +32,7 @@ vi.mock('../lib/prisma.js', () => ({
 }));
 
 vi.mock('../lib/cloudinary.js', () => ({
+  extractPublicIdFromUrl: vi.fn((url: string) => url.match(/\/upload\/(?:v\d+\/)?(.+)\.[^.]+$/)?.[1] ?? null),
   uploadBufferToCloudinary: vi.fn().mockResolvedValue({
     secure_url: 'https://cloudinary.com/image.jpg',
     public_id: 'public-id',
@@ -55,6 +56,7 @@ import {
   confirmJobPhotoUpload
 } from '../modules/upload/upload.service.js';
 import { prisma } from '../lib/prisma.js';
+import { env } from '../config/env.js';
 import { AppError } from '../lib/app-error.js';
 
 describe('Upload Service', () => {
@@ -131,7 +133,8 @@ describe('Upload Service', () => {
       } as any);
       
       const res = await confirmJobPhotoUpload('b1', 'u1', 'after', {
-        secureUrl: 'url', publicId: 'pid', bytes: 100, format: 'png'
+        secureUrl: `https://res.cloudinary.com/${env.CLOUDINARY_CLOUD_NAME}/image/upload/v123/veedufix/jobs/b1/after/pid.png`,
+        publicId: 'veedufix/jobs/b1/after/pid', bytes: 100, format: 'png'
       });
       expect(res.notification.photoFolder).toBe('veedufix/jobs/b1/after');
     });

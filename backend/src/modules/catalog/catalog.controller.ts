@@ -208,6 +208,16 @@ export async function importCatalogHandler(request: Request, response: Response)
 }
 
 export async function exportCatalogHandler(_request: Request, response: Response): Promise<void> {
-  const categories = await catalogService.resolveCatalogTree(undefined, undefined, true);
+  const categories = await catalogService.resolveAdminCatalogTree();
   response.status(200).json({ categories });
+}
+
+export async function addStarterCatalogHandler(_request: Request, response: Response): Promise<void> {
+  const result = await catalogService.addMissingStarterCatalog();
+  response.status(200).json(result);
+}
+
+export async function bulkCatalogStatusHandler(request: Request, response: Response): Promise<void> {
+  const result = await catalogService.bulkSetCatalogActiveStatus(request.body);
+  response.status(200).json(result);
 }

@@ -43,24 +43,40 @@ export async function uploadBufferToCloudinary(
 }
 
 /**
- * Generates a short-lived signed Cloudinary URL for a KYC document that was
- * uploaded with type:"authenticated".  The signed URL expires after
- * `expiresInSeconds` (default 5 minutes) and cannot be extended.
+ * Generates a short-lived signed download URL for an authenticated KYC image.
+ * Unlike a regular signed delivery URL, private_download_url enforces expiry.
  *
  * @param publicId    The Cloudinary public_id stored in the database.
+ * @param format      The original Cloudinary image format (for example jpg).
  * @param expiresInSeconds  TTL for the signed URL (default 300 s = 5 min).
  */
-export function generateSignedUrl(publicId: string, expiresInSeconds = 300): string {
+export function generateSignedUrl(
+  publicId: string,
+  format: string,
+  expiresInSeconds = 300
+): string {
   ensureConfigured();
 
-  const expiresAt = Math.floor(Date.now() / 1000) + expiresInSeconds;
+  if (!/^[a-z0-9]+$/i.test(format)) {
+    throw new Error("A valid Cloudinary document format is required");
+  }
 
-  return cloudinary.url(publicId, {
-    sign_url: true,
-    expires_at: expiresAt,
-    secure: true,
+  return cloudinary.utils.private_download_url(publicId, format, {
+    expires_at: Math.floor(Date.now() / 1000) + expiresInSeconds,
+    resource_type: "image",
     type: "authenticated"
   });
+}
+
+export function getCloudinaryFormatFromUrl(secureUrl: string): string | null {
+  try {
+    const pathname = new URL(secureUrl).pathname;
+    const filename = pathname.slice(pathname.lastIndexOf("/") + 1);
+    const match = filename.match(/\.([a-z0-9]+)$/i);
+    return match?.[1]?.toLowerCase() ?? null;
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -110,4 +126,3 @@ export function extractPublicIdFromUrl(secureUrl: string): string | null {
     return null;
   }
 }
-

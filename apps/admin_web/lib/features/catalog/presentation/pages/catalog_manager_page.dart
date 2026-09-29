@@ -23,6 +23,7 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
   late Future<_CatalogSnapshot> _snapshotFuture;
   final TextEditingController _searchController = TextEditingController();
   String _catalogQuery = '';
+  String _selectedCategoryId = '';
   _CatalogFilter _catalogFilter = _CatalogFilter.all;
 
   @override
@@ -133,9 +134,21 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
     final payload = await _showServiceEditor(snapshot);
     if (payload == null) return;
     try {
-      await _api.createService(payload);
+      final created = await _api.createService(payload);
       await _reload();
-      await _showMessage('Service created');
+      if (!mounted) return;
+      final serviceId = created['id'] as String?;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Service created and saved to the catalog.'),
+          action: serviceId == null
+              ? null
+              : SnackBarAction(
+                  label: 'Manage images & pricing',
+                  onPressed: () => context.push('/catalog/services/$serviceId'),
+                ),
+        ),
+      );
     } catch (error) {
       await _showMessage('Unable to create service: $error');
     }
@@ -163,47 +176,74 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
     }
   }
 
-  Future<void> _bulkUpdateCategories(Iterable<_AdminCategory> categories, {required bool isActive}) async {
-    final items = categories.toList(growable: false);
-    if (items.isEmpty) return;
+  Future<void> _confirmBulkStatus({
+    required String entityType,
+    required String itemLabel,
+    required Iterable<String> ids,
+    required bool isActive,
+  }) async {
+    final itemIds = ids.toSet().toList(growable: false);
+    if (itemIds.isEmpty) return;
+    final action = isActive ? 'Enable' : 'Disable';
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text('$action ${itemIds.length} $itemLabel?'),
+        content: Text(
+          isActive
+              ? 'These items will become available according to their parent category and pricing setup.'
+              : 'These items will no longer be offered to customers. Existing bookings and records will be kept.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: Text(action),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
     try {
-      for (final category in items) {
-        await _api.updateCategory(category.id, {'isActive': isActive});
-      }
+      final result = await _api.bulkSetActiveStatus(
+        entityType: entityType,
+        ids: itemIds,
+        isActive: isActive,
+      );
       await _reload();
-      await _showMessage('${items.length} categories ${isActive ? 'enabled' : 'disabled'}');
+      await _showMessage('${result['updatedCount'] ?? itemIds.length} $itemLabel ${isActive ? 'enabled' : 'disabled'}');
     } catch (error) {
-      await _showMessage('Unable to update categories: $error');
+      await _showMessage('Unable to $action $itemLabel: $error');
     }
   }
 
-  Future<void> _bulkUpdateSubcategories(Iterable<_AdminSubcategory> subcategories, {required bool isActive}) async {
-    final items = subcategories.toList(growable: false);
-    if (items.isEmpty) return;
-    try {
-      for (final subcategory in items) {
-        await _api.updateSubcategory(subcategory.id, {'isActive': isActive});
-      }
-      await _reload();
-      await _showMessage('${items.length} subcategories ${isActive ? 'enabled' : 'disabled'}');
-    } catch (error) {
-      await _showMessage('Unable to update subcategories: $error');
-    }
-  }
+  Future<void> _bulkUpdateCategories(Iterable<_AdminCategory> categories, {required bool isActive}) =>
+      _confirmBulkStatus(
+        entityType: 'categories',
+        itemLabel: 'categories',
+        ids: categories.map((item) => item.id),
+        isActive: isActive,
+      );
 
-  Future<void> _bulkUpdateServices(Iterable<_AdminService> services, {required bool isActive}) async {
-    final items = services.toList(growable: false);
-    if (items.isEmpty) return;
-    try {
-      for (final service in items) {
-        await _api.updateService(service.id, {'isActive': isActive});
-      }
-      await _reload();
-      await _showMessage('${items.length} services ${isActive ? 'enabled' : 'disabled'}');
-    } catch (error) {
-      await _showMessage('Unable to update services: $error');
-    }
-  }
+  Future<void> _bulkUpdateSubcategories(Iterable<_AdminSubcategory> subcategories, {required bool isActive}) =>
+      _confirmBulkStatus(
+        entityType: 'subcategories',
+        itemLabel: 'subcategories',
+        ids: subcategories.map((item) => item.id),
+        isActive: isActive,
+      );
+
+  Future<void> _bulkUpdateServices(Iterable<_AdminService> services, {required bool isActive}) =>
+      _confirmBulkStatus(
+        entityType: 'services',
+        itemLabel: 'services',
+        ids: services.map((item) => item.id),
+        isActive: isActive,
+      );
 
   Future<void> _reorderCategories(_CatalogSnapshot snapshot) async {
     final ordered = snapshot.categories.toList(growable: true);
@@ -624,6 +664,39 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
       await _showMessage('Unable to import catalog: $error');
     } finally {
       controller.dispose();
+    }
+  }
+
+  Future<void> _addStarterCatalog() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Add starter catalog?'),
+        content: const Text(
+          'This adds missing Veedufix starter categories, subcategories, and common services as disabled drafts. Review descriptions and prices, then enable only the items you are ready to offer. Existing entries and settings will not be changed.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Add missing items'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
+    try {
+      final result = await _api.addStarterCatalog();
+      await _reload();
+      await _showMessage(
+        'Added ${result['categoryCount']} categories, ${result['subcategoryCount']} subcategories, and ${result['serviceCount']} services',
+      );
+    } catch (error) {
+      await _showMessage('Unable to add starter catalog: $error');
     }
   }
 
@@ -1199,9 +1272,19 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
             builder: (context, snapshot) {
               final loading = snapshot.connectionState == ConnectionState.waiting;
               final data = snapshot.data;
-              final visibleCategories = data == null ? const <_AdminCategory>[] : _filteredCategories(data, _catalogQuery, _catalogFilter);
-              final visibleSubcategories = data == null ? const <_AdminSubcategory>[] : _filteredSubcategories(data, _catalogQuery, _catalogFilter);
-              final visibleServices = data == null ? const <_AdminService>[] : _filteredServices(data, _catalogQuery, _catalogFilter);
+              final selectedCategory = data?.categoryById(_selectedCategoryId);
+              final scopedSnapshot = data == null || _selectedCategoryId.isEmpty || selectedCategory == null
+                  ? data
+                  : _CatalogSnapshot(categories: [selectedCategory]);
+              final visibleCategories = scopedSnapshot == null
+                  ? const <_AdminCategory>[]
+                  : _filteredCategories(scopedSnapshot, _catalogQuery, _catalogFilter);
+              final visibleSubcategories = scopedSnapshot == null
+                  ? const <_AdminSubcategory>[]
+                  : _filteredSubcategories(scopedSnapshot, _catalogQuery, _catalogFilter);
+              final visibleServices = scopedSnapshot == null
+                  ? const <_AdminService>[]
+                  : _filteredServices(scopedSnapshot, _catalogQuery, _catalogFilter);
 
               return Column(
                 children: [
@@ -1254,6 +1337,29 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
                           controller: _searchController,
                           onChanged: (value) => setState(() => _catalogQuery = value.trim()),
                         ),
+                        const SizedBox(height: 10),
+                        DropdownButtonFormField<String>(
+                          initialValue: selectedCategory == null ? '' : selectedCategory.id,
+                          isExpanded: true,
+                          decoration: const InputDecoration(
+                            labelText: 'Category scope',
+                            prefixIcon: Icon(Icons.account_tree_outlined),
+                            border: OutlineInputBorder(),
+                            isDense: true,
+                          ),
+                          items: [
+                            const DropdownMenuItem(value: '', child: Text('All categories')),
+                            ...?data?.categories.map(
+                              (category) => DropdownMenuItem(
+                                value: category.id,
+                                child: Text(category.name, overflow: TextOverflow.ellipsis),
+                              ),
+                            ),
+                          ],
+                          onChanged: data == null
+                              ? null
+                              : (value) => setState(() => _selectedCategoryId = value ?? ''),
+                        ),
                         const SizedBox(height: 12),
                         Wrap(
                           spacing: 8,
@@ -1293,7 +1399,7 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
                             : TabBarView(
                                 children: [
                                   _CategoriesTab(
-                                    snapshot: data,
+                                    snapshot: scopedSnapshot ?? data,
                                     query: _catalogQuery,
                                     filter: _catalogFilter,
                                     visibleCount: visibleCategories.length,
@@ -1305,7 +1411,7 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
                                     onBulkDisable: () => _bulkUpdateCategories(visibleCategories, isActive: false),
                                   ),
                                   _SubcategoriesTab(
-                                    snapshot: data,
+                                    snapshot: scopedSnapshot ?? data,
                                     query: _catalogQuery,
                                     filter: _catalogFilter,
                                     visibleCount: visibleSubcategories.length,
@@ -1317,7 +1423,7 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
                                     onBulkDisable: () => _bulkUpdateSubcategories(visibleSubcategories, isActive: false),
                                   ),
                                   _ServicesTab(
-                                    snapshot: data,
+                                    snapshot: scopedSnapshot ?? data,
                                     query: _catalogQuery,
                                     filter: _catalogFilter,
                                     visibleCount: visibleServices.length,
@@ -1330,7 +1436,7 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
                                     onBulkDisable: () => _bulkUpdateServices(visibleServices, isActive: false),
                                   ),
                                   _PricingTab(
-                                    snapshot: data,
+                                    snapshot: scopedSnapshot ?? data,
                                     query: _catalogQuery,
                                     filter: _catalogFilter,
                                     onPricingRule: _addPricingRule,
@@ -1338,6 +1444,7 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
                                   _ImportExportTab(
                                     onImport: _importCatalog,
                                     onExport: _exportCatalog,
+                                    onAddStarter: _addStarterCatalog,
                                   ),
                                 ],
                               ),
@@ -2010,10 +2117,12 @@ class _ImportExportTab extends StatelessWidget {
   const _ImportExportTab({
     required this.onImport,
     required this.onExport,
+    required this.onAddStarter,
   });
 
   final VoidCallback onImport;
   final VoidCallback onExport;
+  final VoidCallback onAddStarter;
 
   @override
   Widget build(BuildContext context) {
@@ -2059,6 +2168,12 @@ class _ImportExportTab extends StatelessWidget {
             ),
           ],
         ),
+        const SizedBox(height: 12),
+        OutlinedButton.icon(
+          onPressed: onAddStarter,
+          icon: const Icon(Icons.library_add_outlined),
+          label: const Text('Add starter catalog drafts'),
+        ),
         const SizedBox(height: 16),
         Container(
           decoration: BoxDecoration(
@@ -2069,7 +2184,7 @@ class _ImportExportTab extends StatelessWidget {
           child: const Padding(
             padding: EdgeInsets.all(16),
             child: Text(
-              'Import accepts the hierarchical JSON structure used by the catalog seed and admin export flow. This lets the team manage 200+ services without code changes.',
+              'Add, edit, reorder, enable, or disable categories, subcategories, and services. Disabling keeps records attached to existing bookings. JSON import and export are also available for bulk catalog changes.',
             ),
           ),
         ),
@@ -3608,19 +3723,13 @@ class _CatalogAdminApi {
   final Dio _dio;
 
   Future<_CatalogSnapshot> fetchSnapshot() async {
-    final response = await _dio.get<Map<String, dynamic>>(
-      '/catalog',
-      queryParameters: {'includeInactive': true},
-    );
-    final rawCategories = (response.data?['categories'] as List?) ?? const [];
-    final summaryCategories = rawCategories.whereType<Map<String, dynamic>>().map(_AdminCategory.fromSummary).toList();
-    final detailed = <_AdminCategory>[];
-    for (final category in summaryCategories) {
-      final detailResponse = await _dio.get<Map<String, dynamic>>('/catalog/categories/${category.slug}');
-      final categoryJson = (detailResponse.data?['category'] as Map?)?.cast<String, dynamic>() ?? <String, dynamic>{};
-      detailed.add(_AdminCategory.fromDetail(categoryJson, fallback: category));
-    }
-    return _CatalogSnapshot(categories: detailed);
+    final response = await exportCatalog();
+    final rawCategories = (response['categories'] as List?) ?? const [];
+    final categories = rawCategories
+        .whereType<Map<String, dynamic>>()
+        .map(_AdminCategory.fromDetail)
+        .toList(growable: false);
+    return _CatalogSnapshot(categories: categories);
   }
 
   Future<void> createCategory(Map<String, dynamic> data) async {
@@ -3658,8 +3767,9 @@ class _CatalogAdminApi {
     await _dio.delete('/admin/catalog/subcategories/$id', data: const {});
   }
 
-  Future<void> createService(Map<String, dynamic> data) async {
-    await _dio.post('/admin/catalog/services', data: data);
+  Future<Map<String, dynamic>> createService(Map<String, dynamic> data) async {
+    final response = await _dio.post<Map<String, dynamic>>('/admin/catalog/services', data: data);
+    return response.data ?? <String, dynamic>{};
   }
 
   Future<void> updateService(String id, Map<String, dynamic> data) async {
@@ -3702,6 +3812,23 @@ class _CatalogAdminApi {
 
   Future<void> importCatalog(List<dynamic> categories) async {
     await _dio.post('/admin/catalog/import', data: {'categories': categories});
+  }
+
+  Future<Map<String, dynamic>> bulkSetActiveStatus({
+    required String entityType,
+    required List<String> ids,
+    required bool isActive,
+  }) async {
+    final response = await _dio.patch<Map<String, dynamic>>(
+      '/admin/catalog/bulk-status',
+      data: {'entityType': entityType, 'ids': ids, 'isActive': isActive},
+    );
+    return response.data ?? <String, dynamic>{};
+  }
+
+  Future<Map<String, dynamic>> addStarterCatalog() async {
+    final response = await _dio.post<Map<String, dynamic>>('/admin/catalog/starter');
+    return response.data ?? <String, dynamic>{};
   }
 }
 
@@ -3781,23 +3908,6 @@ class _AdminCategory {
   final List<_AdminSubcategory> subcategories;
 
   int get serviceCount => subcategories.fold<int>(0, (sum, subcategory) => sum + subcategory.serviceCount);
-
-  factory _AdminCategory.fromSummary(Map<String, dynamic> json) {
-    return _AdminCategory(
-      id: json['id'] as String? ?? '',
-      name: json['name'] as String? ?? '',
-      slug: json['slug'] as String? ?? '',
-      isActive: json['isActive'] as bool? ?? true,
-      featured: json['featured'] as bool? ?? false,
-      popular: json['popular'] as bool? ?? false,
-      sortOrder: (json['sortOrder'] as num?)?.toInt() ?? 0,
-      description: json['description'] as String?,
-      iconUrl: json['iconUrl'] as String?,
-      seoTitle: json['seoTitle'] as String?,
-      seoDescription: json['seoDescription'] as String?,
-      subcategories: const [],
-    );
-  }
 
   factory _AdminCategory.fromDetail(Map<String, dynamic> json, {_AdminCategory? fallback}) {
     final subcategories = (json['subcategories'] as List? ?? const [])

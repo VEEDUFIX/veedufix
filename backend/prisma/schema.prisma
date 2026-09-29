@@ -152,6 +152,9 @@ model WorkerProfile {
   alternatePhone      String?
   city                String?
   pincode             String?
+  serviceAreas        String?            @db.VarChar(500)
+  workType            String             @default("FULL_TIME")
+  acceptsUrgentJobs   Boolean            @default(true)
   aadhaarNumber       String?
   aadhaarDocUrl       String?
   aadhaarDocPublicId  String?
@@ -612,15 +615,21 @@ model Notification {
 }
 
 model OpsAlert {
-  id        String   @id @default(cuid())
-  sourceId  String   @unique
-  type      String
-  bookingId String?
-  message   String
-  metadata  Json?
-  severity  String   @default("high")
-  status    String   @default("open")
-  createdAt DateTime @default(now())
+  id                String    @id @default(cuid())
+  sourceId          String    @unique
+  type              String
+  bookingId         String?
+  message           String
+  metadata          Json?
+  severity          String    @default("high")
+  status            String    @default("open")
+  resolutionNote    String?
+  acknowledgedAt    DateTime?
+  acknowledgedById  String?
+  resolvedAt        DateTime?
+  resolvedById      String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
 
   @@index([type, severity, status, createdAt])
   @@index([bookingId, status, createdAt])
@@ -939,6 +948,7 @@ model WorkerDocument {
   worker      WorkerProfile @relation(fields: [workerId], references: [id], onDelete: Cascade)
   type        String
   url         String
+  publicId    String?
   verifiedAt  DateTime?
   rejectedAt  DateTime?
   createdAt   DateTime @default(now())

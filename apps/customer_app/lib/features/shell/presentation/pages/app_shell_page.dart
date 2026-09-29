@@ -1,12 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:marketplace_shared/core/storage/app_locale_provider.dart';
 
 class AppShellPage extends StatelessWidget {
-  const AppShellPage({
-    super.key,
-    required this.child,
-  });
+  const AppShellPage({super.key, required this.child});
 
   final Widget child;
 
@@ -26,17 +24,14 @@ class AppShellPage extends StatelessWidget {
           decoration: const BoxDecoration(
             color: Colors.white,
             border: Border(
-              top: BorderSide(
-                color: Color(0xFFE8E5DE),
-                width: 0.5,
-              ),
+              top: BorderSide(color: Color(0xFFE8E5DE), width: 0.5),
             ),
           ),
           child: Row(
             children: [
               Expanded(
                 child: _NavItem(
-                  label: 'Home',
+                  label: appText(context, 'Home', 'முகப்பு'),
                   activeIcon: Icons.explore_rounded,
                   inactiveIcon: Icons.explore_outlined,
                   isSelected: index == 0,
@@ -45,7 +40,7 @@ class AppShellPage extends StatelessWidget {
               ),
               Expanded(
                 child: _NavItem(
-                  label: 'Bookings',
+                  label: appText(context, 'Bookings', 'முன்பதிவுகள்'),
                   activeIcon: Icons.receipt_long_rounded,
                   inactiveIcon: Icons.receipt_long_outlined,
                   isSelected: index == 1,
@@ -54,7 +49,7 @@ class AppShellPage extends StatelessWidget {
               ),
               Expanded(
                 child: _NavItem(
-                  label: 'Profile',
+                  label: appText(context, 'Profile', 'சுயவிவரம்'),
                   activeIcon: Icons.person_rounded,
                   inactiveIcon: Icons.person_outline_rounded,
                   isSelected: index == 2,

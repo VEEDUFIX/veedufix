@@ -3,9 +3,10 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:intl/intl.dart';
 import 'package:marketplace_shared/marketplace_shared.dart';
-import '../../../../core/widgets/metallic_card.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../../../../core/widgets/metallic_card.dart';
 
 import '../../../../core/widgets/worker_logo.dart';
 import '../providers/worker_availability_provider.dart';
@@ -21,6 +22,7 @@ class _WorkerDashboardPageState extends ConsumerState<WorkerDashboardPage> {
   StreamSubscription<Map<String, dynamic>>? _notificationSubscription;
   final List<_LiveUpdateItem> _liveUpdates = <_LiveUpdateItem>[];
   bool _connected = false;
+  bool _connecting = false;
 
   @override
   void initState() {
@@ -39,12 +41,14 @@ class _WorkerDashboardPageState extends ConsumerState<WorkerDashboardPage> {
 
   Future<void> _connectSocket() async {
     final session = ref.read(authControllerProvider).valueOrNull;
-    if (session == null) return;
+    if (session == null || _connecting || _notificationSubscription != null) return;
 
+    _connecting = true;
     final service = ref.read(realtimeServiceProvider);
-    await service.connectNotifications();
+    try {
+      await service.connectNotifications();
 
-    _notificationSubscription = service.notificationStream.listen(
+      _notificationSubscription = service.notificationStream.listen(
       (payload) {
         final title = payload['title'] as String? ??
             payload['bookingCode'] as String? ??
@@ -79,9 +83,14 @@ class _WorkerDashboardPageState extends ConsumerState<WorkerDashboardPage> {
         if (!mounted) return;
         setState(() => _connected = false);
       },
-    );
+      );
 
-    if (mounted) setState(() => _connected = true);
+      if (mounted) setState(() => _connected = true);
+    } catch (_) {
+      if (mounted) setState(() => _connected = false);
+    } finally {
+      _connecting = false;
+    }
   }
 
   String _relativeLabel(DateTime timestamp) {
@@ -117,7 +126,12 @@ class _WorkerDashboardPageState extends ConsumerState<WorkerDashboardPage> {
   @override
   Widget build(BuildContext context) {
     ref.listen<AsyncValue<AuthSession?>>(authControllerProvider, (_, next) {
-      if (next.hasValue || next.hasError || !next.isLoading) {
+      if (next.valueOrNull == null) {
+        _notificationSubscription?.cancel();
+        _notificationSubscription = null;
+        ref.read(realtimeServiceProvider).disconnectNotifications();
+        if (mounted) setState(() => _connected = false);
+      } else {
         _connectSocket();
       }
     });
@@ -184,35 +198,6 @@ class _WorkerDashboardPageState extends ConsumerState<WorkerDashboardPage> {
             baseColor: const Color(0xFF0F766E),
           ),
           const SizedBox(height: 14),
-          Row(
-            children: [
-              Expanded(
-                child: FilledButton.tonalIcon(
-                  onPressed: () => context.go('/jobs'),
-                  icon: const Icon(Icons.assignment_rounded),
-                  label: const Text('Open jobs'),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: () => context.go('/schedule'),
-                  icon: const Icon(Icons.calendar_month_rounded),
-                  label: const Text('Schedule'),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          _DashboardStatusCard(
-            connected: _connected,
-            todayJobsCount: todayJobsCount,
-            unreadNotifications: unreadNotifications,
-            onOpenJobs: () => context.go('/jobs'),
-            onOpenEarnings: () => context.go('/earnings'),
-            onOpenNotifications: () => context.push('/notifications'),
-          ),
-          const SizedBox(height: 16),
           const _AvailabilityToggleCard(),
           const SizedBox(height: 16),
           PremiumGlassCard(
@@ -353,8 +338,8 @@ class _WorkerDashboardPageState extends ConsumerState<WorkerDashboardPage> {
           ),
           const SizedBox(height: 20),
           const PremiumSectionHeader(
-            title: 'Live updates',
-            subtitle: 'Realtime notifications from the marketplace and booking activity.',
+            title: 'Updates',
+            subtitle: 'Important changes from jobs, customers, and payouts.',
           ),
           const SizedBox(height: 12),
           if (_liveUpdates.isEmpty)
@@ -383,7 +368,7 @@ class _WorkerDashboardPageState extends ConsumerState<WorkerDashboardPage> {
                         Expanded(
                           child: Text(
                             isSignedIn
-                                ? 'No live events yet'
+                                ? 'You\'re all caught up.'
                                 : 'Sign in to receive live updates',
                             style: Theme.of(context).textTheme.titleMedium?.copyWith(
                                   fontWeight: FontWeight.w800,
@@ -500,7 +485,7 @@ class _WorkerDashboardPageState extends ConsumerState<WorkerDashboardPage> {
                     child: _JobCard(
                       title: job.serviceName,
                       status: job.status,
-                      time: ' - ',
+                      time: DateFormat('h:mm a').format(job.scheduledAt),
                       onTap: () => context.push(route),
                       job: job,
                     ),
@@ -544,7 +529,7 @@ class _WorkerDashboardPageState extends ConsumerState<WorkerDashboardPage> {
           // â”€â”€ Quick Actions â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
           const PremiumSectionHeader(
             title: 'Quick actions',
-            subtitle: 'Common tasks at your fingertips.',
+            subtitle: 'Shortcuts for the workday.',
           ),
           const SizedBox(height: 12),
           Row(
@@ -552,35 +537,21 @@ class _WorkerDashboardPageState extends ConsumerState<WorkerDashboardPage> {
               _QuickAction(
                 icon: Icons.calendar_month_rounded,
                 label: 'Schedule',
-                color: const Color(0xFF6366F1),
+                color: const Color(0xFFC8A75A),
                 onTap: () => context.go('/schedule'),
               ),
               const SizedBox(width: 12),
               _QuickAction(
                 icon: Icons.payments_rounded,
                 label: 'Earnings',
-                color: const Color(0xFF14B8A6),
+                color: const Color(0xFFC8A75A),
                 onTap: () => context.go('/earnings'),
-              ),
-              const SizedBox(width: 12),
-              _QuickAction(
-                icon: Icons.account_balance_wallet_rounded,
-                label: 'Wallet',
-                color: const Color(0xFF10B981),
-                onTap: () => context.push('/wallet'),
-              ),
-              const SizedBox(width: 12),
-              _QuickAction(
-                icon: Icons.star_rounded,
-                label: 'Reviews',
-                color: const Color(0xFFF59E0B),
-                onTap: () => context.push('/reviews'),
               ),
               const SizedBox(width: 12),
               _QuickAction(
                 icon: Icons.support_agent_rounded,
                 label: 'Support',
-                color: const Color(0xFF3B82F6),
+                color: const Color(0xFFC8A75A),
                 onTap: () => context.push(
                   '/support?autoFocusForm=true&category=app&subject=${Uri.encodeComponent('Worker app support')}&message=${Uri.encodeComponent('I need help with my worker app account, jobs, or payouts.')}',
                 ),
@@ -771,195 +742,56 @@ class _JobCard extends StatelessWidget {
   }
 }
 
-class _DashboardStatusCard extends StatelessWidget {
-  const _DashboardStatusCard({
-    required this.connected,
-    required this.todayJobsCount,
-    required this.unreadNotifications,
-    required this.onOpenJobs,
-    required this.onOpenEarnings,
-    required this.onOpenNotifications,
-  });
-
-  final bool connected;
-  final int todayJobsCount;
-  final int unreadNotifications;
-  final VoidCallback onOpenJobs;
-  final VoidCallback onOpenEarnings;
-  final VoidCallback onOpenNotifications;
-
-  @override
-  Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    final tt = Theme.of(context).textTheme;
-
-    return PremiumGlassCard(
-      child: Padding(
-        padding: const EdgeInsets.all(18),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Container(
-                  width: 50,
-                  height: 50,
-                  decoration: BoxDecoration(
-                    color: (connected ? const Color(0xFF0F766E) : cs.outline)
-                        .withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: Icon(
-                    connected ? Icons.wifi_rounded : Icons.wifi_off_rounded,
-                    color: connected ? const Color(0xFF0F766E) : cs.outline,
-                  ),
-                ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Dashboard pulse',
-                        style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w800),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        connected
-                            ? 'Live updates are active. Keep an eye on today’s route and jump into jobs or earnings when needed.'
-                            : 'Live updates are reconnecting. You can still open jobs, earnings, and notifications.',
-                        style: tt.bodyMedium?.copyWith(
-                          color: cs.onSurfaceVariant,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 14),
-            Wrap(
-              spacing: 10,
-              runSpacing: 10,
-              children: [
-                _DashboardPulsePill(
-                  label: 'Today',
-                  value: '$todayJobsCount jobs',
-                ),
-                _DashboardPulsePill(
-                  label: 'Alerts',
-                  value: unreadNotifications > 0 ? '$unreadNotifications new' : 'Clear',
-                ),
-                _DashboardPulsePill(
-                  label: 'Status',
-                  value: connected ? 'Connected' : 'Offline',
-                ),
-              ],
-            ),
-            const SizedBox(height: 14),
-            Wrap(
-              spacing: 10,
-              runSpacing: 10,
-              children: [
-                FilledButton.icon(
-                  onPressed: onOpenJobs,
-                  icon: const Icon(Icons.work_history_rounded, size: 18),
-                  label: const Text('Open jobs'),
-                ),
-                OutlinedButton.icon(
-                  onPressed: onOpenEarnings,
-                  icon: const Icon(Icons.payments_rounded, size: 18),
-                  label: const Text('Earnings'),
-                ),
-                TextButton.icon(
-                  onPressed: onOpenNotifications,
-                  icon: const Icon(Icons.notifications_none_rounded, size: 18),
-                  label: const Text('Notifications'),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _DashboardPulsePill extends StatelessWidget {
-  const _DashboardPulsePill({
-    required this.label,
-    required this.value,
-  });
-
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    final tt = Theme.of(context).textTheme;
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
-        color: cs.surfaceContainerHighest.withValues(alpha: 0.55),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.25)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            label,
-            style: tt.labelMedium?.copyWith(
-              color: cs.onSurfaceVariant,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          const SizedBox(height: 2),
-          Text(
-            value,
-            style: tt.titleMedium?.copyWith(
-              fontWeight: FontWeight.w900,
-              color: cs.onSurface,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 class _AvailabilityToggleCard extends ConsumerWidget {
   const _AvailabilityToggleCard();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final toggleState = ref.watch(availabilityToggleProvider);
-    final isOnline = toggleState.valueOrNull ?? true;
+    final hasError = toggleState.hasError;
+    final isOnline = toggleState.valueOrNull ?? false;
     final isLoading = toggleState.isLoading;
 
     return _OnlineToggle(
       isOnline: isOnline,
       isLoading: isLoading,
-      onChanged: (v) => ref.read(availabilityToggleProvider.notifier).toggle(v),
+      hasError: hasError,
+      onRetry: hasError
+          ? () => ref.read(availabilityToggleProvider.notifier).refresh()
+          : null,
+      onChanged: isLoading || hasError
+          ? null
+          : (value) async {
+              try {
+                await ref.read(availabilityToggleProvider.notifier).toggle(value);
+              } catch (_) {
+                if (!context.mounted) return;
+                ScaffoldMessenger.of(context)
+                  ..hideCurrentSnackBar()
+                  ..showSnackBar(const SnackBar(content: Text('Could not update availability. Please try again.')));
+              }
+            },
     );
   }
 }
 
 class _OnlineToggle extends StatelessWidget {
-  const _OnlineToggle({required this.isOnline, required this.onChanged, this.isLoading = false});
+  const _OnlineToggle({required this.isOnline, required this.onChanged, this.isLoading = false, this.hasError = false, this.onRetry});
   final bool isOnline;
   final bool isLoading;
-  final ValueChanged<bool> onChanged;
+  final bool hasError;
+  final VoidCallback? onRetry;
+  final ValueChanged<bool>? onChanged;
 
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final tt = Theme.of(context).textTheme;
-    final accent = isOnline ? const Color(0xFF10B981) : cs.error;
+    final accent = hasError
+        ? cs.onSurfaceVariant
+        : isOnline
+            ? const Color(0xFF10B981)
+            : cs.error;
 
     return AnimatedContainer(
       duration: const Duration(milliseconds: 300),
@@ -1003,24 +835,39 @@ class _OnlineToggle extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  isOnline ? 'You are Online' : 'You are Offline',
+                  hasError
+                      ? 'Availability unavailable'
+                      : isOnline
+                          ? 'You are Online'
+                          : 'You are Offline',
                   style: tt.titleMedium?.copyWith(
                     color: accent,
                     fontWeight: FontWeight.w800,
                   ),
                 ),
                 Text(
-                  isOnline ? 'Accepting new job requests' : 'Not receiving any jobs',
+                  hasError
+                      ? 'Check your connection and try again'
+                      : isOnline
+                          ? 'Accepting new job requests'
+                          : 'Not receiving any jobs',
                   style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant),
                 ),
               ],
             ),
           ),
-          Switch.adaptive(
-            value: isOnline,
-            onChanged: onChanged,
-            activeTrackColor: accent,
-          ),
+          if (hasError)
+            IconButton(
+              tooltip: 'Retry availability',
+              onPressed: onRetry,
+              icon: const Icon(Icons.refresh_rounded),
+            )
+          else
+            Switch.adaptive(
+              value: isOnline,
+              onChanged: onChanged,
+              activeTrackColor: accent,
+            ),
         ],
       ),
     );

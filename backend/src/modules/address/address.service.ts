@@ -23,9 +23,6 @@ export class SavedAddressNotFoundError extends Error {
   }
 }
 
-// Follow-up: booking creation should accept an optional savedAddressId and reuse
-// a SavedAddress record here instead of constructing a fresh address payload inline.
-
 function normalizeOptionalText(value: string | undefined | null): string | null | undefined {
   if (value === undefined) {
     return undefined;

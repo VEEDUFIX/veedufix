@@ -6,6 +6,7 @@
     "dev": "tsx watch src/server.ts",
     "prebuild": "prisma generate",
     "build": "tsc -p tsconfig.json",
+    "prestart": "prisma migrate deploy",
     "start": "node dist/server.js",
     "test": "vitest run",
     "test:watch": "vitest",

@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:marketplace_shared/marketplace_shared.dart';
 import 'router.dart';
 import '../features/onboarding/presentation/providers/onboarding_provider.dart';
+import '../core/notifications/worker_device_token.dart';
 
 class AppBootstrap extends ConsumerStatefulWidget {
   const AppBootstrap({super.key});
@@ -51,6 +52,9 @@ class _AppBootstrapState extends ConsumerState<AppBootstrap>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       ref.invalidate(workerOnboardingStatusProvider);
+      if (ref.read(authControllerProvider).valueOrNull != null) {
+        unawaited(_registerDeviceToken());
+      }
     }
   }
 
@@ -97,18 +101,8 @@ class _AppBootstrapState extends ConsumerState<AppBootstrap>
     final session = ref.read(authControllerProvider).valueOrNull;
     if (session == null) return;
 
-    final token = await FirebaseMessaging.instance.getToken();
-    if (token == null || token.isEmpty) return;
-
     final platform = kIsWeb ? 'web' : defaultTargetPlatform.name;
-    try {
-      await ref.read(apiClientProvider).post(
-        '/device-tokens',
-        data: {'token': token, 'platform': platform},
-      );
-    } catch (_) {
-      // Best-effort only — never block the app for a token registration failure.
-    }
+    await registerWorkerDeviceToken(ref.read(apiClientProvider), platform: platform);
   }
 
   @override
@@ -118,12 +112,15 @@ class _AppBootstrapState extends ConsumerState<AppBootstrap>
       (prev, next) => _syncNotificationSocket(prev, next),
     );
     final router = ref.watch(routerProvider);
+    final locale = ref.watch(appLocaleProvider);
 
     return MaterialApp.router(
       debugShowCheckedModeBanner: false,
       title: appTitleForMode(AppMode.worker),
       theme: buildLightTheme(),
       themeMode: ThemeMode.light,
+      locale: locale,
+      supportedLocales: const [Locale('en'), Locale('ta')],
       scaffoldMessengerKey: _messengerKey,
       builder: (context, child) => AppBackdrop(
         variant: AppBackdropVariant.worker,

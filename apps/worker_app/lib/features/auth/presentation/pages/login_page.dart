@@ -112,6 +112,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
     context.go('/otp', extra: <String, dynamic>{
       'identifier': _phone,
       'verificationId': verificationId,
+      'resendToken': resendToken,
       'role': 'WORKER',
     });
   }

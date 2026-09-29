@@ -1,6 +1,7 @@
 import { BookingStatus, Prisma } from "@prisma/client";
 import { randomInt } from "crypto";
 import { prisma } from "../../lib/prisma.js";
+import { redis } from "../../lib/redis.js";
 import { logger } from "../../lib/logger.js";
 import { publishNotificationEvent } from "../../lib/realtime.js";
 import { getTokensForUser } from "../device-token/device-token.service.js";
@@ -31,6 +32,13 @@ export class OtpInvalidError extends Error {
   }
 }
 
+export class OtpAttemptLimitError extends Error {
+  constructor(message = "Too many incorrect codes. Please request a new code later.") {
+    super(message);
+    this.name = "OtpAttemptLimitError";
+  }
+}
+
 export class IncompleteJobError extends Error {
   missingItems: string[];
   missingPhotos: boolean;
@@ -40,6 +48,13 @@ export class IncompleteJobError extends Error {
     this.name = "IncompleteJobError";
     this.missingItems = missingItems;
     this.missingPhotos = missingPhotos;
+  }
+}
+
+export class JobStateConflictError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "JobStateConflictError";
   }
 }
 
@@ -71,6 +86,22 @@ type ArrivalOtpInput = {
 };
 
 const OTP_TTL_MS = 10 * 60 * 1000;
+const OTP_MAX_ATTEMPTS = 5;
+const OTP_ATTEMPT_WINDOW_SECONDS = 10 * 60;
+
+function otpAttemptKey(bookingId: string, workerId: string, kind: "arrival" | "completion"): string {
+  return `job-otp:attempts:${kind}:${bookingId}:${workerId}`;
+}
+
+async function checkOtpAttemptLimit(key: string): Promise<void> {
+  const attempts = await redis.incr(key);
+  if (attempts === 1) {
+    await redis.expire(key, OTP_ATTEMPT_WINDOW_SECONDS);
+  }
+  if (attempts > OTP_MAX_ATTEMPTS) {
+    throw new OtpAttemptLimitError();
+  }
+}
 
 function now(): Date {
   return new Date();
@@ -221,42 +252,52 @@ export async function generateArrivalOtp(
   input: ArrivalOtpInput = {}
 ): Promise<{ bookingId: string; status: string; otpExpiresAt: Date }> {
   const { booking, execution } = await requireWorkerBooking(bookingId, workerId);
+  if (![BookingStatus.WORKER_ASSIGNED, BookingStatus.ARRIVED].includes(booking.status)) {
+    throw new JobStateConflictError("Arrival can only be recorded for an assigned job");
+  }
   const otpStart = generateOtp();
   const otpStartExpiresAt = new Date(Date.now() + OTP_TTL_MS);
 
-  const updated = await prisma.jobExecution.upsert({
-    where: { bookingId },
-    create: {
-      bookingId,
-      otpStart,
-      otpStartExpiresAt,
-      status: "arrived",
-      arrivedAt: now(),
-      startedAt: null,
-      completedAt: null,
-      beforePhotos: execution.beforePhotos,
-      afterPhotos: execution.afterPhotos,
-      ...(execution.checklist !== null && execution.checklist !== undefined
-        ? { checklist: asJsonInput(execution.checklist) }
-        : {}),
-      workerLat: input.workerLat,
-      workerLng: input.workerLng
-    },
-    update: {
-      otpStart,
-      otpStartExpiresAt,
-      otpStartVerifiedAt: null,
-      status: "arrived",
-      arrivedAt: now(),
-      workerLat: input.workerLat,
-      workerLng: input.workerLng
+  const arrivedAt = now();
+  const updated = await prisma.$transaction(async (tx) => {
+    const bookingTransition = await tx.booking.updateMany({
+      where: { id: bookingId, status: { in: [BookingStatus.WORKER_ASSIGNED, BookingStatus.ARRIVED] } },
+      data: { status: BookingStatus.ARRIVED }
+    });
+    if (bookingTransition.count !== 1) {
+      throw new JobStateConflictError("This booking can no longer be marked as arrived");
     }
-  });
 
-  await prisma.booking.update({
-    where: { id: bookingId },
-    data: { status: BookingStatus.ARRIVED }
+    return tx.jobExecution.upsert({
+      where: { bookingId },
+      create: {
+        bookingId,
+        otpStart,
+        otpStartExpiresAt,
+        status: "arrived",
+        arrivedAt,
+        startedAt: null,
+        completedAt: null,
+        beforePhotos: execution.beforePhotos,
+        afterPhotos: execution.afterPhotos,
+        ...(execution.checklist !== null && execution.checklist !== undefined
+          ? { checklist: asJsonInput(execution.checklist) }
+          : {}),
+        workerLat: input.workerLat,
+        workerLng: input.workerLng
+      },
+      update: {
+        otpStart,
+        otpStartExpiresAt,
+        otpStartVerifiedAt: null,
+        status: "arrived",
+        arrivedAt,
+        workerLat: input.workerLat,
+        workerLng: input.workerLng
+      }
+    });
   });
+  await redis.del(otpAttemptKey(bookingId, workerId, "arrival"));
   void recordBookingTimelineEvent({
     bookingId,
     status: BookingStatus.ARRIVED,
@@ -280,9 +321,9 @@ export async function getArrivalOtpForCustomer(
   bookingId: string,
   customerId: string
 ): Promise<{ bookingId: string; otp: string; otpExpiresAt: Date }> {
-  const { execution } = await requireCustomerBooking(bookingId, customerId);
+  const { booking, execution } = await requireCustomerBooking(bookingId, customerId);
 
-  if (execution.status !== "arrived" || !execution.otpStart || isExpired(execution.otpStartExpiresAt)) {
+  if (booking.status !== BookingStatus.ARRIVED || execution.status !== "arrived" || !execution.otpStart || isExpired(execution.otpStartExpiresAt)) {
     throw new OtpExpiredError("Arrival OTP expired");
   }
 
@@ -300,27 +341,53 @@ export async function verifyArrivalOtp(
 ): Promise<{ bookingId: string; status: string }> {
   const { booking, execution } = await requireWorkerBooking(bookingId, workerId);
 
+  if (
+    booking.status !== BookingStatus.ARRIVED || execution.status !== "arrived" ||
+    execution.otpStartVerifiedAt
+  ) {
+    throw new JobStateConflictError("Arrival verification is no longer available for this booking");
+  }
+
   if (!execution.otpStart || isExpired(execution.otpStartExpiresAt)) {
     throw new OtpExpiredError("Arrival OTP expired");
   }
+
+  const attemptKey = otpAttemptKey(bookingId, workerId, "arrival");
+  await checkOtpAttemptLimit(attemptKey);
 
   if (execution.otpStart !== otpInput.trim()) {
     throw new OtpInvalidError("Invalid arrival OTP");
   }
 
-  const updated = await prisma.jobExecution.update({
-    where: { bookingId },
-    data: {
-      otpStartVerifiedAt: now(),
-      status: "in_progress",
-      startedAt: now()
+  const verifiedAt = now();
+  await prisma.$transaction(async (tx) => {
+    const bookingTransition = await tx.booking.updateMany({
+      where: { id: bookingId, status: BookingStatus.ARRIVED },
+      data: { status: BookingStatus.IN_PROGRESS }
+    });
+    const executionTransition = bookingTransition.count === 1
+      ? await tx.jobExecution.updateMany({
+          where: {
+            bookingId,
+            status: "arrived",
+            otpStart: otpInput.trim(),
+            otpStartVerifiedAt: null,
+            otpStartExpiresAt: { gt: verifiedAt }
+          },
+          data: {
+            otpStart: null,
+            otpStartVerifiedAt: verifiedAt,
+            status: "in_progress",
+            startedAt: verifiedAt
+          }
+        })
+      : { count: 0 };
+
+    if (bookingTransition.count !== 1 || executionTransition.count !== 1) {
+      throw new JobStateConflictError("Arrival code was already used or this booking has changed");
     }
   });
-
-  await prisma.booking.update({
-    where: { id: bookingId },
-    data: { status: BookingStatus.IN_PROGRESS }
-  });
+  await redis.del(attemptKey);
   void recordBookingTimelineEvent({
     bookingId,
     status: BookingStatus.IN_PROGRESS,
@@ -331,8 +398,8 @@ export async function verifyArrivalOtp(
   await notifyCustomer(booking.customerId, "job_started", { bookingId });
 
   return {
-    bookingId: updated.bookingId,
-    status: updated.status
+    bookingId,
+    status: "in_progress"
   };
 }
 
@@ -342,10 +409,23 @@ export async function uploadJobPhotos(
   photoUrls: string[],
   type: "before" | "after"
 ): Promise<{ bookingId: string; type: "before" | "after"; photoUrls: string[] }> {
-  await requireWorkerBooking(bookingId, workerId);
+  const { booking, execution } = await requireWorkerBooking(bookingId, workerId);
+  if (booking.status !== BookingStatus.IN_PROGRESS || execution.status !== "in_progress") {
+    throw new JobStateConflictError("Job photos can only be added while work is in progress");
+  }
+
+  if (type === "after") {
+    const serviceId = resolveServiceId(booking);
+    if (!validateChecklistCompletion(serviceId, execution.checklist).isComplete) {
+      throw new IncompleteJobError("Complete the service checklist before adding after photos", [], false);
+    }
+  }
 
   const existing = await ensureExecutionRow(bookingId);
   const nextPhotos = type === "before" ? mergePhotos(existing.beforePhotos, photoUrls) : mergePhotos(existing.afterPhotos, photoUrls);
+  if (nextPhotos.length > 5) {
+    throw AppError.badRequest("You can upload at most five photos for each step");
+  }
 
   await prisma.jobExecution.update({
     where: { bookingId },
@@ -364,7 +444,10 @@ export async function updateChecklist(
   workerId: string,
   items: unknown
 ): Promise<{ bookingId: string; checklist: unknown }> {
-  await requireWorkerBooking(bookingId, workerId);
+  const { booking, execution } = await requireWorkerBooking(bookingId, workerId);
+  if (booking.status !== BookingStatus.IN_PROGRESS || execution.status !== "in_progress") {
+    throw new JobStateConflictError("The checklist can only be updated while work is in progress");
+  }
 
   await prisma.jobExecution.upsert({
     where: { bookingId },
@@ -390,9 +473,12 @@ export async function generateCompletionOtp(
   workerId: string
 ): Promise<{ bookingId: string; status: string; otpExpiresAt: Date }> {
   const { booking, execution } = await requireWorkerBooking(bookingId, workerId);
+  if (booking.status !== BookingStatus.IN_PROGRESS || execution.status !== "in_progress" || !execution.otpStartVerifiedAt) {
+    throw new JobStateConflictError("Start the job with the arrival code before requesting completion");
+  }
   const serviceId = resolveServiceId(booking);
   const checklistResult = validateChecklistCompletion(serviceId, execution.checklist);
-  const missingPhotos = execution.afterPhotos.length === 0;
+  const missingPhotos = execution.beforePhotos.length === 0 || execution.afterPhotos.length === 0;
 
   if (missingPhotos || !checklistResult.isComplete) {
     throw new IncompleteJobError(
@@ -414,6 +500,7 @@ export async function generateCompletionOtp(
       status: "in_progress"
     }
   });
+  await redis.del(otpAttemptKey(bookingId, workerId, "completion"));
 
   await notifyCustomer(booking.customerId, "completion_otp_requested", {
     bookingId
@@ -430,9 +517,9 @@ export async function getCompletionOtpForCustomer(
   bookingId: string,
   customerId: string
 ): Promise<{ bookingId: string; otp: string; otpExpiresAt: Date }> {
-  const { execution } = await requireCustomerBooking(bookingId, customerId);
+  const { booking, execution } = await requireCustomerBooking(bookingId, customerId);
 
-  if (execution.status !== "in_progress" || !execution.otpEnd || isExpired(execution.otpEndExpiresAt)) {
+  if (booking.status !== BookingStatus.IN_PROGRESS || execution.status !== "in_progress" || !execution.otpEnd || isExpired(execution.otpEndExpiresAt)) {
     throw new OtpExpiredError("Completion OTP expired");
   }
 
@@ -450,27 +537,50 @@ export async function verifyCompletionOtp(
 ): Promise<{ bookingId: string; status: string }> {
   const { booking, execution } = await requireWorkerBooking(bookingId, workerId);
 
+  if (booking.status !== BookingStatus.IN_PROGRESS || execution.status !== "in_progress" || !execution.otpEnd) {
+    throw new JobStateConflictError("This booking is not ready for completion verification");
+  }
+
   if (!execution.otpEnd || isExpired(execution.otpEndExpiresAt)) {
     throw new OtpExpiredError("Completion OTP expired");
   }
+
+  const attemptKey = otpAttemptKey(bookingId, workerId, "completion");
+  await checkOtpAttemptLimit(attemptKey);
 
   if (execution.otpEnd !== otpInput.trim()) {
     throw new OtpInvalidError("Invalid completion OTP");
   }
 
-  const updated = await prisma.jobExecution.update({
-    where: { bookingId },
-    data: {
-      otpEndVerifiedAt: now(),
-      status: "completed",
-      completedAt: now()
+  const completedAt = now();
+  await prisma.$transaction(async (tx) => {
+    const bookingTransition = await tx.booking.updateMany({
+      where: { id: bookingId, status: BookingStatus.IN_PROGRESS },
+      data: { status: BookingStatus.COMPLETED }
+    });
+    const executionTransition = bookingTransition.count === 1
+      ? await tx.jobExecution.updateMany({
+          where: {
+            bookingId,
+            status: "in_progress",
+            otpEnd: otpInput.trim(),
+            otpEndVerifiedAt: null,
+            otpEndExpiresAt: { gt: completedAt }
+          },
+          data: {
+            otpEnd: null,
+            otpEndVerifiedAt: completedAt,
+            status: "completed",
+            completedAt
+          }
+        })
+      : { count: 0 };
+
+    if (bookingTransition.count !== 1 || executionTransition.count !== 1) {
+      throw new JobStateConflictError("Completion code was already used or this booking has changed");
     }
   });
-
-  await prisma.booking.update({
-    where: { id: bookingId },
-    data: { status: BookingStatus.COMPLETED }
-  });
+  await redis.del(attemptKey);
   void recordBookingTimelineEvent({
     bookingId,
     status: BookingStatus.COMPLETED,
@@ -483,8 +593,8 @@ export async function verifyCompletionOtp(
   });
 
   return {
-    bookingId: updated.bookingId,
-    status: updated.status
+    bookingId,
+    status: "completed"
   };
 }
 

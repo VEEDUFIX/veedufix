@@ -58,13 +58,49 @@ import {
   acceptJobOffer,
   rejectJobOffer,
   DispatchConflictError,
-  OfferAuthorizationError
+  OfferAuthorizationError,
+  previewCustomerScheduleSlots
 } from '../modules/matching/matching.service.js';
 import { prisma } from '../lib/prisma.js';
 
 describe('Matching Service', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  describe('previewCustomerScheduleSlots', () => {
+    it('returns only future slots within worker hours and outside existing bookings', async () => {
+      vi.mocked(prisma.workerProfile.findMany).mockResolvedValue([
+        { id: 'w1' }
+      ] as any);
+      vi.mocked(prisma.workerAvailability.findMany).mockResolvedValue(
+        [0, 1, 2, 3, 4, 5, 6].map((dayOfWeek) => ({
+          workerId: 'w1',
+          dayOfWeek,
+          startTime: '09:00',
+          endTime: '18:00'
+        })) as any
+      );
+      vi.mocked(prisma.booking.findMany).mockResolvedValue([
+        { workerId: 'w1', scheduledFor: new Date('2099-01-05T03:30:00.000Z') }
+      ] as any);
+
+      const slots = await previewCustomerScheduleSlots({
+        categoryIds: ['category-1'],
+        latitude: 13.0827,
+        longitude: 80.2707,
+        cityName: 'Chennai',
+        startDate: '2099-01-05',
+        days: 1
+      });
+
+      expect(slots).toHaveLength(4);
+      expect(slots.map((slot) => new Date(slot.scheduledFor).toISOString())).not.toContain(
+        '2099-01-05T03:30:00.000Z'
+      );
+      expect(prisma.workerAvailability.findMany).toHaveBeenCalledTimes(1);
+      expect(prisma.booking.findMany).toHaveBeenCalledTimes(1);
+    });
   });
 
   describe('findAvailableWorkers', () => {

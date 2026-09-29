@@ -1,5 +1,8 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "../../lib/prisma.js";
+import { AppError } from "../../lib/app-error.js";
+import { assertServiceablePincode } from "../service-area/service-area.service.js";
+import { previewCustomerScheduleSlots } from "../matching/matching.service.js";
 
 export type WeeklyAvailabilitySlot = {
   dayOfWeek: number;
@@ -113,8 +116,16 @@ export async function getWorkerAvailability(workerId: string) {
 }
 
 export async function isWorkerAvailableAt(workerId: string, dateTime: Date): Promise<boolean> {
-  const dayOfWeek = dateTime.getDay();
-  const minuteOfDay = dateTime.getHours() * 60 + dateTime.getMinutes();
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Kolkata",
+    weekday: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23"
+  }).formatToParts(dateTime);
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  const dayOfWeek = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].indexOf(values.weekday);
+  const minuteOfDay = Number(values.hour) * 60 + Number(values.minute);
   const slots = await prisma.workerAvailability.findMany({
     where: {
       workerId,
@@ -166,4 +177,65 @@ export async function isWorkerAvailableAt(workerId: string, dateTime: Date): Pro
         });
 
   return bookingConflicts.length === 0 && executionConflicts.length === 0;
+}
+
+export async function getCustomerScheduleSlots(input: {
+  userId: string;
+  addressId: string;
+  serviceIds: string[];
+  startDate: string;
+  days: number;
+}) {
+  const savedAddress = await prisma.savedAddress.findFirst({
+    where: { id: input.addressId, userId: input.userId }
+  });
+  const bookingAddress = savedAddress ? null : await prisma.address.findFirst({
+    where: { id: input.addressId, userId: input.userId },
+    include: { city: { select: { id: true, name: true } } }
+  });
+  if (!savedAddress && !bookingAddress) {
+    throw AppError.badRequest("Select a valid saved service address");
+  }
+
+  const addressCity = savedAddress?.city ?? bookingAddress!.city.name;
+  const pincode = savedAddress?.pincode ?? bookingAddress!.pincode;
+  const city = bookingAddress?.city ?? await prisma.city.findFirst({
+    where: { isActive: true, name: { equals: addressCity.trim(), mode: "insensitive" } },
+    select: { id: true, name: true }
+  });
+  const serviceArea = city
+    ? null
+    : await prisma.serviceArea.findFirst({
+        where: {
+          isActive: true,
+          OR: [
+            { pincode },
+            {
+              pincodeRangeStart: { lte: pincode },
+              pincodeRangeEnd: { gte: pincode }
+            }
+          ]
+        },
+        select: { city: { select: { id: true, name: true } } }
+      });
+  const resolvedCity = city ?? serviceArea?.city;
+  if (!resolvedCity) throw AppError.badRequest("We don't serve this address yet");
+
+  await assertServiceablePincode({ pincode, cityId: resolvedCity.id });
+  const services = await prisma.service.findMany({
+    where: { id: { in: input.serviceIds }, isActive: true },
+    select: { id: true, categoryId: true }
+  });
+  if (services.length !== input.serviceIds.length) {
+    throw AppError.badRequest("One or more selected services are unavailable in this area");
+  }
+
+  return previewCustomerScheduleSlots({
+    categoryIds: [...new Set(services.map((service) => service.categoryId))],
+    latitude: savedAddress?.lat ?? Number(bookingAddress?.latitude),
+    longitude: savedAddress?.lng ?? Number(bookingAddress?.longitude),
+    cityName: resolvedCity.name,
+    startDate: input.startDate,
+    days: input.days
+  });
 }

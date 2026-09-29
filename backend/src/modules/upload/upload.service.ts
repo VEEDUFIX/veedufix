@@ -2,6 +2,7 @@ import { v2 as cloudinary } from "cloudinary";
 import { prisma } from "../../lib/prisma.js";
 import { AppError } from "../../lib/app-error.js";
 import { env } from "../../config/env.js";
+import { extractPublicIdFromUrl } from "../../lib/cloudinary.js";
 import { uploadBufferToCloudinary } from "../../lib/cloudinary.js";
 import { publishNotificationEvent, publishTrackingEvent } from "../../lib/realtime.js";
 
@@ -306,6 +307,25 @@ export async function confirmJobPhotoUpload(
   type: JobPhotoType,
   photo: Omit<UploadedJobPhoto, "folder">
 ) {
+  let parsedUrl: URL;
+  try {
+    parsedUrl = new URL(photo.secureUrl);
+  } catch {
+    throw AppError.badRequest("The uploaded job photo is invalid");
+  }
+  const expectedPath = `/${env.CLOUDINARY_CLOUD_NAME}/image/upload/`;
+  const expectedPublicIdPrefix = `veedufix/jobs/${bookingId}/${type}/`;
+  if (
+    parsedUrl.protocol !== "https:" ||
+    parsedUrl.hostname !== "res.cloudinary.com" ||
+    parsedUrl.port !== "" ||
+    !parsedUrl.pathname.startsWith(expectedPath) ||
+    extractPublicIdFromUrl(photo.secureUrl) !== photo.publicId ||
+    !photo.publicId.startsWith(expectedPublicIdPrefix)
+  ) {
+    throw AppError.badRequest("The uploaded job photo is invalid");
+  }
+
   const recorded = await recordJobPhotoUpload(bookingId, userId, type, {
     ...photo,
     folder: jobPhotoFolder(bookingId, type)

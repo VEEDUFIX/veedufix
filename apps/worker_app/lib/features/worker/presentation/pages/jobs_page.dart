@@ -6,6 +6,7 @@ import 'package:marketplace_shared/marketplace_shared.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../data/worker_job_providers.dart';
+import '../../data/worker_job_repository.dart';
 import 'generate_quote_page.dart';
 
 class JobsPage extends ConsumerStatefulWidget {
@@ -62,7 +63,7 @@ class _JobsPageState extends ConsumerState<JobsPage>
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Jobs',
+                    appText(context, 'Jobs', 'வேலைகள்'),
                     style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                           fontWeight: FontWeight.w900,
                           letterSpacing: -0.5,
@@ -70,7 +71,10 @@ class _JobsPageState extends ConsumerState<JobsPage>
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    'Review incoming requests, manage active jobs, and close completed work smoothly.',
+                    appText(
+                        context,
+                        'Review incoming requests, manage active jobs, and close completed work smoothly.',
+                        'புதிய கோரிக்கைகளைப் பாருங்கள், செயலில் உள்ள வேலைகளை நிர்வகியுங்கள், முடிந்த வேலைகளை நிறைவு செய்யுங்கள்.'),
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                           color: Theme.of(context).colorScheme.onSurfaceVariant,
                         ),
@@ -104,11 +108,11 @@ class _JobsPageState extends ConsumerState<JobsPage>
                   TabBar(
                     controller: _tabController!,
                     isScrollable: true,
-                    tabs: const [
-                      Tab(text: 'Incoming'),
-                      Tab(text: 'Accepted'),
-                      Tab(text: 'Active'),
-                      Tab(text: 'Completed'),
+                    tabs: [
+                      Tab(text: appText(context, 'Incoming', 'புதியவை')),
+                      Tab(text: appText(context, 'Accepted', 'ஏற்றவை')),
+                      Tab(text: appText(context, 'Active', 'செயலில்')),
+                      Tab(text: appText(context, 'Completed', 'முடிந்தவை')),
                     ],
                   ),
                 ],
@@ -176,12 +180,16 @@ class _JobsOverviewCard extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Today at a glance',
-                        style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+                        appText(context, 'Today at a glance', 'இன்றைய வேலைகள்'),
+                        style: tt.titleMedium
+                            ?.copyWith(fontWeight: FontWeight.w800),
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        'Use the live counts to move faster between incoming leads, accepted work, and jobs already in motion.',
+                        appText(
+                            context,
+                            'Use the live counts to move faster between incoming leads, accepted work, and jobs already in motion.',
+                            'புதிய கோரிக்கைகள், ஏற்றுக்கொண்ட வேலைகள் மற்றும் நடைபெறும் வேலைகளின் எண்ணிக்கையை இங்கே பார்க்கலாம்.'),
                         style: tt.bodyMedium?.copyWith(
                           color: cs.onSurfaceVariant,
                         ),
@@ -196,10 +204,18 @@ class _JobsOverviewCard extends StatelessWidget {
               spacing: 10,
               runSpacing: 10,
               children: [
-                _JobsStatPill(label: 'Incoming', value: _countLabel(incomingCount)),
-                _JobsStatPill(label: 'Accepted', value: _countLabel(acceptedCount)),
-                _JobsStatPill(label: 'Active', value: _countLabel(activeCount)),
-                _JobsStatPill(label: 'Completed', value: _countLabel(completedCount)),
+                _JobsStatPill(
+                    label: appText(context, 'Incoming', 'புதியவை'),
+                    value: _countLabel(incomingCount)),
+                _JobsStatPill(
+                    label: appText(context, 'Accepted', 'ஏற்றவை'),
+                    value: _countLabel(acceptedCount)),
+                _JobsStatPill(
+                    label: appText(context, 'Active', 'செயலில்'),
+                    value: _countLabel(activeCount)),
+                _JobsStatPill(
+                    label: appText(context, 'Completed', 'முடிந்தவை'),
+                    value: _countLabel(completedCount)),
               ],
             ),
             const SizedBox(height: 14),
@@ -209,13 +225,16 @@ class _JobsOverviewCard extends StatelessWidget {
               children: [
                 FilledButton.icon(
                   onPressed: onPrimaryAction,
-                  icon: const Icon(Icons.keyboard_arrow_right_rounded, size: 18),
-                  label: const Text('Open accepted jobs'),
+                  icon:
+                      const Icon(Icons.keyboard_arrow_right_rounded, size: 18),
+                  label: Text(appText(context, 'Open accepted jobs',
+                      'ஏற்றுக்கொண்ட வேலைகளைப் பாருங்கள்')),
                 ),
                 OutlinedButton.icon(
                   onPressed: onSecondaryAction,
                   icon: const Icon(Icons.request_quote_rounded, size: 18),
-                  label: const Text('Start a quote'),
+                  label: Text(appText(context, 'Start a quote',
+                      'விலைமதிப்பீட்டைத் தொடங்குங்கள்')),
                 ),
               ],
             ),
@@ -297,8 +316,12 @@ class _JobTabContent extends ConsumerWidget {
               children: [
                 PremiumEmptyState(
                   icon: Icons.event_busy_rounded,
-                  title: 'No $tab jobs',
-                  subtitle: 'You have no $tab jobs at the moment.',
+                  title: appText(context, 'No ${_jobTabLabel(tab)} jobs',
+                      '${_jobTabTamil(tab)} வேலைகள் இல்லை'),
+                  subtitle: appText(
+                      context,
+                      'You have no ${_jobTabLabel(tab)} jobs at the moment.',
+                      'தற்போது ${_jobTabTamil(tab)} வேலைகள் எதுவும் இல்லை.'),
                 ),
               ],
             );
@@ -343,7 +366,10 @@ class _JobCard extends ConsumerWidget {
       job.addressLabel?.trim(),
       job.cityName?.trim(),
       job.destinationQuery?.trim(),
-    ].where((part) => part != null && part.isNotEmpty).cast<String>().join(', ');
+    ]
+        .where((part) => part != null && part.isNotEmpty)
+        .cast<String>()
+        .join(', ');
     if (query.isEmpty) {
       return;
     }
@@ -381,10 +407,11 @@ class _JobCard extends ConsumerWidget {
               ScaffoldMessenger.of(context)
                   .showSnackBar(const SnackBar(content: Text('Job accepted')));
             }
-          } catch (_) {
+          } catch (error) {
+            ref.invalidate(workerJobsProvider('incoming'));
             if (context.mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Failed to accept job.')));
+                  SnackBar(content: Text(_actionErrorMessage(context, error))));
             }
           }
         }
@@ -409,10 +436,11 @@ class _JobCard extends ConsumerWidget {
               ScaffoldMessenger.of(context)
                   .showSnackBar(const SnackBar(content: Text('Job declined')));
             }
-          } catch (_) {
+          } catch (error) {
+            ref.invalidate(workerJobsProvider('incoming'));
             if (context.mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Failed to decline job.')));
+                  SnackBar(content: Text(_actionErrorMessage(context, error))));
             }
           }
         }
@@ -526,7 +554,8 @@ class _JobCard extends ConsumerWidget {
                             child: OutlinedButton(
                               onPressed: () {
                                 Navigator.of(sheetContext).pop();
-                                context.push('/chat?bookingId=${job.bookingId}');
+                                context
+                                    .push('/chat?bookingId=${job.bookingId}');
                               },
                               child: const Text('Chat'),
                             ),
@@ -553,6 +582,17 @@ class _JobCard extends ConsumerWidget {
       },
     );
   }
+
+  String _actionErrorMessage(BuildContext context, Object error) => error
+          is WorkerJobActionError
+      ? error.statusCode == 409 || error.statusCode == 410
+          ? appText(
+              context,
+              'This job offer is no longer available. Refresh the list to see current jobs.',
+              'இந்த வேலை வாய்ப்பு இனி கிடைக்காது. புதுப்பித்து தற்போதைய வேலைகளைப் பாருங்கள்.')
+          : error.message
+      : appText(context, 'Could not complete that action. Please try again.',
+          'செயலை முடிக்க முடியவில்லை. மீண்டும் முயற்சிக்கவும்.');
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -608,9 +648,11 @@ class _JobCard extends ConsumerWidget {
                             ),
                             if (job.customQuoteStatus == 'REQUESTED') ...[
                               Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 8, vertical: 4),
                                 decoration: BoxDecoration(
-                                  color: const Color(0xFFF97316).withValues(alpha: 0.15),
+                                  color: const Color(0xFFF97316)
+                                      .withValues(alpha: 0.15),
                                   borderRadius: BorderRadius.circular(8),
                                 ),
                                 child: const Text(
@@ -684,11 +726,15 @@ class _JobCard extends ConsumerWidget {
                                   const SnackBar(
                                       content: Text('Job accepted')));
                             }
-                          } catch (_) {
+                          } catch (error) {
+                            ref.invalidate(workerJobsProvider('incoming'));
                             if (context.mounted) {
                               ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                      content: Text('Failed to accept job.')));
+                                SnackBar(
+                                  content:
+                                      Text(_actionErrorMessage(context, error)),
+                                ),
+                              );
                             }
                           }
                         },
@@ -698,13 +744,14 @@ class _JobCard extends ConsumerWidget {
                     const SizedBox(width: 12),
                     Expanded(
                       child: OutlinedButton(
-                          onPressed: () async {
+                        onPressed: () async {
                           try {
                             if (job.offerId == null) {
                               if (context.mounted) {
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   const SnackBar(
-                                    content: Text('This offer is no longer available.'),
+                                    content: Text(
+                                        'This offer is no longer available.'),
                                   ),
                                 );
                               }
@@ -719,11 +766,15 @@ class _JobCard extends ConsumerWidget {
                                   const SnackBar(
                                       content: Text('Job declined')));
                             }
-                          } catch (_) {
+                          } catch (error) {
+                            ref.invalidate(workerJobsProvider('incoming'));
                             if (context.mounted) {
                               ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                      content: Text('Failed to decline job.')));
+                                SnackBar(
+                                  content:
+                                      Text(_actionErrorMessage(context, error)),
+                                ),
+                              );
                             }
                           }
                         },
@@ -752,7 +803,8 @@ class _JobCard extends ConsumerWidget {
                           onPressed: () {
                             Navigator.of(context).push(
                               MaterialPageRoute(
-                                builder: (_) => GenerateQuotePage(bookingId: job.bookingId),
+                                builder: (_) =>
+                                    GenerateQuotePage(bookingId: job.bookingId),
                               ),
                             );
                           },
@@ -770,7 +822,8 @@ class _JobCard extends ConsumerWidget {
                       width: double.infinity,
                       child: FilledButton(
                         onPressed: () {
-                          context.push('/job-execution?bookingId=${job.bookingId}');
+                          context.push(
+                              '/job-execution?bookingId=${job.bookingId}');
                         },
                         child: const Text('Continue Job'),
                       ),
@@ -797,6 +850,22 @@ class _JobCard extends ConsumerWidget {
     );
   }
 }
+
+String _jobTabLabel(String tab) => switch (tab) {
+      'incoming' => 'incoming',
+      'accepted' => 'accepted',
+      'active' => 'active',
+      'completed' => 'completed',
+      _ => tab,
+    };
+
+String _jobTabTamil(String tab) => switch (tab) {
+      'incoming' => 'புதிய',
+      'accepted' => 'ஏற்றுக்கொண்ட',
+      'active' => 'செயலில் உள்ள',
+      'completed' => 'முடிந்த',
+      _ => tab,
+    };
 
 class _DetailLine extends StatelessWidget {
   const _DetailLine({

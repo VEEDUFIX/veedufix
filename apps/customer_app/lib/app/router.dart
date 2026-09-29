@@ -59,6 +59,20 @@ final routerProvider = Provider<GoRouter>((ref) {
       final requiresCustomerSession =
           location == '/profile' ||
           location == '/bookings' ||
+          location == '/addresses' ||
+          location == '/checkout' ||
+          location == '/tracking' ||
+          location == '/chat' ||
+          location == '/wallet' ||
+          location == '/referral' ||
+          location == '/favorites' ||
+          location == '/notifications' ||
+          location == '/support' ||
+          location == '/settings' ||
+          location == '/arrival-otp' ||
+          location == '/completion-otp' ||
+          location == '/booking-rating' ||
+          location.startsWith('/bookings/') ||
           location.startsWith('/booking/') ||
           location.startsWith('/invoice/');
 
@@ -177,7 +191,7 @@ final routerProvider = Provider<GoRouter>((ref) {
           }
 
           final session = ref.read(authControllerProvider).valueOrNull;
-          final cityId = session?.user.cityId ?? 'city_kochi';
+          final cityId = session?.user.cityId ?? '';
           final items = cartItems
               .map(
                 (item) => CheckoutItem(

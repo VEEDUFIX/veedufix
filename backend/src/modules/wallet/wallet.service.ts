@@ -62,8 +62,11 @@ export async function requestWorkerPayout(input: {
   amount: number;
   upiId?: string;
 }) {
-  if (!Number.isFinite(input.amount) || input.amount <= 0) {
-    throw AppError.badRequest("amount must be a positive number");
+  if (!Number.isFinite(input.amount) || input.amount < 100) {
+    throw AppError.badRequest("Minimum payout amount is 100");
+  }
+  if (Math.abs(input.amount * 100 - Math.round(input.amount * 100)) > 1e-8) {
+    throw AppError.badRequest("Payout amount must have no more than two decimal places");
   }
 
   const result = await db.$transaction(async (tx) => {
@@ -120,9 +123,8 @@ export async function requestWorkerPayout(input: {
         balanceAfter: user.walletBalance,
         referenceType: "PAYOUT_REQUEST",
         metadata: {
-          upiId: storedUpiId,
           requestedAt: new Date().toISOString(),
-          note: `UPI payout of INR ${input.amount} to ${storedUpiId}`
+          payoutDestination: "verified_upi"
         }
       }
     });
@@ -261,11 +263,15 @@ export async function processPendingWalletPayouts(): Promise<void> {
   logger.info({ count: pendingTransactions.length }, "Wallet payout processor: found pending requests");
 
   for (const tx of pendingTransactions) {
+    if ((tx.metadata as { reconciliationRequired?: boolean } | null)?.reconciliationRequired) {
+      continue;
+    }
+
     try {
       // The amount is negative in DB, so we get the absolute value in paise
       const amountPaise = Math.round(Math.abs(Number(tx.amount)) * 100);
       
-      const upiId = (tx.metadata as any)?.upiId;
+      const upiId = tx.worker?.upiId ?? (tx.metadata as any)?.upiId;
       if (!upiId) {
         throw new Error("Missing UPI ID in metadata");
       }
@@ -302,7 +308,7 @@ export async function processPendingWalletPayouts(): Promise<void> {
           purpose: "payout",
           queue_if_low_balance: false,
           reference_id: tx.id,
-          narration: `Wallet payout to ${upiId}`,
+          narration: "Veedufix partner payout",
           fund_account: fundAccount,
           notes: {
             walletTransactionId: tx.id,
@@ -314,12 +320,40 @@ export async function processPendingWalletPayouts(): Promise<void> {
       const payload = (await response.json().catch(() => null)) as any;
 
       if (!response.ok) {
-        throw new Error(payload?.error?.description || payload?.error?.reason || `Razorpay payout request failed with status ${response.status}`);
+        const isDefinitiveRejection =
+          response.status >= 400 && response.status < 500 &&
+          ![408, 409, 425, 429].includes(response.status);
+        if (!isDefinitiveRejection) {
+          await db.walletTransaction.updateMany({
+            where: { id: tx.id, type: "PAYOUT_PENDING" },
+            data: {
+              metadata: {
+                ...(typeof tx.metadata === 'object' && tx.metadata !== null ? tx.metadata : {}),
+                reconciliationRequired: true,
+                lastAttemptAt: new Date().toISOString()
+              }
+            }
+          });
+          logger.error({ txId: tx.id, status: response.status }, "Payout response requires reconciliation");
+          continue;
+        }
+        throw new Error(`RazorpayRejected${response.status}`);
       }
 
       const razorpayPayoutId = payload?.id;
       if (!razorpayPayoutId) {
-        throw new Error("Razorpay payout response was malformed");
+        await db.walletTransaction.updateMany({
+          where: { id: tx.id, type: "PAYOUT_PENDING" },
+          data: {
+            metadata: {
+              ...(typeof tx.metadata === 'object' && tx.metadata !== null ? tx.metadata : {}),
+              reconciliationRequired: true,
+              lastAttemptAt: new Date().toISOString()
+            }
+          }
+        });
+        logger.error({ txId: tx.id }, "Payout response requires reconciliation");
+        continue;
       }
 
       // Success! Update transaction
@@ -338,27 +372,48 @@ export async function processPendingWalletPayouts(): Promise<void> {
       logger.info({ txId: tx.id, razorpayPayoutId }, "Wallet payout processor: request successful");
 
     } catch (error) {
-      const reason = error instanceof Error ? error.message : "Unknown error";
-      logger.error({ error, txId: tx.id }, "Wallet payout processor: request failed");
+      const reason = error instanceof Error ? error.name : "UnknownError";
+      logger.error({ errorName: reason, txId: tx.id }, "Wallet payout processor: request outcome is uncertain");
+      const currentMetadata = typeof tx.metadata === 'object' && tx.metadata !== null ? tx.metadata : {};
+      if ((currentMetadata as { reconciliationRequired?: boolean }).reconciliationRequired) continue;
+
+      // Network failures may happen after the payout provider accepted the
+      // request. Keep the debit pending for reconciliation rather than risk
+      // refunding a payout that may already have been sent.
+      if (!(error instanceof Error && error.message.startsWith("RazorpayRejected"))) {
+        await db.walletTransaction.updateMany({
+          where: { id: tx.id, type: "PAYOUT_PENDING" },
+          data: {
+            metadata: {
+              ...currentMetadata,
+              reconciliationRequired: true,
+              lastAttemptAt: new Date().toISOString()
+            }
+          }
+        });
+        continue;
+      }
       
       // Update transaction to failed and refund the wallet
       await db.$transaction(async (prismaTx) => {
-        const failedTx = await prismaTx.walletTransaction.update({
-          where: { id: tx.id },
+        const claimed = await prismaTx.walletTransaction.updateMany({
+          where: { id: tx.id, type: "PAYOUT_PENDING" },
           data: {
             type: "PAYOUT_FAILED",
             metadata: {
               ...(typeof tx.metadata === 'object' && tx.metadata !== null ? tx.metadata : {}),
-              failureReason: reason,
+              failureCode: reason,
               processedAt: new Date().toISOString(),
             }
           }
         });
 
+        if (claimed.count === 0) return;
+
         // Refund user wallet
-        const refundAmount = Math.abs(Number(failedTx.amount));
+        const refundAmount = Math.abs(Number(tx.amount));
         const updatedUser = await prismaTx.user.update({
-          where: { id: failedTx.userId },
+          where: { id: tx.userId },
           data: {
             walletBalance: { increment: refundAmount }
           }
@@ -367,15 +422,15 @@ export async function processPendingWalletPayouts(): Promise<void> {
         // Add refund transaction
         await prismaTx.walletTransaction.create({
           data: {
-            userId: failedTx.userId,
-            workerId: failedTx.workerId,
+            userId: tx.userId,
+            workerId: tx.workerId,
             type: "PAYOUT_REFUND",
             amount: refundAmount,
             referenceType: "PAYOUT_FAILED",
-            referenceId: failedTx.id,
+            referenceId: tx.id,
             balanceAfter: updatedUser.walletBalance,
             metadata: {
-              note: `Refund for failed payout: ${reason}`
+              note: "Refund for failed payout"
             }
           }
         });

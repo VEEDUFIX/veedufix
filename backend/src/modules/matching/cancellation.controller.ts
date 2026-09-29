@@ -26,7 +26,7 @@ function handleCancellationError(response: Response, error: unknown): boolean {
   }
 
   if (error instanceof CancellationConflictError) {
-    response.status(409).json({ message: "This booking cannot be cancelled" });
+    response.status(409).json({ message: error.message });
     return true;
   }
 

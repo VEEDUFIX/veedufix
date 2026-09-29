@@ -19,6 +19,10 @@ class _OtpPageState extends ConsumerState<OtpPage> {
   final List<FocusNode> _focusNodes = List.generate(6, (_) => FocusNode());
   final _formKey = GlobalKey<FormState>();
   bool _isLoading = false;
+  bool _isResending = false;
+  String? _verificationId;
+  int? _resendToken;
+  String? _resendError;
 
   // Resend timer
   int _resendSeconds = 30;
@@ -60,6 +64,52 @@ class _OtpPageState extends ConsumerState<OtpPage> {
 
   String get _otpValue => _controllers.map((c) => c.text).join();
 
+  Future<void> _resendOtp(Map<String, dynamic> args) async {
+    if (!_canResend || _isResending) return;
+    final phone = args['identifier'] as String? ?? '';
+    if (phone.isEmpty) {
+      setState(() => _resendError = 'Return to sign in and request a new code.');
+      return;
+    }
+
+    setState(() {
+      _isResending = true;
+      _resendError = null;
+    });
+    try {
+      await FirebaseAuth.instance.verifyPhoneNumber(
+        phoneNumber: phone,
+        forceResendingToken: _resendToken ?? args['resendToken'] as int?,
+        verificationCompleted: (_) {},
+        verificationFailed: (error) {
+          if (mounted) {
+            setState(() => _resendError = error.message ?? 'Could not resend the code.');
+          }
+        },
+        codeSent: (verificationId, resendToken) {
+          if (!mounted) return;
+          setState(() {
+            _verificationId = verificationId;
+            _resendToken = resendToken;
+            _isResending = false;
+            for (final controller in _controllers) {
+              controller.clear();
+            }
+          });
+          _startResendTimer();
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('A new verification code was sent.')),
+          );
+        },
+        codeAutoRetrievalTimeout: (_) {},
+      );
+    } catch (error) {
+      if (mounted) setState(() => _resendError = 'Could not resend the code. Please try again.');
+    } finally {
+      if (mounted) setState(() => _isResending = false);
+    }
+  }
+
   Future<void> _verifyOtp(Map<String, dynamic> args) async {
     if (_isLoading) return;
     if (_otpValue.length < 6) {
@@ -72,7 +122,7 @@ class _OtpPageState extends ConsumerState<OtpPage> {
     setState(() => _isLoading = true);
     try {
       final credential = PhoneAuthProvider.credential(
-        verificationId: args['verificationId'] as String,
+        verificationId: _verificationId ?? args['verificationId'] as String,
         smsCode: _otpValue,
       );
       final result = await FirebaseAuth.instance.signInWithCredential(credential);
@@ -197,9 +247,9 @@ class _OtpPageState extends ConsumerState<OtpPage> {
               Center(
                 child: _canResend
                     ? TapScale(
-                        onTap: _startResendTimer,
+                        onTap: _isResending ? null : () => _resendOtp(args),
                         child: Text(
-                          'Resend OTP',
+                          _isResending ? 'Sending code...' : 'Resend OTP',
                           style: tt.titleSmall?.copyWith(
                             color: cs.primary,
                             fontWeight: FontWeight.w700,
@@ -224,6 +274,10 @@ class _OtpPageState extends ConsumerState<OtpPage> {
                         ),
                       ),
               ),
+              if (_resendError != null) ...[
+                const SizedBox(height: 8),
+                Text(_resendError!, style: TextStyle(color: cs.error)),
+              ],
             ],
           ),
         ),

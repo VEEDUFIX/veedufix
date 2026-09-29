@@ -79,7 +79,7 @@ export async function requestPayoutHandler(request: AuthenticatedRequest, respon
   } catch (error) {
     logger.error({ error }, "Failed to request payout");
     if (error instanceof Error) {
-      if (error.message === "amount must be a positive number") {
+      if (error.message === "Minimum payout amount is 100" || error.message === "Payout amount must have no more than two decimal places") {
         response.status(400).json({ message: error.message });
         return;
       }

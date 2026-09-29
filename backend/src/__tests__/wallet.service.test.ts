@@ -9,7 +9,7 @@ vi.mock('../lib/prisma.js', () => ({
     user: { findUnique: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
     workerProfile: { findUnique: vi.fn() },
     referral: { findMany: vi.fn(), findFirst: vi.fn(), create: vi.fn() },
-    walletTransaction: { findMany: vi.fn(), create: vi.fn(), update: vi.fn() },
+    walletTransaction: { findMany: vi.fn(), create: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
   },
 }));
 
@@ -17,7 +17,7 @@ const prismaMockTx = {
   workerProfile: { findUnique: vi.fn() },
   referral: { create: vi.fn() },
   user: { update: vi.fn(), updateMany: vi.fn(), findUnique: vi.fn() },
-  walletTransaction: { create: vi.fn(), update: vi.fn() },
+  walletTransaction: { create: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
 };
 
 vi.mock('../lib/logger.js', () => ({
@@ -126,6 +126,14 @@ describe('Wallet Service', () => {
   });
 
   describe('requestWorkerPayout', () => {
+    it('rejects values below the minimum and fractional paise before touching the wallet', async () => {
+      await expect(requestWorkerPayout({ userId: 'u1', amount: 99.99 }))
+        .rejects.toMatchObject({ statusCode: 400 });
+      await expect(requestWorkerPayout({ userId: 'u1', amount: 100.001 }))
+        .rejects.toMatchObject({ statusCode: 400 });
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+
     it('debts wallet and records a payout request inside a transaction', async () => {
       prismaMockTx.workerProfile.findUnique.mockResolvedValue({
         id: 'wp_1',
@@ -207,7 +215,7 @@ describe('Wallet Service', () => {
     it('processes payout and updates to success', async () => {
       vi.mocked(prisma.walletTransaction.findMany).mockResolvedValue([
         { 
-          id: 'tx1', amount: new Prisma.Decimal(-500), metadata: { upiId: 'test@upi' },
+          id: 'tx1', userId: 'u1', workerId: 'w1', amount: new Prisma.Decimal(-500), metadata: { upiId: 'test@upi' },
           user: { id: 'u1', name: 'Test User', phone: '9999999999' }
         } as any
       ]);
@@ -229,22 +237,25 @@ describe('Wallet Service', () => {
     it('handles payout failure by refunding wallet', async () => {
       vi.mocked(prisma.walletTransaction.findMany).mockResolvedValue([
         { 
-          id: 'tx1', amount: new Prisma.Decimal(-500), metadata: { upiId: 'test@upi' },
-          user: { id: 'u1', name: 'Test User', phone: '9999999999' }
+          id: 'tx1', userId: 'u1', workerId: 'w1', amount: new Prisma.Decimal(-500), metadata: { upiId: 'test@upi' },
+          user: { id: 'u1', name: 'Test User', phone: '9999999999' },
+          worker: { upiId: 'test@upi' }
         } as any
       ]);
 
       (global.fetch as any).mockResolvedValue({
         ok: false,
+        status: 400,
         json: async () => ({ error: { description: 'Insufficient balance' } })
       });
 
-      prismaMockTx.walletTransaction.update.mockResolvedValue({ id: 'tx1', amount: new Prisma.Decimal(-500), userId: 'u1' } as any);
+      prismaMockTx.walletTransaction.updateMany.mockResolvedValue({ count: 1 });
       prismaMockTx.user.update.mockResolvedValue({ walletBalance: new Prisma.Decimal(500) } as any);
 
       await processPendingWalletPayouts();
 
-      expect(prismaMockTx.walletTransaction.update).toHaveBeenCalledWith(expect.objectContaining({
+      expect(prismaMockTx.walletTransaction.updateMany).toHaveBeenCalledWith(expect.objectContaining({
+        where: { id: 'tx1', type: 'PAYOUT_PENDING' },
         data: expect.objectContaining({ type: 'PAYOUT_FAILED' })
       }));
       expect(prismaMockTx.user.update).toHaveBeenCalledWith({
@@ -254,6 +265,49 @@ describe('Wallet Service', () => {
       expect(prismaMockTx.walletTransaction.create).toHaveBeenCalledWith(expect.objectContaining({
         data: expect.objectContaining({ type: 'PAYOUT_REFUND', amount: 500 })
       }));
+    });
+
+    it('keeps uncertain provider outcomes pending without refunding', async () => {
+      vi.mocked(prisma.walletTransaction.findMany).mockResolvedValue([
+        {
+          id: 'tx-timeout', userId: 'u1', workerId: 'w1', amount: new Prisma.Decimal(-500), metadata: { upiId: 'test@upi' },
+          user: { id: 'u1', name: 'Test User', phone: '9999999999' },
+          worker: { upiId: 'test@upi' }
+        } as any
+      ]);
+      (global.fetch as any).mockRejectedValue(new Error('socket timeout'));
+
+      await processPendingWalletPayouts();
+
+      expect(prisma.walletTransaction.updateMany).toHaveBeenCalledWith(expect.objectContaining({
+        where: { id: 'tx-timeout', type: 'PAYOUT_PENDING' },
+        data: { metadata: expect.objectContaining({ reconciliationRequired: true }) }
+      }));
+      expect(prismaMockTx.user.update).not.toHaveBeenCalled();
+      expect(prismaMockTx.walletTransaction.create).not.toHaveBeenCalled();
+    });
+
+    it('keeps rate-limited provider outcomes pending for reconciliation', async () => {
+      vi.mocked(prisma.walletTransaction.findMany).mockResolvedValue([
+        {
+          id: 'tx-rate-limited', userId: 'u1', workerId: 'w1', amount: new Prisma.Decimal(-500), metadata: {},
+          user: { id: 'u1', name: 'Test User', phone: '9999999999' },
+          worker: { upiId: 'test@upi' }
+        } as any
+      ]);
+      (global.fetch as any).mockResolvedValue({
+        ok: false,
+        status: 429,
+        json: async () => ({})
+      });
+
+      await processPendingWalletPayouts();
+
+      expect(prisma.walletTransaction.updateMany).toHaveBeenCalledWith(expect.objectContaining({
+        where: { id: 'tx-rate-limited', type: 'PAYOUT_PENDING' },
+        data: { metadata: expect.objectContaining({ reconciliationRequired: true }) }
+      }));
+      expect(prismaMockTx.user.update).not.toHaveBeenCalled();
     });
   });
 });

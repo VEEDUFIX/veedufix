@@ -42,7 +42,7 @@ function sendError(response: Response, error: unknown): void {
   }
 
   if (error instanceof WorkerStatusConflictError) {
-    response.status(409).json({ message: "Worker profile status conflict" });
+    response.status(409).json({ message: error.message });
     return;
   }
 
@@ -351,6 +351,7 @@ export async function getWorkerHistoryHandler(
 
 function kycDocResponse(response: Response, signedUrl: string, ttlSeconds = 300): void {
   const expiresAt = new Date(Date.now() + ttlSeconds * 1000).toISOString();
+  response.setHeader("Cache-Control", "private, no-store");
   response.status(200).json({ url: signedUrl, expiresAt });
 }
 

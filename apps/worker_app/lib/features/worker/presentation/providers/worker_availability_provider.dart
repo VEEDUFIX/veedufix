@@ -15,16 +15,23 @@ final availabilityToggleProvider =
 
 class _AvailabilityNotifier extends StateNotifier<AsyncValue<bool>> {
   _AvailabilityNotifier(this._ref) : super(const AsyncValue.loading()) {
-    _loadFromStats();
+    unawaited(_loadFromStats());
   }
 
   final Ref _ref;
 
-  void _loadFromStats() {
-    final stats = _ref.read(workerDashboardStatsProvider);
-    stats.whenData((s) {
-      if (mounted) state = AsyncValue.data(s.isAvailable);
-    });
+  Future<void> _loadFromStats() async {
+    try {
+      final stats = await _ref.read(workerDashboardStatsProvider.future);
+      if (mounted) state = AsyncValue.data(stats.isAvailable);
+    } catch (error, stackTrace) {
+      if (mounted) state = AsyncValue.error(error, stackTrace);
+    }
+  }
+
+  Future<void> refresh() async {
+    state = const AsyncValue.loading();
+    await _loadFromStats();
   }
 
   Future<void> toggle(bool value) async {
@@ -38,8 +45,8 @@ class _AvailabilityNotifier extends StateNotifier<AsyncValue<bool>> {
       );
       _ref.invalidate(workerDashboardStatsProvider);
     } catch (e) {
-      // Revert on failure
       if (mounted) state = AsyncValue.data(previous);
+      rethrow;
     }
   }
 }

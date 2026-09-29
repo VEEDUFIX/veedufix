@@ -151,4 +151,22 @@ describe('Catalog Service', () => {
       expect(res.name).toBe('Plumbing Fix');
     });
   });
+
+  describe('bulkSetCatalogActiveStatus', () => {
+    it('updates deduplicated service ids in one transaction', async () => {
+      prismaMockTx.service.updateMany.mockResolvedValue({ count: 2 } as any);
+
+      const result = await catalogService.bulkSetCatalogActiveStatus({
+        entityType: 'services',
+        ids: ['service-1', 'service-1', 'service-2'],
+        isActive: false,
+      });
+
+      expect(prismaMockTx.service.updateMany).toHaveBeenCalledWith({
+        where: { id: { in: ['service-1', 'service-2'] } },
+        data: { isActive: false },
+      });
+      expect(result).toEqual({ updatedCount: 2 });
+    });
+  });
 });

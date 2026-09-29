@@ -1,3 +1,5 @@
+import 'package:dio/dio.dart';
+
 import '../../../../core/storage/secure_store.dart';
 import '../../domain/entities/auth_session.dart';
 import '../../domain/repositories/auth_repository.dart';
@@ -97,8 +99,14 @@ class AuthRepositoryImpl implements AuthRepository {
         refreshToken: session.refreshToken,
       );
       return session;
+    } on DioException catch (error) {
+      final statusCode = error.response?.statusCode;
+      if (statusCode == 401 || statusCode == 403) {
+        await _secureStore.clearTokens();
+      }
+      return null;
     } catch (_) {
-      await _secureStore.clearTokens();
+      // Keep stored credentials when local storage or response parsing fails.
       return null;
     }
   }
@@ -108,8 +116,12 @@ class AuthRepositoryImpl implements AuthRepository {
     final refreshToken = await _secureStore.readRefreshToken();
     try {
       if (refreshToken != null) {
-        await _remoteDataSource.signOut(refreshToken);
+        await _remoteDataSource
+            .signOut(refreshToken)
+            .timeout(const Duration(seconds: 4));
       }
+    } catch (_) {
+      // Local sign-out must not depend on the network being available.
     } finally {
       // Local logout must succeed even when an expired server session cannot
       // be revoked. Otherwise the app can keep showing a stale signed-in UI.

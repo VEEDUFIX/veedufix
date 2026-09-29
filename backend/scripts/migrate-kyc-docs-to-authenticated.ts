@@ -5,13 +5,11 @@
  * ONE-TIME MIGRATION SCRIPT — run manually by an operator, never at startup.
  *
  * What it does:
- *   1. Reads all WorkerProfile.aadhaarDocUrl values from the DB.
- *   2. Reads all WorkerSkill.certificationDocUrl values from the DB.
- *   3. For each, extracts the Cloudinary public_id from the stored URL using
- *      the extractPublicIdFromUrl helper (URL-parsing fallback).
- *   4. Calls cloudinary.api.update(publicId, { type: "authenticated" }) to
- *      convert the existing public asset to restricted/authenticated delivery.
- *   5. Logs successes and failures clearly; never crashes on a single failure.
+ *   1. Finds worker identity, qualification, and professional documents.
+ *   2. Verifies each URL points to this Cloudinary account and the expected
+ *      worker-owned folder.
+ *   3. Converts public assets to authenticated delivery and stores their IDs.
+ *   4. Avoids logging document URLs, which may contain signed access tokens.
  *
  * Run with:
  *   npx tsx scripts/migrate-kyc-docs-to-authenticated.ts [--dry-run]
@@ -22,10 +20,10 @@
  *   - Real Cloudinary credentials must be set in the environment (.env or shell).
  *   - The DB must be reachable.
  *
- * NOTE: Assets that are already type:"authenticated" will return an error from
- * Cloudinary's API — this is harmless and is reported as a skip, not a failure.
+ * Run after the publicId database migration has been deployed.
  */
 
+import "dotenv/config";
 import { v2 as cloudinary } from "cloudinary";
 import { PrismaClient } from "@prisma/client";
 import { extractPublicIdFromUrl } from "../src/lib/cloudinary.js";
@@ -65,8 +63,22 @@ cloudinary.config({
 
 type MigrationResult =
   | { status: "success"; id: string; publicId: string }
-  | { status: "skipped"; id: string; reason: string }
-  | { status: "failed"; id: string; url: string; error: string };
+  | { status: "skipped"; id: string; reason: string; publicId?: string }
+  | { status: "failed"; id: string; error: string };
+
+function safeCloudinaryError(err: unknown): string {
+  if (err instanceof Error) return err.message;
+  if (!err || typeof err !== "object") return String(err);
+
+  const value = err as {
+    http_code?: number;
+    error?: { message?: string; http_code?: number };
+    message?: string;
+  };
+  const message = value.error?.message ?? value.message ?? "Cloudinary request failed";
+  const code = value.error?.http_code ?? value.http_code;
+  return code ? `${message} (HTTP ${code})` : message;
+}
 
 // ---------------------------------------------------------------------------
 // Core migration helper
@@ -75,43 +87,71 @@ type MigrationResult =
 async function migrateAsset(
   recordId: string,
   url: string | null | undefined,
-  label: string
+  expectedPrefixes: string[],
+  expectedPublicId?: string | null
 ): Promise<MigrationResult> {
   if (!url?.trim()) {
     return { status: "skipped", id: recordId, reason: "URL is empty or null" };
   }
 
-  const publicId = extractPublicIdFromUrl(url);
-  if (!publicId) {
-    return {
-      status: "failed",
-      id: recordId,
-      url,
-      error: "Could not parse public_id from URL — manual inspection required"
-    };
+  let parsedUrl: URL;
+  try {
+    parsedUrl = new URL(url);
+  } catch {
+    return { status: "failed", id: recordId, error: "Stored document URL is invalid" };
   }
 
+  const publicId = extractPublicIdFromUrl(url);
+  const accountPath = `/${CLOUD_NAME}/image/`;
+  if (
+    parsedUrl.protocol !== "https:" ||
+    parsedUrl.hostname !== "res.cloudinary.com" ||
+    parsedUrl.port !== "" ||
+    !parsedUrl.pathname.startsWith(accountPath) ||
+    !publicId
+  ) {
+    return { status: "failed", id: recordId, error: "URL is not a valid asset from the configured Cloudinary account" };
+  }
+  if (!expectedPrefixes.some((prefix) => publicId.startsWith(prefix))) {
+    return { status: "failed", id: recordId, error: "Asset is outside the worker-owned document folder" };
+  }
+  if (expectedPublicId && expectedPublicId !== publicId) {
+    return { status: "failed", id: recordId, error: "Stored public ID does not match its document URL" };
+  }
+
+  if (parsedUrl.pathname.includes("/image/authenticated/")) {
+    return { status: "skipped", id: recordId, reason: "Already authenticated", publicId };
+  }
+  if (!parsedUrl.pathname.includes("/image/upload/")) {
+    return { status: "failed", id: recordId, error: "Asset is not using a supported Cloudinary delivery type" };
+  }
   if (isDryRun) {
     return { status: "success", id: recordId, publicId };
   }
 
   try {
-    await cloudinary.api.update(publicId, { type: "authenticated", resource_type: "image" });
+    await cloudinary.uploader.rename(publicId, publicId, {
+      type: "upload",
+      to_type: "authenticated",
+      resource_type: "image",
+      invalidate: true
+    });
     return { status: "success", id: recordId, publicId };
   } catch (err: unknown) {
-    let msg = "Unknown error";
-    if (err instanceof Error) {
-      msg = err.message;
-    } else if (err && typeof err === "object") {
-      msg = (err as any).message || JSON.stringify(err);
-    } else {
-      msg = String(err);
+    const msg = safeCloudinaryError(err);
+    if (msg.toLowerCase().includes("already")) {
+      return { status: "skipped", id: recordId, reason: "Already authenticated", publicId };
     }
-    // "already authenticated" or similar — treat as harmless skip
-    if (msg.toLowerCase().includes("already") || msg.toLowerCase().includes("not found")) {
-      return { status: "skipped", id: recordId, reason: `Cloudinary: ${msg}` };
+    try {
+      await cloudinary.api.resource(publicId, {
+        resource_type: "image",
+        type: "authenticated"
+      });
+      return { status: "skipped", id: recordId, reason: "Already authenticated", publicId };
+    } catch {
+      // Preserve the original sanitized error when the authenticated lookup fails.
     }
-    return { status: "failed", id: recordId, url, error: msg };
+    return { status: "failed", id: recordId, error: msg };
   }
 }
 
@@ -121,13 +161,13 @@ async function migrateAsset(
 
 async function main() {
   console.log("=".repeat(64));
-  console.log(" KYC Document Migration: public → authenticated delivery");
+  console.log(" Worker Document Migration: public → authenticated delivery");
   console.log("=".repeat(64));
   console.log();
 
   // --- Aadhaar documents ---
   const profiles = await prisma.workerProfile.findMany({
-    select: { id: true, aadhaarDocUrl: true }
+    select: { id: true, userId: true, aadhaarDocUrl: true, aadhaarDocPublicId: true }
   });
 
   console.log(`Found ${profiles.length} WorkerProfile rows to check for aadhaarDocUrl.\n`);
@@ -136,29 +176,41 @@ async function main() {
   for (let i = 0; i < profiles.length; i++) {
     const p = profiles[i];
     const prefix = `[${i + 1}/${profiles.length}]`;
-    const result = await migrateAsset(p.id, p.aadhaarDocUrl, "aadhaarDocUrl for profile");
+    const result = await migrateAsset(
+      p.id,
+      p.aadhaarDocUrl,
+      [
+        `veedufix/kyc/${p.userId}/`,
+        `veedufix/documents/${p.userId}/`
+      ],
+      p.aadhaarDocPublicId
+    );
     aadhaarResults.push(result);
 
     const icon = result.status === "success" ? "✅" : result.status === "skipped" ? "⏭️ " : "❌";
-    if (result.status === "success") {
+    if (result.status === "success" || (result.status === "skipped" && result.publicId)) {
       if (!isDryRun) {
         await prisma.workerProfile.update({
           where: { id: p.id },
           data: { aadhaarDocPublicId: result.publicId }
         });
       }
-      console.log(`${prefix} ${icon} Profile ${result.id}: publicId=${result.publicId}`);
+      console.log(`${prefix} ${icon} Profile ${result.id}: private asset ID recorded`);
     } else if (result.status === "skipped") {
       console.log(`${prefix} ${icon} Profile ${result.id}: skipped — ${result.reason}`);
     } else {
       console.log(`${prefix} ${icon} Profile ${result.id}: FAILED — ${result.error}`);
-      console.log(`   URL: ${result.url}`);
     }
   }
 
   // --- Certification documents ---
   const skills = await prisma.workerSkill.findMany({
-    select: { id: true, certificationDocUrl: true }
+    select: {
+      id: true,
+      certificationDocUrl: true,
+      certificationDocPublicId: true,
+      workerProfile: { select: { userId: true } }
+    }
   });
 
   console.log(`\nFound ${skills.length} WorkerSkill rows to check for certificationDocUrl.\n`);
@@ -167,28 +219,73 @@ async function main() {
   for (let i = 0; i < skills.length; i++) {
     const s = skills[i];
     const prefix = `[${i + 1}/${skills.length}]`;
-    const result = await migrateAsset(s.id, s.certificationDocUrl, "certificationDocUrl for skill");
+    const result = await migrateAsset(
+      s.id,
+      s.certificationDocUrl,
+      [
+        `veedufix/kyc/${s.workerProfile.userId}/`,
+        `veedufix/documents/${s.workerProfile.userId}/`
+      ],
+      s.certificationDocPublicId
+    );
     certResults.push(result);
 
     const icon = result.status === "success" ? "✅" : result.status === "skipped" ? "⏭️ " : "❌";
-    if (result.status === "success") {
+    if (result.status === "success" || (result.status === "skipped" && result.publicId)) {
       if (!isDryRun) {
         await prisma.workerSkill.update({
           where: { id: s.id },
           data: { certificationDocPublicId: result.publicId }
         });
       }
-      console.log(`${prefix} ${icon} Skill ${result.id}: publicId=${result.publicId}`);
+      console.log(`${prefix} ${icon} Skill ${result.id}: private asset ID recorded`);
     } else if (result.status === "skipped") {
       console.log(`${prefix} ${icon} Skill ${result.id}: skipped — ${result.reason}`);
     } else {
       console.log(`${prefix} ${icon} Skill ${result.id}: FAILED — ${result.error}`);
-      console.log(`   URL: ${result.url}`);
+    }
+  }
+
+  const documents = await prisma.workerDocument.findMany({
+    select: {
+      id: true,
+      url: true,
+      publicId: true,
+      worker: { select: { userId: true } }
+    }
+  });
+  console.log(`\nFound ${documents.length} WorkerDocument rows to check.\n`);
+
+  const documentResults: MigrationResult[] = [];
+  for (let i = 0; i < documents.length; i++) {
+    const document = documents[i];
+    const prefix = `[${i + 1}/${documents.length}]`;
+    const result = await migrateAsset(
+      document.id,
+      document.url,
+      [`veedufix/documents/${document.worker.userId}/`],
+      document.publicId
+    );
+    documentResults.push(result);
+
+    const icon = result.status === "success" ? "✅" : result.status === "skipped" ? "⏭️ " : "❌";
+    if (result.status === "success" || (result.status === "skipped" && result.publicId)) {
+      if (!isDryRun) {
+        await prisma.workerDocument.update({
+          where: { id: document.id },
+          data: { publicId: result.publicId }
+        });
+      }
+      console.log(`${prefix} ${icon} Document ${result.id}: private asset ID recorded`);
+    } else if (result.status === "skipped") {
+      console.log(`${prefix} ${icon} Document ${result.id}: skipped — ${result.reason}`);
+    } else {
+      console.log(`${prefix} ${icon} Document ${result.id}: FAILED — ${result.error}`);
     }
   }
 
   // --- Summary ---
-  const allResults = [...aadhaarResults, ...certResults];
+  const allResults = [...aadhaarResults, ...certResults, ...documentResults];
   const successes = allResults.filter(r => r.status === "success").length;
   const skipped = allResults.filter(r => r.status === "skipped").length;
   const failures = allResults.filter(r => r.status === "failed");
@@ -197,7 +294,7 @@ async function main() {
   console.log("=".repeat(64));
   console.log(" Summary");
   console.log("=".repeat(64));
-  console.log(`  ✅ Migrated:  ${successes}`);
+  console.log(`  ✅ ${isDryRun ? "Would migrate" : "Migrated"}: ${successes}`);
   console.log(`  ⏭️  Skipped:   ${skipped}`);
   console.log(`  ❌ Failed:    ${failures.length}`);
 
@@ -205,7 +302,7 @@ async function main() {
     console.log("\nFailed records (require manual inspection):");
     for (const f of failures) {
       if (f.status === "failed") {
-        console.log(`  - ID: ${f.id} | URL: ${f.url} | Error: ${f.error}`);
+        console.log(`  - ID: ${f.id} | Error: ${f.error}`);
       }
     }
     console.log();

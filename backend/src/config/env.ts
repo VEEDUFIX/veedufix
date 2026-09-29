@@ -33,6 +33,7 @@ const prodStr = (fallback = "") =>
 const envSchema = z.object({
   // ── Runtime ──────────────────────────────────────────────────────────────
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
+  EXPOSE_DEV_OTP: z.enum(["true", "false"]).default("false").transform((value) => value === "true"),
   PORT: z.coerce.number().int().positive().default(4000),
 
   // ── Database ─────────────────────────────────────────────────────────────
@@ -137,6 +138,14 @@ const envSchema = z.object({
     z.coerce.number().int().min(0).max(100).default(20)
   )
 }).superRefine((value, ctx) => {
+  if (value.NODE_ENV === "production" && value.EXPOSE_DEV_OTP) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["EXPOSE_DEV_OTP"],
+      message: "EXPOSE_DEV_OTP cannot be enabled in production"
+    });
+  }
+
   // In production, placeholders / default stub values are not acceptable.
   if (value.NODE_ENV !== "production") return;
 
@@ -167,7 +176,7 @@ const envSchema = z.object({
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: [key],
-        message: `${key} must be set to a real value in production (got: "${v?.slice(0, 20) ?? ""}...")`,
+        message: `${key} must be set to a real value in production`,
       });
     }
   }

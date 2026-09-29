@@ -125,11 +125,40 @@ export async function cancelBooking(
     throw new CancellationConflictError("This booking is already cancelled");
   }
 
-  await prisma.booking.update({
-    where: { id: bookingId },
-    data: {
-      status: BookingStatus.CANCELLED_MANUAL
+  await prisma.$transaction(async (tx) => {
+    const cancellation = await tx.booking.updateMany({
+      where: {
+        id: bookingId,
+        status: {
+          notIn: [
+            BookingStatus.COMPLETED,
+            BookingStatus.REFUNDED,
+            BookingStatus.CANCELLED,
+            BookingStatus.CANCELLED_MANUAL,
+            BookingStatus.CANCELLED_NO_SHOW
+          ]
+        }
+      },
+      data: {
+        status: BookingStatus.CANCELLED_MANUAL
+      }
+    });
+    if (cancellation.count !== 1) {
+      throw new CancellationConflictError("Booking status changed. Refresh and try again.");
     }
+
+    await tx.jobExecution.upsert({
+      where: { bookingId },
+      create: {
+        bookingId,
+        status: "cancelled",
+        beforePhotos: [],
+        afterPhotos: []
+      },
+      update: {
+        status: "cancelled"
+      }
+    });
   });
   void recordBookingTimelineEvent({
     bookingId,
@@ -138,20 +167,11 @@ export async function cancelBooking(
     description: "The booking was cancelled manually."
   });
 
-  await prisma.jobExecution.upsert({
-    where: { bookingId },
-    create: {
-      bookingId,
-      status: "cancelled",
-      beforePhotos: [],
-      afterPhotos: []
-    },
-    update: {
-      status: "cancelled"
-    }
-  });
-
-  await notifyOtherParty(booking, requestedBy, reason);
+  try {
+    await notifyOtherParty(booking, requestedBy, reason);
+  } catch (error) {
+    logger.warn({ error, bookingId }, "Booking cancelled but notification delivery failed");
+  }
 
   logger.info(
     {

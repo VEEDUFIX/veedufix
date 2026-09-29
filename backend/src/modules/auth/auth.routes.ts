@@ -3,6 +3,7 @@ import { requireAuth } from "../../middleware/auth.js";
 import { validate } from "../../middleware/validate.js";
 import {
   makeGoogleAuthLimiter,
+  makeFirebaseAuthLimiter,
   makeOtpRequestLimiter,
   makeOtpVerifyLimiter,
   makeRefreshLimiter,
@@ -42,6 +43,7 @@ export const authRouter = Router();
 const otpRequestLimiter = makeOtpRequestLimiter();
 const otpVerifyLimiter = makeOtpVerifyLimiter();
 const googleAuthLimiter = makeGoogleAuthLimiter();
+const firebaseAuthLimiter = makeFirebaseAuthLimiter();
 const refreshLimiter = makeRefreshLimiter();
 const signOutLimiter = makeSignOutLimiter();
 
@@ -61,7 +63,12 @@ authRouter.post("/google", validate(authProviderSchema), googleAuthLimiter, goog
 
 // Firebase verifies the SMS on-device; this endpoint verifies the resulting
 // Firebase ID token before granting an application session.
-authRouter.post("/firebase-phone", validate(firebasePhoneAuthSchema), firebasePhoneAuthHandler);
+authRouter.post(
+  "/firebase-phone",
+  validate(firebasePhoneAuthSchema),
+  firebaseAuthLimiter,
+  firebasePhoneAuthHandler
+);
 
 // POST /api/auth/refresh
 // Limit: 20 req / min per IP  — prevents automated refresh-token grinding

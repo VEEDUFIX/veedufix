@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // ─── Mocks ────────────────────────────────────────────────────────────────────
 vi.mock('../lib/cloudinary.js', () => ({
+  generateSignedUrl: vi.fn().mockReturnValue('https://res.cloudinary.com/test-cloud/image/authenticated/signed.jpg'),
   uploadBufferToCloudinary: vi.fn().mockResolvedValue({
     secure_url: 'https://cloudinary.com/image.jpg',
     public_id: 'public-id',
@@ -26,6 +27,7 @@ import {
   uploadWorkerDocumentImage
 } from '../modules/media/media.service.js';
 import { prisma } from '../lib/prisma.js';
+import { uploadBufferToCloudinary } from '../lib/cloudinary.js';
 import { AppError } from '../lib/app-error.js';
 
 describe('Media Service', () => {
@@ -71,13 +73,26 @@ describe('Media Service', () => {
   describe('uploadWorkerDocumentImage', () => {
     it('uploads image and creates document', async () => {
       vi.mocked(prisma.workerProfile.findUnique).mockResolvedValue({ id: 'w1' } as any);
+      vi.mocked(uploadBufferToCloudinary).mockResolvedValueOnce({
+        secure_url: 'https://res.cloudinary.com/test-cloud/image/authenticated/v123/veedufix/documents/u1/document.jpg',
+        public_id: 'public-id',
+        bytes: 1024,
+        format: 'jpg'
+      } as any);
       vi.mocked(prisma.workerDocument.create).mockResolvedValue({
         id: 'd1', url: 'https://cloudinary.com/image.jpg', type: 'id_card'
       } as any);
-      
+
       const res = await uploadWorkerDocumentImage('u1', dummyFile, 'id_card');
-      expect(res.document.url).toBe('https://cloudinary.com/image.jpg');
+      expect(res.document.url).toBe('https://res.cloudinary.com/test-cloud/image/authenticated/v123/veedufix/documents/u1/document.jpg');
       expect(res.document.type).toBe('id_card');
+      expect(vi.mocked(uploadBufferToCloudinary)).toHaveBeenCalledWith(
+        dummyFile.buffer,
+        expect.objectContaining({ type: 'authenticated' })
+      );
+      expect(prisma.workerDocument.create).toHaveBeenCalledWith(expect.objectContaining({
+        data: expect.objectContaining({ publicId: 'public-id' })
+      }));
     });
   });
 });

@@ -36,10 +36,15 @@ class OnboardingStatusPage extends ConsumerWidget {
             SafeArea(
               child: statusAsync.when(
                 loading: () => const Center(child: CircularProgressIndicator()),
-                error: (error, _) => const _OnboardingStatusShell(
+                error: (error, _) => _OnboardingStatusShell(
                   title: 'Could not load your onboarding status',
                   subtitle: 'We could not load your onboarding profile right now.',
                   icon: Icons.info_outline_rounded,
+                  extra: FilledButton.icon(
+                    onPressed: () => ref.invalidate(workerOnboardingStatusProvider),
+                    icon: const Icon(Icons.refresh_rounded),
+                    label: const Text('Try again'),
+                  ),
                 ),
                 data: (profile) {
                   if (profile == null) {
@@ -55,11 +60,11 @@ class OnboardingStatusPage extends ConsumerWidget {
                     return _OnboardingStatusShell(
                       title: 'Your application is being reviewed',
                       subtitle:
-                          'Thanks for submitting your details. Our team usually reviews worker applications within 24 to 48 hours.',
+                          'Thanks for submitting your details. We will notify you when the review is complete.',
                       icon: Icons.hourglass_top_rounded,
                       accent: const Color(0xFFF59E0B),
                       chips: const [
-                        _StatusChip(icon: Icons.schedule_rounded, label: '24-48 hour review'),
+                        _StatusChip(icon: Icons.schedule_rounded, label: 'Review in progress'),
                         _StatusChip(icon: Icons.verified_user_outlined, label: 'Identity checked'),
                         _StatusChip(icon: Icons.support_agent_rounded, label: 'Support available'),
                       ],
@@ -164,15 +169,24 @@ class OnboardingStatusPage extends ConsumerWidget {
   int _stepForReason(String? reason) {
     final text = reason?.toLowerCase() ?? '';
     if (text.contains('aadhaar') || text.contains('identity') || text.contains('document')) {
-      return 1;
+      return 5;
     }
-    if (text.contains('skill')) {
+    if (text.contains('experience') || text.contains('qualification')) {
+      return 3;
+    }
+    if (text.contains('skill') || text.contains('service')) {
       return 2;
     }
     if (text.contains('upi') || text.contains('bank')) {
-      return 3;
+      return 7;
     }
-    return 0;
+    if (text.contains('area') || text.contains('pincode') || text.contains('availability')) {
+      return 4;
+    }
+    if (text.contains('agreement') || text.contains('consent') || text.contains('safety')) {
+      return 10;
+    }
+    return 1;
   }
 }
 

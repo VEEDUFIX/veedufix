@@ -1,11 +1,11 @@
 import { BookingStatus, CouponType, PaymentStatus, Prisma } from "@prisma/client";
 import { AppError } from "../../lib/app-error.js";
-import { createHmac, randomBytes } from "crypto";
+import { createHmac, randomBytes, timingSafeEqual } from "crypto";
 import Razorpay from "razorpay";
 import { env } from "../../config/env.js";
 import { prisma } from "../../lib/prisma.js";
 import { logger } from "../../lib/logger.js";
-import { publishTrackingEvent } from "../../lib/realtime.js";
+import { publishNotificationEvent, publishTrackingEvent } from "../../lib/realtime.js";
 import { recordBookingTimelineEvent } from "../../lib/booking-timeline.js";
 import { dispatchBookingAfterPayment } from "../matching/matching.service.js";
 import { raiseOpsAlert } from "../ops/ops.service.js";
@@ -14,6 +14,7 @@ import { sendMulticastPush } from "../../lib/fcm.js";
 import { allocateProportionalShares, reverseInclusiveTax, roundMoney, toPaise } from "../../lib/gst.js";
 import { generateInvoiceForBooking } from "../invoice/invoice.service.js";
 import { assertServiceablePincode } from "../service-area/service-area.service.js";
+import { getCustomerScheduleSlots } from "../availability/availability.service.js";
 
 type BookingItemInput = {
   serviceId: string;
@@ -23,7 +24,8 @@ type BookingItemInput = {
 
 type CreatePaymentOrderInput = {
   userId: string;
-  cityId: string;
+  cityId?: string;
+  addressId?: string;
   items: BookingItemInput[];
   couponCode?: string;
   bookingType?: "instant" | "scheduled";
@@ -178,22 +180,63 @@ async function ensureCity(cityId: string): Promise<void> {
   }
 }
 
-async function ensureBookingAddress(userId: string, cityId: string): Promise<string> {
+async function ensureBookingAddress(
+  userId: string,
+  cityId: string,
+  savedAddress?: {
+    label: string;
+    addressLine1: string;
+    addressLine2: string | null;
+    landmark: string | null;
+    pincode: string;
+    lat: number;
+    lng: number;
+    isDefault: boolean;
+  } | null
+): Promise<string> {
+  if (savedAddress) {
+    const existing = await prisma.address.findFirst({
+      where: {
+        userId,
+        cityId,
+        label: savedAddress.label,
+        line1: savedAddress.addressLine1,
+        pincode: savedAddress.pincode
+      },
+      orderBy: [{ isDefault: "desc" }, { createdAt: "asc" }]
+    });
+    if (existing) return existing.id;
+
+    const created = await prisma.address.create({
+      data: {
+        userId,
+        cityId,
+        label: savedAddress.label,
+        line1: savedAddress.addressLine1,
+        line2: savedAddress.addressLine2,
+        landmark: savedAddress.landmark,
+        pincode: savedAddress.pincode,
+        latitude: savedAddress.lat,
+        longitude: savedAddress.lng,
+        isDefault: savedAddress.isDefault
+      },
+      select: { id: true }
+    });
+    return created.id;
+  }
+
   const existing = await prisma.address.findFirst({
     where: { userId, cityId },
     orderBy: [{ isDefault: "desc" }, { createdAt: "asc" }]
   });
-
-  if (existing) {
-    return existing.id;
-  }
-
+  if (existing) return existing.id;
   throw AppError.badRequest("Please add a valid saved address before placing a booking");
 }
 
 async function resolveCustomerContext(
   userId: string,
-  cityId: string
+  cityId?: string,
+  addressId?: string
 ): Promise<{
   user: {
     id: string;
@@ -204,35 +247,72 @@ async function resolveCustomerContext(
   cityId: string;
   addressId: string;
 }> {
-  const [user, bookingCity] = await Promise.all([
-    prisma.user.findUnique({
-      where: { id: userId },
-      include: { city: true }
-    }),
-    prisma.city.findUnique({
-      where: { id: cityId },
-      select: { id: true, name: true }
-    })
-  ]);
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    include: { city: true }
+  });
 
   if (!user) {
     throw AppError.notFound("User not found");
   }
 
+  const savedAddress = await prisma.savedAddress.findFirst({
+    where: { userId, ...(addressId ? { id: addressId } : {}) },
+    orderBy: [{ isDefault: "desc" }, { createdAt: "desc" }]
+  });
+  if (addressId && !savedAddress) {
+    throw AppError.badRequest("Select a valid saved service address before placing a booking");
+  }
+
+  const normalizedCitySlug = savedAddress?.city.trim().toLowerCase().replace(/[\\s_-]+/g, "-");
+  let bookingCity = normalizedCitySlug
+    ? await prisma.city.findFirst({
+        where: {
+          isActive: true,
+          OR: [
+            { slug: normalizedCitySlug },
+            { name: { equals: savedAddress!.city.trim(), mode: "insensitive" } }
+          ]
+        },
+        select: { id: true, name: true }
+      })
+    : null;
+
+  if (!bookingCity && savedAddress?.pincode) {
+    const matchingArea = await prisma.serviceArea.findFirst({
+      where: {
+        isActive: true,
+        OR: [
+          { pincode: savedAddress.pincode },
+          {
+            pincodeRangeStart: { lte: savedAddress.pincode },
+            pincodeRangeEnd: { gte: savedAddress.pincode }
+          }
+        ]
+      },
+      select: { city: { select: { id: true, name: true } } }
+    });
+    bookingCity = matchingArea?.city ?? null;
+  }
+  if (!bookingCity && cityId) {
+    bookingCity = await prisma.city.findUnique({
+      where: { id: cityId },
+      select: { id: true, name: true }
+    });
+  }
+  if (!bookingCity && user.cityId) {
+    bookingCity = await prisma.city.findUnique({
+      where: { id: user.cityId },
+      select: { id: true, name: true }
+    });
+  }
   if (!bookingCity) {
     throw AppError.notFound("City not found");
   }
 
-  if (!user.cityId) {
-    await prisma.user.update({
-      where: { id: userId },
-      data: { cityId: bookingCity.id }
-    });
-  }
-
-  const addressId = await ensureBookingAddress(userId, bookingCity.id);
+  const bookingAddressId = await ensureBookingAddress(userId, bookingCity.id, savedAddress);
   const address = await prisma.address.findFirst({
-    where: { id: addressId, userId },
+    where: { id: bookingAddressId, userId },
     select: { id: true, pincode: true }
   });
 
@@ -240,14 +320,17 @@ async function resolveCustomerContext(
     throw AppError.badRequest("Please add a valid saved address before placing a booking");
   }
 
-  if (!address.pincode.startsWith('600')) {
-    throw AppError.badRequest('We currently serve only Chennai (pincodes starting with 600)');
-  }
-
   await assertServiceablePincode({
     pincode: address.pincode,
     cityId: bookingCity.id
   });
+
+  if (user.cityId !== bookingCity.id) {
+    await prisma.user.update({
+      where: { id: userId },
+      data: { cityId: bookingCity.id }
+    });
+  }
 
   return {
     user: {
@@ -257,7 +340,7 @@ async function resolveCustomerContext(
       phone: user.phone
     },
     cityId: bookingCity.id,
-    addressId
+    addressId: bookingAddressId
   };
 }
 
@@ -421,7 +504,6 @@ async function flagPaymentAmountMismatch(input: {
   razorpayAmountPaise: number;
   razorpayPaymentId: string;
   razorpayOrderId: string;
-  signature: string;
   existingNotes: Prisma.JsonValue | null;
 }): Promise<void> {
   await prisma.payment.update({
@@ -438,7 +520,6 @@ async function flagPaymentAmountMismatch(input: {
         razorpayAmountPaise: input.razorpayAmountPaise,
         razorpayPaymentId: input.razorpayPaymentId,
         razorpayOrderId: input.razorpayOrderId,
-        signature: input.signature,
         flaggedAt: new Date().toISOString()
       } as Prisma.InputJsonValue
     }
@@ -448,7 +529,7 @@ async function flagPaymentAmountMismatch(input: {
     bookingId: input.bookingId,
     bookingCode: input.bookingCode,
     status: "PAYMENT_AMOUNT_MISMATCH",
-    message: "Payment amount did not match the booking total",
+    message: "Payment amount did not match the expected gateway charge",
     actorRole: "CUSTOMER",
     paymentId: input.razorpayPaymentId
   });
@@ -458,7 +539,7 @@ async function flagPaymentAmountMismatch(input: {
     sourceId: `payment_mismatch:${input.paymentId}`,
     bookingId: input.bookingId,
     severity: "critical",
-    message: `Payment amount mismatch on booking ${input.bookingCode}: expected ${input.expectedAmountPaise}p, got ${input.razorpayAmountPaise}p from Razorpay.`,
+    message: `Payment amount mismatch on booking ${input.bookingCode}: expected gateway charge ${input.expectedAmountPaise}p, got ${input.razorpayAmountPaise}p from Razorpay.`,
     metadata: {
       title: `Payment mismatch \u2014 ${input.bookingCode}`,
       bookingCode: input.bookingCode,
@@ -497,7 +578,8 @@ function verifyRazorpaySignature(input: {
     .update(`${input.orderId}|${input.paymentId}`)
     .digest("hex");
 
-  return expected === input.signature;
+  if (!/^[a-f\d]{64}$/i.test(input.signature)) return false;
+  return timingSafeEqual(Buffer.from(expected, "hex"), Buffer.from(input.signature, "hex"));
 }
 
 async function fetchRazorpayPayment(paymentId: string): Promise<{
@@ -531,7 +613,7 @@ async function fetchRazorpayPayment(paymentId: string): Promise<{
 export async function createPaymentOrder(
   input: CreatePaymentOrderInput
 ): Promise<PaymentOrderResult> {
-  const context = await resolveCustomerContext(input.userId, input.cityId);
+  const context = await resolveCustomerContext(input.userId, input.cityId, input.addressId);
   const bookingType = input.bookingType ?? "instant";
   const scheduledFor = bookingType === "scheduled" ? input.scheduledFor : undefined;
   const scheduledAt =
@@ -544,6 +626,30 @@ export async function createPaymentOrder(
     cityId: context.cityId,
     items: input.items
   });
+
+  if (bookingType === "scheduled") {
+    if (!scheduledFor || !input.addressId) {
+      throw AppError.badRequest("Choose an available appointment time and service address");
+    }
+    const dateParts = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Asia/Kolkata",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit"
+    }).formatToParts(scheduledFor);
+    const dateValues = Object.fromEntries(dateParts.map((part) => [part.type, part.value]));
+    const startDate = `${dateValues.year}-${dateValues.month}-${dateValues.day}`;
+    const availableSlots = await getCustomerScheduleSlots({
+      userId: input.userId,
+      addressId: input.addressId,
+      serviceIds: [...new Set(input.items.map((item) => item.serviceId))],
+      startDate,
+      days: 1
+    });
+    if (!availableSlots.some((slot) => new Date(slot.scheduledFor).getTime() === scheduledFor.getTime())) {
+      throw AppError.conflict("This appointment time is no longer available. Choose another time.");
+    }
+  }
 
   const { couponCode, discountAmount } = await resolveCouponDiscount({
     couponCode: input.couponCode,
@@ -667,11 +773,22 @@ export async function createPaymentOrder(
 
     // Debit wallet if customer chose to use balance
     if (walletDeductAmount.gt(0)) {
-      const updatedUser = await tx.user.update({
+      const debit = await tx.user.updateMany({
+        where: {
+          id: input.userId,
+          walletBalance: { gte: walletDeductAmount }
+        },
+        data: { walletBalance: { decrement: walletDeductAmount } }
+      });
+      if (debit.count !== 1) {
+        throw AppError.conflict("Wallet balance changed. Please review your balance and try again.");
+      }
+      const updatedUser = await tx.user.findUnique({
         where: { id: input.userId },
-        data: { walletBalance: { decrement: walletDeductAmount } },
         select: { walletBalance: true }
       });
+      if (!updatedUser) throw AppError.notFound("User not found");
+
       await tx.walletTransaction.create({
         data: {
           userId: input.userId,
@@ -709,6 +826,17 @@ export async function createPaymentOrder(
           bookingCode: booking.code,
           cityId: context.cityId,
           ...(couponCode ? { couponCode } : {}),
+          walletDeductAmountPaise: toPaise(walletDeductAmount),
+          subtotalAmountPaise: toPaise(subtotalAmount),
+          discountAmountPaise: toPaise(discountAmount),
+          items: items.map((item) => ({
+            serviceId: item.serviceId,
+            quantity: item.quantity,
+            unitPricePaise: toPaise(item.unitPrice),
+            totalPricePaise: toPaise(item.totalPrice),
+            gstRate: item.gstRate.toString(),
+            sacCode: item.sacCode
+          })),
           orderId: order.id,
           totalAmountPaise
         } as Prisma.InputJsonValue
@@ -753,16 +881,42 @@ export async function createPaymentOrder(
       customerPhone: context.user.phone
     };
   } catch (error) {
-    await prisma.payment.updateMany({
-      where: { bookingId: booking.id, provider: "RAZORPAY" },
-      data: {
-        status: PaymentStatus.FAILED,
-        notes: {
-          bookingCode: booking.code,
-          cityId: context.cityId,
-          ...(couponCode ? { couponCode } : {}),
-          orderCreationFailedAt: new Date().toISOString()
-        } as Prisma.InputJsonValue
+    await prisma.$transaction(async (tx) => {
+      await tx.payment.updateMany({
+        where: { bookingId: booking.id, provider: "RAZORPAY" },
+        data: {
+          status: PaymentStatus.FAILED,
+          notes: {
+            bookingCode: booking.code,
+            cityId: context.cityId,
+            ...(couponCode ? { couponCode } : {}),
+            orderCreationFailedAt: new Date().toISOString()
+          } as Prisma.InputJsonValue
+        }
+      });
+
+      await tx.booking.update({
+        where: { id: booking.id },
+        data: { status: BookingStatus.CANCELLED }
+      });
+
+      if (walletDeductAmount.gt(0)) {
+        const updatedUser = await tx.user.update({
+          where: { id: input.userId },
+          data: { walletBalance: { increment: walletDeductAmount } }
+        });
+
+        await tx.walletTransaction.create({
+          data: {
+            userId: input.userId,
+            type: "WALLET_CREDIT",
+            amount: walletDeductAmount,
+            referenceType: "PAYMENT_ORDER_FAILED",
+            referenceId: booking.id,
+            balanceAfter: updatedUser.walletBalance,
+            metadata: { note: "Wallet restored after payment order creation failed" }
+          }
+        });
       }
     });
 
@@ -808,7 +962,8 @@ export async function verifyPayment(
     throw AppError.badRequest("Invalid payment signature");
   }
 
-  const expectedAmountPaise = toPaise(payment.booking.totalAmount);
+  // The booking total can include wallet funds; Razorpay only charges payment.amount.
+  const expectedAmountPaise = toPaise(payment.amount);
   const recordedAmountPaise = toPaise(payment.amount);
 
   if (recordedAmountPaise !== expectedAmountPaise) {
@@ -821,7 +976,6 @@ export async function verifyPayment(
       razorpayAmountPaise: recordedAmountPaise,
       razorpayPaymentId: input.razorpayPaymentId,
       razorpayOrderId: input.razorpayOrderId,
-      signature: input.razorpaySignature,
       existingNotes: payment.notes
     });
 
@@ -840,7 +994,6 @@ export async function verifyPayment(
       razorpayAmountPaise: razorpayPayment.amount ?? 0,
       razorpayPaymentId: input.razorpayPaymentId,
       razorpayOrderId: input.razorpayOrderId,
-      signature: input.razorpaySignature,
       existingNotes: payment.notes
     });
 
@@ -863,11 +1016,33 @@ export async function verifyPayment(
       razorpayAmountPaise,
       razorpayPaymentId: input.razorpayPaymentId,
       razorpayOrderId: input.razorpayOrderId,
-      signature: input.razorpaySignature,
       existingNotes: payment.notes
     });
 
     throw AppError.conflict("Payment amount mismatch");
+  }
+
+  if (payment.status === PaymentStatus.REFUNDED) {
+    await raiseOpsAlert({
+      type: "payment_mismatch",
+      sourceId: `capture-after-refund:${payment.id}`,
+      bookingId: payment.bookingId,
+      severity: "critical",
+      message: `A captured payment was reported for already-refunded booking ${payment.booking.code}; review the provider transaction.`,
+      metadata: {
+        title: "Payment capture reported after refund",
+        bookingCode: payment.booking.code,
+        orderId: input.razorpayOrderId,
+        paymentId: input.razorpayPaymentId,
+        retryAvailable: false
+      }
+    });
+    return {
+      bookingId: payment.bookingId,
+      bookingCode: payment.booking.code,
+      paymentId: input.razorpayPaymentId,
+      status: PaymentStatus.REFUNDED
+    };
   }
 
   if (payment.status === PaymentStatus.CAPTURED) {
@@ -892,19 +1067,66 @@ export async function verifyPayment(
       notes: {
         ...(payment.notes && typeof payment.notes === "object" ? (payment.notes as Record<string, unknown>) : {}),
         paymentId: input.razorpayPaymentId,
-        signature: input.razorpaySignature,
         verifiedAt: new Date().toISOString(),
         razorpayAmountPaise
       } as Prisma.InputJsonValue
     }
   });
 
-  await prisma.booking.update({
-    where: { id: payment.bookingId },
-    data: {
-      status: BookingStatus.ACCEPTED
-    }
+  const acceptedBooking = await prisma.booking.updateMany({
+    where: {
+      id: payment.bookingId,
+      status: {
+        notIn: [
+          BookingStatus.CANCELLED,
+          BookingStatus.CANCELLED_MANUAL,
+          BookingStatus.CANCELLED_NO_SHOW,
+          BookingStatus.REFUNDED
+        ]
+      }
+    },
+    data: { status: BookingStatus.ACCEPTED }
   });
+
+  if (acceptedBooking.count === 0) {
+    await raiseOpsAlert({
+      type: "payment_mismatch",
+      sourceId: `payment-after-unavailable-booking:${payment.id}`,
+      bookingId: payment.bookingId,
+      severity: "critical",
+      message: `Payment was captured for unavailable booking ${payment.booking.code}; review refund eligibility.`,
+      metadata: {
+        title: "Payment captured after booking became unavailable",
+        bookingCode: payment.booking.code,
+        customerId: payment.booking.customerId,
+        amount: Number(payment.booking.totalAmount),
+        orderId: input.razorpayOrderId,
+        paymentId: input.razorpayPaymentId,
+        retryAvailable: false
+      }
+    });
+    await publishTrackingEvent({
+      bookingId: payment.bookingId,
+      bookingCode: payment.booking.code,
+      status: "PAYMENT_CAPTURED_AFTER_CANCELLATION",
+      message: "Payment received for a booking that is no longer available; refund review is required",
+      actorRole: "CUSTOMER",
+      paymentId: input.razorpayPaymentId
+    });
+    await publishNotificationEvent({
+      userId: input.userId,
+      title: "Payment received; booking needs review",
+      body: `Payment for booking ${payment.booking.code} was received after the booking became unavailable. Our team will review it.`,
+      type: "PAYMENT_CAPTURED_AFTER_CANCELLATION",
+      data: { bookingId: payment.bookingId, paymentId: input.razorpayPaymentId }
+    });
+    return {
+      bookingId: payment.bookingId,
+      bookingCode: payment.booking.code,
+      paymentId: input.razorpayPaymentId,
+      status: PaymentStatus.CAPTURED
+    };
+  }
 
   await generateInvoiceForBooking(payment.bookingId);
 

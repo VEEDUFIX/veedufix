@@ -11,6 +11,14 @@ const alertKindSchema = z.enum([
 const alertSeveritySchema = z.enum(["low", "medium", "high", "critical"]);
 const alertStatusSchema = z.enum(["open", "acknowledged", "resolved"]);
 
+export const opsAlertStatusUpdateSchema = z.object({
+  params: z.object({ alertId: z.string().min(1) }),
+  body: z.object({
+    status: alertStatusSchema,
+    resolutionNote: z.string().trim().max(1000).optional()
+  })
+});
+
 export const opsAlertListQuerySchema = z.object({
   query: z.object({
     type: alertKindSchema.optional(),

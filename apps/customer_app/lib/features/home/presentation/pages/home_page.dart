@@ -61,12 +61,20 @@ class HomePage extends ConsumerWidget {
               child: Column(
                 children: [
                   HomeHeader(
-                    location: _locationLabel(session, selectedLocation),
+                    location: _locationLabel(
+                      context,
+                      session,
+                      selectedLocation,
+                    ),
                     bright: true,
                   ),
                   const SizedBox(height: 18),
                   HomeSearchBar(
-                    hint: 'Search for AC service',
+                    hint: appText(
+                      context,
+                      'Search for AC service',
+                      'ஏசி சேவையைத் தேடுங்கள்',
+                    ),
                     onVoiceTap: () => showAiAssistantSheet(context),
                   ),
                   const SizedBox(height: 18),
@@ -82,7 +90,11 @@ class HomePage extends ConsumerWidget {
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
                 child: HomeSectionLabel(
-                  title: 'What do you need?',
+                  title: appText(
+                    context,
+                    'What do you need?',
+                    'உங்களுக்கு என்ன சேவை தேவை?',
+                  ),
                   onSeeAll: () => context.push('/search'),
                 ),
               ),
@@ -104,7 +116,11 @@ class HomePage extends ConsumerWidget {
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
                 child: HomeSectionLabel(
-                  title: 'Most booked',
+                  title: appText(
+                    context,
+                    'Most booked',
+                    'அதிகம் முன்பதிவு செய்யப்பட்டவை',
+                  ),
                   onSeeAll: () => context.push('/search'),
                 ),
               ),
@@ -134,8 +150,16 @@ class HomePage extends ConsumerWidget {
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
                 child: HomeSectionLabel(
-                  title: 'Cleaning essentials',
-                  subtitle: 'Monthly care for busy homes',
+                  title: appText(
+                    context,
+                    'Cleaning essentials',
+                    'வீட்டு சுத்தம்',
+                  ),
+                  subtitle: appText(
+                    context,
+                    'Monthly care for busy homes',
+                    'உங்கள் வீட்டிற்கான மாதாந்திர பராமரிப்பு',
+                  ),
                   onSeeAll: () => context.push('/search'),
                 ),
               ),
@@ -158,9 +182,15 @@ class HomePage extends ConsumerWidget {
               const SizedBox(height: 28),
             ],
             if (!professionalsAsync.isLoading && professionals.isNotEmpty) ...[
-              const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 20),
-                child: HomeSectionLabel(title: 'Nearby professionals'),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: HomeSectionLabel(
+                  title: appText(
+                    context,
+                    'Nearby professionals',
+                    'அருகிலுள்ள நிபுணர்கள்',
+                  ),
+                ),
               ),
               const SizedBox(height: 16),
               SizedBox(
@@ -247,6 +277,7 @@ class HomePage extends ConsumerWidget {
   }
 
   String _locationLabel(
+    BuildContext context,
     AuthSession? session,
     SelectedLocation? selectedLocation,
   ) {
@@ -254,7 +285,13 @@ class HomePage extends ConsumerWidget {
       return selectedLocation.title;
     }
     final cityId = session?.user.cityId?.trim() ?? '';
-    return cityId.isNotEmpty ? cityId.replaceAll('_', ' ') : 'Set your location';
+    return cityId.isNotEmpty
+        ? cityId.replaceAll('_', ' ')
+        : appText(
+            context,
+            'Set your location',
+            'உங்கள் இருப்பிடத்தை அமைக்கவும்',
+          );
   }
 }
 

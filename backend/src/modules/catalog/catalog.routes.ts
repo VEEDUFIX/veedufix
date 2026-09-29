@@ -6,6 +6,7 @@ import {
   addServiceImagesSchema,
   addServicePricingSchema,
   autocompleteCatalogQuerySchema,
+  bulkCatalogStatusSchema,
   catalogListQuerySchema,
   catalogSearchQuerySchema,
   catalogSlugParamsSchema,
@@ -24,6 +25,8 @@ import {
 import {
   addServiceImagesHandler,
   addServicePricingHandler,
+  addStarterCatalogHandler,
+  bulkCatalogStatusHandler,
   autocompleteCatalogHandler,
   createCategoryHandler,
   createServiceHandler,
@@ -137,6 +140,8 @@ catalogRouter.get("/subcategories/:slug", validate(catalogSlugParamsSchema), get
 catalogRouter.get("/services/:slug", validate(catalogSlugParamsSchema), getServiceHandler);
 
 adminCatalogRouter.use(requireAuth, requireRole("ADMIN"));
+adminCatalogRouter.post("/starter", addStarterCatalogHandler);
+adminCatalogRouter.patch("/bulk-status", validate(bulkCatalogStatusSchema), bulkCatalogStatusHandler);
 adminCatalogRouter.post("/categories", validate(createCategorySchema), createCategoryHandler);
 adminCatalogRouter.patch("/categories/:id", validate(updateCategorySchema), updateCategoryHandler);
 adminCatalogRouter.delete("/categories/:id", validate(updateCategorySchema), deleteCategoryHandler);

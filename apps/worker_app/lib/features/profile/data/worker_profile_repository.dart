@@ -65,6 +65,27 @@ class WorkerProfileRepository {
     }
   }
 
+  Future<void> uploadWorkerDocumentFile({
+    required String type,
+    required String imagePath,
+    required String filename,
+  }) async {
+    try {
+      await _api.dio.post<Map<String, dynamic>>(
+        '/media/workers/document',
+        data: FormData.fromMap({
+          'type': type,
+          'file': await MultipartFile.fromFile(imagePath, filename: filename),
+        }),
+        options: Options(contentType: Headers.multipartFormDataContentType),
+      );
+    } on DioException catch (e) {
+      throw _handleError(e);
+    } catch (_) {
+      throw Exception('Failed to upload document.');
+    }
+  }
+
   Future<void> uploadPortfolioPhoto(String imagePath, String filename) async {
     try {
       await _api.dio.post<Map<String, dynamic>>(

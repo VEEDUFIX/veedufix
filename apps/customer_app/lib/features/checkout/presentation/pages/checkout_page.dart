@@ -1,10 +1,63 @@
 import 'dart:async';
 
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:marketplace_shared/marketplace_shared.dart';
 import 'package:razorpay_flutter/razorpay_flutter.dart';
+
+import '../../../profile/data/saved_addresses_api.dart';
+
+final cartCheckoutAddressesProvider =
+    FutureProvider.autoDispose<List<SavedAddressItem>>((ref) async {
+      final api = ref.watch(apiClientProvider);
+      return SavedAddressesApi(api.dio).listAddresses();
+    });
+
+class CustomerScheduleSlot {
+  const CustomerScheduleSlot({
+    required this.scheduledFor,
+    required this.availableProviders,
+  });
+
+  final DateTime scheduledFor;
+  final int availableProviders;
+
+  factory CustomerScheduleSlot.fromJson(Map<String, dynamic> json) =>
+      CustomerScheduleSlot(
+        scheduledFor: DateTime.parse(json['scheduledFor'] as String).toLocal(),
+        availableProviders: (json['availableProviders'] as num?)?.toInt() ?? 0,
+      );
+}
+
+final cartCheckoutScheduleSlotsProvider = FutureProvider.autoDispose
+    .family<List<CustomerScheduleSlot>, String>((ref, key) async {
+      final pieces = key.split('|');
+      final addressId = pieces[0];
+      final serviceIds = pieces[1].split(',');
+      final startDate = pieces[2];
+      final api = ref.watch(apiClientProvider);
+      final response = await api.get(
+        '/schedule/slots',
+        queryParameters: {
+          'addressId': addressId,
+          'serviceIds': serviceIds.join(','),
+          'startDate': startDate,
+          'days': 7,
+        },
+      );
+      final data = response as Map<dynamic, dynamic>;
+      final rawSlots = data['slots'];
+      if (rawSlots is! List) return const <CustomerScheduleSlot>[];
+      return rawSlots
+          .whereType<Map>()
+          .map(
+            (slot) =>
+                CustomerScheduleSlot.fromJson(slot.cast<String, dynamic>()),
+          )
+          .toList(growable: false);
+    });
 
 // ─── Entities ─────────────────────────────────────────────────────────────────
 
@@ -24,9 +77,9 @@ class CheckoutItem {
   double get total => price * quantity;
 
   Map<String, dynamic> toJson() => {
-        'serviceId': serviceId,
-        'quantity': quantity,
-      };
+    'serviceId': serviceId,
+    'quantity': quantity,
+  };
 }
 
 class PaymentOrder {
@@ -55,23 +108,24 @@ class PaymentOrder {
   double get amountRupees => amountPaise / 100;
 
   factory PaymentOrder.fromJson(Map<String, dynamic> json) => PaymentOrder(
-        keyId: json['keyId'] as String? ?? '',
-        bookingId: json['bookingId'] as String? ?? '',
-        bookingCode: json['bookingCode'] as String? ?? '',
-        orderId: json['orderId'] as String? ?? '',
-        amountPaise: (json['amountPaise'] as num?)?.toInt() ?? 0,
-        currency: json['currency'] as String? ?? 'INR',
-        customerName: json['customerName'] as String? ?? '',
-        customerEmail: json['customerEmail'] as String?,
-        customerPhone: json['customerPhone'] as String?,
-      );
+    keyId: json['keyId'] as String? ?? '',
+    bookingId: json['bookingId'] as String? ?? '',
+    bookingCode: json['bookingCode'] as String? ?? '',
+    orderId: json['orderId'] as String? ?? '',
+    amountPaise: (json['amountPaise'] as num?)?.toInt() ?? 0,
+    currency: json['currency'] as String? ?? 'INR',
+    customerName: json['customerName'] as String? ?? '',
+    customerEmail: json['customerEmail'] as String?,
+    customerPhone: json['customerPhone'] as String?,
+  );
 }
 
 // ─── Providers ────────────────────────────────────────────────────────────────
 
 final checkoutProvider =
     StateNotifierProvider<_CheckoutNotifier, AsyncValue<void>>(
-        (ref) => _CheckoutNotifier(ref));
+      (ref) => _CheckoutNotifier(ref),
+    );
 
 class _CheckoutNotifier extends StateNotifier<AsyncValue<void>> {
   _CheckoutNotifier(this._ref) : super(const AsyncValue.data(null));
@@ -81,7 +135,9 @@ class _CheckoutNotifier extends StateNotifier<AsyncValue<void>> {
 
   Future<PaymentOrder?> createOrder({
     required String cityId,
+    required String addressId,
     required List<CheckoutItem> items,
+    DateTime? scheduledFor,
     String? couponCode,
   }) async {
     state = const AsyncValue.loading();
@@ -90,13 +146,19 @@ class _CheckoutNotifier extends StateNotifier<AsyncValue<void>> {
       final data = await api.post(
         '/payments/create-order',
         data: {
-          'cityId': cityId,
+          if (cityId.isNotEmpty) 'cityId': cityId,
+          'addressId': addressId,
           'items': items.map((i) => i.toJson()).toList(),
-          if (couponCode != null && couponCode.isNotEmpty) 'couponCode': couponCode,
-          'bookingType': 'scheduled',
+          if (couponCode != null && couponCode.isNotEmpty)
+            'couponCode': couponCode,
+          'bookingType': scheduledFor == null ? 'instant' : 'scheduled',
+          if (scheduledFor != null)
+            'scheduledFor': scheduledFor.toUtc().toIso8601String(),
         },
       );
-      final order = PaymentOrder.fromJson((data as Map<dynamic, dynamic>).cast<String, dynamic>());
+      final order = PaymentOrder.fromJson(
+        (data as Map<dynamic, dynamic>).cast<String, dynamic>(),
+      );
       lastOrder = order;
       state = const AsyncValue.data(null);
       return order;
@@ -136,11 +198,7 @@ class _CheckoutNotifier extends StateNotifier<AsyncValue<void>> {
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 class CheckoutPage extends ConsumerStatefulWidget {
-  const CheckoutPage({
-    super.key,
-    required this.cityId,
-    required this.items,
-  });
+  const CheckoutPage({super.key, required this.cityId, required this.items});
 
   final String cityId;
   final List<CheckoutItem> items;
@@ -153,6 +211,14 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
   final _couponController = TextEditingController();
   final _razorpay = Razorpay();
   bool _couponApplied = false;
+  bool _isLaunchingPayment = false;
+  bool _isVerifyingPayment = false;
+  bool _paymentAttemptFailed = false;
+  bool _paymentVerificationFailed = false;
+  bool _scheduleForLater = false;
+  String? _selectedAddressId;
+  DateTime _selectedScheduleDate = DateTime.now();
+  String? _selectedScheduleSlot;
   PaymentOrder? _activeOrder;
 
   @override
@@ -170,8 +236,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
     super.dispose();
   }
 
-  double get _subtotal =>
-      widget.items.fold(0, (sum, i) => sum + i.total);
+  double get _subtotal => widget.items.fold(0, (sum, i) => sum + i.total);
 
   @override
   Widget build(BuildContext context) {
@@ -179,6 +244,37 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
     final tt = Theme.of(context).textTheme;
     final checkoutState = ref.watch(checkoutProvider);
     final isLoading = checkoutState.isLoading;
+    final addressesState = ref.watch(cartCheckoutAddressesProvider);
+    final addresses = addressesState.valueOrNull ?? const <SavedAddressItem>[];
+    final selectedAddress = _resolveSelectedAddress(addresses);
+    final scheduleDays = List<DateTime>.generate(7, (index) {
+      final today = DateTime.now();
+      return DateTime(today.year, today.month, today.day + index);
+    }, growable: false);
+    final scheduleKey = selectedAddress == null
+        ? null
+        : '${selectedAddress.id}|${widget.items.map((item) => item.serviceId).toSet().join(',')}|${_dateKey(scheduleDays.first)}';
+    final slotsState = scheduleKey == null
+        ? null
+        : ref.watch(cartCheckoutScheduleSlotsProvider(scheduleKey));
+    final slotsForDay =
+        (slotsState?.valueOrNull ?? const <CustomerScheduleSlot>[])
+            .where(
+              (slot) =>
+                  _dateKey(slot.scheduledFor) ==
+                  _dateKey(_selectedScheduleDate),
+            )
+            .toList(growable: false);
+    final selectedSlotIso =
+        slotsForDay.any(
+          (slot) =>
+              slot.scheduledFor.toUtc().toIso8601String() ==
+              _selectedScheduleSlot,
+        )
+        ? _selectedScheduleSlot
+        : (slotsForDay.isEmpty
+              ? null
+              : slotsForDay.first.scheduledFor.toUtc().toIso8601String());
 
     return Scaffold(
       backgroundColor: cs.surface,
@@ -198,7 +294,10 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
             ),
           ),
         ),
-        title: Text('Checkout', style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
+        title: Text(
+          'Checkout',
+          style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+        ),
       ),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(20, 8, 20, 120),
@@ -211,50 +310,260 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
               padding: const EdgeInsets.all(18),
               child: Column(
                 children: [
-                  ...widget.items.map((item) => Padding(
-                        padding: const EdgeInsets.only(bottom: 10),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(item.serviceName,
-                                      style: tt.bodyMedium?.copyWith(fontWeight: FontWeight.w700)),
-                                  Text('× ${item.quantity}',
-                                      style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
-                                ],
-                              ),
+                  ...widget.items.map(
+                    (item) => Padding(
+                      padding: const EdgeInsets.only(bottom: 10),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  item.serviceName,
+                                  style: tt.bodyMedium?.copyWith(
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                                Text(
+                                  '× ${item.quantity}',
+                                  style: tt.bodySmall?.copyWith(
+                                    color: cs.onSurfaceVariant,
+                                  ),
+                                ),
+                              ],
                             ),
-                            Text(
-                              '₹${item.total.toStringAsFixed(2)}',
-                              style: tt.bodyMedium?.copyWith(fontWeight: FontWeight.w700),
+                          ),
+                          Text(
+                            '₹${item.total.toStringAsFixed(2)}',
+                            style: tt.bodyMedium?.copyWith(
+                              fontWeight: FontWeight.w700,
                             ),
-                          ],
-                        ),
-                      )),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
                   const Divider(height: 16),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text('Subtotal', style: tt.bodyMedium?.copyWith(color: cs.onSurfaceVariant)),
-                      Text('₹${_subtotal.toStringAsFixed(2)}',
-                          style: tt.bodyMedium?.copyWith(fontWeight: FontWeight.w700)),
+                      Text(
+                        'Subtotal',
+                        style: tt.bodyMedium?.copyWith(
+                          color: cs.onSurfaceVariant,
+                        ),
+                      ),
+                      Text(
+                        '₹${_subtotal.toStringAsFixed(2)}',
+                        style: tt.bodyMedium?.copyWith(
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
                     ],
                   ),
                   const SizedBox(height: 6),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text('Taxes & fees', style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
-                      Text('Included', style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
+                      Text(
+                        'Taxes & fees',
+                        style: tt.bodySmall?.copyWith(
+                          color: cs.onSurfaceVariant,
+                        ),
+                      ),
+                      Text(
+                        'Included',
+                        style: tt.bodySmall?.copyWith(
+                          color: cs.onSurfaceVariant,
+                        ),
+                      ),
                     ],
                   ),
                 ],
               ),
             ),
           ),
+          const SizedBox(height: 20),
+
+          const _SectionHeader(title: 'Service address'),
+          const SizedBox(height: 10),
+          PremiumGlassCard(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: addressesState.isLoading
+                  ? const Center(child: CircularProgressIndicator())
+                  : addressesState.hasError
+                  ? Row(
+                      children: [
+                        const Expanded(
+                          child: Text('Could not load your saved addresses.'),
+                        ),
+                        TextButton(
+                          onPressed: () =>
+                              ref.invalidate(cartCheckoutAddressesProvider),
+                          child: const Text('Retry'),
+                        ),
+                      ],
+                    )
+                  : addresses.isEmpty
+                  ? Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('Add a service address before booking.'),
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: TextButton.icon(
+                            onPressed: _openAddresses,
+                            icon: const Icon(Icons.add_location_alt_outlined),
+                            label: const Text('Add address'),
+                          ),
+                        ),
+                      ],
+                    )
+                  : Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        DropdownButtonFormField<String>(
+                          key: ValueKey(selectedAddress?.id),
+                          initialValue: selectedAddress?.id,
+                          isExpanded: true,
+                          decoration: const InputDecoration(
+                            labelText: 'Where should we provide the service?',
+                            border: OutlineInputBorder(),
+                          ),
+                          items: addresses
+                              .map(
+                                (address) => DropdownMenuItem<String>(
+                                  value: address.id,
+                                  child: Text(
+                                    '${address.label} · ${address.city} ${address.pincode}',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              )
+                              .toList(growable: false),
+                          onChanged: (value) =>
+                              setState(() => _selectedAddressId = value),
+                        ),
+                        if (selectedAddress != null) ...[
+                          const SizedBox(height: 8),
+                          Text(
+                            selectedAddress.displayAddress,
+                            style: tt.bodySmall?.copyWith(
+                              color: cs.onSurfaceVariant,
+                            ),
+                          ),
+                        ],
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: TextButton.icon(
+                            onPressed: _openAddresses,
+                            icon: const Icon(Icons.edit_location_alt_outlined),
+                            label: const Text('Manage addresses'),
+                          ),
+                        ),
+                      ],
+                    ),
+            ),
+          ),
+          const SizedBox(height: 20),
+
+          const _SectionHeader(title: 'When do you need the service?'),
+          const SizedBox(height: 10),
+          SegmentedButton<bool>(
+            segments: const [
+              ButtonSegment(value: false, label: Text('Instant')),
+              ButtonSegment(value: true, label: Text('Schedule')),
+            ],
+            selected: {_scheduleForLater},
+            onSelectionChanged: (selection) => setState(() {
+              _scheduleForLater = selection.first;
+              _selectedScheduleSlot = null;
+            }),
+          ),
+          if (_scheduleForLater) ...[
+            const SizedBox(height: 14),
+            SizedBox(
+              height: 72,
+              child: ListView.separated(
+                scrollDirection: Axis.horizontal,
+                itemCount: scheduleDays.length,
+                separatorBuilder: (_, __) => const SizedBox(width: 8),
+                itemBuilder: (context, index) {
+                  final date = scheduleDays[index];
+                  final selected =
+                      _dateKey(date) == _dateKey(_selectedScheduleDate);
+                  return ChoiceChip(
+                    selected: selected,
+                    label: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(index == 0 ? 'Today' : _weekdayShort(date)),
+                        Text('${date.day}/${date.month}'),
+                      ],
+                    ),
+                    onSelected: (_) => setState(() {
+                      _selectedScheduleDate = date;
+                      _selectedScheduleSlot = null;
+                    }),
+                  );
+                },
+              ),
+            ),
+            if (selectedAddress == null)
+              const Text('Choose a service address to see available times.')
+            else if (slotsState?.isLoading ?? true)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 14),
+                child: Center(child: CircularProgressIndicator()),
+              )
+            else if (slotsState?.hasError ?? false)
+              Row(
+                children: [
+                  const Expanded(
+                    child: Text('Could not load available times.'),
+                  ),
+                  TextButton(
+                    onPressed: () => ref.invalidate(
+                      cartCheckoutScheduleSlotsProvider(scheduleKey!),
+                    ),
+                    child: const Text('Retry'),
+                  ),
+                ],
+              )
+            else if (slotsForDay.isEmpty)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 8),
+                child: Text(
+                  'No appointment times are available on this day. Choose another date.',
+                ),
+              )
+            else
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: slotsForDay
+                    .map((slot) {
+                      final slotIso = slot.scheduledFor
+                          .toUtc()
+                          .toIso8601String();
+                      final selected = slotIso == selectedSlotIso;
+                      final time = TimeOfDay.fromDateTime(
+                        slot.scheduledFor,
+                      ).format(context);
+                      return ChoiceChip(
+                        selected: selected,
+                        label: Text(time),
+                        onSelected: (_) =>
+                            setState(() => _selectedScheduleSlot = slotIso),
+                      );
+                    })
+                    .toList(growable: false),
+              ),
+          ],
           const SizedBox(height: 20),
 
           // ── Coupon code ─────────────────────────────────────────────────
@@ -274,7 +583,9 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
                       borderSide: BorderSide.none,
                     ),
                     filled: true,
-                    fillColor: cs.surfaceContainerHighest.withValues(alpha: 0.5),
+                    fillColor: cs.surfaceContainerHighest.withValues(
+                      alpha: 0.5,
+                    ),
                   ),
                   enabled: !_couponApplied,
                 ),
@@ -283,20 +594,27 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
               TapScale(
                 onTap: _couponApplied
                     ? () => setState(() {
-                          _couponApplied = false;
-                          _couponController.clear();
-                        })
+                        _couponApplied = false;
+                        _couponController.clear();
+                      })
                     : _applyCoupon,
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 14,
+                  ),
                   decoration: BoxDecoration(
-                    color: _couponApplied ? cs.errorContainer : cs.primaryContainer,
+                    color: _couponApplied
+                        ? cs.errorContainer
+                        : cs.primaryContainer,
                     borderRadius: BorderRadius.circular(14),
                   ),
                   child: Text(
                     _couponApplied ? 'Remove' : 'Apply',
                     style: tt.labelLarge?.copyWith(
-                      color: _couponApplied ? cs.onErrorContainer : cs.onPrimaryContainer,
+                      color: _couponApplied
+                          ? cs.onErrorContainer
+                          : cs.onPrimaryContainer,
                       fontWeight: FontWeight.w700,
                     ),
                   ),
@@ -308,11 +626,18 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
             const SizedBox(height: 8),
             Row(
               children: [
-                const Icon(Icons.check_circle_rounded, size: 16, color: Color(0xFF10B981)),
+                Icon(
+                  Icons.info_outline_rounded,
+                  size: 16,
+                  color: cs.onSurfaceVariant,
+                ),
                 const SizedBox(width: 6),
                 Text(
-                  'Coupon "${_couponController.text}" applied!',
-                  style: tt.bodySmall?.copyWith(color: const Color(0xFF10B981), fontWeight: FontWeight.w600),
+                  'Code added. Eligibility is confirmed before payment.',
+                  style: tt.bodySmall?.copyWith(
+                    color: cs.onSurfaceVariant,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ],
             ),
@@ -324,7 +649,10 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
               gradient: LinearGradient(
-                colors: [cs.primary.withValues(alpha: 0.1), cs.secondary.withValues(alpha: 0.05)],
+                colors: [
+                  cs.primary.withValues(alpha: 0.1),
+                  cs.secondary.withValues(alpha: 0.05),
+                ],
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
               ),
@@ -337,8 +665,12 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Total Payable',
-                        style: tt.labelMedium?.copyWith(color: cs.onSurfaceVariant)),
+                    Text(
+                      'Estimated service amount',
+                      style: tt.labelMedium?.copyWith(
+                        color: cs.onSurfaceVariant,
+                      ),
+                    ),
                     const SizedBox(height: 4),
                     Text(
                       '₹${_subtotal.toStringAsFixed(2)}',
@@ -347,9 +679,18 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
                         color: cs.primary,
                       ),
                     ),
+                    const SizedBox(height: 3),
+                    Text(
+                      'Final amount shown in Razorpay',
+                      style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+                    ),
                   ],
                 ),
-                Icon(Icons.lock_rounded, color: cs.primary.withValues(alpha: 0.5), size: 28),
+                Icon(
+                  Icons.lock_rounded,
+                  color: cs.primary.withValues(alpha: 0.5),
+                  size: 28,
+                ),
               ],
             ),
           ),
@@ -369,11 +710,38 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
                   const SizedBox(width: 10),
                   Expanded(
                     child: Text(
-                      '${checkoutState.error}',
+                      _checkoutErrorMessage(checkoutState.error),
                       style: tt.bodySmall?.copyWith(color: cs.onErrorContainer),
                     ),
                   ),
                 ],
+              ),
+            ),
+          ],
+          if (_paymentVerificationFailed) ...[
+            const SizedBox(height: 12),
+            Text(
+              'Payment may have been received, but booking confirmation is pending. Please contact support instead of trying to pay again.',
+              style: tt.bodySmall?.copyWith(
+                color: cs.error,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            TextButton.icon(
+              onPressed: () => context.push(
+                '/support?autoCompose=true&category=payment&subject=${Uri.encodeComponent('Payment confirmation pending')}&message=${Uri.encodeComponent('My payment may have been received, but the booking confirmation did not complete. Please check the payment and booking status.')}',
+              ),
+              icon: const Icon(Icons.support_agent_rounded),
+              label: const Text('Contact support'),
+            ),
+          ],
+          if (_paymentAttemptFailed && _activeOrder != null) ...[
+            const SizedBox(height: 12),
+            Text(
+              'Payment was not completed. Your booking ${_activeOrder!.bookingCode} is saved; retrying will not create another booking.',
+              style: tt.bodySmall?.copyWith(
+                color: cs.error,
+                fontWeight: FontWeight.w600,
               ),
             ),
           ],
@@ -387,15 +755,36 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
           child: SizedBox(
             width: double.infinity,
             child: FilledButton(
-              onPressed: isLoading ? null : _pay,
+              onPressed:
+                  isLoading ||
+                      _isLaunchingPayment ||
+                      _paymentVerificationFailed ||
+                      addressesState.isLoading ||
+                      selectedAddress == null ||
+                      (_scheduleForLater &&
+                          ((slotsState?.isLoading ?? true) ||
+                              selectedSlotIso == null))
+                  ? null
+                  : () => _pay(
+                      selectedAddress.id,
+                      scheduledFor: _scheduleForLater
+                          ? DateTime.parse(selectedSlotIso!).toUtc()
+                          : null,
+                    ),
               style: FilledButton.styleFrom(
                 padding: const EdgeInsets.symmetric(vertical: 18),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AbzioTheme.buttonRadius)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(AbzioTheme.buttonRadius),
+                ),
               ),
               child: isLoading
                   ? const SizedBox(
-                      width: 22, height: 22,
-                      child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5),
+                      width: 22,
+                      height: 22,
+                      child: CircularProgressIndicator(
+                        color: Colors.white,
+                        strokeWidth: 2.5,
+                      ),
                     )
                   : Row(
                       mainAxisAlignment: MainAxisAlignment.center,
@@ -403,8 +792,11 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
                         const Icon(Icons.payment_rounded, size: 20),
                         const SizedBox(width: 10),
                         Text(
-                          'Pay ₹${_subtotal.toStringAsFixed(2)} via Razorpay',
-                          style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                          _paymentAttemptFailed
+                              ? 'Retry payment'
+                              : 'Continue to secure payment',
+                          style: Theme.of(context).textTheme.titleSmall
+                              ?.copyWith(
                                 color: Colors.white,
                                 fontWeight: FontWeight.w800,
                               ),
@@ -419,54 +811,182 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
   }
 
   void _applyCoupon() {
-    if (_couponController.text.trim().isEmpty) { return; }
+    final code = _couponController.text.trim().toUpperCase();
+    if (code.isEmpty) return;
+    if (!RegExp(r'^[A-Z0-9_-]{2,64}$').hasMatch(code)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Enter a valid promo code.')),
+      );
+      return;
+    }
+    _couponController.value = TextEditingValue(
+      text: code,
+      selection: TextSelection.collapsed(offset: code.length),
+    );
     setState(() => _couponApplied = true);
   }
 
-  Future<void> _pay() async {
-    final order = await ref.read(checkoutProvider.notifier).createOrder(
-          cityId: widget.cityId,
-          items: widget.items,
-          couponCode: _couponApplied ? _couponController.text.trim() : null,
-        );
+  SavedAddressItem? _resolveSelectedAddress(List<SavedAddressItem> addresses) {
+    if (_selectedAddressId != null) {
+      for (final address in addresses) {
+        if (address.id == _selectedAddressId) return address;
+      }
+    }
+    for (final address in addresses) {
+      if (address.isDefault) return address;
+    }
+    return addresses.isEmpty ? null : addresses.first;
+  }
 
-    if (order == null || !mounted) { return; }
-    setState(() => _activeOrder = order);
+  Future<void> _openAddresses() async {
+    await context.push('/addresses');
+    if (mounted) ref.invalidate(cartCheckoutAddressesProvider);
+  }
 
-    final options = {
-      'key': order.keyId,
-      'amount': order.amountPaise,
-      'currency': order.currency,
-      'order_id': order.orderId,
-      'name': 'VeeduFix',
-      'description': 'Home Service Booking',
-      'prefill': {
-        'name': order.customerName,
-        if (order.customerEmail != null) 'email': order.customerEmail,
-        if (order.customerPhone != null) 'contact': order.customerPhone,
-      },
-      'theme': {'color': '#6366F1'},
-    };
+  static String _dateKey(DateTime date) =>
+      '${date.year.toString().padLeft(4, '0')}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
 
-    _razorpay.open(options);
+  static String _weekdayShort(DateTime date) =>
+      const ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'][date.weekday - 1];
+
+  Future<void> _pay(String addressId, {DateTime? scheduledFor}) async {
+    if (_isLaunchingPayment || _paymentVerificationFailed) return;
+
+    final existingOrder = _activeOrder;
+    if (existingOrder != null) {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('Retry payment?'),
+          content: Text(
+            'This will retry payment for booking ${existingOrder.bookingCode}. It will not create a new booking.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: const Text('Retry payment'),
+            ),
+          ],
+        ),
+      );
+      if (!mounted || confirmed != true) return;
+      await _launchPaymentCheckout(existingOrder);
+      return;
+    }
+
+    setState(() => _isLaunchingPayment = true);
+    try {
+      final order = await ref
+          .read(checkoutProvider.notifier)
+          .createOrder(
+            cityId: widget.cityId,
+            addressId: addressId,
+            items: widget.items,
+            scheduledFor: scheduledFor,
+            couponCode: _couponApplied ? _couponController.text.trim() : null,
+          );
+
+      if (order == null || !mounted) {
+        if (mounted) setState(() => _isLaunchingPayment = false);
+        return;
+      }
+      if (order.keyId.isEmpty ||
+          order.bookingId.isEmpty ||
+          order.orderId.isEmpty ||
+          order.amountPaise <= 0) {
+        throw StateError('The payment order response was incomplete.');
+      }
+      setState(() => _activeOrder = order);
+      await _launchPaymentCheckout(order);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _isLaunchingPayment = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Could not open payment. Please try again.'),
+        ),
+      );
+    }
+  }
+
+  Future<void> _launchPaymentCheckout(PaymentOrder order) async {
+    setState(() {
+      _isLaunchingPayment = true;
+      _paymentAttemptFailed = false;
+    });
+    try {
+      _razorpay.open({
+        'key': order.keyId,
+        'amount': order.amountPaise,
+        'currency': order.currency,
+        'order_id': order.orderId,
+        'name': 'VeeduFix',
+        'description': 'Home Service Booking',
+        'prefill': {
+          'name': order.customerName,
+          if (order.customerEmail != null) 'email': order.customerEmail,
+          if (order.customerPhone != null) 'contact': order.customerPhone,
+        },
+        'theme': {'color': '#C6A769'},
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _isLaunchingPayment = false;
+        _paymentAttemptFailed = true;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Could not open payment. Please try again.'),
+        ),
+      );
+    }
   }
 
   Future<void> _onPaymentSuccess(PaymentSuccessResponse response) async {
     final order = _activeOrder;
-    if (order == null) { return; }
+    if (order == null || _isVerifyingPayment) return;
+    if (response.orderId == null ||
+        response.paymentId == null ||
+        response.signature == null ||
+        response.orderId!.isEmpty ||
+        response.paymentId!.isEmpty ||
+        response.signature!.isEmpty) {
+      setState(() {
+        _isLaunchingPayment = false;
+        _paymentVerificationFailed = true;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Payment details could not be confirmed. Contact support before trying again.',
+          ),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+    setState(() => _isVerifyingPayment = true);
+    setState(() => _paymentAttemptFailed = false);
 
-    final success = await ref.read(checkoutProvider.notifier).verifyPayment(
+    final success = await ref
+        .read(checkoutProvider.notifier)
+        .verifyPayment(
           bookingId: order.bookingId,
           orderId: response.orderId ?? order.orderId,
           paymentId: response.paymentId ?? '',
           signature: response.signature ?? '',
         );
 
-    if (!mounted) { return; }
+    if (!mounted) {
+      return;
+    }
 
     if (success) {
-      // Navigate to booking detail / confirmation
-      context.go('/booking/${order.bookingId}');
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Row(
@@ -478,13 +998,22 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
           ),
           backgroundColor: const Color(0xFF10B981),
           behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
         ),
       );
+      context.go('/booking/${Uri.encodeComponent(order.bookingId)}');
     } else {
+      setState(() {
+        _isVerifyingPayment = false;
+        _paymentVerificationFailed = true;
+      });
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Payment captured but verification failed. Contact support.'),
+          content: Text(
+            'Payment captured but verification failed. Contact support.',
+          ),
           backgroundColor: Colors.orange,
         ),
       );
@@ -492,7 +1021,13 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
   }
 
   void _onPaymentError(PaymentFailureResponse response) {
-    if (!mounted) { return; }
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _isLaunchingPayment = false;
+      _paymentAttemptFailed = true;
+    });
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text('Payment failed: ${response.message ?? 'Unknown error'}'),
@@ -504,10 +1039,26 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
   }
 
   void _onExternalWallet(ExternalWalletResponse response) {
-    if (!mounted) { return; }
+    if (!mounted) {
+      return;
+    }
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('External wallet selected: ${response.walletName}')),
+      SnackBar(
+        content: Text('External wallet selected: ${response.walletName}'),
+      ),
     );
+  }
+
+  String _checkoutErrorMessage(Object? error) {
+    if (error is DioException) {
+      if (error.response?.statusCode == 400 && _couponApplied) {
+        return 'That promo code could not be applied. Check the code or remove it to continue.';
+      }
+      if (error.response?.statusCode == 401) {
+        return 'Please sign in again to continue with payment.';
+      }
+    }
+    return 'We could not prepare your payment. Check your connection and try again.';
   }
 }
 
@@ -521,7 +1072,9 @@ class _SectionHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     return Text(
       title,
-      style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800),
+      style: Theme.of(
+        context,
+      ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800),
     );
   }
 }

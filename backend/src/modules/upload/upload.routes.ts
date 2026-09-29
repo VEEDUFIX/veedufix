@@ -2,6 +2,7 @@ import { NextFunction, Request, Response, Router } from "express";
 import multer from "multer";
 import { requireAuth, requireRole } from "../../middleware/auth.js";
 import { validate } from "../../middleware/validate.js";
+import { validateImageContent } from "../../middleware/validate-image-content.js";
 import {
   confirmJobPhotoSchema,
   uploadChatAttachmentSchema,
@@ -67,6 +68,7 @@ uploadRouter.post(
   requireRole("WORKER"),
   upload.single("file"),
   handleMulterError,
+  validateImageContent,
   validate(uploadJobPhotoSchema),
   uploadJobPhotoHandler
 );
@@ -84,6 +86,7 @@ uploadRouter.post(
   requireAuth,
   upload.single("file"),
   handleMulterError,
+  validateImageContent,
   validate(uploadChatAttachmentSchema),
   uploadChatAttachmentHandler
 );

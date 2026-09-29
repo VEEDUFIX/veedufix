@@ -10,6 +10,7 @@ import 'package:intl/intl.dart';
 import 'package:marketplace_shared/marketplace_shared.dart';
 
 import '../../../../core/widgets/worker_logo.dart';
+import '../../../profile/presentation/providers/worker_profile_providers.dart';
 import '../providers/onboarding_provider.dart';
 
 const _ink = Color(0xFF17120D);
@@ -37,6 +38,7 @@ class _OnboardingFlowPageState extends ConsumerState<OnboardingFlowPage> {
   final _emergencyName = TextEditingController();
   final _emergencyPhone = TextEditingController();
   final _city = TextEditingController();
+  final _streetAddress = TextEditingController();
   final _areas = TextEditingController();
   final _pincodes = TextEditingController();
   final _travelKm = TextEditingController(text: '8');
@@ -55,6 +57,7 @@ class _OnboardingFlowPageState extends ConsumerState<OnboardingFlowPage> {
   final Map<String, TextEditingController> _expertise = {};
   final Map<String, Set<String>> _skills = {};
   final Map<String, List<String>> _qualifications = {};
+  final Set<String> _seededExperienceCategoryIds = <String>{};
 
   DateTime? _dateOfBirth;
   String? _gender;
@@ -67,9 +70,12 @@ class _OnboardingFlowPageState extends ConsumerState<OnboardingFlowPage> {
   bool _safetyGuidelines = false;
   bool _termsAccepted = false;
   bool _seeded = false;
+  bool _hasSavedAvailability = false;
+  bool _hasEditedAvailability = false;
   XFile? _profilePhoto;
+  bool _profilePhotoUploaded = false;
   XFile? _panDoc;
-  XFile? _selfieDoc;
+  bool _panDocUploaded = false;
   final Set<String> _workingDays = {'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'};
   TimeOfDay _from = const TimeOfDay(hour: 9, minute: 0);
   TimeOfDay _to = const TimeOfDay(hour: 19, minute: 0);
@@ -98,6 +104,7 @@ class _OnboardingFlowPageState extends ConsumerState<OnboardingFlowPage> {
       _emergencyName,
       _emergencyPhone,
       _city,
+      _streetAddress,
       _areas,
       _pincodes,
       _travelKm,
@@ -136,6 +143,31 @@ class _OnboardingFlowPageState extends ConsumerState<OnboardingFlowPage> {
     _emergencyName.text = profile.emergencyContactName ?? '';
     _emergencyPhone.text = profile.emergencyContactPhone ?? '';
     _city.text = profile.city ?? '';
+    final savedAddress = profile.addressLine1 ?? '';
+    const legacyAreaMarker = ', Areas served: ';
+    final legacyAreaMarkerIndex = savedAddress.indexOf(legacyAreaMarker);
+    _streetAddress.text = legacyAreaMarkerIndex < 0
+        ? savedAddress
+        : savedAddress.substring(0, legacyAreaMarkerIndex);
+    _areas.text = profile.serviceAreas ??
+        (legacyAreaMarkerIndex < 0
+            ? ''
+            : savedAddress.substring(legacyAreaMarkerIndex + legacyAreaMarker.length));
+    _travelKm.text = '${profile.serviceRadiusKm ?? 8}';
+    _workType = profile.workType == 'PART_TIME' ? 'Part-time' : 'Full-time';
+    _urgentJobs = profile.acceptsUrgentJobs;
+    if (profile.availabilitySlots.isNotEmpty) {
+      _hasSavedAvailability = true;
+      const dayCodes = <int, String>{
+        0: 'SUN', 1: 'MON', 2: 'TUE', 3: 'WED', 4: 'THU', 5: 'FRI', 6: 'SAT',
+      };
+      _workingDays
+        ..clear()
+        ..addAll(profile.availabilitySlots.map((slot) => dayCodes[slot.dayOfWeek]).whereType<String>());
+      final firstSlot = profile.availabilitySlots.first;
+      _from = _parseTime(firstSlot.startTime, const TimeOfDay(hour: 9, minute: 0));
+      _to = _parseTime(firstSlot.endTime, const TimeOfDay(hour: 19, minute: 0));
+    }
     _pincodes.text = profile.pincode ?? '';
     _upi.text = profile.upiId ?? '';
     final bankAccount = profile.bankAccountNumber ?? '';
@@ -174,10 +206,13 @@ class _OnboardingFlowPageState extends ConsumerState<OnboardingFlowPage> {
           emergencyContactPhone: _emergencyPhone.text.trim(),
         );
         await controller.savePersonalDetails();
-        await controller.saveEmergencyContact(
-          emergencyContactName: _emergencyName.text.trim(),
-          emergencyContactPhone: _emergencyPhone.text.trim(),
-        );
+        final photo = _profilePhoto;
+        if (photo != null) {
+          await ref.read(workerProfileRepositoryProvider).uploadAvatar(photo.path, photo.name);
+          _profilePhoto = null;
+          _profilePhotoUploaded = true;
+          ref.invalidate(workerAccountProfileProvider);
+        }
         controller.nextStep();
         return;
       }
@@ -216,32 +251,34 @@ class _OnboardingFlowPageState extends ConsumerState<OnboardingFlowPage> {
           'FRI': 5,
           'SAT': 6,
         };
-        final formattedHours = '${_from.format(context)}-${_to.format(context)}';
-        await controller.saveAvailability(
-          slots: _workingDays
-              .map((day) => {
-                    'dayOfWeek': dayNumbers[day],
-                    'startTime': startTime,
-                    'endTime': endTime,
-                  })
-              .toList(growable: false),
-        );
-        final serviceAreaSummary = [
-          _areas.text.trim(),
-          '${_travelKm.text.trim()} km radius',
-          _workingDays.join(', '),
-          formattedHours,
-          _workType,
-          _urgentJobs ? 'Urgent jobs accepted' : 'No urgent jobs',
-        ].where((item) => item.trim().isNotEmpty).join(' | ');
+        if (!_hasSavedAvailability || _hasEditedAvailability) {
+          await controller.saveAvailability(
+            slots: _workingDays
+                .map((day) => {
+                      'dayOfWeek': dayNumbers[day],
+                      'startTime': startTime,
+                      'endTime': endTime,
+                    })
+                .toList(growable: false),
+          );
+        }
+        final streetAddress = _streetAddress.text.trim();
+        final serviceAreas = _areas.text.trim();
+        if (streetAddress.length > 255 || serviceAreas.length > 500) {
+          _toast('Check the address and service area lengths, then try again.');
+          return;
+        }
         controller.updatePersonalDetails(
           city: _city.text.trim(),
           pincode: _pincodes.text.trim(),
-          addressLine1: serviceAreaSummary.length > 255
-              ? serviceAreaSummary.substring(0, 255)
-              : serviceAreaSummary,
+          addressLine1: streetAddress,
         );
-        await controller.savePersonalDetails();
+        await controller.savePersonalDetails(
+          serviceRadiusKm: int.parse(_travelKm.text.trim()),
+          serviceAreas: serviceAreas,
+          workType: _workType == 'Part-time' ? 'PART_TIME' : 'FULL_TIME',
+          acceptsUrgentJobs: _urgentJobs,
+        );
         controller.nextStep();
         return;
       }
@@ -250,6 +287,16 @@ class _OnboardingFlowPageState extends ConsumerState<OnboardingFlowPage> {
         await controller.savePersonalDetails();
         final file = state.draft.aadhaarDocumentFile;
         if (file != null) await controller.saveIdentityDocument(file);
+        final panFile = _panDoc;
+        if (panFile != null && !_panDocUploaded) {
+          await ref.read(workerProfileRepositoryProvider).uploadWorkerDocumentFile(
+                type: 'pan',
+                imagePath: panFile.path,
+                filename: panFile.name,
+              );
+          _panDocUploaded = true;
+          ref.invalidate(workerDocumentsProvider);
+        }
         controller.nextStep();
         return;
       }
@@ -312,6 +359,80 @@ class _OnboardingFlowPageState extends ConsumerState<OnboardingFlowPage> {
       final limit = summary.length < 500 ? summary.length : 500;
       return summary.substring(0, limit);
     }).toList();
+  }
+
+  void _seedExperienceFromProfile(
+    WorkerOnboardingState state,
+    List<CatalogCategory> categories,
+  ) {
+    for (final category in categories) {
+      if (!_seededExperienceCategoryIds.add(category.id)) continue;
+      final prefix = '${category.name} - ';
+      String? summary;
+      for (final item in state.draft.toolsOwned) {
+        if (item.startsWith(prefix)) {
+          summary = item;
+          break;
+        }
+      }
+      if (summary == null) continue;
+
+      final years = _years.putIfAbsent(category.id, TextEditingController.new);
+      final expertise = _expertise.putIfAbsent(category.id, TextEditingController.new);
+      final skillSet = _skills.putIfAbsent(category.id, () => <String>{});
+      final qualifications = _qualifications.putIfAbsent(category.id, () => <String>[]);
+      final expertiseParts = <String>[];
+      for (final item in summary.substring(prefix.length).split(' - ')) {
+        if (item.endsWith(' years')) {
+          years.text = item.substring(0, item.length - ' years'.length);
+        } else if (item.startsWith('Skills: ')) {
+          skillSet.addAll(item.substring('Skills: '.length).split(', ').where((value) => value.isNotEmpty));
+        } else if (item.startsWith('Qualifications: ')) {
+          qualifications.addAll(item.substring('Qualifications: '.length).split(', ').where((value) => value.isNotEmpty));
+        } else {
+          expertiseParts.add(item);
+        }
+      }
+      expertise.text = expertiseParts.join(' - ');
+    }
+  }
+
+  TimeOfDay _parseTime(String value, TimeOfDay fallback) {
+    final parts = value.split(':');
+    if (parts.length < 2) return fallback;
+    final hour = int.tryParse(parts[0]);
+    final minute = int.tryParse(parts[1]);
+    if (hour == null || minute == null || hour < 0 || hour > 23 || minute < 0 || minute > 59) {
+      return fallback;
+    }
+    return TimeOfDay(hour: hour, minute: minute);
+  }
+
+  Future<void> _addQualification(List<String> qualifications) async {
+    final controller = TextEditingController();
+    final value = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Add qualification'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          textCapitalization: TextCapitalization.words,
+          maxLength: 120,
+          decoration: const InputDecoration(labelText: 'Qualification or certificate'),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Cancel')),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, controller.text.trim()),
+            child: const Text('Add'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (!mounted || value == null || value.isEmpty) return;
+    setState(() => qualifications.add(value));
   }
 
   String _friendlyError(Object error) {
@@ -394,7 +515,14 @@ class _OnboardingFlowPageState extends ConsumerState<OnboardingFlowPage> {
   Future<void> _pickTime(bool start) async {
     final picked = await showTimePicker(context: context, initialTime: start ? _from : _to);
     if (picked == null) return;
-    setState(() => start ? _from = picked : _to = picked);
+    setState(() {
+      _hasEditedAvailability = true;
+      if (start) {
+        _from = picked;
+      } else {
+        _to = picked;
+      }
+    });
   }
 
   List<CatalogCategory> _catalog(WorkerOnboardingState state) {
@@ -534,11 +662,14 @@ class _OnboardingFlowPageState extends ConsumerState<OnboardingFlowPage> {
         child: Column(
           children: [
             InkWell(
-              onTap: () => _pickImage((file) => setState(() => _profilePhoto = file)),
+              onTap: () => _pickImage((file) => setState(() {
+                _profilePhoto = file;
+                _profilePhotoUploaded = false;
+              })),
               child: CircleAvatar(
                 radius: 44,
                 backgroundColor: const Color(0xFFFFF3D3),
-                child: Icon(_profilePhoto == null ? Icons.add_a_photo_rounded : Icons.check_rounded, color: _gold),
+                child: Icon(_profilePhoto == null && !_profilePhotoUploaded ? Icons.add_a_photo_rounded : Icons.check_rounded, color: _gold),
               ),
             ),
             const SizedBox(height: 16),
@@ -611,6 +742,7 @@ class _OnboardingFlowPageState extends ConsumerState<OnboardingFlowPage> {
   Widget _experience(WorkerOnboardingState state) {
     final categories = _selectedCategories(state);
     if (categories.isEmpty) return const _Panel(child: Text('Select services first.'));
+    _seedExperienceFromProfile(state, categories);
     return Column(
       children: categories.map((category) {
         final years = _years.putIfAbsent(category.id, TextEditingController.new);
@@ -650,11 +782,14 @@ class _OnboardingFlowPageState extends ConsumerState<OnboardingFlowPage> {
                   spacing: 8,
                   runSpacing: 8,
                   children: [
-                    ...qualifications.map((item) => Chip(label: Text(item))),
+                    ...qualifications.map((item) => Chip(
+                          label: Text(item),
+                          onDeleted: () => setState(() => qualifications.remove(item)),
+                        )),
                     ActionChip(
                       avatar: const Icon(Icons.add_rounded, size: 18),
                       label: const Text('Add qualification'),
-                      onPressed: () => setState(() => qualifications.add('Certificate ${qualifications.length + 1}')),
+                      onPressed: () => _addQualification(qualifications),
                     ),
                   ],
                 ),
@@ -671,11 +806,13 @@ class _OnboardingFlowPageState extends ConsumerState<OnboardingFlowPage> {
           children: [
             _field(_city, 'City', Icons.location_city_rounded, validator: _required),
             const SizedBox(height: 12),
+            _field(_streetAddress, 'Street address', Icons.home_outlined, validator: _required),
+            const SizedBox(height: 12),
             _field(_areas, 'Areas/localities served', Icons.map_rounded, validator: _required),
             const SizedBox(height: 12),
-            _field(_pincodes, 'Service pincodes', Icons.pin_drop_rounded, keyboardType: TextInputType.number, validator: _required),
+            _field(_pincodes, 'Primary service pincode', Icons.pin_drop_rounded, keyboardType: TextInputType.number, inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(6)], validator: _pincodeValidator),
             const SizedBox(height: 12),
-            _field(_travelKm, 'Maximum travel distance (km)', Icons.route_rounded, keyboardType: TextInputType.number, validator: _required),
+            _field(_travelKm, 'Maximum travel distance (km)', Icons.route_rounded, keyboardType: TextInputType.number, inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(3)], validator: _travelDistanceValidator),
             const SizedBox(height: 16),
             _sectionTitle('Working days'),
             Wrap(
@@ -684,7 +821,14 @@ class _OnboardingFlowPageState extends ConsumerState<OnboardingFlowPage> {
                 return FilterChip(
                   label: Text(day),
                   selected: _workingDays.contains(day),
-                  onSelected: (_) => setState(() => _workingDays.contains(day) ? _workingDays.remove(day) : _workingDays.add(day)),
+                  onSelected: (_) => setState(() {
+                    _hasEditedAvailability = true;
+                    if (_workingDays.contains(day)) {
+                      _workingDays.remove(day);
+                    } else {
+                      _workingDays.add(day);
+                    }
+                  }),
                 );
               }).toList(),
             ),
@@ -728,8 +872,11 @@ class _OnboardingFlowPageState extends ConsumerState<OnboardingFlowPage> {
               uploaded: state.draft.aadhaarDocumentFile != null || state.profile?.hasAadhaarDoc == true,
               onTap: () => _pickImage((file) => ref.read(onboardingControllerProvider.notifier).setAadhaarDocumentFile(file)),
             ),
-            _UploadTile(title: 'PAN', subtitle: 'Used for payouts when required', uploaded: _panDoc != null, onTap: () => _pickImage((file) => setState(() => _panDoc = file))),
-            _UploadTile(title: 'Selfie Verification', subtitle: 'Helps us confirm the account holder', uploaded: _selfieDoc != null, onTap: () => _pickImage((file) => setState(() => _selfieDoc = file))),
+            _UploadTile(title: 'PAN', subtitle: 'Optional unless requested for verification', uploaded: _panDocUploaded, onTap: () => _pickImage((file) => setState(() {
+              _panDoc = file;
+              _panDocUploaded = false;
+            }))),
+            const _InfoBox(text: 'If a selfie check is required, Veedufix will request it during verification.', icon: Icons.face_rounded),
             const _InfoBox(text: 'Your documents are securely stored and used for verification purposes.', icon: Icons.lock_rounded),
           ],
         ),
@@ -755,15 +902,15 @@ class _OnboardingFlowPageState extends ConsumerState<OnboardingFlowPage> {
   Widget _bank() => _Panel(
         child: Column(
           children: [
-            _field(_accountHolder, 'Account holder name', Icons.person_pin_rounded, validator: _required),
+            _field(_accountHolder, 'Account holder name', Icons.person_pin_rounded, validator: (value) => _bankHolderValidator(value, _fullName.text)),
             const SizedBox(height: 12),
             _field(_bankAccount, 'Bank account number', Icons.account_balance_rounded, keyboardType: TextInputType.number, validator: _bankAccountValidator),
             const SizedBox(height: 12),
-            _field(_confirmBankAccount, 'Confirm account number', Icons.check_circle_outline_rounded, keyboardType: TextInputType.number, validator: _required),
+            _field(_confirmBankAccount, 'Confirm account number', Icons.check_circle_outline_rounded, keyboardType: TextInputType.number, inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(18)], validator: (value) => value == _bankAccount.text ? null : 'Account numbers do not match'),
             const SizedBox(height: 12),
-            _field(_ifsc, 'IFSC', Icons.numbers_rounded, validator: _required),
+            _field(_ifsc, 'IFSC', Icons.numbers_rounded, inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[a-zA-Z0-9]')), LengthLimitingTextInputFormatter(11)], validator: _ifscValidator),
             const SizedBox(height: 12),
-            _field(_upi, 'UPI ID (optional)', Icons.payments_rounded, requiredMark: false),
+            _field(_upi, 'UPI ID (optional)', Icons.payments_rounded, requiredMark: false, validator: _upiValidator),
             const SizedBox(height: 12),
             const _InfoBox(text: 'Bank account name may be checked against verified identity.', icon: Icons.verified_user_rounded),
           ],
@@ -823,11 +970,11 @@ class _OnboardingFlowPageState extends ConsumerState<OnboardingFlowPage> {
 
   Widget _review(WorkerOnboardingState state) => Column(
         children: [
-          _Summary(title: 'Personal Information', onEdit: () => ref.read(onboardingControllerProvider.notifier).setStep(2), rows: {'Name': _fullName.text, 'Mobile': state.profile?.phone ?? 'Linked', 'Language': _language}),
-          _Summary(title: 'Services', onEdit: () => ref.read(onboardingControllerProvider.notifier).setStep(3), rows: {'Selected': _selectedCategories(state).map((e) => e.name).join(', ')}),
-          _Summary(title: 'Service Area', onEdit: () => ref.read(onboardingControllerProvider.notifier).setStep(5), rows: {'City': _city.text, 'Pincodes': _pincodes.text, 'Days': _workingDays.join(', ')}),
-          _Summary(title: 'Verification', onEdit: () => ref.read(onboardingControllerProvider.notifier).setStep(6), rows: {'Identity': state.profile?.hasAadhaarDoc == true ? 'Uploaded' : 'Pending', 'PAN': _panDoc == null ? 'Optional' : 'Uploaded'}),
-          _Summary(title: 'Payment', onEdit: () => ref.read(onboardingControllerProvider.notifier).setStep(8), rows: {'Bank': _bankAccount.text.isEmpty ? 'Not set' : 'Added'}),
+          _Summary(title: 'Personal Information', onEdit: () => ref.read(onboardingControllerProvider.notifier).setStep(1), rows: {'Name': _fullName.text, 'Mobile': state.profile?.phone ?? 'Linked', 'Language': _language}),
+          _Summary(title: 'Services', onEdit: () => ref.read(onboardingControllerProvider.notifier).setStep(2), rows: {'Selected': _selectedCategories(state).map((e) => e.name).join(', ')}),
+          _Summary(title: 'Service Area', onEdit: () => ref.read(onboardingControllerProvider.notifier).setStep(4), rows: {'City': _city.text, 'Pincodes': _pincodes.text, 'Days': _workingDays.join(', ')}),
+          _Summary(title: 'Verification', onEdit: () => ref.read(onboardingControllerProvider.notifier).setStep(5), rows: {'Identity': state.profile?.hasAadhaarDoc == true ? 'Uploaded' : 'Pending', 'PAN': _panDocUploaded ? 'Uploaded' : 'Optional'}),
+          _Summary(title: 'Payment', onEdit: () => ref.read(onboardingControllerProvider.notifier).setStep(7), rows: {'Bank': _bankAccount.text.isEmpty ? 'Not set' : 'Added'}),
         ],
       );
 
@@ -1096,10 +1243,33 @@ TextFormField _field(
 }
 
 String? _required(String? value) => (value ?? '').trim().isEmpty ? 'Required' : null;
+String? _pincodeValidator(String? value) => RegExp(r'^[1-9]\d{5}$').hasMatch((value ?? '').trim()) ? null : 'Enter a valid 6-digit pincode';
+String? _travelDistanceValidator(String? value) {
+  final distance = int.tryParse((value ?? '').trim());
+  return distance != null && distance >= 1 && distance <= 100
+      ? null
+      : 'Enter a distance from 1 to 100 km';
+}
+String? _bankHolderValidator(String? value, String profileName) {
+  final holder = (value ?? '').trim();
+  if (holder.length < 2) return 'Enter the account holder name';
+  if (holder.toLowerCase() != profileName.trim().toLowerCase()) {
+    return 'Use the same name as your partner profile';
+  }
+  return null;
+}
 String? _bankAccountValidator(String? value) {
   return RegExp(r'^\d{9,18}$').hasMatch((value ?? '').trim())
       ? null
       : 'Enter 9 to 18 digits';
+}
+String? _ifscValidator(String? value) => RegExp(r'^[A-Z]{4}0[A-Z0-9]{6}$').hasMatch((value ?? '').trim().toUpperCase()) ? null : 'Enter a valid 11-character IFSC';
+String? _upiValidator(String? value) {
+  final input = (value ?? '').trim();
+  if (input.isEmpty) return null;
+  return RegExp(r'^[a-zA-Z0-9._-]{2,256}@[a-zA-Z][a-zA-Z0-9.-]{1,63}$').hasMatch(input)
+      ? null
+      : 'Enter a valid UPI ID';
 }
 String? _aadhaarValidator(String? value) {
   return RegExp(r'^\d{12}$').hasMatch((value ?? '').trim())

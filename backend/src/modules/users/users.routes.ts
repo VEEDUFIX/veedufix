@@ -1,9 +1,11 @@
 import { Router } from "express";
-import { requireAuth, type AuthenticatedRequest } from "../../middleware/auth.js";
+import { requireAuth, requireRole, type AuthenticatedRequest } from "../../middleware/auth.js";
 import { prisma } from "../../lib/prisma.js";
 import { getBookingTimelineEvents } from "../../lib/booking-timeline.js";
 import { serializeWorkerProfile } from "../worker-onboarding/worker-onboarding.service.js";
 import { requestWorkerPayout } from "../wallet/wallet.service.js";
+import { generateSignedUrl, getCloudinaryFormatFromUrl } from "../../lib/cloudinary.js";
+import { getCustomerScheduleSlots } from "../availability/availability.service.js";
 
 export const usersRouter = Router();
 
@@ -99,9 +101,12 @@ usersRouter.get("/me", requireAuth, async (request: AuthenticatedRequest, respon
     return;
   }
 
+  const safeUser = { ...user };
+  delete safeUser.passwordHash;
+  response.setHeader("Cache-Control", "private, no-store");
   response.status(200).json({
     user: {
-      ...user,
+      ...safeUser,
       workerProfile: user.workerProfile ? serializeWorkerProfile(user.workerProfile) : null
     }
   });
@@ -219,7 +224,7 @@ usersRouter.get("/me/bookings", requireAuth, async (request: AuthenticatedReques
 
 // ─── Worker: list my jobs ─────────────────────────────────────────────────────
 // Query param: ?tab=incoming|accepted|active|completed
-usersRouter.get("/me/worker/jobs", requireAuth, async (request: AuthenticatedRequest, response) => {
+usersRouter.get("/me/worker/jobs", requireAuth, requireRole("WORKER"), async (request: AuthenticatedRequest, response) => {
   const userId = request.auth!.userId;
   const tab = (request.query.tab as string) ?? "incoming";
 
@@ -426,7 +431,7 @@ usersRouter.get("/bookings/:bookingId", requireAuth, async (request: Authenticat
         },
       },
       address: {
-        select: { label: true, line1: true, city: { select: { name: true } } },
+        select: { label: true, line1: true, pincode: true, city: { select: { name: true } } },
       },
       sparePartRequest: true,
       jobExecution: {
@@ -450,11 +455,17 @@ usersRouter.get("/bookings/:bookingId", requireAuth, async (request: Authenticat
       id: booking.id,
       code: booking.code,
       status: booking.status,
+      bookingType: booking.bookingType,
       scheduledAt: booking.scheduledAt.toISOString(),
+      addressId: booking.addressId,
+      addressLine1: booking.address?.line1 ?? null,
+      addressPincode: booking.address?.pincode ?? null,
+      cityName: booking.address?.city?.name ?? null,
       totalAmount: Number(booking.totalAmount),
       serviceName: booking.services[0]?.service?.name ?? booking.services[0]?.serviceSubcategory?.name ?? "Service",
       serviceIcon: booking.services[0]?.service?.iconUrl ?? null,
       serviceSlug: booking.services[0]?.service?.slug ?? null,
+      serviceIds: booking.services.map((item: { serviceId: string | null }) => item.serviceId),
       addressLabel: booking.address
         ? `${booking.address.label}, ${booking.address.line1}, ${booking.address.city?.name ?? ""}`
         : null,
@@ -489,6 +500,47 @@ usersRouter.get("/bookings/:bookingId", requireAuth, async (request: Authenticat
   });
 });
 
+usersRouter.get("/bookings/:bookingId/reschedule-slots", requireAuth, async (request: AuthenticatedRequest, response) => {
+  const booking = await prisma.booking.findUnique({
+    where: { id: String(request.params.bookingId) },
+    select: {
+      id: true,
+      customerId: true,
+      status: true,
+      workerId: true,
+      addressId: true,
+      services: { select: { serviceId: true } }
+    }
+  });
+  if (!booking) {
+    response.status(404).json({ message: "Booking not found" });
+    return;
+  }
+  if (booking.customerId !== request.auth!.userId) {
+    response.status(403).json({ message: "Forbidden" });
+    return;
+  }
+  if (booking.status !== "PENDING" || booking.workerId || booking.services.length === 0 || booking.services.some((item: { serviceId: string | null }) => !item.serviceId)) {
+    response.status(409).json({ message: "This booking can no longer be rescheduled" });
+    return;
+  }
+  const startDate = typeof request.query.startDate === "string" ? request.query.startDate : new Date().toISOString().slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(startDate)) {
+    response.status(400).json({ message: "startDate must use YYYY-MM-DD format" });
+    return;
+  }
+  const addressId = typeof request.query.addressId === "string" ? request.query.addressId : booking.addressId;
+  const days = Math.min(7, Math.max(1, Number(request.query.days) || 7));
+  const slots = await getCustomerScheduleSlots({
+    userId: request.auth!.userId,
+    addressId,
+    serviceIds: booking.services.map((item: { serviceId: string | null }) => item.serviceId).filter((id: string | null): id is string => Boolean(id)),
+    startDate,
+    days
+  });
+  response.status(200).json({ slots });
+});
+
 usersRouter.patch("/bookings/:bookingId", requireAuth, async (request: AuthenticatedRequest, response) => {
   const { bookingId } = request.params as { bookingId: string };
   const userId = request.auth!.userId;
@@ -509,6 +561,8 @@ usersRouter.patch("/bookings/:bookingId", requireAuth, async (request: Authentic
       addressId: true,
       cityId: true,
       scheduledAt: true,
+      bookingType: true,
+      services: { select: { serviceId: true } },
       dispatchOffers: {
         where: { status: "pending" },
         select: { id: true }
@@ -533,43 +587,152 @@ usersRouter.patch("/bookings/:bookingId", requireAuth, async (request: Authentic
 
   let nextAddressId = booking.addressId;
   let nextCityId = booking.cityId;
+  let slotAddressId = booking.addressId;
+  let persistSelectedAddress: (() => Promise<{ id: string }>) | null = null;
   if (addressId) {
-    const address = await prisma.address.findFirst({
-      where: { id: addressId, userId },
-      select: { id: true, cityId: true }
+    const savedAddress = await prisma.savedAddress.findFirst({
+      where: { id: addressId, userId }
     });
-    if (!address) {
+    if (!savedAddress) {
       response.status(404).json({ message: "Address not found" });
       return;
     }
-    nextAddressId = address.id;
-    nextCityId = address.cityId;
+    let city = await prisma.city.findFirst({
+      where: {
+        isActive: true,
+        name: { equals: savedAddress.city.trim(), mode: "insensitive" }
+      },
+      select: { id: true }
+    });
+    if (!city) {
+      const area = await prisma.serviceArea.findFirst({
+        where: {
+          isActive: true,
+          OR: [
+            { pincode: savedAddress.pincode },
+            {
+              pincodeRangeStart: { lte: savedAddress.pincode },
+              pincodeRangeEnd: { gte: savedAddress.pincode }
+            }
+          ]
+        },
+        select: { cityId: true }
+      });
+      if (area) city = { id: area.cityId };
+    }
+    if (!city) {
+      response.status(400).json({ message: "This address is outside the service area" });
+      return;
+    }
+    nextCityId = city.id;
+    slotAddressId = addressId;
+    const existingAddress = await prisma.address.findFirst({
+      where: {
+        userId,
+        cityId: city.id,
+        label: savedAddress.label,
+        line1: savedAddress.addressLine1,
+        pincode: savedAddress.pincode
+      },
+      select: { id: true }
+    });
+    if (existingAddress) {
+      nextAddressId = existingAddress.id;
+    } else {
+      persistSelectedAddress = () => prisma.address.create({
+        data: {
+          userId,
+          cityId: city.id,
+          label: savedAddress.label,
+          line1: savedAddress.addressLine1,
+          line2: savedAddress.addressLine2,
+          landmark: savedAddress.landmark,
+          pincode: savedAddress.pincode,
+          latitude: savedAddress.lat,
+          longitude: savedAddress.lng,
+          isDefault: savedAddress.isDefault
+        },
+        select: { id: true }
+      });
+    }
   }
 
   let nextScheduledAt = booking.scheduledAt;
+  let nextBookingType = booking.bookingType;
   if (scheduledAt) {
     const parsed = new Date(scheduledAt);
     if (Number.isNaN(parsed.getTime())) {
       response.status(400).json({ message: "scheduledAt is invalid" });
       return;
     }
+    if (parsed.getTime() <= Date.now()) {
+      response.status(400).json({ message: "Choose a future appointment time" });
+      return;
+    }
+    if (booking.services.some((item: { serviceId: string | null }) => !item.serviceId)) {
+      response.status(409).json({ message: "This booking cannot be rescheduled online. Contact support for help." });
+      return;
+    }
+    const slots = await getCustomerScheduleSlots({
+      userId,
+      addressId: slotAddressId,
+      serviceIds: booking.services.map((item: { serviceId: string | null }) => item.serviceId).filter((id: string | null): id is string => Boolean(id)),
+      startDate: parsed.toISOString().slice(0, 10),
+      days: 1
+    });
+    if (!slots.some((slot) => new Date(slot.scheduledFor).getTime() === parsed.getTime())) {
+      response.status(409).json({ message: "That appointment slot is no longer available. Choose another available time." });
+      return;
+    }
     nextScheduledAt = parsed;
+    nextBookingType = "scheduled";
   }
 
-  const updated = await prisma.booking.update({
-    where: { id: booking.id },
-    data: {
-      addressId: nextAddressId,
-      cityId: nextCityId,
-      scheduledAt: nextScheduledAt,
-      scheduledFor: nextScheduledAt
-    },
-    include: {
-      address: {
-        select: { label: true, line1: true, city: { select: { name: true } } }
+  if (persistSelectedAddress) {
+    nextAddressId = (await persistSelectedAddress()).id;
+  }
+
+  const updated = await prisma.$transaction(async (tx) => {
+    const changed = await tx.booking.updateMany({
+      where: {
+        id: booking.id,
+        customerId: userId,
+        status: "PENDING",
+        workerId: null,
+        dispatchOffers: { none: { status: "pending" } }
+      },
+      data: {
+        addressId: nextAddressId,
+        cityId: nextCityId,
+        ...(scheduledAt ? {
+          scheduledAt: nextScheduledAt,
+          scheduledFor: nextScheduledAt,
+          bookingType: nextBookingType
+        } : {})
       }
+    });
+    if (changed.count !== 1) {
+      response.status(409).json({ message: "Booking is no longer editable. Refresh and try again." });
+      return null;
     }
+    if (scheduledAt) {
+      await tx.bookingTimelineEvent.create({
+        data: {
+          bookingId: booking.id,
+          status: "PENDING",
+          title: "Appointment rescheduled",
+          description: `New appointment time: ${nextScheduledAt.toISOString()}`
+        }
+      });
+    }
+    const result = await tx.booking.findUnique({
+      where: { id: booking.id },
+      include: { address: { select: { label: true, line1: true, city: { select: { name: true } } } } }
+    });
+    if (!result) throw new Error("Updated booking could not be reloaded");
+    return result;
   });
+  if (!updated) return;
 
   response.status(200).json({
     success: true,
@@ -699,7 +862,7 @@ usersRouter.get("/workers/:workerId/profile", requireAuth, async (request, respo
 });
 
 // ─── Worker wallet ────────────────────────────────────────────────────────────
-usersRouter.get("/worker/wallet", requireAuth, async (request: AuthenticatedRequest, response) => {
+usersRouter.get("/worker/wallet", requireAuth, requireRole("WORKER"), async (request: AuthenticatedRequest, response) => {
   const userId = request.auth!.userId;
 
   const workerProfile = await prisma.workerProfile.findUnique({
@@ -745,7 +908,7 @@ usersRouter.get("/worker/wallet", requireAuth, async (request: AuthenticatedRequ
 });
 
 // ─── Worker: request payout ───────────────────────────────────────────────────
-usersRouter.post("/worker/wallet/payout", requireAuth, async (request: AuthenticatedRequest, response) => {
+usersRouter.post("/worker/wallet/payout", requireAuth, requireRole("WORKER"), async (request: AuthenticatedRequest, response) => {
   const userId = request.auth!.userId;
   const { amount, upiId } = request.body as { amount: number; upiId: string };
 
@@ -764,13 +927,12 @@ usersRouter.post("/worker/wallet/payout", requireAuth, async (request: Authentic
     upiId
   });
 
-  response.status(201).json({
-    success: true,
-    transactionId: payout.transaction.id,
-    amountRequested: amount,
-    upiId: payout.upiId,
-    newBalance: payout.newBalance
-  });
+    response.status(201).json({
+      success: true,
+      transactionId: payout.transaction.id,
+      amountRequested: amount,
+      newBalance: payout.newBalance
+    });
   return;
 
   // Fetch worker profile + current balance
@@ -827,22 +989,46 @@ usersRouter.post("/worker/wallet/payout", requireAuth, async (request: Authentic
 });
 
 // ─── Worker: update own profile ───────────────────────────────────────────────
-usersRouter.patch("/me/worker/profile", requireAuth, async (request: AuthenticatedRequest, response) => {
+usersRouter.patch("/me/worker/profile", requireAuth, requireRole("WORKER"), async (request: AuthenticatedRequest, response) => {
   const userId = request.auth!.userId;
-  const { fullName, displayName, bio, experienceYears } = request.body as {
-    fullName?: string;
-    displayName?: string;
-    bio?: string;
-    experienceYears?: number;
-  };
+  const body = request.body && typeof request.body === "object" && !Array.isArray(request.body)
+    ? request.body as Record<string, unknown>
+    : null;
+  if (!body) {
+    response.status(400).json({ message: "A profile update object is required" });
+    return;
+  }
+  const { fullName, displayName, bio, experienceYears } = body;
+
+  if (
+    (fullName !== undefined && (typeof fullName !== "string" || fullName.trim().length < 2 || fullName.trim().length > 120)) ||
+    (displayName !== undefined && (typeof displayName !== "string" || displayName.trim().length > 80)) ||
+    (bio !== undefined && bio !== null && (typeof bio !== "string" || bio.length > 1000)) ||
+    (experienceYears !== undefined && (typeof experienceYears !== "number" || !Number.isInteger(experienceYears) || experienceYears < 0 || experienceYears > 60))
+  ) {
+    response.status(400).json({ message: "One or more profile fields are invalid" });
+    return;
+  }
 
   const workerProfile = await prisma.workerProfile.findUnique({
     where: { userId },
-    select: { id: true }
+    select: { id: true, fullName: true, verificationStatus: true }
   });
 
   if (!workerProfile) {
     response.status(404).json({ message: "Worker profile not found" });
+    return;
+  }
+
+  if (
+    workerProfile.verificationStatus === "VERIFIED" &&
+    typeof fullName === "string" &&
+    fullName.trim() !== workerProfile.fullName
+  ) {
+    response.status(409).json({
+      message: "Your verified name cannot be changed here. Contact support to request an identity update.",
+      code: "VERIFIED_IDENTITY_CHANGE_REQUIRES_REVIEW"
+    });
     return;
   }
 
@@ -896,11 +1082,11 @@ usersRouter.get("/me/worker/profile", requireAuth, async (request: Authenticated
 });
 
 // ─── Worker: get documents ─────────────────────────────────────────────────────
-usersRouter.get("/me/worker/documents", requireAuth, async (request: AuthenticatedRequest, response) => {
+usersRouter.get("/me/worker/documents", requireAuth, requireRole("WORKER"), async (request: AuthenticatedRequest, response) => {
   const userId = request.auth!.userId;
   const workerProfile = await prisma.workerProfile.findUnique({
     where: { userId },
-    select: { id: true, documents: { select: { id: true, type: true, url: true, verifiedAt: true, rejectedAt: true } } }
+    select: { id: true, documents: { select: { id: true, type: true, url: true, publicId: true, verifiedAt: true, rejectedAt: true } } }
   });
 
   if (!workerProfile) {
@@ -908,41 +1094,28 @@ usersRouter.get("/me/worker/documents", requireAuth, async (request: Authenticat
     return;
   }
 
-  response.status(200).json({ documents: workerProfile.documents });
+  response.setHeader("Cache-Control", "private, no-store");
+  response.status(200).json({ documents: workerProfile.documents.map((document: {
+    id: string;
+    type: string;
+    url: string;
+    publicId: string | null;
+    verifiedAt: Date | null;
+    rejectedAt: Date | null;
+  }) => ({
+    id: document.id,
+    type: document.type,
+    url: document.publicId && getCloudinaryFormatFromUrl(document.url)
+      ? generateSignedUrl(document.publicId, getCloudinaryFormatFromUrl(document.url)!)
+      : null,
+    verifiedAt: document.verifiedAt,
+    rejectedAt: document.rejectedAt
+  })) });
 });
 
 // ─── Worker: upload a new document ───────────────────────────────────────────
-usersRouter.post("/me/worker/documents", requireAuth, async (request: AuthenticatedRequest, response) => {
-  const userId = request.auth!.userId;
-  const { type, url } = request.body as { type?: string; url?: string };
-  if (!type || !url) {
-    response.status(400).json({ message: "type and url are required" });
-    return;
-  }
-
-  const workerProfile = await prisma.workerProfile.findUnique({
-    where: { userId },
-    select: { id: true }
-  });
-
-  if (!workerProfile) {
-    response.status(404).json({ message: "Worker profile not found" });
-    return;
-  }
-
-  const newDoc = await prisma.workerDocument.create({
-    data: {
-      workerId: workerProfile.id,
-      type,
-      url,
-    }
-  });
-
-  response.status(201).json({ document: newDoc });
-});
-
 // ─── Worker: decline a job offer ─────────────────────────────────────────────
-usersRouter.post("/me/worker/jobs/:offerId/decline", requireAuth, async (request: AuthenticatedRequest, response) => {
+usersRouter.post("/me/worker/jobs/:offerId/decline", requireAuth, requireRole("WORKER"), async (request: AuthenticatedRequest, response) => {
   const userId = request.auth!.userId;
   const { offerId } = request.params as { offerId: string };
   const { reason } = request.body as { reason?: string };
@@ -957,22 +1130,18 @@ usersRouter.post("/me/worker/jobs/:offerId/decline", requireAuth, async (request
     return;
   }
 
-  const offer = await prisma.dispatchOffer.findFirst({
-    where: { id: offerId, workerId: workerProfile.id, status: "pending" }
-  });
-
-  if (!offer) {
-    response.status(404).json({ message: "Offer not found or already actioned" });
-    return;
-  }
-
-  await prisma.dispatchOffer.update({
-    where: { id: offerId },
+  const declined = await prisma.dispatchOffer.updateMany({
+    where: { id: offerId, workerId: workerProfile.id, status: "pending" },
     data: {
       status: "declined",
       respondedAt: new Date()
     }
   });
+
+  if (declined.count !== 1) {
+    response.status(409).json({ message: "Offer is no longer available to decline" });
+    return;
+  }
 
   response.status(200).json({ success: true });
 });

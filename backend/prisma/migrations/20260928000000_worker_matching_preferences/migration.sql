@@ -1,0 +1,4 @@
+ALTER TABLE "WorkerProfile"
+  ADD COLUMN "serviceAreas" VARCHAR(500),
+  ADD COLUMN "workType" TEXT NOT NULL DEFAULT 'FULL_TIME',
+  ADD COLUMN "acceptsUrgentJobs" BOOLEAN NOT NULL DEFAULT true;

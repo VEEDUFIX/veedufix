@@ -34,14 +34,18 @@ class OpsSummaryCounts {
   factory OpsSummaryCounts.fromJson(Map<String, dynamic> json) {
     return OpsSummaryCounts(
       activeJobsCount: (json['activeJobsCount'] as num?)?.toInt() ?? 0,
-      dispatchFailuresCount: (json['dispatchFailuresCount'] as num?)?.toInt() ?? 0,
-      cancelledBookingsCount: (json['cancelledBookingsCount'] as num?)?.toInt() ?? 0,
+      dispatchFailuresCount:
+          (json['dispatchFailuresCount'] as num?)?.toInt() ?? 0,
+      cancelledBookingsCount:
+          (json['cancelledBookingsCount'] as num?)?.toInt() ?? 0,
       activeWorkersCount: (json['activeWorkersCount'] as num?)?.toInt() ?? 0,
       openDisputesCount: (json['openDisputesCount'] as num?)?.toInt() ?? 0,
-      openSupportTicketsCount: (json['openSupportTicketsCount'] as num?)?.toInt() ?? 0,
+      openSupportTicketsCount:
+          (json['openSupportTicketsCount'] as num?)?.toInt() ?? 0,
       failedPayoutsCount: (json['failedPayoutsCount'] as num?)?.toInt() ?? 0,
       failedRefundsCount: (json['failedRefundsCount'] as num?)?.toInt() ?? 0,
-      pendingWorkerReviewsCount: (json['pendingWorkerReviewsCount'] as num?)?.toInt() ?? 0,
+      pendingWorkerReviewsCount:
+          (json['pendingWorkerReviewsCount'] as num?)?.toInt() ?? 0,
       totalRevenue: (json['totalRevenue'] as num?)?.toDouble() ?? 0.0,
       totalBookings: (json['totalBookings'] as num?)?.toInt() ?? 0,
       completedBookings: (json['completedBookings'] as num?)?.toInt() ?? 0,
@@ -114,7 +118,9 @@ class OpsLiveJob {
   final double? workerLng;
   final DateTime updatedAt;
 
-  bool get isNoShowRisk => status == 'assigned' && DateTime.now().isAfter(scheduledAt.add(const Duration(minutes: 20)));
+  bool get isNoShowRisk =>
+      status == 'assigned' &&
+      DateTime.now().isAfter(scheduledAt.add(const Duration(minutes: 20)));
 
   factory OpsLiveJob.fromJson(Map<String, dynamic> json) {
     return OpsLiveJob(
@@ -126,13 +132,19 @@ class OpsLiveJob {
       workerName: json['workerName'] as String?,
       workerAvatarUrl: json['workerAvatarUrl'] as String?,
       cityName: json['cityName'] as String? ?? '',
-      serviceCategories: (json['serviceCategories'] as List? ?? const []).whereType<String>().toList(growable: false),
+      serviceCategories: (json['serviceCategories'] as List? ?? const [])
+          .whereType<String>()
+          .toList(growable: false),
       status: json['status'] as String? ?? 'assigned',
       scheduledAt: _parseDateTime(json['scheduledAt']) ?? DateTime.now(),
       assignedAt: _parseDateTime(json['assignedAt']) ?? DateTime.now(),
       elapsedMinutes: (json['elapsedMinutes'] as num?)?.toInt() ?? 0,
-      beforePhotos: (json['beforePhotos'] as List? ?? const []).whereType<String>().toList(growable: false),
-      afterPhotos: (json['afterPhotos'] as List? ?? const []).whereType<String>().toList(growable: false),
+      beforePhotos: (json['beforePhotos'] as List? ?? const [])
+          .whereType<String>()
+          .toList(growable: false),
+      afterPhotos: (json['afterPhotos'] as List? ?? const [])
+          .whereType<String>()
+          .toList(growable: false),
       checklistItems: (json['checklistItems'] as List? ?? const [])
           .whereType<Map<String, dynamic>>()
           .map(OpsChecklistItem.fromJson)
@@ -158,6 +170,7 @@ class OpsAlert {
     required this.customerName,
     required this.amount,
     required this.createdAt,
+    required this.status,
     required this.retryAvailable,
   });
 
@@ -171,6 +184,7 @@ class OpsAlert {
   final String? customerName;
   final double? amount;
   final DateTime createdAt;
+  final String status;
   final bool retryAvailable;
 
   factory OpsAlert.fromJson(Map<String, dynamic> json) {
@@ -185,6 +199,7 @@ class OpsAlert {
       customerName: json['customerName'] as String?,
       amount: (json['amount'] as num?)?.toDouble(),
       createdAt: _parseDateTime(json['createdAt']) ?? DateTime.now(),
+      status: json['status'] as String? ?? 'open',
       retryAvailable: json['retryAvailable'] as bool? ?? false,
     );
   }
@@ -195,7 +210,8 @@ class OpsAlert {
   bool get isPaymentMismatch => kind == 'payment_mismatch';
   bool get isSupportEscalation => kind == 'support_escalation';
   bool get isDisputeEscalation => kind == 'dispute_escalation';
-  bool get isFinanceException => isPayoutFailure || isRefundFailure || isPaymentMismatch;
+  bool get isFinanceException =>
+      isPayoutFailure || isRefundFailure || isPaymentMismatch;
 }
 
 class OpsOverviewSnapshot {
@@ -211,7 +227,9 @@ class OpsOverviewSnapshot {
 
   factory OpsOverviewSnapshot.fromJson(Map<String, dynamic> json) {
     return OpsOverviewSnapshot(
-      summary: OpsSummaryCounts.fromJson((json['summary'] as Map?)?.cast<String, dynamic>() ?? const <String, dynamic>{}),
+      summary: OpsSummaryCounts.fromJson(
+          (json['summary'] as Map?)?.cast<String, dynamic>() ??
+              const <String, dynamic>{}),
       liveJobs: (json['liveJobs'] as List? ?? const [])
           .whereType<Map<String, dynamic>>()
           .map(OpsLiveJob.fromJson)
@@ -231,7 +249,36 @@ class OpsApi {
 
   Future<OpsOverviewSnapshot> fetchOverview() async {
     final response = await _dio.get<Map<String, dynamic>>('/admin/ops/summary');
-    return OpsOverviewSnapshot.fromJson(response.data ?? const <String, dynamic>{});
+    return OpsOverviewSnapshot.fromJson(
+        response.data ?? const <String, dynamic>{});
+  }
+
+  Future<List<OpsAlert>> fetchAlerts() async {
+    final response = await _dio.get<Map<String, dynamic>>(
+      '/admin/alerts',
+      queryParameters: const {'page': 1, 'pageSize': 100},
+    );
+    final items = response.data?['items'];
+    if (items is! List) return const [];
+    return items
+        .whereType<Map<String, dynamic>>()
+        .map(OpsAlert.fromJson)
+        .toList(growable: false);
+  }
+
+  Future<void> updateAlertStatus(
+    String alertId, {
+    required String status,
+    String? resolutionNote,
+  }) async {
+    await _dio.patch(
+      '/admin/alerts/$alertId/status',
+      data: {
+        'status': status,
+        if (resolutionNote != null && resolutionNote.trim().isNotEmpty)
+          'resolutionNote': resolutionNote.trim(),
+      },
+    );
   }
 
   Future<void> redispatchBooking(String bookingId) async {
@@ -275,9 +322,11 @@ String formatDurationLabel(Duration duration) {
 }
 
 extension OpsLiveJobFormatting on OpsLiveJob {
-  String get serviceLabel => serviceCategories.isEmpty ? 'No category' : serviceCategories.join(', ');
+  String get serviceLabel =>
+      serviceCategories.isEmpty ? 'No category' : serviceCategories.join(', ');
 
-  String get elapsedLabel => formatDurationLabel(Duration(minutes: elapsedMinutes));
+  String get elapsedLabel =>
+      formatDurationLabel(Duration(minutes: elapsedMinutes));
 
   String get statusLabel => status.replaceAll('_', ' ');
 }

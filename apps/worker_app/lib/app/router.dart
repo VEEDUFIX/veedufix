@@ -24,6 +24,7 @@ import '../features/worker/presentation/pages/worker_wallet_page.dart';
 import '../features/shell/presentation/pages/app_shell_page.dart';
 import '../features/profile/presentation/pages/worker_profile_edit_page.dart';
 import '../features/profile/presentation/pages/document_upload_page.dart';
+import '../features/profile/presentation/pages/profile_detail_pages.dart';
 
 final routerProvider = Provider<GoRouter>((ref) {
   final refresh = _RouterRefreshNotifier(ref);
@@ -51,11 +52,20 @@ final routerProvider = Provider<GoRouter>((ref) {
         return homeRoute;
       }
 
-      final onboardingProfile = await ref.read(workerOnboardingStatusProvider.future);
+      WorkerOnboardingProfile? onboardingProfile;
+      try {
+        onboardingProfile = await ref.read(workerOnboardingStatusProvider.future);
+      } catch (_) {
+        return location == '/onboarding/status' ? null : '/onboarding/status';
+      }
       final onboardingStatus = onboardingProfile?.onboardingStatus ?? 'pending_documents';
       final isEditMode = state.uri.queryParameters['mode'] == 'edit';
 
       if (onboardingStatus == 'approved') {
+        if (location == '/onboarding') {
+          return isEditMode ? null : homeRoute;
+        }
+        if (location == '/onboarding/status') return homeRoute;
         if (!allowedRoutesForMode(AppMode.worker).contains(location)) {
           return homeRoute;
         }
@@ -182,10 +192,21 @@ final routerProvider = Provider<GoRouter>((ref) {
             path: '/profile/edit',
             builder: (context, state) => const WorkerProfileEditPage(),
           ),
-          GoRoute(
-            path: '/documents/upload',
-            builder: (context, state) => const DocumentUploadPage(),
-          ),
+        GoRoute(
+          path: '/documents/upload',
+          builder: (context, state) => const DocumentUploadPage(),
+        ),
+        GoRoute(path: '/profile/kyc', builder: (context, state) => const KycVerificationPage()),
+        GoRoute(path: '/profile/experience', builder: (context, state) => const ExperienceSkillsPage()),
+        GoRoute(path: '/profile/services', builder: (context, state) => const ServicesPage()),
+        GoRoute(path: '/profile/portfolio', builder: (context, state) => const PortfolioPage()),
+        GoRoute(path: '/profile/service-area', builder: (context, state) => const ServiceAreaPage()),
+        GoRoute(path: '/profile/documents', builder: (context, state) => const ProfessionalDocumentsPage()),
+        GoRoute(path: '/profile/preferences', builder: (context, state) => const ServicePreferencesPage()),
+        GoRoute(path: '/profile/bank-details', builder: (context, state) => const BankDetailsPage()),
+        GoRoute(path: '/profile/payout-change', builder: (context, state) => const ChangePayoutAccountPage()),
+        GoRoute(path: '/profile/payment-details', builder: (context, state) => const PaymentDetailsPage()),
+        GoRoute(path: '/profile/account-status', builder: (context, state) => const AccountStatusPage()),
         ],
       ),
     ],

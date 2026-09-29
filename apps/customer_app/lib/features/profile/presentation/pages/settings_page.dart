@@ -3,6 +3,9 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:marketplace_shared/marketplace_shared.dart';
+import 'package:url_launcher/url_launcher.dart';
+
+import '../../../../core/notifications/customer_device_token.dart';
 
 class SettingsPage extends ConsumerWidget {
   const SettingsPage({super.key});
@@ -32,42 +35,57 @@ class SettingsPage extends ConsumerWidget {
           ),
         ),
         title: Text(
-          'Settings',
+          appText(context, 'Settings', 'அமைப்புகள்'),
           style: tt.titleLarge?.copyWith(fontWeight: FontWeight.w800),
         ),
       ),
       body: ListView(
         padding: const EdgeInsets.all(24),
         children: [
-          const _SectionHeader(title: 'Preferences'),
+          _SectionHeader(
+            title: appText(context, 'Preferences', 'விருப்பங்கள்'),
+          ),
           _SettingsTile(
             icon: Icons.language_rounded,
-            title: 'Language',
-            subtitle: 'English (US)',
-            onTap: () => _showLanguagePicker(context),
+            title: appText(context, 'Language', 'மொழி'),
+            subtitle: appLanguageName(ref.watch(appLocaleProvider)),
+            onTap: () => _showLanguagePicker(context, ref),
           ),
           _SettingsTile(
             icon: Icons.notifications_rounded,
-            title: 'Notifications',
-            subtitle: 'Push, Email, SMS',
-            onTap: () => _showNotificationPrefs(context),
+            title: appText(context, 'Notifications', 'அறிவிப்புகள்'),
+            subtitle: 'Push notifications on this device',
+            onTap: () => _showNotificationPrefs(context, ref),
           ),
           const SizedBox(height: 32),
-          const _SectionHeader(title: 'Security & Privacy'),
+          _SectionHeader(
+            title: appText(
+              context,
+              'Security & Privacy',
+              'பாதுகாப்பு மற்றும் தனியுரிமை',
+            ),
+          ),
           _SettingsTile(
             icon: Icons.lock_outline_rounded,
             title: 'Privacy Center',
             subtitle: 'Manage your data and privacy',
-            onTap: () => _showPrivacyCenter(context),
+            onTap: () => _openSupportRequest(
+              context,
+              category: 'privacy',
+              subject: 'Privacy and data question',
+              message: 'I have a question about my personal data or privacy.',
+            ),
           ),
           _SettingsTile(
             icon: Icons.download_rounded,
             title: 'Export My Data',
-            onTap: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Data export requested. We will prepare it shortly.')),
-              );
-            },
+            onTap: () => _openSupportRequest(
+              context,
+              category: 'privacy',
+              subject: 'Request a copy of my data',
+              message:
+                  'Please help me request a copy of the personal data associated with my Veedufix account.',
+            ),
           ),
           _SettingsTile(
             icon: Icons.delete_forever_rounded,
@@ -80,12 +98,13 @@ class SettingsPage extends ConsumerWidget {
           _SettingsTile(
             icon: Icons.description_rounded,
             title: 'Terms of Service',
-            onTap: () => _showTermsDialog(context),
+            onTap: () => _openLegalPage(context, 'https://veedufix.com/terms'),
           ),
           _SettingsTile(
             icon: Icons.privacy_tip_rounded,
             title: 'Privacy Policy',
-            onTap: () => _showPrivacyDialog(context),
+            onTap: () =>
+                _openLegalPage(context, 'https://veedufix.com/privacy'),
           ),
           _SettingsTile(
             icon: Icons.info_outline_rounded,
@@ -102,14 +121,24 @@ class SettingsPage extends ConsumerWidget {
           Center(
             child: TapScale(
               onTap: () async {
-                await FirebaseAuth.instance.signOut();
+                await unregisterCustomerDeviceToken(
+                  ref.read(apiClientProvider),
+                );
+                try {
+                  await FirebaseAuth.instance.signOut();
+                } catch (_) {
+                  // Clear the backend session even if Firebase is unavailable.
+                }
                 await ref.read(authControllerProvider.notifier).signOut();
                 if (context.mounted) {
                   context.go('/login');
                 }
               },
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 32,
+                  vertical: 16,
+                ),
                 decoration: BoxDecoration(
                   color: cs.error.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(AbzioTheme.buttonRadius),
@@ -142,10 +171,10 @@ class _SectionHeader extends StatelessWidget {
       child: Text(
         title,
         style: Theme.of(context).textTheme.titleMedium?.copyWith(
-              color: Theme.of(context).colorScheme.primary,
-              fontWeight: FontWeight.w800,
-              letterSpacing: 0.5,
-            ),
+          color: Theme.of(context).colorScheme.primary,
+          fontWeight: FontWeight.w800,
+          letterSpacing: 0.5,
+        ),
       ),
     );
   }
@@ -183,7 +212,9 @@ class _SettingsTile extends StatelessWidget {
           color: cs.surfaceContainerHighest.withValues(alpha: 0.3),
           borderRadius: BorderRadius.circular(AbzioTheme.cardRadius),
           border: Border.all(
-            color: isDestructive ? cs.error.withValues(alpha: 0.3) : cs.outlineVariant.withValues(alpha: 0.5),
+            color: isDestructive
+                ? cs.error.withValues(alpha: 0.3)
+                : cs.outlineVariant.withValues(alpha: 0.5),
           ),
         ),
         child: Row(
@@ -191,10 +222,16 @@ class _SettingsTile extends StatelessWidget {
             Container(
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: isDestructive ? cs.error.withValues(alpha: 0.1) : cs.primary.withValues(alpha: 0.1),
+                color: isDestructive
+                    ? cs.error.withValues(alpha: 0.1)
+                    : cs.primary.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: Icon(icon, color: isDestructive ? cs.error : cs.primary, size: 22),
+              child: Icon(
+                icon,
+                color: isDestructive ? cs.error : cs.primary,
+                size: 22,
+              ),
             ),
             const SizedBox(width: 16),
             Expanded(
@@ -221,7 +258,11 @@ class _SettingsTile extends StatelessWidget {
               ),
             ),
             if (showChevron)
-              Icon(Icons.arrow_forward_ios_rounded, size: 16, color: cs.onSurfaceVariant),
+              Icon(
+                Icons.arrow_forward_ios_rounded,
+                size: 16,
+                color: cs.onSurfaceVariant,
+              ),
           ],
         ),
       ),
@@ -251,63 +292,154 @@ Future<void> _showInfoDialog(
   );
 }
 
-Future<void> _showLanguagePicker(BuildContext context) async {
-  await showDialog<void>(
+Future<void> _showLanguagePicker(BuildContext context, WidgetRef ref) async {
+  final selected = await showDialog<String>(
     context: context,
     builder: (dialogContext) {
+      final activeLanguage = ref.read(appLocaleProvider).languageCode;
       return SimpleDialog(
-        title: const Text('Language'),
+        title: Text(
+          appText(context, 'Choose language', 'மொழியைத் தேர்ந்தெடுக்கவும்'),
+        ),
         children: [
           SimpleDialogOption(
-            onPressed: () => Navigator.of(dialogContext).pop(),
-            child: const Text('English (US)'),
+            onPressed: () => Navigator.of(dialogContext).pop('en'),
+            child: ListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('English'),
+              trailing: activeLanguage == 'en'
+                  ? const Icon(Icons.check_rounded)
+                  : null,
+            ),
           ),
           SimpleDialogOption(
-            onPressed: () => Navigator.of(dialogContext).pop(),
-            child: const Text('Hindi'),
+            onPressed: () => Navigator.of(dialogContext).pop('ta'),
+            child: ListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('தமிழ்'),
+              trailing: activeLanguage == 'ta'
+                  ? const Icon(Icons.check_rounded)
+                  : null,
+            ),
           ),
         ],
       );
     },
   );
-}
-
-Future<void> _showNotificationPrefs(BuildContext context) async {
-  await showDialog<void>(
-    context: context,
-    builder: (dialogContext) {
-      return AlertDialog(
-        title: const Text('Notification Preferences'),
-        content: const Text(
-          'Push, email, and SMS delivery are coordinated from the notification service, and the app now keeps this screen ready for future preference toggles.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(),
-            child: const Text('Close'),
+  if (selected == null || !context.mounted) return;
+  try {
+    await ref.read(appLocaleProvider.notifier).setLanguage(selected);
+  } catch (_) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            appText(
+              context,
+              'Could not save language preference.',
+              'மொழி விருப்பத்தைச் சேமிக்க முடியவில்லை.',
+            ),
           ),
-        ],
+        ),
       );
-    },
-  );
+    }
+  }
 }
 
-Future<void> _showPrivacyCenter(BuildContext context) async {
+Future<void> _showNotificationPrefs(BuildContext context, WidgetRef ref) async {
+  final hasFirebaseConfig = ref.read(environmentProvider).hasFirebaseConfig;
+  var enabled = false;
+  if (hasFirebaseConfig) {
+    try {
+      enabled = await customerPushNotificationsEnabled();
+    } catch (_) {
+      enabled = false;
+    }
+  }
+  if (!context.mounted) return;
+  var isSaving = false;
+  String? errorMessage;
+
+  Future<void> updatePreference(
+    bool value,
+    BuildContext dialogContext,
+    StateSetter setDialogState,
+  ) async {
+    if (!dialogContext.mounted) return;
+    setDialogState(() {
+      isSaving = true;
+      errorMessage = null;
+    });
+    try {
+      final updated = await updateCustomerPushNotifications(
+        ref.read(apiClientProvider),
+        enabled: value,
+      );
+      if (!dialogContext.mounted) return;
+      setDialogState(() {
+        if (updated) {
+          enabled = value;
+        } else {
+          errorMessage =
+              'Allow notifications in your device settings to turn them on.';
+        }
+      });
+    } catch (_) {
+      if (dialogContext.mounted) {
+        setDialogState(
+          () => errorMessage = 'Could not update this preference. Try again.',
+        );
+      }
+    } finally {
+      if (dialogContext.mounted) {
+        setDialogState(() => isSaving = false);
+      }
+    }
+  }
+
   await showDialog<void>(
     context: context,
     builder: (dialogContext) {
-      return AlertDialog(
-        title: const Text('Privacy Center'),
-        content: const Text(
-          'You can review how booking history, support requests, address data, and notification preferences are used from this hub. '
-          'This screen is now wired so it can later surface export and deletion actions without changing the navigation.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(),
-            child: const Text('Close'),
+      return StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Push notifications'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (hasFirebaseConfig)
+                SwitchListTile.adaptive(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('This device'),
+                  value: enabled,
+                  onChanged: isSaving
+                      ? null
+                      : (value) =>
+                            updatePreference(value, context, setDialogState),
+                )
+              else
+                const Text(
+                  'Push notifications are not available in this app build.',
+                ),
+              if (isSaving) const LinearProgressIndicator(),
+              if (errorMessage != null) ...[
+                const SizedBox(height: 8),
+                Text(
+                  errorMessage!,
+                  style: TextStyle(color: Theme.of(context).colorScheme.error),
+                ),
+              ],
+            ],
           ),
-        ],
+          actions: [
+            TextButton(
+              onPressed: isSaving
+                  ? null
+                  : () => Navigator.of(dialogContext).pop(),
+              child: const Text('Done'),
+            ),
+          ],
+        ),
       );
     },
   );
@@ -318,8 +450,10 @@ Future<void> _confirmDeleteAccount(BuildContext context) async {
     context: context,
     builder: (dialogContext) {
       return AlertDialog(
-        title: const Text('Delete account?'),
-        content: const Text('This would normally start the account deletion workflow.'),
+        title: const Text('Request account deletion?'),
+        content: const Text(
+          'This opens a support request for review. Your account will remain active until the request is processed.',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(false),
@@ -327,34 +461,41 @@ Future<void> _confirmDeleteAccount(BuildContext context) async {
           ),
           FilledButton(
             onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text('Delete'),
+            child: const Text('Continue'),
           ),
         ],
       );
     },
   );
-
   if (confirmed == true && context.mounted) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Account deletion request queued.')),
+    _openSupportRequest(
+      context,
+      category: 'privacy',
+      subject: 'Request account deletion',
+      message:
+          'I want to request deletion of my Veedufix account. Please explain any required verification and the next steps.',
     );
   }
 }
 
-Future<void> _showTermsDialog(BuildContext context) async {
-  await _showInfoDialog(
-    context,
-    title: 'Terms of Service',
-    body: 'Use of VeeduFix is subject to service availability, payment completion, cancellation rules, and community safety expectations. '
-        'Bookings, support requests, and wallet activity may be retained to fulfill services and resolve disputes.',
+void _openSupportRequest(
+  BuildContext context, {
+  required String category,
+  required String subject,
+  required String message,
+}) {
+  context.push(
+    '/support?autoCompose=true&category=${Uri.encodeComponent(category)}'
+    '&subject=${Uri.encodeComponent(subject)}&message=${Uri.encodeComponent(message)}',
   );
 }
 
-Future<void> _showPrivacyDialog(BuildContext context) async {
-  await _showInfoDialog(
-    context,
-    title: 'Privacy Policy',
-    body: 'We use your profile, booking, address, support, and notification data to provide the service, process payments, and improve support. '
-        'You can request data export or deletion from the settings screen.',
-  );
+Future<void> _openLegalPage(BuildContext context, String url) async {
+  final uri = Uri.parse(url);
+  if (!await launchUrl(uri, mode: LaunchMode.externalApplication) &&
+      context.mounted) {
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Could not open this page.')));
+  }
 }

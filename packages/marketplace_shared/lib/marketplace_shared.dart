@@ -8,6 +8,7 @@ export 'core/network/realtime_service.dart';
 export 'core/notifications/firebase_messaging_service.dart';
 export 'core/notifications/fcm_service.dart';
 export 'core/storage/secure_store.dart';
+export 'core/storage/app_locale_provider.dart';
 export 'core/widgets/gradient_hero.dart';
 export 'core/widgets/app_backdrop.dart';
 export 'core/theme/abzio_theme.dart';

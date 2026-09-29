@@ -11,6 +11,7 @@ import 'package:web_socket_channel/web_socket_channel.dart';
 
 import '../core/realtime/realtime_socket_service.dart';
 import '../features/auth/providers/guest_mode_provider.dart';
+import '../core/notifications/customer_device_token.dart';
 import 'router.dart';
 
 class AppBootstrap extends ConsumerStatefulWidget {
@@ -20,14 +21,15 @@ class AppBootstrap extends ConsumerStatefulWidget {
   ConsumerState<AppBootstrap> createState() => _AppBootstrapState();
 }
 
-class _AppBootstrapState extends ConsumerState<AppBootstrap> {
+class _AppBootstrapState extends ConsumerState<AppBootstrap>
+    with WidgetsBindingObserver {
   final GlobalKey<ScaffoldMessengerState> _messengerKey = GlobalKey<ScaffoldMessengerState>();
   WebSocketChannel? _notificationChannel;
   StreamSubscription? _notificationSubscription;
   StreamSubscription<Map<String, dynamic>>? _notificationTapSubscription;
   StreamSubscription<String>? _tokenRefreshSubscription;
   StreamSubscription<User?>? _firebaseAuthSubscription;
-  Timer? _backendSessionRenewalTimer;
+  StreamSubscription<void>? _sessionExpiredSubscription;
   bool _isRecoveringBackendSession = false;
   String? _activeUserId;
   Map<String, dynamic>? _pendingNotificationTap;
@@ -36,7 +38,11 @@ class _AppBootstrapState extends ConsumerState<AppBootstrap> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _isFirebaseConfigured = ref.read(environmentProvider).hasFirebaseConfig;
+    _sessionExpiredSubscription = ref.read(apiClientProvider).sessionExpired.listen((_) {
+      unawaited(_handleExpiredBackendSession());
+    });
     if (!_isFirebaseConfigured) {
       return;
     }
@@ -54,39 +60,43 @@ class _AppBootstrapState extends ConsumerState<AppBootstrap> {
     _firebaseAuthSubscription = FirebaseAuth.instance.idTokenChanges().listen((_) {
       unawaited(_restoreBackendSessionFromFirebase());
     });
-    // The API access token expires after 15 minutes. Renew it while the app
-    // is active so the customer never reaches a forced-login state.
-    _backendSessionRenewalTimer = Timer.periodic(const Duration(minutes: 10), (_) {
-      unawaited(_restoreBackendSessionFromFirebase(force: true));
-    });
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _notificationTapSubscription?.cancel();
     _notificationTapSubscription = null;
     _tokenRefreshSubscription?.cancel();
     _tokenRefreshSubscription = null;
     _firebaseAuthSubscription?.cancel();
     _firebaseAuthSubscription = null;
-    _backendSessionRenewalTimer?.cancel();
-    _backendSessionRenewalTimer = null;
+    _sessionExpiredSubscription?.cancel();
+    _sessionExpiredSubscription = null;
     _disposeNotificationSocket();
     super.dispose();
   }
 
-  Future<void> _restoreBackendSessionFromFirebase({bool force = false}) async {
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed &&
+        ref.read(authControllerProvider).valueOrNull != null) {
+      unawaited(_registerDeviceToken());
+    }
+  }
+
+  Future<bool> _restoreBackendSessionFromFirebase({bool force = false}) async {
     if (!_isFirebaseConfigured || _isRecoveringBackendSession) {
-      return;
+      return false;
     }
     if (ref.read(guestModeProvider) ||
         (!force && ref.read(authControllerProvider).valueOrNull != null)) {
-      return;
+      return ref.read(authControllerProvider).valueOrNull != null;
     }
 
     final firebaseUser = FirebaseAuth.instance.currentUser;
     if (firebaseUser == null) {
-      return;
+      return false;
     }
 
     _isRecoveringBackendSession = true;
@@ -96,12 +106,27 @@ class _AppBootstrapState extends ConsumerState<AppBootstrap> {
         await ref
             .read(authControllerProvider.notifier)
             .refreshFirebasePhoneSession(idToken: idToken);
+        return ref.read(authControllerProvider).valueOrNull != null;
       }
     } catch (_) {
       // The login screen remains available if Firebase cannot restore the API session.
     } finally {
       _isRecoveringBackendSession = false;
     }
+    return false;
+  }
+
+  Future<void> _handleExpiredBackendSession() async {
+    if (_isRecoveringBackendSession || ref.read(guestModeProvider)) return;
+    if (await _restoreBackendSessionFromFirebase(force: true)) return;
+    if (!mounted) return;
+    try {
+      await FirebaseAuth.instance.signOut();
+    } catch (_) {
+      // The backend session is still cleared below.
+    }
+    if (!mounted) return;
+    await ref.read(authControllerProvider.notifier).signOut();
   }
 
   void _disposeNotificationSocket() {
@@ -168,23 +193,11 @@ class _AppBootstrapState extends ConsumerState<AppBootstrap> {
       return;
     }
 
-    final token = await FirebaseMessaging.instance.getToken();
-    if (token == null || token.isEmpty) {
-      return;
-    }
-
     final platform = kIsWeb ? 'web' : defaultTargetPlatform.name;
-    try {
-      await ref.read(apiClientProvider).post(
-            '/device-tokens',
-            data: {
-              'token': token,
-              'platform': platform,
-            },
-          );
-    } catch (_) {
-      // Token registration is best-effort and should never block the app.
-    }
+    await registerCustomerDeviceToken(
+      ref.read(apiClientProvider),
+      platform: platform,
+    );
   }
 
   void _routeNotificationPayload(Map<String, dynamic> payload) {
@@ -235,16 +248,60 @@ class _AppBootstrapState extends ConsumerState<AppBootstrap> {
       payloadData['booking_id'],
     ]);
 
-    if (type == null || bookingId == null || bookingId.isEmpty) {
-      return null;
+    final safeBookingId = bookingId == null || bookingId.isEmpty
+        ? null
+        : Uri.encodeComponent(bookingId);
+
+    switch (type?.toUpperCase()) {
+      case 'BOOKING_CONFIRMED':
+      case 'BOOKING_DETAIL':
+        if (safeBookingId != null) return '/booking/$safeBookingId';
+        break;
+      case 'BOOKING':
+      case 'JOB_UPDATE':
+      case 'WORKER_ASSIGNED':
+      case 'WORKER_EN_ROUTE':
+      case 'WORKER_ARRIVED':
+        if (safeBookingId != null) return '/tracking?bookingId=$safeBookingId';
+        break;
+      case 'BOOKING_COMPLETED':
+        if (safeBookingId != null) return '/invoice/$safeBookingId';
+        break;
+      case 'REVIEW_REQUEST':
+      case 'RATING_REQUESTED':
+        if (safeBookingId != null) return '/booking-rating?bookingId=$safeBookingId';
+        break;
+      case 'ARRIVAL_STATUS_CHANGED':
+        if (safeBookingId != null) return '/arrival-otp?bookingId=$safeBookingId';
+        break;
+      case 'COMPLETION_OTP_REQUESTED':
+        if (safeBookingId != null) return '/completion-otp?bookingId=$safeBookingId';
+        break;
+      case 'PAYMENT':
+      case 'WALLET':
+        return '/wallet';
+      case 'PROMO':
+      case 'OFFER':
+        return '/offers';
+      case 'CHAT':
+        if (safeBookingId != null) return '/chat?bookingId=$safeBookingId';
+        break;
     }
 
-    switch (type) {
-      case 'arrival_status_changed': return '/arrival-otp?bookingId=$bookingId';
-      case 'completion_otp_requested': return '/completion-otp?bookingId=$bookingId';
-      case 'rating_requested': return '/booking-rating?bookingId=$bookingId';
-      default: return null;
-    }
+    final requestedRoute = _firstString([
+      payload['route'],
+      data['route'],
+      payloadData['route'],
+    ]);
+    final routeUri = requestedRoute == null ? null : Uri.tryParse(requestedRoute);
+    final isAllowedRoute = routeUri != null &&
+        !routeUri.hasScheme &&
+        !routeUri.hasAuthority &&
+        routeUri.path.startsWith('/') &&
+        allowedRoutesForMode(AppMode.customer).any(
+          (path) => routeUri.path == path || routeUri.path.startsWith('$path/'),
+        );
+    return isAllowedRoute ? routeUri.toString() : '/notifications';
   }
 
   @override
@@ -261,12 +318,15 @@ class _AppBootstrapState extends ConsumerState<AppBootstrap> {
       }
     });
     final router = ref.watch(routerProvider);
+    final locale = ref.watch(appLocaleProvider);
 
     return MaterialApp.router(
       debugShowCheckedModeBanner: false,
       title: appTitleForMode(AppMode.customer),
       theme: buildLightTheme(),
       themeMode: ThemeMode.light,
+      locale: locale,
+      supportedLocales: const [Locale('en'), Locale('ta')],
       scaffoldMessengerKey: _messengerKey,
       builder: (context, child) => AppBackdrop(
         variant: AppBackdropVariant.customer,

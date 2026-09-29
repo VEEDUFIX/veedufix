@@ -172,13 +172,13 @@ class _SupportPageState extends ConsumerState<SupportPage> {
     final faqs = const [
       _Faq(
         q: 'How do I cancel a booking?',
-        a: 'You can cancel a booking for free up to 2 hours before the scheduled time. '
-            'Go to My Bookings, tap the booking, and select Cancel.',
+        a: 'Open My Bookings, select the booking, and choose Cancel. '
+            'If a payment was captured, refund eligibility is reviewed separately; cancellation does not issue a refund automatically.',
       ),
       _Faq(
         q: 'What if the professional does not arrive?',
         a: 'If the professional is more than 30 minutes late without notice, you can '
-            'contact our 24/7 support or cancel for a full refund.',
+            'contact support. We will review the booking and any refund eligibility; a refund is not automatic.',
       ),
       _Faq(
         q: 'Is there a warranty on the work done?',

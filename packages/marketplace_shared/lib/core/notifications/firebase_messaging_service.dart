@@ -44,17 +44,6 @@ class FirebaseMessagingService {
       debugPrint('FCM permission status: ${settings.authorizationStatus}');
     }
 
-    final token = await _messaging.getToken();
-    if (kDebugMode && token != null) {
-      debugPrint('FCM token: $token');
-    }
-
-    FirebaseMessaging.instance.onTokenRefresh.listen((token) {
-      if (kDebugMode) {
-        debugPrint('FCM token refreshed: $token');
-      }
-    });
-
     final initialMessage = await FirebaseMessaging.instance.getInitialMessage();
     if (initialMessage != null) {
       _pendingTapPayload = _normalizeTapPayload(initialMessage);

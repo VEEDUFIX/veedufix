@@ -17,11 +17,15 @@ export async function submitReview(data: {
   }
 
   if (booking.customerId !== data.reviewerId) {
-    throw AppError.unauthorized("Unauthorized");
+    throw AppError.forbidden("Not authorized to review this booking");
   }
 
   if (!booking.workerId) {
-    throw AppError.notFound("Booking has no worker assigned");
+    throw AppError.conflict("This booking does not have an assigned worker yet");
+  }
+
+  if (booking.status !== "COMPLETED") {
+    throw AppError.conflict("You can review a booking after the service is completed");
   }
 
   // Check if review already exists

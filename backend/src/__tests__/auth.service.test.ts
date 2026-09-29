@@ -20,8 +20,8 @@ vi.mock('bcryptjs', () => ({
 vi.mock('../lib/prisma.js', () => ({
   prisma: {
     user: { upsert: vi.fn() },
-    refreshToken: { create: vi.fn(), findUnique: vi.fn(), update: vi.fn() },
-    authSession: { create: vi.fn(), updateMany: vi.fn() },
+    refreshToken: { create: vi.fn(), findUnique: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
+    authSession: { create: vi.fn(), updateMany: vi.fn(), findMany: vi.fn() },
   },
 }));
 
@@ -64,7 +64,7 @@ vi.mock('../config/env.js', () => ({
 import bcrypt from 'bcryptjs';
 import { prisma } from '../lib/prisma.js';
 import { redis } from '../lib/redis.js';
-import { requestOtp, verifyOtp, refreshSession } from '../modules/auth/auth.service.js';
+import { requestOtp, verifyOtp, refreshSession, revokeAuthSession, revokeAllAuthSessions } from '../modules/auth/auth.service.js';
 import { AppError } from '../lib/app-error.js';
 
 // ─── Shared test data ─────────────────────────────────────────────────────────
@@ -78,6 +78,53 @@ const mockUser = {
   avatarUrl: null,
   createdAt: new Date(),
 };
+
+describe('revokeAllAuthSessions', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it('revokes other sessions without revoking the current session refresh token', async () => {
+    vi.mocked(prisma.authSession.findMany).mockResolvedValue([
+      { refreshToken: 'other-refresh-hash' },
+      { refreshToken: null },
+    ] as never);
+
+    await revokeAllAuthSessions('user-001', 'current-session');
+
+    expect(prisma.authSession.findMany).toHaveBeenCalledWith({
+      where: { userId: 'user-001', id: { not: 'current-session' } },
+      select: { refreshToken: true },
+    });
+    expect(prisma.authSession.updateMany).toHaveBeenCalledWith({
+      where: { userId: 'user-001', id: { not: 'current-session' } },
+      data: { accessToken: null, refreshToken: null },
+    });
+    expect(prisma.refreshToken.updateMany).toHaveBeenCalledWith({
+      where: { userId: 'user-001', tokenHash: { in: ['other-refresh-hash'] } },
+      data: { revokedAt: expect.any(Date) },
+    });
+  });
+});
+
+describe('revokeAuthSession', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it('revokes the selected session and its refresh token', async () => {
+    vi.mocked(prisma.authSession.findMany).mockResolvedValue([
+      { refreshToken: 'device-refresh-hash' },
+    ] as never);
+
+    await revokeAuthSession('user-001', 'device-session');
+
+    expect(prisma.authSession.updateMany).toHaveBeenCalledWith({
+      where: { id: 'device-session', userId: 'user-001' },
+      data: { accessToken: null, refreshToken: null },
+    });
+    expect(prisma.refreshToken.updateMany).toHaveBeenCalledWith({
+      where: { userId: 'user-001', tokenHash: 'device-refresh-hash' },
+      data: { revokedAt: expect.any(Date) },
+    });
+  });
+});
 
 // ─── requestOtp ───────────────────────────────────────────────────────────────
 

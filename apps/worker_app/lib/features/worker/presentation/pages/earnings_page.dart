@@ -188,11 +188,12 @@ class _EarningsPageState extends ConsumerState<EarningsPage> {
     final hasUpi = _nonEmpty(workerProfile['upiId']) != null;
     final hasBank = _nonEmpty(workerProfile['bankAccountNumber']) != null &&
         _nonEmpty(workerProfile['bankIfsc']) != null;
-    final payoutSetupLabel = hasUpi || hasBank ? 'Ready for payout' : 'Add UPI or bank details';
+    final hasPayoutMethod = hasUpi || hasBank;
+    final payoutSetupLabel = hasPayoutMethod ? 'Payout details on file' : 'Add UPI or bank details';
     final payoutSetupSubtitle = hasUpi
-        ? 'UPI is set for RazorpayX payouts.'
+        ? 'UPI is available for wallet withdrawals.'
         : hasBank
-            ? 'Bank transfer details are ready for RazorpayX payouts.'
+            ? 'Bank details are saved. Verification and payout readiness are not confirmed here.'
             : 'Complete onboarding to enable worker payouts.';
     final latestStatus = _transactions.isNotEmpty ? _transactions.first.status : 'pending';
     final recentPayouts = _transactions.where((entry) => entry.status == 'success' || entry.status == 'processing').take(4).toList(growable: false);
@@ -286,8 +287,8 @@ class _EarningsPageState extends ConsumerState<EarningsPage> {
                                     borderRadius: BorderRadius.circular(16),
                                   ),
                                   child: Icon(
-                                    hasUpi || hasBank ? Icons.verified_rounded : Icons.warning_rounded,
-                                    color: hasUpi || hasBank ? const Color(0xFF10B981) : const Color(0xFFF59E0B),
+                                    hasPayoutMethod ? Icons.account_balance_rounded : Icons.warning_rounded,
+                                    color: hasPayoutMethod ? const Color(0xFFC2A15E) : const Color(0xFFF59E0B),
                                   ),
                                 ),
                                 const SizedBox(width: 14),
@@ -318,7 +319,7 @@ class _EarningsPageState extends ConsumerState<EarningsPage> {
                               Align(
                                 alignment: Alignment.centerRight,
                                 child: TextButton(
-                                  onPressed: () => context.push('/profile/edit'),
+                                  onPressed: () => context.push('/profile/bank-details'),
                                   child: const Text('Set up payout'),
                                 ),
                               ),
@@ -333,7 +334,7 @@ class _EarningsPageState extends ConsumerState<EarningsPage> {
                         Expanded(
                           child: _MiniMetric(
                             title: 'Payout ready',
-                            value: hasUpi || hasBank ? 'Yes' : 'No',
+                            value: hasPayoutMethod ? 'On file' : 'No',
                             icon: Icons.account_balance_wallet_rounded,
                           ),
                         ),
@@ -378,13 +379,13 @@ class _EarningsPageState extends ConsumerState<EarningsPage> {
                                   label: const Text('Open wallet'),
                                 ),
                                 OutlinedButton.icon(
-                                  onPressed: () => context.push('/profile/edit'),
-                                  icon: const Icon(Icons.person_rounded, size: 18),
-                                  label: const Text('Edit payout details'),
+                                  onPressed: () => context.push('/profile/payout-change'),
+                                  icon: const Icon(Icons.account_balance_rounded, size: 18),
+                                  label: const Text('Change payout account'),
                                 ),
                                 TextButton.icon(
                                   onPressed: () => context.push(
-                                    '/support?autoCompose=true&initialCategory=payment&initialSubject=${Uri.encodeComponent('Payout or wallet issue')}&initialMessage=${Uri.encodeComponent('I need help with my worker payout setup or a withdrawal that needs attention.')}',
+                                  '/support?autoFocusForm=true&category=payment&subject=${Uri.encodeComponent('Payout or wallet issue')}&message=${Uri.encodeComponent('I need help with my worker payout setup or a withdrawal that needs attention.')}',
                                   ),
                                   icon: const Icon(Icons.support_agent_rounded, size: 18),
                                   label: const Text('Get support'),

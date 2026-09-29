@@ -15,22 +15,23 @@ class OpsAlertsPage extends ConsumerStatefulWidget {
 
 class _OpsAlertsPageState extends ConsumerState<OpsAlertsPage> {
   late final OpsApi _api;
-  late Future<OpsOverviewSnapshot> _snapshotFuture;
+  late Future<List<OpsAlert>> _alertsFuture;
   bool _busy = false;
   String _selectedQueue = 'all';
+  String _selectedStatus = 'open';
 
   @override
   void initState() {
     super.initState();
     _api = OpsApi(ref.read(apiClientProvider).dio);
-    _snapshotFuture = _api.fetchOverview();
+    _alertsFuture = _api.fetchAlerts();
   }
 
   Future<void> _reload() async {
     setState(() {
-      _snapshotFuture = _api.fetchOverview();
+      _alertsFuture = _api.fetchAlerts();
     });
-    await _snapshotFuture;
+    await _alertsFuture;
   }
 
   Future<void> _runAction(Future<void> Function() action) async {
@@ -84,6 +85,10 @@ class _OpsAlertsPageState extends ConsumerState<OpsAlertsPage> {
     }
   }
 
+  Future<void> _setAlertStatus(OpsAlert alert, String status) async {
+    await _runAction(() => _api.updateAlertStatus(alert.id, status: status));
+  }
+
   String _queueLabel(String queue) {
     return switch (queue) {
       'all' => 'All queues',
@@ -113,8 +118,8 @@ class _OpsAlertsPageState extends ConsumerState<OpsAlertsPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.transparent,
-      body: FutureBuilder<OpsOverviewSnapshot>(
-        future: _snapshotFuture,
+      body: FutureBuilder<List<OpsAlert>>(
+        future: _alertsFuture,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting &&
               !snapshot.hasData) {
@@ -140,7 +145,10 @@ class _OpsAlertsPageState extends ConsumerState<OpsAlertsPage> {
             );
           }
 
-          final alerts = snapshot.data?.alerts ?? const <OpsAlert>[];
+          final allAlerts = snapshot.data ?? const <OpsAlert>[];
+          final alerts = allAlerts
+              .where((alert) => alert.status == _selectedStatus)
+              .toList(growable: false);
           final visibleAlerts = _visibleAlerts(alerts);
 
           return RefreshIndicator(
@@ -184,7 +192,8 @@ class _OpsAlertsPageState extends ConsumerState<OpsAlertsPage> {
                         style: FilledButton.styleFrom(
                           backgroundColor: Colors.white,
                           foregroundColor: Colors.black87,
-                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 20, vertical: 16),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(8),
                             side: const BorderSide(color: Color(0xFFE5E7EB)),
@@ -200,29 +209,57 @@ class _OpsAlertsPageState extends ConsumerState<OpsAlertsPage> {
                     children: [
                       FilterChip(
                         selected: _selectedQueue == 'all',
-                        onSelected: (_) => setState(() => _selectedQueue = 'all'),
+                        onSelected: (_) =>
+                            setState(() => _selectedQueue = 'all'),
                         label: Text('All (${alerts.length})'),
                       ),
                       FilterChip(
                         selected: _selectedQueue == 'dispatch',
-                        onSelected: (_) => setState(() => _selectedQueue = 'dispatch'),
-                        label: Text('Dispatch (${alerts.where((alert) => alert.isDispatchFailure).length})'),
+                        onSelected: (_) =>
+                            setState(() => _selectedQueue = 'dispatch'),
+                        label: Text(
+                            'Dispatch (${alerts.where((alert) => alert.isDispatchFailure).length})'),
                       ),
                       FilterChip(
                         selected: _selectedQueue == 'reconciliation',
-                        onSelected: (_) => setState(() => _selectedQueue = 'reconciliation'),
-                        label: Text('Reconciliation (${alerts.where((alert) => alert.isFinanceException).length})'),
+                        onSelected: (_) =>
+                            setState(() => _selectedQueue = 'reconciliation'),
+                        label: Text(
+                            'Reconciliation (${alerts.where((alert) => alert.isFinanceException).length})'),
                       ),
                       FilterChip(
                         selected: _selectedQueue == 'disputes',
-                        onSelected: (_) => setState(() => _selectedQueue = 'disputes'),
-                        label: Text('Disputes (${alerts.where((alert) => alert.isDisputeEscalation).length})'),
+                        onSelected: (_) =>
+                            setState(() => _selectedQueue = 'disputes'),
+                        label: Text(
+                            'Disputes (${alerts.where((alert) => alert.isDisputeEscalation).length})'),
                       ),
                       FilterChip(
                         selected: _selectedQueue == 'support',
-                        onSelected: (_) => setState(() => _selectedQueue = 'support'),
-                        label: Text('Support SLA (${alerts.where((alert) => alert.isSupportEscalation).length})'),
+                        onSelected: (_) =>
+                            setState(() => _selectedQueue = 'support'),
+                        label: Text(
+                            'Support SLA (${alerts.where((alert) => alert.isSupportEscalation).length})'),
                       ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Wrap(
+                    spacing: 10,
+                    runSpacing: 10,
+                    children: [
+                      for (final status in const [
+                        'open',
+                        'acknowledged',
+                        'resolved'
+                      ])
+                        FilterChip(
+                          selected: _selectedStatus == status,
+                          onSelected: (_) =>
+                              setState(() => _selectedStatus = status),
+                          label: Text(
+                              '${_statusLabel(status)} (${allAlerts.where((alert) => alert.status == status).length})'),
+                        ),
                     ],
                   ),
                   const SizedBox(height: 10),
@@ -332,6 +369,8 @@ class _OpsAlertsPageState extends ConsumerState<OpsAlertsPage> {
                                     _InfoChip(
                                         label: MaterialLocalizations.of(context)
                                             .formatMediumDate(alert.createdAt)),
+                                    _InfoChip(
+                                        label: _statusLabel(alert.status)),
                                     if (alert.amount != null)
                                       _InfoChip(
                                           label:
@@ -356,6 +395,30 @@ class _OpsAlertsPageState extends ConsumerState<OpsAlertsPage> {
                                             : () => _retryAlert(alert),
                                         child: const Text('Retry'),
                                       ),
+                                    if (alert.status == 'open')
+                                      OutlinedButton(
+                                        onPressed: _busy
+                                            ? null
+                                            : () => _setAlertStatus(
+                                                alert, 'acknowledged'),
+                                        child: const Text('Acknowledge'),
+                                      ),
+                                    if (alert.status != 'resolved')
+                                      FilledButton.tonal(
+                                        onPressed: _busy
+                                            ? null
+                                            : () => _setAlertStatus(
+                                                alert, 'resolved'),
+                                        child: const Text('Resolve'),
+                                      ),
+                                    if (alert.status == 'resolved')
+                                      OutlinedButton(
+                                        onPressed: _busy
+                                            ? null
+                                            : () =>
+                                                _setAlertStatus(alert, 'open'),
+                                        child: const Text('Reopen'),
+                                      ),
                                   ],
                                 ),
                               ],
@@ -372,6 +435,12 @@ class _OpsAlertsPageState extends ConsumerState<OpsAlertsPage> {
       ),
     );
   }
+
+  String _statusLabel(String status) => switch (status) {
+        'acknowledged' => 'Acknowledged',
+        'resolved' => 'Resolved',
+        _ => 'Open',
+      };
 }
 
 class OpsAlertDetailPage extends ConsumerStatefulWidget {
@@ -401,12 +470,8 @@ class _OpsAlertDetailPageState extends ConsumerState<OpsAlertDetailPage> {
   }
 
   Future<OpsAlert?> _loadAlert() async {
-    if (widget.initialAlert != null && widget.initialAlert!.id == widget.alertId) {
-      return widget.initialAlert;
-    }
-
-    final snapshot = await _api.fetchOverview();
-    for (final alert in snapshot.alerts) {
+    final alerts = await _api.fetchAlerts();
+    for (final alert in alerts) {
       if (alert.id == widget.alertId) {
         return alert;
       }
@@ -463,6 +528,24 @@ class _OpsAlertDetailPageState extends ConsumerState<OpsAlertDetailPage> {
     }
   }
 
+  Future<void> _setAlertStatus(OpsAlert alert, String status) async {
+    setState(() => _busy = true);
+    try {
+      await _api.updateAlertStatus(alert.id, status: status);
+      if (!mounted) return;
+      await _reload();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('Alert status updated')));
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(error.toString())));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
@@ -486,7 +569,8 @@ class _OpsAlertDetailPageState extends ConsumerState<OpsAlertDetailPage> {
       body: FutureBuilder<OpsAlert?>(
         future: _alertFuture,
         builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting && !snapshot.hasData) {
+          if (snapshot.connectionState == ConnectionState.waiting &&
+              !snapshot.hasData) {
             return const Padding(
               padding: EdgeInsets.all(24),
               child: _AlertDetailSkeleton(),
@@ -521,16 +605,19 @@ class _OpsAlertDetailPageState extends ConsumerState<OpsAlertDetailPage> {
                     const SizedBox(height: 12),
                     Text(
                       'Alert not found',
-                      style: tt.titleLarge?.copyWith(fontWeight: FontWeight.w800),
+                      style:
+                          tt.titleLarge?.copyWith(fontWeight: FontWeight.w800),
                     ),
                     const SizedBox(height: 8),
                     Text(
                       'This alert is no longer present in the current snapshot.',
                       textAlign: TextAlign.center,
-                      style: tt.bodyMedium?.copyWith(color: cs.onSurfaceVariant),
+                      style:
+                          tt.bodyMedium?.copyWith(color: cs.onSurfaceVariant),
                     ),
                     const SizedBox(height: 16),
-                    FilledButton(onPressed: _reload, child: const Text('Reload')),
+                    FilledButton(
+                        onPressed: _reload, child: const Text('Reload')),
                   ],
                 ),
               ),
@@ -549,11 +636,14 @@ class _OpsAlertDetailPageState extends ConsumerState<OpsAlertDetailPage> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(alert.title, style: tt.headlineSmall?.copyWith(fontWeight: FontWeight.w800)),
+                        Text(alert.title,
+                            style: tt.headlineSmall
+                                ?.copyWith(fontWeight: FontWeight.w800)),
                         const SizedBox(height: 6),
                         Text(
                           alert.message,
-                          style: tt.bodyMedium?.copyWith(color: cs.onSurfaceVariant),
+                          style: tt.bodyMedium
+                              ?.copyWith(color: cs.onSurfaceVariant),
                         ),
                       ],
                     ),
@@ -566,22 +656,30 @@ class _OpsAlertDetailPageState extends ConsumerState<OpsAlertDetailPage> {
                 spacing: 8,
                 runSpacing: 8,
                 children: [
-                  if (alert.bookingCode != null) _InfoChip(label: 'Booking ${alert.bookingCode}'),
-                  if (alert.customerName != null) _InfoChip(label: alert.customerName!),
-                  _InfoChip(label: MaterialLocalizations.of(context).formatMediumDate(alert.createdAt)),
-                  if (alert.amount != null) _InfoChip(label: '₹${alert.amount!.toStringAsFixed(2)}'),
+                  if (alert.bookingCode != null)
+                    _InfoChip(label: 'Booking ${alert.bookingCode}'),
+                  if (alert.customerName != null)
+                    _InfoChip(label: alert.customerName!),
+                  _InfoChip(
+                      label: MaterialLocalizations.of(context)
+                          .formatMediumDate(alert.createdAt)),
+                  if (alert.amount != null)
+                    _InfoChip(label: '₹${alert.amount!.toStringAsFixed(2)}'),
                   _InfoChip(label: alert.kind.replaceAll('_', ' ')),
+                  _InfoChip(label: alert.status),
                 ],
               ),
               const SizedBox(height: 18),
               if (alert.isDispatchFailure && alert.bookingId != null)
                 FilledButton.icon(
-                  onPressed: () => context.push('/ops/live-jobs/${alert.bookingId}'),
+                  onPressed: () =>
+                      context.push('/ops/live-jobs/${alert.bookingId}'),
                   icon: const Icon(Icons.work_rounded),
                   label: const Text('Open live job'),
                 ),
               const SizedBox(height: 16),
-              Text('Actions', style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
+              Text('Actions',
+                  style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
               const SizedBox(height: 10),
               Wrap(
                 spacing: 12,
@@ -591,6 +689,26 @@ class _OpsAlertDetailPageState extends ConsumerState<OpsAlertDetailPage> {
                     FilledButton(
                       onPressed: _busy ? null : () => _retryAlert(alert),
                       child: const Text('Retry'),
+                    ),
+                  if (alert.status == 'open')
+                    OutlinedButton(
+                      onPressed: _busy
+                          ? null
+                          : () => _setAlertStatus(alert, 'acknowledged'),
+                      child: const Text('Acknowledge'),
+                    ),
+                  if (alert.status != 'resolved')
+                    FilledButton.tonal(
+                      onPressed: _busy
+                          ? null
+                          : () => _setAlertStatus(alert, 'resolved'),
+                      child: const Text('Resolve'),
+                    ),
+                  if (alert.status == 'resolved')
+                    OutlinedButton(
+                      onPressed:
+                          _busy ? null : () => _setAlertStatus(alert, 'open'),
+                      child: const Text('Reopen'),
                     ),
                   OutlinedButton(
                     onPressed: _busy ? null : _reload,

@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:marketplace_shared/marketplace_shared.dart';
 
+import '../../../../core/notifications/worker_device_token.dart';
+
 class SettingsPage extends ConsumerWidget {
   const SettingsPage({super.key});
 
@@ -31,40 +33,47 @@ class SettingsPage extends ConsumerWidget {
           ),
         ),
         title: Text(
-          'Settings',
+          appText(context, 'Settings', 'அமைப்புகள்'),
           style: tt.titleLarge?.copyWith(fontWeight: FontWeight.w800),
         ),
       ),
       body: ListView(
         padding: const EdgeInsets.all(24),
         children: [
-          const _SectionHeader(title: 'Preferences'),
+          _SectionHeader(title: appText(context, 'Preferences', 'விருப்பங்கள்')),
           _SettingsTile(
             icon: Icons.language_rounded,
             title: 'Language',
-            subtitle: 'English (US)',
-            onTap: () => _showLanguagePicker(context),
+            subtitle: appLanguageName(ref.watch(appLocaleProvider)),
+            onTap: () => _showLanguagePicker(context, ref),
           ),
           _SettingsTile(
             icon: Icons.notifications_rounded,
-            title: 'Notifications',
-            subtitle: 'Push, Email, SMS',
+            title: appText(context, 'Notifications', 'அறிவிப்புகள்'),
+            subtitle: 'Manage alerts for jobs and payouts',
             onTap: () => _showNotificationPrefs(context),
           ),
           const SizedBox(height: 32),
           
-          const _SectionHeader(title: 'Security & Privacy'),
+          _SectionHeader(title: appText(context, 'Security & Privacy', 'பாதுகாப்பு மற்றும் தனியுரிமை')),
           _SettingsTile(
             icon: Icons.lock_outline_rounded,
             title: 'Privacy Center',
-            subtitle: 'Manage your data and privacy',
-            onTap: () => _showPrivacyCenter(context),
+            subtitle: 'Request a data copy or account deletion',
+            onTap: () => _openSupportRequest(
+              context,
+              subject: 'Privacy and data request',
+              message: 'Please help me with a privacy or personal data request for my Veedufix Partner account.',
+            ),
           ),
           _SettingsTile(
             icon: Icons.download_rounded,
-            title: 'Export My Data',
-            onTap: () => ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Your data export request has been queued.')),
+            title: 'Request a data export',
+            subtitle: 'Contact support to request a copy of your data',
+            onTap: () => _openSupportRequest(
+              context,
+              subject: 'Request a copy of my data',
+              message: 'Please help me request an export of my Veedufix Partner account data.',
             ),
           ),
           _SettingsTile(
@@ -88,10 +97,10 @@ class SettingsPage extends ConsumerWidget {
           _SettingsTile(
             icon: Icons.privacy_tip_rounded,
             title: 'Privacy Policy',
-            onTap: () => _showInfoDialog(
-              context,
-              title: 'Privacy Policy',
-              body: 'We only use your profile, job, and support data to operate the marketplace and improve your experience.',
+              onTap: () => _showInfoDialog(
+                context,
+                title: 'Privacy Policy',
+              body: 'For a copy or deletion request for your account data, contact Veedufix Support so the team can verify your identity and explain any requirements.',
             ),
           ),
           _SettingsTile(
@@ -108,12 +117,7 @@ class SettingsPage extends ConsumerWidget {
           const SizedBox(height: 48),
           Center(
             child: TapScale(
-              onTap: () async {
-                await ref.read(authControllerProvider.notifier).signOut();
-                if (context.mounted) {
-                  context.go('/login');
-                }
-              },
+              onTap: () => _confirmSignOut(context, ref),
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
                 decoration: BoxDecoration(
@@ -248,45 +252,38 @@ void _showInfoDialog(BuildContext context, {required String title, required Stri
   );
 }
 
-void _showLanguagePicker(BuildContext context) {
-  showModalBottomSheet<void>(
+Future<void> _showLanguagePicker(BuildContext context, WidgetRef ref) async {
+  final selected = await showDialog<String>(
     context: context,
-    builder: (context) => SafeArea(
-      child: ListView(
-        shrinkWrap: true,
+    builder: (dialogContext) {
+      final activeLanguage = ref.read(appLocaleProvider).languageCode;
+      return SimpleDialog(
+        title: Text(appText(context, 'Choose language', 'மொழியைத் தேர்ந்தெடுக்கவும்')),
         children: [
-          const ListTile(title: Text('Choose language')),
-          ListTile(
-            title: const Text('English (US)'),
-            onTap: () {
-              Navigator.of(context).pop();
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Language saved: English (US)')),
-              );
-            },
-          ),
-          ListTile(
-            title: const Text('Hindi'),
-            onTap: () {
-              Navigator.of(context).pop();
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Language saved: Hindi')),
-              );
-            },
-          ),
-          ListTile(
-            title: const Text('Marathi'),
-            onTap: () {
-              Navigator.of(context).pop();
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Language saved: Marathi')),
-              );
-            },
-          ),
+          for (final option in const [('en', 'English'), ('ta', 'தமிழ்')])
+            SimpleDialogOption(
+              onPressed: () => Navigator.of(dialogContext).pop(option.$1),
+              child: ListTile(
+                contentPadding: EdgeInsets.zero,
+                title: Text(option.$2),
+                trailing: activeLanguage == option.$1
+                    ? const Icon(Icons.check_rounded)
+                    : null,
+              ),
+            ),
         ],
-      ),
-    ),
+      );
+    },
   );
+  if (selected == null || !context.mounted) return;
+  try {
+    await ref.read(appLocaleProvider.notifier).setLanguage(selected);
+  } catch (_) {
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(appText(context, 'Could not save language preference.', 'மொழி விருப்பத்தைச் சேமிக்க முடியவில்லை.'))),
+    );
+  }
 }
 
 void _showNotificationPrefs(BuildContext context) {
@@ -294,22 +291,9 @@ void _showNotificationPrefs(BuildContext context) {
     context: context,
     builder: (context) => AlertDialog(
       title: const Text('Notification preferences'),
-      content: const Text('Push, email, and SMS notifications are enabled by default for job updates and payouts.'),
+      content: const Text('Push notifications depend on your device permissions. Email and SMS preferences cannot currently be changed in the app.'),
       actions: [
         TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('OK')),
-      ],
-    ),
-  );
-}
-
-void _showPrivacyCenter(BuildContext context) {
-  showDialog<void>(
-    context: context,
-    builder: (context) => AlertDialog(
-      title: const Text('Privacy Center'),
-      content: const Text('You can export your data or request account deletion from this screen.'),
-      actions: [
-        TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Close')),
       ],
     ),
   );
@@ -320,7 +304,7 @@ void _confirmDeleteAccount(BuildContext context) {
     context: context,
     builder: (dialogContext) => AlertDialog(
       title: const Text('Delete account?'),
-      content: const Text('This will queue a deletion request. You can still cancel by contacting support.'),
+      content: const Text('Account deletion is handled by support after your identity and any active jobs or payouts are reviewed. Continue to contact support?'),
       actions: [
         TextButton(
           onPressed: () => Navigator.of(dialogContext).pop(),
@@ -329,13 +313,43 @@ void _confirmDeleteAccount(BuildContext context) {
         TextButton(
           onPressed: () {
             Navigator.of(dialogContext).pop();
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Deletion request submitted.')),
+            _openSupportRequest(
+              context,
+              subject: 'Request to delete my account',
+              message: 'Please explain the steps to delete my Veedufix Partner account.',
             );
           },
-          child: const Text('Delete'),
+          child: const Text('Contact support'),
         ),
       ],
     ),
+  );
+}
+
+Future<void> _confirmSignOut(BuildContext context, WidgetRef ref) async {
+  final shouldSignOut = await showDialog<bool>(
+    context: context,
+    builder: (dialogContext) => AlertDialog(
+      title: const Text('Log out of Veedufix?'),
+      content: const Text('You can sign in again anytime using your registered mobile number.'),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Cancel')),
+        FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('Log out')),
+      ],
+    ),
+  );
+  if (shouldSignOut != true || !context.mounted) return;
+  await unregisterWorkerDeviceToken(ref.read(apiClientProvider));
+  await ref.read(authControllerProvider.notifier).signOut();
+  if (context.mounted) context.go('/login');
+}
+
+void _openSupportRequest(
+  BuildContext context, {
+  required String subject,
+  required String message,
+}) {
+  context.push(
+    '/support?autoFocusForm=true&category=account&subject=${Uri.encodeComponent(subject)}&message=${Uri.encodeComponent(message)}',
   );
 }

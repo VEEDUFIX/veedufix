@@ -120,6 +120,7 @@ export async function uploadWorkerDocumentHandler(request: Request, response: Re
 
   try {
     const result = await uploadWorkerDocumentImage(authRequest.auth.userId, authRequest.file, type);
+    response.setHeader("Cache-Control", "private, no-store");
     response.status(201).json(result);
   } catch (error) {
     sendMediaError(response, error);

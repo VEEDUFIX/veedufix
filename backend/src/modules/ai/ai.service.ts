@@ -1,7 +1,9 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import { logger } from "../../lib/logger.js";
+import type { ChatMessage } from "./ai.schemas.js";
 
 export class AiService {
-  async chat(message: string, chatHistory: { role: string; parts: { text: string }[] }[] = []): Promise<string> {
+  async chat(message: string, chatHistory: ChatMessage[] = []): Promise<string> {
     const apiKey = process.env.GEMINI_API_KEY;
 
     if (!apiKey) {
@@ -27,7 +29,7 @@ Keep responses under 3 sentences. Be extremely polite. Suggest booking a profess
       const result = await chat.sendMessage(`${systemPrompt}\n\nCustomer: ${message}`);
       return result.response.text();
     } catch (error: any) {
-      console.error("AI Error:", error);
+      logger.error({ errorName: error instanceof Error ? error.name : "UnknownError" }, "AI provider request failed");
       return "Sorry, I'm having trouble connecting to my brain right now. Please try again later!";
     }
   }

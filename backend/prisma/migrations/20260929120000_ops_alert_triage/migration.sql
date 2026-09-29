@@ -1,0 +1,7 @@
+ALTER TABLE "OpsAlert"
+  ADD COLUMN "resolutionNote" TEXT,
+  ADD COLUMN "acknowledgedAt" TIMESTAMP(3),
+  ADD COLUMN "acknowledgedById" TEXT,
+  ADD COLUMN "resolvedAt" TIMESTAMP(3),
+  ADD COLUMN "resolvedById" TEXT,
+  ADD COLUMN "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP;

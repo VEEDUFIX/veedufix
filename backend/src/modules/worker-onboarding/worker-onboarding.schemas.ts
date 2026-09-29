@@ -7,7 +7,11 @@ const baseProfileBodySchema = z.object({
   addressLine1: z.string().trim().min(3).max(255).optional(),
   alternatePhone: z.string().trim().min(7).max(20).optional(),
   city: z.string().trim().min(2).max(120).optional(),
-  pincode: z.string().trim().min(3).max(20).optional(),
+  pincode: z.string().trim().regex(/^[1-9]\d{5}$/, "Enter a valid 6-digit Indian pincode").optional(),
+  serviceAreas: z.string().trim().min(2).max(500).optional(),
+  workType: z.enum(["FULL_TIME", "PART_TIME"]).optional(),
+  acceptsUrgentJobs: z.boolean().optional(),
+  serviceRadiusKm: z.number().int().min(1).max(100).optional(),
   bankAccountNumber: z.string().trim().regex(/^\d{9,18}$/, "Bank account number must contain 9 to 18 digits").optional(),
   bankIfsc: z.string().trim().min(6).max(20).optional(),
   upiId: z.string().trim().min(3).max(128).optional(),
@@ -32,7 +36,7 @@ export const uploadDocumentSchema = z.object({
   body: z
     .object({
       docType: z.enum(["aadhaar", "skill_certification"]),
-      fileUrl: z.string().trim().min(1),
+      fileUrl: z.string().trim().url().max(2048),
       categoryId: z.string().trim().min(1).optional()
     })
     .superRefine((value, ctx) => {

@@ -50,6 +50,26 @@ class WorkerOnboardingSkillItem {
   }
 }
 
+class WorkerOnboardingAvailabilitySlot {
+  const WorkerOnboardingAvailabilitySlot({
+    required this.dayOfWeek,
+    required this.startTime,
+    required this.endTime,
+  });
+
+  final int dayOfWeek;
+  final String startTime;
+  final String endTime;
+
+  factory WorkerOnboardingAvailabilitySlot.fromJson(Map<String, dynamic> json) {
+    return WorkerOnboardingAvailabilitySlot(
+      dayOfWeek: (json['dayOfWeek'] as num?)?.toInt() ?? 0,
+      startTime: json['startTime'] as String? ?? '09:00',
+      endTime: json['endTime'] as String? ?? '19:00',
+    );
+  }
+}
+
 class WorkerOnboardingProfile {
   const WorkerOnboardingProfile({
     required this.onboardingStatus,
@@ -66,6 +86,10 @@ class WorkerOnboardingProfile {
     required this.upiId,
     required this.bankAccountNumber,
     required this.bankIfsc,
+    required this.serviceRadiusKm,
+    required this.serviceAreas,
+    required this.workType,
+    required this.acceptsUrgentJobs,
     required this.toolsOwned,
     required this.emergencyContactName,
     required this.emergencyContactPhone,
@@ -75,6 +99,7 @@ class WorkerOnboardingProfile {
     required this.email,
     required this.rejectionReason,
     required this.skills,
+    required this.availabilitySlots,
   });
 
   final String onboardingStatus;
@@ -95,6 +120,10 @@ class WorkerOnboardingProfile {
   final String? upiId;
   final String? bankAccountNumber;
   final String? bankIfsc;
+  final int? serviceRadiusKm;
+  final String? serviceAreas;
+  final String? workType;
+  final bool acceptsUrgentJobs;
   final List<String> toolsOwned;
   final String? emergencyContactName;
   final String? emergencyContactPhone;
@@ -104,6 +133,7 @@ class WorkerOnboardingProfile {
   final String? email;
   final String? rejectionReason;
   final List<WorkerOnboardingSkillItem> skills;
+  final List<WorkerOnboardingAvailabilitySlot> availabilitySlots;
 
   factory WorkerOnboardingProfile.fromJson(Map<String, dynamic> json) {
     List<String> decodeToolsOwned(dynamic value) {
@@ -140,6 +170,10 @@ class WorkerOnboardingProfile {
       upiId: json['upiId'] as String?,
       bankAccountNumber: json['bankAccountNumber'] as String?,
       bankIfsc: json['bankIfsc'] as String?,
+      serviceRadiusKm: (json['serviceRadiusKm'] as num?)?.toInt(),
+      serviceAreas: json['serviceAreas'] as String?,
+      workType: json['workType'] as String?,
+      acceptsUrgentJobs: json['acceptsUrgentJobs'] as bool? ?? true,
       toolsOwned: decodeToolsOwned(json['toolsOwned']),
       emergencyContactName: json['emergencyContactName'] as String?,
       emergencyContactPhone: json['emergencyContactPhone'] as String?,
@@ -151,6 +185,10 @@ class WorkerOnboardingProfile {
       email: user['email'] as String?,
       rejectionReason: json['rejectionReason'] as String?,
       skills: _decodeSkills(json['skills']),
+      availabilitySlots: (json['availabilitySlots'] as List<dynamic>? ?? const [])
+          .whereType<Map<String, dynamic>>()
+          .map(WorkerOnboardingAvailabilitySlot.fromJson)
+          .toList(growable: false),
     );
   }
 
@@ -396,6 +434,10 @@ class WorkerOnboardingApi {
     String? upiId,
     String? bankAccountNumber,
     String? bankIfsc,
+    int? serviceRadiusKm,
+    String? serviceAreas,
+    String? workType,
+    bool? acceptsUrgentJobs,
     String? aadhaarNumber,
     List<String>? toolsOwned,
     String? emergencyContactName,
@@ -433,6 +475,18 @@ class WorkerOnboardingApi {
     }
     if (bankIfsc != null) {
       body['bankIfsc'] = bankIfsc;
+    }
+    if (serviceRadiusKm != null) {
+      body['serviceRadiusKm'] = serviceRadiusKm;
+    }
+    if (serviceAreas != null) {
+      body['serviceAreas'] = serviceAreas;
+    }
+    if (workType != null) {
+      body['workType'] = workType;
+    }
+    if (acceptsUrgentJobs != null) {
+      body['acceptsUrgentJobs'] = acceptsUrgentJobs;
     }
     if (aadhaarNumber != null) {
       body['aadhaarNumber'] = aadhaarNumber;
@@ -541,48 +595,14 @@ class WorkerOnboardingApi {
 
   Future<String> uploadDocumentAsset({
     required XFile file,
-    required String userId,
     required String type,
   }) async {
     final fileName = file.name.isNotEmpty ? file.name : 'document.jpg';
-    return _retryTransient<String>(() async {
-      try {
-        final signatureResponse = await _dio.post<Map<String, dynamic>>(
-          '/uploads/signature',
-          data: {
-            'bookingId': 'onboarding-$userId',
-            'type': 'before',
-          },
-        );
-
-        final payload = signatureResponse.data ?? <String, dynamic>{};
-        final uploadUrl = payload['uploadUrl'] as String? ?? '';
-        final folder = payload['folder'] as String? ?? '';
-        final apiKey = payload['apiKey'] as String? ?? '';
-        final timestamp = payload['timestamp'];
-        final signature = payload['signature'] as String? ?? '';
-
-        if (uploadUrl.isEmpty ||
-            apiKey.isEmpty ||
-            folder.isEmpty ||
-            signature.isEmpty) {
-          throw Exception('Cloudinary signature response was incomplete.');
-        }
-
-        return await _uploadDirectToCloudinary(
-          uploadUrl: uploadUrl,
-          apiKey: apiKey,
-          folder: folder,
-          timestamp: timestamp,
-          signature: signature,
+    return _retryTransient<String>(() => _uploadViaLegacyEndpoint(
           file: file,
           fileName: fileName,
-        );
-      } catch (_) {
-        return _uploadViaLegacyEndpoint(
-            file: file, fileName: fileName, type: type);
-      }
-    });
+          type: type,
+        ));
   }
 
   Future<String> _uploadViaLegacyEndpoint({
@@ -611,48 +631,6 @@ class WorkerOnboardingApi {
     }
 
     throw Exception('Document upload failed.');
-  }
-
-  Future<String> _uploadDirectToCloudinary({
-    required String uploadUrl,
-    required String apiKey,
-    required String folder,
-    required dynamic timestamp,
-    required String signature,
-    required XFile file,
-    required String fileName,
-  }) async {
-    final uploadDio = Dio(
-      BaseOptions(
-        connectTimeout: const Duration(seconds: 30),
-        receiveTimeout: const Duration(seconds: 30),
-        sendTimeout: const Duration(seconds: 30),
-      ),
-    );
-
-    final formData = FormData.fromMap({
-      'file': await MultipartFile.fromFile(file.path, filename: fileName),
-      'api_key': apiKey,
-      'folder': folder,
-      'timestamp': timestamp.toString(),
-      'signature': signature,
-    });
-
-    final response = await uploadDio.post<Map<String, dynamic>>(
-      uploadUrl,
-      data: formData,
-      options: Options(
-        contentType: Headers.multipartFormDataContentType,
-        responseType: ResponseType.json,
-      ),
-    );
-
-    final data = response.data ?? <String, dynamic>{};
-    final secureUrl = data['secure_url'] as String?;
-    if (secureUrl == null || secureUrl.isEmpty) {
-      throw Exception('Cloudinary did not return a secure URL.');
-    }
-    return secureUrl;
   }
 
   WorkerOnboardingProfile _parseProfileResponse(Map<String, dynamic>? data) {
@@ -928,7 +906,12 @@ class WorkerOnboardingController extends StateNotifier<WorkerOnboardingState> {
     );
   }
 
-  Future<void> savePersonalDetails() async {
+  Future<void> savePersonalDetails({
+    int? serviceRadiusKm,
+    String? serviceAreas,
+    String? workType,
+    bool? acceptsUrgentJobs,
+  }) async {
     state = state.copyWith(isSavingProfile: true, errorMessage: null);
     try {
       final alternatePhone = state.draft.alternatePhone.trim();
@@ -951,6 +934,10 @@ class WorkerOnboardingController extends StateNotifier<WorkerOnboardingState> {
         upiId: upiId.isEmpty ? null : upiId,
         bankAccountNumber: validBankAccount ? bankAccountNumber : null,
         bankIfsc: bankIfsc.isEmpty ? null : bankIfsc,
+        serviceRadiusKm: serviceRadiusKm,
+        serviceAreas: serviceAreas,
+        workType: workType,
+        acceptsUrgentJobs: acceptsUrgentJobs,
         aadhaarNumber: aadhaarNumber.isEmpty ? null : aadhaarNumber,
       );
       state = state.copyWith(
@@ -972,11 +959,8 @@ class WorkerOnboardingController extends StateNotifier<WorkerOnboardingState> {
   Future<void> saveIdentityDocument(XFile documentFile) async {
     state = state.copyWith(isUploadingDocument: true, errorMessage: null);
     try {
-      final userId =
-          ref.read(authControllerProvider).valueOrNull?.user.id ?? 'worker';
       final fileUrl = await _api.uploadDocumentAsset(
         file: documentFile,
-        userId: userId,
         type: 'aadhaar',
       );
       final profile = await _api.uploadDocument(
@@ -1008,8 +992,6 @@ class WorkerOnboardingController extends StateNotifier<WorkerOnboardingState> {
       );
 
       var profile = state.profile;
-      final userId =
-          ref.read(authControllerProvider).valueOrNull?.user.id ?? 'worker';
 
       for (final serviceId in state.draft.selectedServiceIds) {
         profile = await _api.addService(serviceId);
@@ -1030,7 +1012,6 @@ class WorkerOnboardingController extends StateNotifier<WorkerOnboardingState> {
         if (certificate != null) {
           final uploadedUrl = await _api.uploadDocumentAsset(
             file: certificate,
-            userId: userId,
             type: 'skill_certification',
           );
           profile = await _api.uploadDocument(
@@ -1273,74 +1254,67 @@ class WorkerOnboardingController extends StateNotifier<WorkerOnboardingState> {
   }
 
   int _stepForProfile(WorkerOnboardingProfile profile) {
-    if (profile.fullName == null ||
+    if (_isBlank(profile.fullName) ||
         profile.dateOfBirth == null ||
-        profile.addressLine1 == null ||
-        profile.city == null ||
-        profile.pincode == null) {
-      return 0;
-    }
-
-    if (!profile.hasAadhaarDoc) {
+        _isBlank(profile.emergencyContactName) ||
+        _isBlank(profile.emergencyContactPhone)) {
       return 1;
     }
-
-    if (profile.selectedCategoryIds.isEmpty) {
-      return 2;
-    }
-
-    final hasUpi = profile.upiId != null && profile.upiId!.trim().isNotEmpty;
-    final hasBankFallback = (profile.bankAccountNumber != null &&
-            RegExp(r'^\d{9,18}$').hasMatch(profile.bankAccountNumber!.trim())) &&
-        (profile.bankIfsc != null && profile.bankIfsc!.trim().isNotEmpty);
-    if (!hasUpi && !hasBankFallback) {
-      return 3;
-    }
-
-    if (!profile.hasAvailability) {
+    if (profile.selectedCategoryIds.isEmpty) return 2;
+    if (profile.toolsOwned.isEmpty) return 3;
+    if (_isBlank(profile.addressLine1) ||
+        _isBlank(profile.city) ||
+        _isBlank(profile.pincode) ||
+        _isBlank(profile.serviceAreas) ||
+        !profile.hasAvailability) {
       return 4;
     }
+    if (!profile.hasAadhaarDoc) return 5;
 
+    final hasUpi = !_isBlank(profile.upiId);
+    final hasBank = RegExp(r'^\d{9,18}$').hasMatch(profile.bankAccountNumber?.trim() ?? '') &&
+        !_isBlank(profile.bankIfsc);
+    if (!hasUpi && !hasBank) return 7;
     if (profile.agreementAcceptedAt == null ||
         profile.dataConsentAcceptedAt == null) {
-      return 5;
+      return 10;
     }
-
-    if (profile.emergencyContactName == null ||
-        profile.emergencyContactPhone == null) {
-      return 6;
-    }
-
-    return 7;
+    return 11;
   }
+
+  bool _isBlank(String? value) => value == null || value.trim().isEmpty;
 
   int _stepForField(String field) {
     switch (field) {
       case 'fullName':
       case 'dateOfBirth':
-      case 'addressLine1':
-      case 'city':
-      case 'pincode':
-        return 0;
-      case 'aadhaarNumber':
-      case 'hasAadhaarDoc':
+      case 'emergencyContactName':
+      case 'emergencyContactPhone':
         return 1;
       case 'skills':
         return 2;
+      case 'toolsOwned':
+        return 3;
+      case 'addressLine1':
+      case 'city':
+      case 'pincode':
+      case 'serviceAreas':
+      case 'serviceRadiusKm':
+      case 'availability':
+        return 4;
+      case 'aadhaarNumber':
+      case 'aadhaarDocUrl':
+      case 'hasAadhaarDoc':
+        return 5;
       case 'upiId':
       case 'bankAccountNumber':
       case 'bankIfsc':
-        return 3;
-      case 'availability':
-        return 4;
+        return 7;
       case 'agreementAcceptedAt':
       case 'dataConsentAcceptedAt':
-        return 5;
-      case 'emergencyContactName':
-      case 'emergencyContactPhone':
-        return 6;
+        return 10;
       default:
-        return 0;
+        return 1;
     }
   }
 

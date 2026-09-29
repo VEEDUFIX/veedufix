@@ -614,7 +614,7 @@ export async function exportPayoutsCsv(filters: PayoutFilters = {}): Promise<str
   const rows = items.map((p) => {
     const worker = p.booking?.worker;
     const workerName = worker?.fullName ?? worker?.user?.name ?? "Unknown";
-    const amount = (Number(p.amount ?? 0) / 100).toFixed(2);
+    const amount = Number(p.amount ?? 0).toFixed(2);
     const reason = (p.failureReason ?? "").replace(/"/g, "'");
     return [p.id, p.booking?.code ?? "", workerName, amount, p.status, `"${reason}"`, p.createdAt.toISOString()].join(",");
   });

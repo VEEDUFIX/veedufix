@@ -4,8 +4,31 @@ import {
   WorkerAvailabilityNotFoundError,
   getWorkerProfileIdByUserId,
   getWorkerAvailability,
+  getCustomerScheduleSlots,
   setWeeklyAvailability
 } from "./availability.service.js";
+import { customerScheduleSlotsSchema } from "./availability.schemas.js";
+
+export async function getCustomerScheduleSlotsHandler(
+  request: AuthenticatedRequest,
+  response: Response,
+  next: NextFunction
+): Promise<void> {
+  try {
+    const { addressId, serviceIds, startDate, days } =
+      customerScheduleSlotsSchema.shape.query.parse(request.query);
+    const slots = await getCustomerScheduleSlots({
+      userId: request.auth!.userId,
+      addressId,
+      serviceIds,
+      startDate,
+      days
+    });
+    response.status(200).json({ slots });
+  } catch (error) {
+    next(error);
+  }
+}
 
 function sendError(response: Response, error: unknown): void {
   if (error instanceof WorkerAvailabilityNotFoundError) {

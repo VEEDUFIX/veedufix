@@ -117,13 +117,11 @@ export async function requestOtp(
   await redis.del(otpAttemptsKey(channel, normalized));
   await redis.del(otpLockKey(channel, normalized));
 
-  if (env.NODE_ENV !== "production") {
-    logger.info({ channel, identifier: normalized, otp }, "Development OTP issued");
-  }
+  const exposeDevelopmentOtp = env.NODE_ENV === "development" && env.EXPOSE_DEV_OTP;
 
   return {
     expiresInSeconds: 300,
-    ...(env.NODE_ENV !== "production" ? { debugOtp: otp } : {})
+    ...(exposeDevelopmentOtp ? { debugOtp: otp } : {})
   };
 }
 
@@ -374,7 +372,7 @@ export async function signInWithFirebasePhone(input: {
   }
 
   const phone = normalizeIdentifier(claims.phoneNumber, "PHONE");
-  logger.info({ phone }, "Firebase phone token verified");
+  logger.info("Firebase phone token verified");
   const user = await withTimeout(
     prisma.user.upsert({
       where: { phone },
@@ -452,7 +450,6 @@ export async function signOut(refreshToken: string): Promise<void> {
 export type AuthSessionSummary = {
   id: string;
   provider: string;
-  providerId: string;
   createdAt: Date;
   updatedAt: Date;
   isCurrent: boolean;
@@ -466,7 +463,6 @@ export async function listAuthSessions(userId: string, currentSessionId: string)
     select: {
       id: true,
       provider: true,
-      providerId: true,
       accessToken: true,
       refreshToken: true,
       createdAt: true,
@@ -477,7 +473,6 @@ export async function listAuthSessions(userId: string, currentSessionId: string)
   return sessions.map((session) => ({
     id: session.id,
     provider: session.provider,
-    providerId: session.providerId,
     createdAt: session.createdAt,
     updatedAt: session.updatedAt,
     isCurrent: session.id === currentSessionId,
@@ -486,13 +481,37 @@ export async function listAuthSessions(userId: string, currentSessionId: string)
 }
 
 export async function revokeAuthSession(userId: string, sessionId: string): Promise<void> {
+  const sessions = await prisma.authSession.findMany({
+    where: { id: sessionId, userId },
+    select: { refreshToken: true }
+  });
+  const refreshTokenHash = sessions[0]?.refreshToken;
+
   await prisma.authSession.updateMany({
     where: { id: sessionId, userId },
     data: { accessToken: null, refreshToken: null }
   });
+
+  if (refreshTokenHash) {
+    await prisma.refreshToken.updateMany({
+      where: { userId, tokenHash: refreshTokenHash },
+      data: { revokedAt: new Date() }
+    });
+  }
 }
 
 export async function revokeAllAuthSessions(userId: string, currentSessionId?: string): Promise<void> {
+  const otherSessions = await prisma.authSession.findMany({
+    where: {
+      userId,
+      ...(currentSessionId ? { id: { not: currentSessionId } } : {})
+    },
+    select: { refreshToken: true }
+  });
+  const refreshTokenHashes = otherSessions
+    .map((session) => session.refreshToken)
+    .filter((tokenHash): tokenHash is string => Boolean(tokenHash));
+
   await prisma.authSession.updateMany({
     where: {
       userId,
@@ -501,8 +520,10 @@ export async function revokeAllAuthSessions(userId: string, currentSessionId?: s
     data: { accessToken: null, refreshToken: null }
   });
 
-  await prisma.refreshToken.updateMany({
-    where: { userId },
-    data: { revokedAt: new Date() }
-  });
+  if (refreshTokenHashes.length > 0) {
+    await prisma.refreshToken.updateMany({
+      where: { userId, tokenHash: { in: refreshTokenHashes } },
+      data: { revokedAt: new Date() }
+    });
+  }
 }

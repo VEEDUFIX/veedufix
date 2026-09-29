@@ -76,6 +76,7 @@ export async function getCustomQuote(bookingId: string, userId: string) {
       id: true,
       customerId: true,
       workerId: true,
+      worker: { select: { userId: true } },
       customQuoteStatus: true,
       customQuoteAmount: true,
       customQuoteNotes: true,
@@ -83,8 +84,16 @@ export async function getCustomQuote(bookingId: string, userId: string) {
     }
   });
   if (!booking) throw AppError.notFound('Booking not found');
-  if (booking.customerId !== userId && booking.workerId !== userId) {
+  if (booking.customerId !== userId && booking.worker?.userId !== userId) {
     throw AppError.forbidden('Access denied');
   }
-  return booking;
+  return {
+    id: booking.id,
+    customerId: booking.customerId,
+    workerId: booking.workerId,
+    customQuoteStatus: booking.customQuoteStatus,
+    customQuoteAmount: booking.customQuoteAmount,
+    customQuoteNotes: booking.customQuoteNotes,
+    customQuoteItemized: booking.customQuoteItemized
+  };
 }

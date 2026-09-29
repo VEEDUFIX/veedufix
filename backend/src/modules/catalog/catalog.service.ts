@@ -202,11 +202,11 @@ async function ensureUniqueSlug(
   return candidate;
 }
 
-function catalogInclude(cityId?: string) {
+function catalogInclude(cityId?: string, includeInactive = false) {
   return {
     translations: true,
     subcategories: {
-      where: { isActive: true },
+      where: includeInactive ? undefined : { isActive: true },
       orderBy: [{ sortOrder: "asc" as const }, { name: "asc" as const }],
       include: {
         translations: true,
@@ -287,10 +287,36 @@ async function resolveCatalogTree(cityId?: string, locale?: string, includeInact
       where,
       orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
       include: {
-        ...catalogInclude(cityId)
+        ...catalogInclude(cityId, includeInactive)
       }
     })
   );
+}
+
+async function resolveAdminCatalogTree() {
+  return prisma.serviceCategory.findMany({
+    orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+    include: {
+      translations: true,
+      subcategories: {
+        orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+        include: {
+          translations: true,
+          catalogServices: {
+            orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+            include: {
+              translations: true,
+              images: { orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }] },
+              pricingRules: { orderBy: [{ priority: "desc" }, { createdAt: "desc" }] },
+              requiredSkills: { include: { skill: true }, orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }] },
+              requiredTools: { include: { tool: true }, orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }] },
+              requiredDocuments: { orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }] }
+            }
+          }
+        }
+      }
+    }
+  });
 }
 
 async function resolveServiceBySlug(slug: string, cityId?: string) {
@@ -1122,6 +1148,112 @@ async function importCatalog(categories: Array<Record<string, unknown>>) {
   return { categoryCount, subcategoryCount, serviceCount };
 }
 
+const starterCatalog = [
+  ["Home Repair", "home-repair", ["Switches & Sockets", "Lighting & Fixtures", "Safety & Wiring"]],
+  ["Cleaning", "cleaning", ["Deep Cleaning", "Kitchen Cleaning", "Bathroom Cleaning"]],
+  ["Appliance Repair", "appliance-repair", ["AC Units", "Washing Machines", "Refrigerators"]],
+  ["Painting", "painting", ["Interior Painting", "Exterior Painting", "Texture & Decor"]],
+  ["Electrical", "electrical", ["Fan & Light", "MCB & DB", "Door Bell & CCTV"]],
+  ["Plumbing", "plumbing", ["Tap & Faucet", "Leakage & Pipes", "Tank & Pump"]],
+  ["Carpentry", "carpentry", ["Furniture Repair", "Door & Window", "Modular Furniture"]],
+  ["Home Improvement", "home-improvement", ["False Ceiling", "Wallpaper & Panels", "Flooring & Tiling"]],
+  ["Electronics Repair", "electronics-repair", ["TVs & Audio", "Laptops & PCs", "Smart Devices"]],
+  ["Automobile", "automobile", ["Two Wheeler", "Four Wheeler", "Battery & Accessories"]],
+  ["Beauty & Wellness", "beauty-wellness", ["Hair Care", "Skincare", "Grooming"]],
+  ["Laundry", "laundry", ["Wash & Fold", "Dry Cleaning", "Steam Ironing"]],
+  ["Moving", "moving", ["Packing", "Truck Loading", "Unpacking"]],
+  ["Pest Control", "pest-control", ["Termites", "Cockroaches & Ants", "Mosquitoes"]],
+  ["Home Care", "home-care", ["Elder Care", "Patient Care", "Child Care"]]
+] as const;
+const starterServiceActions = ["Inspection", "Installation", "Repair", "Replacement", "Maintenance"] as const;
+
+async function addMissingStarterCatalog() {
+  let categoryCount = 0;
+  let subcategoryCount = 0;
+  let serviceCount = 0;
+
+  for (const [categoryIndex, [categoryName, categorySlug, subcategoryNames]] of starterCatalog.entries()) {
+    let category = await prisma.serviceCategory.findUnique({ where: { slug: categorySlug } });
+    if (!category) {
+      category = await createCategory({
+        name: categoryName,
+        slug: categorySlug,
+        description: `${categoryName} services for VeeduFix customers.`,
+        sortOrder: categoryIndex,
+        isActive: false
+      });
+      categoryCount += 1;
+    }
+
+    for (const [subcategoryIndex, subcategoryName] of subcategoryNames.entries()) {
+      let subcategory = await prisma.serviceSubcategory.findFirst({
+        where: { categoryId: category.id, name: subcategoryName }
+      });
+      if (!subcategory) {
+        subcategory = await createSubcategory({
+          categoryId: category.id,
+          name: subcategoryName,
+          slug: `${categorySlug}-${slugify(subcategoryName)}`,
+          description: `${subcategoryName} under ${categoryName}.`,
+          basePrice: 299 + categoryIndex * 40 + subcategoryIndex * 25,
+          sortOrder: subcategoryIndex,
+          isActive: false
+        });
+        subcategoryCount += 1;
+      }
+
+      for (const [serviceIndex, action] of starterServiceActions.entries()) {
+        const serviceName = `${subcategoryName} ${action}`;
+        const existingService = await prisma.service.findFirst({
+          where: { subcategoryId: subcategory.id, name: serviceName }
+        });
+        if (existingService) {
+          continue;
+        }
+        await createService({
+          categoryId: category.id,
+          subcategoryId: subcategory.id,
+          name: serviceName,
+          slug: `${categorySlug}-${slugify(subcategoryName)}-${action.toLowerCase()}`,
+          description: `Professional ${serviceName.toLowerCase()} delivered by verified VeeduFix experts.`,
+          shortDescription: `Reliable ${serviceName.toLowerCase()}.`,
+          startingPrice: 299 + categoryIndex * 45 + subcategoryIndex * 35 + serviceIndex * 40,
+          estimatedDurationMins: 30 + serviceIndex * 20,
+          warrantyDays: 7 + serviceIndex * 7,
+          emergencyAvailable: serviceIndex % 2 === 0,
+          featured: serviceIndex === 0,
+          popular: serviceIndex <= 2,
+          sortOrder: serviceIndex,
+          isActive: false
+        });
+        serviceCount += 1;
+      }
+    }
+  }
+
+  return { categoryCount, subcategoryCount, serviceCount };
+}
+
+async function bulkSetCatalogActiveStatus(input: {
+  entityType: "categories" | "subcategories" | "services";
+  ids: string[];
+  isActive: boolean;
+}) {
+  const uniqueIds = [...new Set(input.ids)];
+  const result = await prisma.$transaction(async (tx) => {
+    switch (input.entityType) {
+      case "categories":
+        return tx.serviceCategory.updateMany({ where: { id: { in: uniqueIds } }, data: { isActive: input.isActive } });
+      case "subcategories":
+        return tx.serviceSubcategory.updateMany({ where: { id: { in: uniqueIds } }, data: { isActive: input.isActive } });
+      case "services":
+        return tx.service.updateMany({ where: { id: { in: uniqueIds } }, data: { isActive: input.isActive } });
+    }
+  });
+  await invalidateCatalogCache();
+  return { updatedCount: result.count };
+}
+
 async function createOrUpdateCategoryFromImport(category: Record<string, unknown>) {
   const slug = String(category.slug ?? slugify(String(category.name ?? "category")));
   const existing = await prisma.serviceCategory.findUnique({ where: { slug } });
@@ -1212,6 +1344,7 @@ async function createOrUpdateServiceFromImport(categoryId: string, subcategoryId
 
 export const catalogService = {
   resolveCatalogTree,
+  resolveAdminCatalogTree,
   resolveCategoryBySlug,
   resolveSubcategoryBySlug,
   resolveServiceBySlug,
@@ -1230,5 +1363,7 @@ export const catalogService = {
   addServiceImages,
   upsertPriceRule,
   updatePriceRule,
-  importCatalog
+  importCatalog,
+  addMissingStarterCatalog,
+  bulkSetCatalogActiveStatus
 };

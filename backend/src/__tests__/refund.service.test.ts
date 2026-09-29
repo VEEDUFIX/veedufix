@@ -57,7 +57,7 @@ describe('Refund Service', () => {
     it('creates a processed refund when Razorpay refund succeeds', async () => {
       vi.mocked(prisma.booking.findUnique).mockResolvedValue({ id: 'b1', code: 'B-123' } as any);
       vi.mocked(prisma.payment.findFirst).mockResolvedValue({
-        id: 'p1', notes: { paymentId: 'pay_123' }, providerRef: 'pay_123'
+        id: 'p1', notes: { paymentId: 'pay_123' }, providerRef: 'pay_123', amount: new Prisma.Decimal(100)
       } as any);
       
       mockRazorpayRefund.mockResolvedValue({ id: 'rfnd_123' });
@@ -74,7 +74,7 @@ describe('Refund Service', () => {
     it('creates a failed refund when Razorpay refund fails', async () => {
       vi.mocked(prisma.booking.findUnique).mockResolvedValue({ id: 'b1', code: 'B-123' } as any);
       vi.mocked(prisma.payment.findFirst).mockResolvedValue({
-        id: 'p1', notes: { paymentId: 'pay_123' }, providerRef: 'pay_123'
+        id: 'p1', notes: { paymentId: 'pay_123' }, providerRef: 'pay_123', amount: new Prisma.Decimal(100)
       } as any);
       
       mockRazorpayRefund.mockRejectedValue(new Error('Razorpay error'));
@@ -85,6 +85,23 @@ describe('Refund Service', () => {
       
       expect(res.status).toBe('failed');
       expect(res.failureReason).toBe('Razorpay error');
+    });
+
+    it('does not send a refund larger than the captured Razorpay amount', async () => {
+      vi.mocked(prisma.booking.findUnique).mockResolvedValue({ id: 'b1', code: 'B-123' } as any);
+      vi.mocked(prisma.payment.findFirst).mockResolvedValue({
+        id: 'p1',
+        notes: { paymentId: 'pay_123' },
+        providerRef: 'order_123',
+        amount: new Prisma.Decimal(50),
+      } as any);
+      vi.mocked(prisma.refund.create).mockImplementation((async (args: any) => ({ ...args.data, id: 'r1' })) as any);
+
+      const result = await processRefund('b1', 100, 'Customer requested');
+
+      expect(result.status).toBe('failed');
+      expect(result.failureReason).toBe('Refund amount exceeds the amount captured by Razorpay');
+      expect(mockRazorpayRefund).not.toHaveBeenCalled();
     });
 
     it('throws AppError.notFound if booking does not exist', async () => {
@@ -102,7 +119,7 @@ describe('Refund Service', () => {
         id: 'r1', bookingId: 'b1', amount: 100, status: 'failed', reason: 'Failed once'
       } as any);
       vi.mocked(prisma.payment.findFirst).mockResolvedValue({
-        id: 'p1', notes: { paymentId: 'pay_123' }
+        id: 'p1', notes: { paymentId: 'pay_123' }, amount: new Prisma.Decimal(100)
       } as any);
       mockRazorpayRefund.mockResolvedValue({ id: 'rfnd_456' });
       vi.mocked(prisma.refund.update).mockImplementation((async (args: any) => ({ ...args.data, id: 'r1' })) as any);
@@ -162,7 +179,7 @@ describe('Refund Service', () => {
   describe('exportRefundsCsv', () => {
     it('exports to csv format', async () => {
       vi.mocked(prisma.refund.findMany).mockResolvedValue([{
-        id: 'r1', booking: { code: 'B-1', customer: { name: 'John' } }, amount: 10000, reason: 'Test', status: 'processed', createdAt: new Date('2024-01-01T00:00:00Z')
+        id: 'r1', booking: { code: 'B-1', customer: { name: 'John' } }, amount: 100, reason: 'Test', status: 'processed', createdAt: new Date('2024-01-01T00:00:00Z')
       }] as any);
 
       const csv = await exportRefundsCsv();

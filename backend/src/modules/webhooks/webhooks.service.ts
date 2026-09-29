@@ -1,5 +1,5 @@
 import { BookingStatus, PaymentStatus, Prisma } from "@prisma/client";
-import { createHash, createHmac } from "crypto";
+import { createHash, createHmac, timingSafeEqual } from "crypto";
 import { AppError } from "../../lib/app-error.js";
 import { env } from "../../config/env.js";
 import { prisma } from "../../lib/prisma.js";
@@ -11,6 +11,7 @@ import {
 } from "../../lib/realtime.js";
 import { recordBookingTimelineEvent } from "../../lib/booking-timeline.js";
 import { dispatchBookingAfterPayment } from "../matching/matching.service.js";
+import { raiseOpsAlert } from "../ops/ops.service.js";
 
 type RazorpayWebhookEvent = {
   event?: string;
@@ -57,10 +58,11 @@ function verifyWebhookSignature(rawBody: string, signature: string): boolean {
     .update(rawBody)
     .digest("hex");
 
-  return expected === signature;
+  if (!/^[a-f\d]{64}$/i.test(signature)) return false;
+  return timingSafeEqual(Buffer.from(expected, "hex"), Buffer.from(signature, "hex"));
 }
 
-async function claimWebhookDelivery(rawBody: string, signature: string): Promise<boolean> {
+async function claimWebhookDelivery(rawBody: string, signature: string): Promise<string | null> {
   const digest = createHash("sha256")
     .update(rawBody)
     .update("|")
@@ -69,7 +71,7 @@ async function claimWebhookDelivery(rawBody: string, signature: string): Promise
 
   const key = `webhook:razorpay:${digest}`;
   const result = await redis.set(key, "1", "EX", 24 * 60 * 60, "NX");
-  return result === "OK";
+  return result === "OK" ? key : null;
 }
 
 function compactNotes(notes: Record<string, unknown>): Record<string, unknown> {
@@ -148,6 +150,52 @@ async function findPaymentForRazorpayPaymentId(paymentId: string): Promise<Payme
   return null;
 }
 
+function isCancelledBookingStatus(status: BookingStatus): boolean {
+  return status === BookingStatus.CANCELLED ||
+    status === BookingStatus.CANCELLED_MANUAL ||
+    status === BookingStatus.CANCELLED_NO_SHOW;
+}
+
+async function flagPaymentCapturedAfterCancellation(
+  payment: PaymentWithBooking,
+  orderId: string,
+  notes: Record<string, unknown>,
+  notifyCustomer: boolean
+): Promise<void> {
+  const paymentId = String(notes.paymentId ?? payment.id);
+  await raiseOpsAlert({
+    type: "payment_mismatch",
+    sourceId: `payment-after-cancellation:${payment.id}`,
+    bookingId: payment.bookingId,
+    severity: "critical",
+    message: `Payment was captured for cancelled booking ${payment.booking.code}; review refund eligibility.`,
+    metadata: {
+      title: "Payment captured after cancellation",
+      bookingCode: payment.booking.code,
+      customerId: payment.booking.customerId,
+      amount: Number(payment.booking.totalAmount),
+      orderId,
+      paymentId,
+      retryAvailable: false
+    }
+  });
+  if (!notifyCustomer) return;
+
+  await publishTrackingEvent({
+    bookingId: payment.bookingId,
+    bookingCode: payment.booking.code,
+    status: "PAYMENT_CAPTURED_AFTER_CANCELLATION",
+    message: "Payment captured after the booking was cancelled; refund review is required",
+    paymentId
+  });
+  await notifyUser(
+    payment.booking.customerId,
+    "Payment needs review",
+    `Payment for cancelled booking ${payment.booking.code} was received. Our team will review the refund eligibility.`,
+    { bookingId: payment.bookingId, orderId, paymentId }
+  );
+}
+
 export async function updatePaymentForWebhook(
   orderId: string,
   status: PaymentStatus,
@@ -164,10 +212,27 @@ export async function updatePaymentForWebhook(
     return null;
   }
 
-  const expectedAmountPaise = toPaise(payment.booking.totalAmount);
+  // Razorpay captures only the non-wallet portion of the booking total.
+  const expectedAmountPaise = toPaise(payment.amount);
   const recordedAmountPaise = toPaise(payment.amount);
   const razorpayAmountPaise = capturedAmountPaise ?? recordedAmountPaise;
   const isDuplicateFinalState = payment.status === status;
+
+  if (
+    status === PaymentStatus.FAILED &&
+    (payment.status === PaymentStatus.CAPTURED || payment.status === PaymentStatus.REFUNDED)
+  ) {
+    logger.info({ bookingId: payment.bookingId, orderId }, "Ignoring stale payment failure after capture");
+    return payment;
+  }
+
+  if (
+    status === PaymentStatus.CAPTURED &&
+    (payment.status === PaymentStatus.REFUNDED || payment.booking.status === BookingStatus.REFUNDED)
+  ) {
+    logger.warn({ bookingId: payment.bookingId, orderId }, "Ignoring capture event for an already refunded booking");
+    return payment;
+  }
 
   if (status === PaymentStatus.CAPTURED) {
     if (recordedAmountPaise !== expectedAmountPaise || razorpayAmountPaise !== expectedAmountPaise) {
@@ -205,7 +270,7 @@ export async function updatePaymentForWebhook(
         bookingId: payment.bookingId,
         bookingCode: payment.booking.code,
         status: "PAYMENT_AMOUNT_MISMATCH",
-        message: "Payment amount did not match the booking total",
+        message: "Payment amount did not match the expected gateway charge",
         paymentId: String(notes.paymentId ?? payment.id)
       });
 
@@ -225,14 +290,39 @@ export async function updatePaymentForWebhook(
   });
 
   if (status === PaymentStatus.CAPTURED) {
+    if (isCancelledBookingStatus(payment.booking.status)) {
+      await flagPaymentCapturedAfterCancellation(payment, orderId, notes, !isDuplicateFinalState);
+      return updatedPayment;
+    }
+
     const shouldApplyCapturedSideEffects = payment.status !== PaymentStatus.CAPTURED || payment.booking.status !== BookingStatus.ACCEPTED;
     if (shouldApplyCapturedSideEffects) {
-      await prisma.booking.update({
-        where: { id: payment.bookingId },
-        data: {
-          status: BookingStatus.ACCEPTED
+      const acceptedBooking = await prisma.booking.updateMany({
+        data: { status: BookingStatus.ACCEPTED },
+        where: {
+          id: payment.bookingId,
+          status: {
+            notIn: [
+              BookingStatus.CANCELLED,
+              BookingStatus.CANCELLED_MANUAL,
+              BookingStatus.CANCELLED_NO_SHOW,
+              BookingStatus.REFUNDED
+            ]
+          }
         }
       });
+
+      if (acceptedBooking.count === 0) {
+        const currentBooking = await prisma.booking.findUnique({
+          where: { id: payment.bookingId },
+          select: { status: true }
+        });
+        if (currentBooking && isCancelledBookingStatus(currentBooking.status)) {
+          await flagPaymentCapturedAfterCancellation(payment, orderId, notes, !isDuplicateFinalState);
+        }
+        return updatedPayment;
+      }
+
       void recordBookingTimelineEvent({
         bookingId: payment.bookingId,
         status: BookingStatus.ACCEPTED,
@@ -328,10 +418,48 @@ async function updatePaymentForRefundWebhook(
     return null;
   }
 
+  const refundId = typeof notes.refundId === "string" ? notes.refundId : null;
+  const refundRecord = refundId
+    ? await prisma.refund.findFirst({
+        where: { razorpayRefundId: refundId },
+        select: { id: true, status: true }
+      })
+    : null;
+  const refundFailed = status === PaymentStatus.FAILED;
+
+  if (refundFailed && refundRecord?.status === "processed") {
+    logger.warn({ paymentId, refundId }, "Ignoring failed event for an already processed refund");
+    return payment;
+  }
+
+  if (refundRecord) {
+    await prisma.refund.update({
+      where: { id: refundRecord.id },
+      data: {
+        status: refundFailed ? "failed" : "processed",
+        failureReason: refundFailed
+          ? String(notes.refundStatus ?? "Refund failed at the payment provider")
+          : null
+      }
+    });
+  }
+
+  const processedRefunds = await prisma.refund.aggregate({
+    where: { bookingId: payment.bookingId, status: "processed" },
+    _sum: { amount: true }
+  });
+  const untrackedRefundAmount = refundRecord
+    ? 0
+    : Math.max(0, Number(notes.refundAmount ?? 0) / 100);
+  const refundedAmount = Number(processedRefunds._sum.amount ?? 0) + untrackedRefundAmount;
+  const fullyRefunded = refundedAmount >= Number(payment.booking.totalAmount);
+
   const updatedPayment = await prisma.payment.update({
     where: { id: payment.id },
     data: {
-      status,
+      ...(status === PaymentStatus.REFUNDED && fullyRefunded
+        ? { status: PaymentStatus.REFUNDED }
+        : {}),
       notes: {
         ...getPaymentNotes(payment),
         ...compactNotes(notes)
@@ -343,42 +471,45 @@ async function updatePaymentForRefundWebhook(
   });
 
   if (status === PaymentStatus.REFUNDED) {
-    await prisma.booking.update({
-      where: { id: payment.bookingId },
-      data: {
-        status: BookingStatus.REFUNDED
-      }
-    });
+    if (fullyRefunded) {
+      await prisma.booking.update({
+        where: { id: payment.bookingId },
+        data: { status: BookingStatus.REFUNDED }
+      });
 
-    void recordBookingTimelineEvent({
-      bookingId: payment.bookingId,
-      status: BookingStatus.REFUNDED,
-      title: "Payment refunded",
-      description: "The payment was refunded by the provider."
-    });
+      void recordBookingTimelineEvent({
+        bookingId: payment.bookingId,
+        status: BookingStatus.REFUNDED,
+        title: "Payment refunded",
+        description: "The full payment was refunded by the provider."
+      });
+    }
 
     await publishTrackingEvent({
       bookingId: payment.bookingId,
       bookingCode: payment.booking.code,
-      status: "PAYMENT_REFUNDED",
-      message: "Payment refunded",
+      status: fullyRefunded ? "PAYMENT_REFUNDED" : "PAYMENT_PARTIALLY_REFUNDED",
+      message: fullyRefunded ? "Payment refunded" : "A partial payment refund was processed",
       paymentId
     });
 
     await notifyUser(
       payment.booking.customerId,
-      "Payment refunded",
-      `Refund completed for booking ${payment.booking.code}.`,
+      fullyRefunded ? "Payment refunded" : "Partial refund processed",
+      fullyRefunded
+        ? `The payment for booking ${payment.booking.code} was refunded.`
+        : `A partial refund for booking ${payment.booking.code} was processed.`,
       {
         bookingId: payment.bookingId,
-        paymentId
+        paymentId,
+        fullyRefunded
       }
     );
   } else if (status === PaymentStatus.FAILED) {
     await publishTrackingEvent({
       bookingId: payment.bookingId,
       bookingCode: payment.booking.code,
-      status: "PAYMENT_FAILED",
+      status: "REFUND_FAILED",
       message: "Refund failed",
       paymentId
     });
@@ -410,12 +541,25 @@ export async function handleRazorpayWebhook(
     throw AppError.unauthorized("Invalid Razorpay webhook signature");
   }
 
-  const claimed = await claimWebhookDelivery(rawBody, signature);
-  if (!claimed) {
+  const deliveryKey = await claimWebhookDelivery(rawBody, signature);
+  if (!deliveryKey) {
     logger.info({ event: body.event ?? "unknown" }, "Duplicate Razorpay webhook delivery ignored");
     return { ok: true };
   }
 
+  try {
+    return await processClaimedRazorpayWebhook(body);
+  } catch (error) {
+    try {
+      await redis.del(deliveryKey);
+    } catch (cleanupError) {
+      logger.error({ error: cleanupError, event: body.event ?? "unknown" }, "Could not release failed webhook claim");
+    }
+    throw error;
+  }
+}
+
+async function processClaimedRazorpayWebhook(body: RazorpayWebhookEvent): Promise<{ ok: true }> {
   const event = body.event ?? "unknown";
   const refundEntity = body.payload?.refund?.entity;
   const paymentEntity = body.payload?.payment?.entity;

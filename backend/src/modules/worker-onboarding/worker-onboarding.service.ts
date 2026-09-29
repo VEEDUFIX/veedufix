@@ -2,8 +2,9 @@ import { Gender, Prisma, VerificationStatus } from "@prisma/client";
 import { prisma } from "../../lib/prisma.js";
 import { AppError } from "../../lib/app-error.js";
 import { logger } from "../../lib/logger.js";
-import { uploadBufferToCloudinary, generateSignedUrl } from "../../lib/cloudinary.js";
+import { extractPublicIdFromUrl, generateSignedUrl, getCloudinaryFormatFromUrl } from "../../lib/cloudinary.js";
 import { maskWorkerFinancialFields } from "../../lib/mask-worker.js";
+import { env } from "../../config/env.js";
 
 export class IncompleteProfileError extends Error {
   missingFields: string[];
@@ -37,6 +38,10 @@ type ProfileDetails = {
   alternatePhone?: string;
   city?: string;
   pincode?: string;
+  serviceAreas?: string;
+  workType?: "FULL_TIME" | "PART_TIME";
+  acceptsUrgentJobs?: boolean;
+  serviceRadiusKm?: number;
   bankAccountNumber?: string;
   bankIfsc?: string;
   upiId?: string;
@@ -171,14 +176,22 @@ function normalizeProfile(profile: WorkerProfileWithRelations | MinimalWorkerPro
     return null;
   }
 
-  // Destructure raw KYC doc fields — never send these to any client.
-  const { aadhaarDocUrl, aadhaarDocPublicId, availability, ...rest } = maskWorkerFinancialFields(profile) as typeof profile & {
-    aadhaarDocPublicId?: string | null;
+  const relations = profile as typeof profile & {
+    skills?: WorkerSkillWithCategory[];
     availability?: Array<{
       dayOfWeek: number;
       startTime: string;
       endTime: string;
     }>;
+  };
+  const skills = Array.isArray(relations.skills) ? relations.skills : [];
+  const availability = Array.isArray(relations.availability)
+    ? relations.availability
+    : [];
+
+  // Destructure raw KYC doc fields — never send these to any client.
+  const { aadhaarDocUrl, aadhaarDocPublicId, ...rest } = maskWorkerFinancialFields(profile) as typeof profile & {
+    aadhaarDocPublicId?: string | null;
   };
 
   const base = {
@@ -191,7 +204,9 @@ function normalizeProfile(profile: WorkerProfileWithRelations | MinimalWorkerPro
       startTime: slot.startTime,
       endTime: slot.endTime
     })),
-    skills: profile.skills.map((skill: WorkerSkillWithCategory) => ({
+    skills: skills.flatMap((skill: WorkerSkillWithCategory) => {
+      if (!skill.category) return [];
+      return [{
       id: skill.id,
       categoryId: skill.categoryId,
       // Boolean presence indicator — raw certificationDocUrl is intentionally omitted.
@@ -207,7 +222,8 @@ function normalizeProfile(profile: WorkerProfileWithRelations | MinimalWorkerPro
         description: skill.category.description,
         iconUrl: skill.category.iconUrl
       }
-    }))
+      }];
+    })
   };
 
   return base;
@@ -303,6 +319,7 @@ function missingProfileFields(profile: MinimalWorkerProfile): string[] {
   if (!profile.addressLine1?.trim()) missingFields.push("addressLine1");
   if (!profile.city?.trim()) missingFields.push("city");
   if (!profile.pincode?.trim()) missingFields.push("pincode");
+  if (!profile.serviceAreas?.trim()) missingFields.push("serviceAreas");
   if (!profile.aadhaarDocUrl?.trim()) missingFields.push("aadhaarDocUrl");
   if (!hasUpi && !hasBankFallback) missingFields.push("upiId");
   if (!profile.skills.length) missingFields.push("skills");
@@ -315,45 +332,31 @@ function missingProfileFields(profile: MinimalWorkerProfile): string[] {
   return missingFields;
 }
 
-/**
- * Uploads a KYC document to Cloudinary with type:"authenticated", which
- * prevents unauthenticated access to the raw asset URL.  Signed URLs are
- * generated on demand by the document-access endpoints.
- *
- * Returns both the secure_url (for storage) and the public_id (for future
- * signed-URL generation without URL string-parsing).
- */
+/** Accept only this worker's authenticated Cloudinary upload; never fetch a client URL. */
 async function uploadKycDocument(
-  fileUrl: string,
-  folder: string,
-  publicIdPrefix: string
+  userId: string,
+  fileUrl: string
 ): Promise<{ url: string; publicId: string }> {
-  let buffer: Buffer;
-
-  if (fileUrl.startsWith("data:")) {
-    const base64 = fileUrl.split(",")[1] ?? "";
-    buffer = Buffer.from(base64, "base64");
-  } else {
-    const response = await fetch(fileUrl);
-    if (!response.ok) {
-      throw new AppError(502, "Unable to fetch document file");
-    }
-
-    const arrayBuffer = await response.arrayBuffer();
-    buffer = Buffer.from(arrayBuffer);
+  let parsed: URL;
+  try {
+    parsed = new URL(fileUrl);
+  } catch {
+    throw AppError.badRequest("Upload the document before submitting it");
   }
 
-  const uploaded = await uploadBufferToCloudinary(buffer, {
-    folder,
-    public_id: `${publicIdPrefix}-${Date.now()}`,
-    resource_type: "auto",
-    // type:"authenticated" makes the asset inaccessible without a signed URL.
-    // Do NOT change this for KYC documents.
-    type: "authenticated",
-    overwrite: true
-  });
+  const publicId = extractPublicIdFromUrl(fileUrl);
+  const expectedPath = `/${env.CLOUDINARY_CLOUD_NAME}/image/authenticated/`;
+  if (
+    parsed.protocol !== "https:" ||
+    parsed.hostname !== "res.cloudinary.com" ||
+    parsed.port !== "" ||
+    !parsed.pathname.startsWith(expectedPath) ||
+    !publicId?.startsWith(`veedufix/documents/${userId}/`)
+  ) {
+    throw AppError.badRequest("Upload the document using the secure document uploader");
+  }
 
-  return { url: uploaded.secure_url, publicId: uploaded.public_id };
+  return { url: fileUrl, publicId };
 }
 
 export async function createOrGetProfile(userId: string) {
@@ -366,10 +369,39 @@ export async function updatePersonalDetails(userId: string, details: ProfileDeta
   const current = await prisma.workerProfile.findUnique({
     where: { userId },
     select: {
+      fullName: true,
+      verificationStatus: true,
+      onboardingStatus: true,
+      bankAccountNumber: true,
+      bankIfsc: true,
+      upiId: true,
       agreementAcceptedAt: true,
       dataConsentAcceptedAt: true
     }
   });
+
+  if (
+    current?.verificationStatus === VerificationStatus.VERIFIED &&
+    details.fullName !== undefined &&
+    details.fullName.trim() !== current.fullName
+  ) {
+    throw new WorkerStatusConflictError(
+      "Verified identity changes require a support review"
+    );
+  }
+
+  const payoutChangeRequested =
+    (details.bankAccountNumber !== undefined && details.bankAccountNumber !== current?.bankAccountNumber) ||
+    (details.bankIfsc !== undefined && details.bankIfsc !== current?.bankIfsc) ||
+    (details.upiId !== undefined && details.upiId !== current?.upiId);
+  if (
+    payoutChangeRequested &&
+    (current?.onboardingStatus === "approved" || current?.onboardingStatus === "under_review")
+  ) {
+    throw new WorkerStatusConflictError(
+      "Payout details cannot be changed after submission. Contact support to request an update"
+    );
+  }
 
   await prisma.workerProfile.update({
     where: { userId },
@@ -381,6 +413,10 @@ export async function updatePersonalDetails(userId: string, details: ProfileDeta
       alternatePhone: details.alternatePhone,
       city: details.city,
       pincode: details.pincode,
+      serviceAreas: details.serviceAreas,
+      workType: details.workType,
+      acceptsUrgentJobs: details.acceptsUrgentJobs,
+      serviceRadiusKm: details.serviceRadiusKm,
       bankAccountNumber: details.bankAccountNumber,
       bankIfsc: details.bankIfsc,
       upiId: details.upiId,
@@ -403,8 +439,7 @@ export async function uploadDocument(
   categoryId?: string
 ) {
   const profile = await ensureWorkerProfile(userId);
-  const folder = `veedufix/kyc/${userId}/${docType}`;
-  const { url, publicId } = await uploadKycDocument(fileUrl, folder, `kyc-${userId}-${docType}`);
+  const { url, publicId } = await uploadKycDocument(userId, fileUrl);
 
   if (docType === "aadhaar") {
     await prisma.workerProfile.update({
@@ -943,11 +978,12 @@ export async function getAadhaarSignedUrl(workerProfileId: string): Promise<stri
   if (!profile) throw new WorkerProfileNotFoundError();
 
   const publicId = profile.aadhaarDocPublicId;
-  if (!publicId) {
+  const format = getCloudinaryFormatFromUrl(profile.aadhaarDocUrl ?? "");
+  if (!publicId || !format) {
     throw new WorkerProfileNotFoundError("No Aadhaar document found for this profile");
   }
 
-  return generateSignedUrl(publicId);
+  return generateSignedUrl(publicId, format);
 }
 
 /**
@@ -977,7 +1013,7 @@ export async function getSkillCertSignedUrl(
 ): Promise<string> {
   const skill = await prisma.workerSkill.findUnique({
     where: { id: skillId },
-    select: { certificationDocPublicId: true, workerProfileId: true }
+    select: { certificationDocPublicId: true, certificationDocUrl: true, workerProfileId: true }
   });
 
   if (!skill) throw new WorkerProfileNotFoundError("Skill not found");
@@ -986,11 +1022,12 @@ export async function getSkillCertSignedUrl(
     throw new WorkerProfileNotFoundError("Skill does not belong to this profile");
   }
 
-  if (!skill.certificationDocPublicId) {
+  const format = getCloudinaryFormatFromUrl(skill.certificationDocUrl ?? "");
+  if (!skill.certificationDocPublicId || !format) {
     throw new WorkerProfileNotFoundError("No certification document found for this skill");
   }
 
-  return generateSignedUrl(skill.certificationDocPublicId);
+  return generateSignedUrl(skill.certificationDocPublicId, format);
 }
 
 /**

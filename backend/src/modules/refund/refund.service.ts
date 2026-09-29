@@ -106,6 +106,7 @@ async function fetchCapturedPayment(bookingId: string) {
       id: true,
       notes: true,
       providerRef: true,
+      amount: true,
       booking: {
         select: {
           id: true,
@@ -169,6 +170,15 @@ async function attemptRazorpayRefund(
     return {
       ok: false,
       failureReason: "Refund amount must be greater than zero"
+    };
+  }
+
+  const capturedAmountPaise = toPaise(payment.amount);
+  if (Number.isFinite(capturedAmountPaise) && amountPaise > capturedAmountPaise) {
+    return {
+      ok: false,
+      paymentId,
+      failureReason: "Refund amount exceeds the amount captured by Razorpay"
     };
   }
 
@@ -433,7 +443,7 @@ export async function exportRefundsCsv(filters: RefundListFilters = {}): Promise
 
   const header = ["ID", "Booking Code", "Customer Name", "Amount (Rs.)", "Reason", "Status", "Failure Reason", "Created At"];
   const rows = items.map((r) => {
-    const amount = (Number(r.amount ?? 0) / 100).toFixed(2);
+    const amount = Number(r.amount ?? 0).toFixed(2);
     const reason = (r.reason ?? "").replace(/"/g, "'");
     const failureReason = (r.failureReason ?? "").replace(/"/g, "'");
     const customerName = (r.booking?.customer?.name ?? "Unknown").replace(/"/g, "'");
