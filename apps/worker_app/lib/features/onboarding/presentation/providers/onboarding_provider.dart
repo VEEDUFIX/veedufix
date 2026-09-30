@@ -185,10 +185,11 @@ class WorkerOnboardingProfile {
       email: user['email'] as String?,
       rejectionReason: json['rejectionReason'] as String?,
       skills: _decodeSkills(json['skills']),
-      availabilitySlots: (json['availabilitySlots'] as List<dynamic>? ?? const [])
-          .whereType<Map<String, dynamic>>()
-          .map(WorkerOnboardingAvailabilitySlot.fromJson)
-          .toList(growable: false),
+      availabilitySlots:
+          (json['availabilitySlots'] as List<dynamic>? ?? const [])
+              .whereType<Map<String, dynamic>>()
+              .map(WorkerOnboardingAvailabilitySlot.fromJson)
+              .toList(growable: false),
     );
   }
 
@@ -732,6 +733,18 @@ class WorkerOnboardingController extends StateNotifier<WorkerOnboardingState> {
     }
   }
 
+  Future<void> refreshCatalog() async {
+    state = state.copyWith(isLoadingCategories: true, errorMessage: null);
+    try {
+      final categories = await _api.fetchCategories();
+      state = state.copyWith(categories: categories);
+    } catch (error) {
+      state = state.copyWith(errorMessage: _readErrorMessage(error));
+    } finally {
+      state = state.copyWith(isLoadingCategories: false);
+    }
+  }
+
   void setStep(int step) {
     state = state.copyWith(currentStep: step.clamp(0, 12));
   }
@@ -920,7 +933,8 @@ class WorkerOnboardingController extends StateNotifier<WorkerOnboardingState> {
       final pincode = state.draft.pincode.trim();
       final upiId = state.draft.upiId.trim();
       final bankAccountNumber = state.draft.bankAccountNumber.trim();
-      final validBankAccount = RegExp(r'^\d{9,18}$').hasMatch(bankAccountNumber);
+      final validBankAccount =
+          RegExp(r'^\d{9,18}$').hasMatch(bankAccountNumber);
       final bankIfsc = state.draft.bankIfsc.trim();
       final aadhaarNumber = state.draft.aadhaarNumber.trim();
       final profile = await _api.updateProfile(
@@ -1207,9 +1221,10 @@ class WorkerOnboardingController extends StateNotifier<WorkerOnboardingState> {
       pincode: profile.pincode ?? '',
       aadhaarNumber: '',
       upiId: profile.upiId ?? '',
-      bankAccountNumber: RegExp(r'^\d{9,18}$').hasMatch(profile.bankAccountNumber ?? '')
-          ? profile.bankAccountNumber!
-          : '',
+      bankAccountNumber:
+          RegExp(r'^\d{9,18}$').hasMatch(profile.bankAccountNumber ?? '')
+              ? profile.bankAccountNumber!
+              : '',
       bankIfsc: profile.bankIfsc ?? '',
       toolsOwned: profile.toolsOwned,
       emergencyContactName: profile.emergencyContactName ?? '',
@@ -1272,7 +1287,8 @@ class WorkerOnboardingController extends StateNotifier<WorkerOnboardingState> {
     if (!profile.hasAadhaarDoc) return 5;
 
     final hasUpi = !_isBlank(profile.upiId);
-    final hasBank = RegExp(r'^\d{9,18}$').hasMatch(profile.bankAccountNumber?.trim() ?? '') &&
+    final hasBank = RegExp(r'^\d{9,18}$')
+            .hasMatch(profile.bankAccountNumber?.trim() ?? '') &&
         !_isBlank(profile.bankIfsc);
     if (!hasUpi && !hasBank) return 7;
     if (profile.agreementAcceptedAt == null ||

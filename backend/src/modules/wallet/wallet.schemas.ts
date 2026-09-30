@@ -8,6 +8,6 @@ export const applyReferralSchema = z.object({
 
 export const requestPayoutSchema = z.object({
   body: z.object({
-    amount: z.number().finite().min(100, "Minimum payout is 100").multipleOf(0.01)
+    amount: z.number().finite().positive().multipleOf(0.01)
   })
 });

@@ -7,6 +7,7 @@ vi.mock('../lib/prisma.js', () => ({
   prisma: {
     $transaction: vi.fn((cb) => cb(prismaMockTx)),
     user: { findUnique: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
+    platformConfig: { findUnique: vi.fn() },
     workerProfile: { findUnique: vi.fn() },
     referral: { findMany: vi.fn(), findFirst: vi.fn(), create: vi.fn() },
     walletTransaction: { findMany: vi.fn(), create: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
@@ -51,6 +52,7 @@ import { AppError } from '../lib/app-error.js';
 describe('Wallet Service', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(prisma.platformConfig.findUnique).mockResolvedValue(null);
   });
 
   describe('getWalletBalance', () => {
@@ -78,6 +80,7 @@ describe('Wallet Service', () => {
       expect(res.totalReferrals).toBe(2);
       expect(res.referralEarnings).toBe(200);
       expect(res.walletBalance.toNumber()).toBe(150);
+      expect(res.referralRewardAmount).toBe(100);
     });
   });
 
@@ -111,6 +114,7 @@ describe('Wallet Service', () => {
     it('creates referral and updates both balances in transaction', async () => {
       vi.mocked(prisma.user.findUnique).mockResolvedValue({ id: 'u2' } as any); // Referrer
       vi.mocked(prisma.referral.findFirst).mockResolvedValue(null);
+      prismaMockTx.user.updateMany.mockResolvedValue({ count: 1 } as any);
       
       prismaMockTx.user.update.mockResolvedValueOnce({ walletBalance: new Prisma.Decimal(100) } as any);
       prismaMockTx.user.update.mockResolvedValueOnce({ walletBalance: new Prisma.Decimal(100) } as any);
@@ -123,6 +127,44 @@ describe('Wallet Service', () => {
       expect(prismaMockTx.user.update).toHaveBeenCalledTimes(2);
       expect(prismaMockTx.walletTransaction.create).toHaveBeenCalledTimes(2);
     });
+
+    it('uses the referral reward configured by the admin', async () => {
+      vi.mocked(prisma.platformConfig.findUnique).mockResolvedValue({ referralRewardAmount: new Prisma.Decimal(45) } as any);
+      vi.mocked(prisma.user.findUnique).mockResolvedValue({ id: 'u2' } as any);
+      vi.mocked(prisma.referral.findFirst).mockResolvedValue(null);
+      prismaMockTx.user.updateMany.mockResolvedValue({ count: 1 } as any);
+      prismaMockTx.user.update.mockResolvedValueOnce({ walletBalance: new Prisma.Decimal(45) } as any);
+      prismaMockTx.user.update.mockResolvedValueOnce({ walletBalance: new Prisma.Decimal(45) } as any);
+
+      const result = await applyReferralCode('u1', 'OTHER');
+
+      expect(result.rewardAmount).toBe(45);
+      expect(prismaMockTx.referral.create).toHaveBeenCalledWith(expect.objectContaining({
+        data: expect.objectContaining({ rewardAmount: 45 })
+      }));
+    });
+
+    it('rejects referrals when rewards are disabled', async () => {
+      vi.mocked(prisma.platformConfig.findUnique).mockResolvedValue({ referralsEnabled: false } as any);
+      await expect(applyReferralCode('u1', 'OTHER')).rejects.toMatchObject({ statusCode: 400 });
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('does not issue a reward after the referrer reaches the configured cap', async () => {
+      vi.mocked(prisma.platformConfig.findUnique).mockResolvedValue({
+        referralMaxSuccessfulPerReferrer: 2
+      } as any);
+      vi.mocked(prisma.user.findUnique).mockResolvedValue({ id: 'u2' } as any);
+      vi.mocked(prisma.referral.findFirst).mockResolvedValue(null);
+      prismaMockTx.user.updateMany.mockResolvedValue({ count: 0 } as any);
+
+      await expect(applyReferralCode('u1', 'OTHER')).rejects.toMatchObject({
+        statusCode: 400,
+        message: 'Referral reward limit reached'
+      });
+      expect(prismaMockTx.referral.create).not.toHaveBeenCalled();
+      expect(prismaMockTx.walletTransaction.create).not.toHaveBeenCalled();
+    });
   });
 
   describe('requestWorkerPayout', () => {
@@ -131,6 +173,13 @@ describe('Wallet Service', () => {
         .rejects.toMatchObject({ statusCode: 400 });
       await expect(requestWorkerPayout({ userId: 'u1', amount: 100.001 }))
         .rejects.toMatchObject({ statusCode: 400 });
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('uses the minimum payout configured by the admin', async () => {
+      vi.mocked(prisma.platformConfig.findUnique).mockResolvedValue({ minimumWorkerPayout: new Prisma.Decimal(250) } as any);
+      await expect(requestWorkerPayout({ userId: 'u1', amount: 200 }))
+        .rejects.toMatchObject({ statusCode: 400, message: 'Minimum payout amount is 250' });
       expect(prisma.$transaction).not.toHaveBeenCalled();
     });
 

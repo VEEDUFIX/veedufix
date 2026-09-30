@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:dio/dio.dart';
 import 'package:intl/intl.dart';
 import 'package:marketplace_shared/marketplace_shared.dart';
 import 'package:razorpay_flutter/razorpay_flutter.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../../../profile/data/saved_addresses_api.dart';
 import '../../../../core/payments/razorpay_service.dart';
@@ -55,11 +55,49 @@ class BookingDetailPage extends ConsumerWidget {
       ),
       body: bookingAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => const Center(
-          child: PremiumEmptyState(
-            icon: Icons.receipt_long_outlined,
-            title: 'Could not load booking',
-            subtitle: 'Pull down to try again.',
+        error: (e, _) => RefreshIndicator(
+          onRefresh: () async {
+            ref.invalidate(bookingDetailPageProvider(bookingId));
+            try {
+              await ref.read(bookingDetailPageProvider(bookingId).future);
+            } catch (_) {}
+          },
+          child: ListView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.all(24),
+            children: [
+              SizedBox(
+                height: MediaQuery.sizeOf(context).height * 0.6,
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(Icons.receipt_long_outlined, size: 44),
+                    const SizedBox(height: 12),
+                    Text(
+                      'Could not load booking',
+                      style: tt.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      'Check your connection and try again.',
+                      textAlign: TextAlign.center,
+                      style: tt.bodyMedium?.copyWith(
+                        color: cs.onSurfaceVariant,
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    FilledButton.icon(
+                      onPressed: () =>
+                          ref.invalidate(bookingDetailPageProvider(bookingId)),
+                      icon: const Icon(Icons.refresh_rounded),
+                      label: const Text('Try again'),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
         ),
         data: (booking) => _BookingDetailBody(booking: booking),
@@ -67,17 +105,15 @@ class BookingDetailPage extends ConsumerWidget {
     );
   }
 
-  void _shareBooking(BuildContext context, BookingDetail booking) {
-    Clipboard.setData(
-      ClipboardData(
-        text:
-            'Booking #${booking.code} — ${booking.serviceName}\n'
-            'Status: ${_statusLabel(booking.status)}\n'
-            'Total: ₹${booking.totalAmount.toStringAsFixed(0)}',
-      ),
-    );
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Booking info copied to clipboard')),
+  Future<void> _shareBooking(
+    BuildContext context,
+    BookingDetail booking,
+  ) async {
+    await Share.share(
+      'Booking #${booking.code} — ${booking.serviceName}\n'
+      'Status: ${_statusLabel(booking.status)}\n'
+      'Total: ₹${booking.totalAmount.toStringAsFixed(0)}',
+      subject: 'Veedufix booking ${booking.code}',
     );
   }
 
@@ -91,7 +127,7 @@ class BookingDetailPage extends ConsumerWidget {
     'COMPLETED' => 'Completed',
     'CANCELLED' => 'Cancelled',
     'REFUNDED' => 'Refunded',
-    _ => s,
+    _ => s.toLowerCase().replaceAll('_', ' '),
   };
 }
 
@@ -115,11 +151,11 @@ class _BookingDetailBody extends ConsumerWidget {
   };
 
   Color get _statusColor => switch (booking.status) {
-    'COMPLETED' => const Color(0xFF10B981),
-    'CANCELLED' || 'REFUNDED' => const Color(0xFFEF4444),
-    'IN_PROGRESS' || 'ARRIVED' => const Color(0xFF6366F1),
-    'EN_ROUTE' => const Color(0xFF14B8A6),
-    _ => const Color(0xFFF59E0B),
+    'COMPLETED' => const Color(0xFF2D7A57),
+    'CANCELLED' || 'REFUNDED' => const Color(0xFFB34B43),
+    'IN_PROGRESS' || 'ARRIVED' => const Color(0xFF397AA5),
+    'EN_ROUTE' => const Color(0xFF397AA5),
+    _ => _accent,
   };
 
   IconData get _statusIcon => switch (booking.status) {
@@ -418,7 +454,7 @@ class _BookingDetailBody extends ConsumerWidget {
                             Text(
                               DateFormat(
                                 'EEE, d MMM y • h:mm a',
-                              ).format(booking.scheduledAt),
+                              ).format(booking.scheduledAt.toLocal()),
                               style: tt.bodySmall?.copyWith(
                                 color: cs.onSurfaceVariant,
                               ),
@@ -491,9 +527,12 @@ class _BookingDetailBody extends ConsumerWidget {
                             radius: 26,
                             backgroundColor: _accent.withValues(alpha: 0.15),
                             fallback: Text(
-                              booking.worker!.name
-                                  .substring(0, 1)
-                                  .toUpperCase(),
+                              booking.worker!.name.trim().isEmpty
+                                  ? 'P'
+                                  : booking.worker!.name
+                                        .trim()
+                                        .substring(0, 1)
+                                        .toUpperCase(),
                               style: tt.titleMedium?.copyWith(
                                 color: _accent,
                                 fontWeight: FontWeight.w800,
@@ -554,29 +593,16 @@ class _BookingDetailBody extends ConsumerWidget {
                   const _SectionLabel(label: 'Payment'),
                   const SizedBox(height: 16),
                   _PayRow(
-                    label: 'Service total',
+                    label: 'Booking total',
                     value: '₹${booking.totalAmount.toStringAsFixed(2)}',
                   ),
-                  const SizedBox(height: 10),
-                  const Divider(height: 1),
-                  const SizedBox(height: 10),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        'Amount paid',
-                        style: tt.titleSmall?.copyWith(
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                      Text(
-                        '₹${booking.totalAmount.toStringAsFixed(2)}',
-                        style: tt.titleSmall?.copyWith(
-                          fontWeight: FontWeight.w800,
-                          color: const Color(0xFF10B981),
-                        ),
-                      ),
-                    ],
+                  const SizedBox(height: 12),
+                  Text(
+                    'Payment, refund, and transaction details are available on the invoice.',
+                    style: tt.bodySmall?.copyWith(
+                      color: cs.onSurfaceVariant,
+                      height: 1.4,
+                    ),
                   ),
                 ],
               ),
@@ -593,26 +619,23 @@ class _BookingDetailBody extends ConsumerWidget {
                 children: [
                   const _SectionLabel(label: 'Booking Timeline'),
                   const SizedBox(height: 16),
-                  Row(
-                    children: [
-                      _TimelineBadge(
-                        icon: Icons.update_rounded,
-                        label:
-                            '${booking.timeline.isNotEmpty ? booking.timeline.length : 4} updates',
-                      ),
-                      const SizedBox(width: 8),
-                      _TimelineBadge(
-                        icon: Icons.schedule_rounded,
-                        label: DateFormat('d MMM, h:mm a').format(
-                          booking.timeline.isNotEmpty
-                              ? booking.timeline.last.createdAt
-                              : booking.scheduledAt,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
                   if (booking.timeline.isNotEmpty) ...[
+                    Row(
+                      children: [
+                        _TimelineBadge(
+                          icon: Icons.update_rounded,
+                          label: '${booking.timeline.length} updates',
+                        ),
+                        const SizedBox(width: 8),
+                        _TimelineBadge(
+                          icon: Icons.schedule_rounded,
+                          label: DateFormat(
+                            'd MMM, h:mm a',
+                          ).format(booking.timeline.last.createdAt.toLocal()),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
                     for (
                       var index = 0;
                       index < booking.timeline.length;
@@ -623,46 +646,43 @@ class _BookingDetailBody extends ConsumerWidget {
                         label: booking.timeline[index].title,
                         time: DateFormat(
                           'd MMM, h:mm a',
-                        ).format(booking.timeline[index].createdAt),
+                        ).format(booking.timeline[index].createdAt.toLocal()),
                         description: booking.timeline[index].description,
                         isCompleted: true,
                         isFirst: index == 0,
                         isLast: index == booking.timeline.length - 1,
                       ),
                   ] else ...[
-                    _TimelineStep(
-                      status: 'PENDING',
-                      label: 'Booking placed',
-                      time: DateFormat(
-                        'd MMM, h:mm a',
-                      ).format(booking.scheduledAt),
-                      isCompleted: true,
-                      isFirst: true,
-                    ),
-                    _TimelineStep(
-                      status: booking.worker != null
-                          ? 'WORKER_ASSIGNED'
-                          : 'PENDING',
-                      label: 'Worker assigned',
-                      time: booking.worker != null ? booking.worker!.name : '',
-                      isCompleted: booking.worker != null,
-                    ),
-                    _TimelineStep(
-                      status: 'IN_PROGRESS',
-                      label: 'Work in progress',
-                      time: '',
-                      isCompleted: [
-                        'IN_PROGRESS',
-                        'ARRIVED',
-                        'COMPLETED',
-                      ].contains(booking.status),
-                    ),
-                    _TimelineStep(
-                      status: booking.status,
-                      label: 'Completed',
-                      time: '',
-                      isCompleted: booking.status == 'COMPLETED',
-                      isLast: true,
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Icon(
+                          Icons.hourglass_empty_rounded,
+                          size: 20,
+                          color: cs.onSurfaceVariant,
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'No timeline updates yet',
+                                style: tt.bodyMedium?.copyWith(
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                              const SizedBox(height: 3),
+                              Text(
+                                'Booking progress will appear here as it changes.',
+                                style: tt.bodySmall?.copyWith(
+                                  color: cs.onSurfaceVariant,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ],
@@ -1072,81 +1092,136 @@ Future<void> _confirmCancelBooking(
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) {
-        return AlertDialog(
-          title: const Text('Cancel booking?'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    color: Theme.of(
-                      dialogContext,
-                    ).colorScheme.primaryContainer.withValues(alpha: 0.45),
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(
+        var isSubmitting = false;
+        String? errorMessage;
+        return StatefulBuilder(
+          builder: (context, setDialogState) => AlertDialog(
+            title: const Text('Cancel booking?'),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
                       color: Theme.of(
                         dialogContext,
-                      ).colorScheme.primary.withValues(alpha: 0.16),
+                      ).colorScheme.primaryContainer.withValues(alpha: 0.45),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                        color: Theme.of(
+                          dialogContext,
+                        ).colorScheme.primary.withValues(alpha: 0.16),
+                      ),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Cancellation & refund',
+                          style: Theme.of(dialogContext).textTheme.labelLarge
+                              ?.copyWith(
+                                fontWeight: FontWeight.w800,
+                                color: Theme.of(
+                                  dialogContext,
+                                ).colorScheme.primary,
+                              ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          cancellationInformation,
+                          style: Theme.of(dialogContext).textTheme.bodyMedium
+                              ?.copyWith(
+                                color: Theme.of(
+                                  dialogContext,
+                                ).colorScheme.onSurfaceVariant,
+                                height: 1.4,
+                              ),
+                        ),
+                      ],
                     ),
                   ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Cancellation & refund',
-                        style: Theme.of(dialogContext).textTheme.labelLarge
-                            ?.copyWith(
-                              fontWeight: FontWeight.w800,
-                              color: Theme.of(
-                                dialogContext,
-                              ).colorScheme.primary,
-                            ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        cancellationInformation,
-                        style: Theme.of(dialogContext).textTheme.bodyMedium
-                            ?.copyWith(
-                              color: Theme.of(
-                                dialogContext,
-                              ).colorScheme.onSurfaceVariant,
-                              height: 1.4,
-                            ),
-                      ),
-                    ],
+                  const SizedBox(height: 14),
+                  const Text(
+                    'Tell us why you want to cancel so we can improve support.',
                   ),
-                ),
-                const SizedBox(height: 14),
-                const Text(
-                  'Tell us why you want to cancel so we can improve support.',
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: controller,
-                  maxLines: 3,
-                  maxLength: 200,
-                  decoration: const InputDecoration(
-                    hintText: 'Reason for cancellation',
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: controller,
+                    maxLines: 3,
+                    maxLength: 200,
+                    enabled: !isSubmitting,
+                    onChanged: (_) {
+                      if (errorMessage != null) {
+                        setDialogState(() => errorMessage = null);
+                      }
+                    },
+                    decoration: InputDecoration(
+                      hintText: 'Reason for cancellation',
+                      errorText: errorMessage,
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
+            actions: [
+              TextButton(
+                onPressed: isSubmitting
+                    ? null
+                    : () => Navigator.of(dialogContext).pop(false),
+                child: const Text('Keep booking'),
+              ),
+              FilledButton(
+                onPressed: isSubmitting
+                    ? null
+                    : () async {
+                        final reason = controller.text.trim();
+                        if (reason.length < 3) {
+                          setDialogState(
+                            () => errorMessage =
+                                'Enter a reason with at least 3 characters.',
+                          );
+                          return;
+                        }
+                        setDialogState(() {
+                          isSubmitting = true;
+                          errorMessage = null;
+                        });
+                        try {
+                          await ref
+                              .read(apiClientProvider)
+                              .post(
+                                '/bookings/${booking.id}/cancel',
+                                data: {'reason': reason},
+                              );
+                          if (dialogContext.mounted) {
+                            Navigator.of(dialogContext).pop(true);
+                          }
+                        } catch (error) {
+                          if (!dialogContext.mounted) return;
+                          setDialogState(() {
+                            isSubmitting = false;
+                            errorMessage = error is DioException
+                                ? _errorMessageFromDio(error)
+                                : 'Could not cancel this booking. Please try again.';
+                          });
+                        }
+                      },
+                style: FilledButton.styleFrom(backgroundColor: Colors.red),
+                child: isSubmitting
+                    ? const SizedBox.square(
+                        dimension: 18,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : const Text('Cancel booking'),
+              ),
+            ],
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(dialogContext).pop(false),
-              child: const Text('Keep booking'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.of(dialogContext).pop(true),
-              style: FilledButton.styleFrom(backgroundColor: Colors.red),
-              child: const Text('Cancel booking'),
-            ),
-          ],
         );
       },
     );
@@ -1155,23 +1230,9 @@ Future<void> _confirmCancelBooking(
       return;
     }
 
-    final reason = controller.text.trim();
-    if (reason.length < 3) {
-      if (!context.mounted) {
-        return;
-      }
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please provide a short cancellation reason.'),
-        ),
-      );
-      return;
-    }
-
-    await ref
-        .read(apiClientProvider)
-        .post('/bookings/${booking.id}/cancel', data: {'reason': reason});
     ref.invalidate(bookingDetailPageProvider(booking.id));
+    ref.invalidate(customerBookingsProvider('upcoming'));
+    ref.invalidate(customerBookingsProvider('cancelled'));
     if (!context.mounted) {
       return;
     }
@@ -1210,7 +1271,9 @@ void _openRebookBooking(BuildContext context, BookingDetail booking) {
 
 String _errorMessageFromDio(DioException error) {
   final data = error.response?.data;
-  if (data is Map<String, dynamic>) {
+  if (error.response?.statusCode != null &&
+      error.response!.statusCode! < 500 &&
+      data is Map<String, dynamic>) {
     final message = data['message'];
     if (message is String && message.trim().isNotEmpty) {
       return message;
@@ -1221,7 +1284,7 @@ String _errorMessageFromDio(DioException error) {
     }
   }
 
-  return error.message ?? 'Could not cancel booking.';
+  return 'Could not cancel this booking. Please check your connection and try again.';
 }
 
 String _cancellationInformationForBooking(BookingDetail booking) {
@@ -2038,6 +2101,8 @@ class BookingDetail {
     this.serviceIds = const [],
     this.addressLine1,
     this.addressPincode,
+    this.addressLatitude,
+    this.addressLongitude,
     this.cityName,
   });
 
@@ -2066,6 +2131,8 @@ class BookingDetail {
   final List<String> serviceIds;
   final String? addressLine1;
   final String? addressPincode;
+  final double? addressLatitude;
+  final double? addressLongitude;
   final String? cityName;
 
   /// Returns true if booking can still be disputed (within 48-hour window).
@@ -2087,6 +2154,8 @@ class BookingDetail {
         .toList(),
     addressLine1: json['addressLine1'] as String?,
     addressPincode: json['addressPincode'] as String?,
+    addressLatitude: (json['addressLatitude'] as num?)?.toDouble(),
+    addressLongitude: (json['addressLongitude'] as num?)?.toDouble(),
     cityName: json['cityName'] as String?,
     scheduledAt:
         DateTime.tryParse(json['scheduledAt'] as String? ?? '') ??

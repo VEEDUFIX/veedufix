@@ -76,6 +76,7 @@ model City {
   id            String   @id @default(cuid())
   name          String   @unique
   state         String
+  district      String?
   country       String   @default("India")
   slug          String   @unique
   isActive      Boolean  @default(true)
@@ -99,6 +100,7 @@ model User {
   passwordHash     String?
   avatarUrl        String?
   walletBalance    Decimal  @default(0.0) @db.Decimal(12, 2)
+  referralRewardsIssued Int @default(0)
   emailVerifiedAt  DateTime?
   phoneVerifiedAt   DateTime?
   isActive         Boolean  @default(true)
@@ -542,6 +544,12 @@ model PlatformConfig {
   gstin               String?
   legalBusinessName   String?
   registeredAddress   String?
+  minimumWorkerPayout Decimal  @default(100.0) @db.Decimal(12, 2)
+  referralRewardAmount Decimal @default(100.0) @db.Decimal(12, 2)
+  referralsEnabled   Boolean  @default(true)
+  referralMaxSuccessfulPerReferrer Int @default(0)
+  payoutsPaused      Boolean  @default(false)
+  payoutPauseReason  String?
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 }

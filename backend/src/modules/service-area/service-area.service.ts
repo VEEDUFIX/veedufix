@@ -59,6 +59,7 @@ export async function findServiceableArea(input: {
 
   const where: Prisma.ServiceAreaWhereInput = {
     isActive: true,
+    city: { isActive: true },
     ...(input.cityId ? { cityId: input.cityId } : {})
   };
 
@@ -73,7 +74,14 @@ export async function findServiceableArea(input: {
       pincodeRangeStart: true,
       pincodeRangeEnd: true,
       city: {
-        select: { id: true, name: true, slug: true }
+        select: {
+          id: true,
+          name: true,
+          slug: true,
+          state: true,
+          district: true,
+          isActive: true
+        }
       }
     },
     orderBy: [{ createdAt: "asc" }]

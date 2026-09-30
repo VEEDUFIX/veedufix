@@ -5,17 +5,13 @@ import '../../../auth/presentation/providers/auth_providers.dart';
 export '../../domain/entities/notification_entity.dart';
 
 final notificationsProvider = FutureProvider.autoDispose<List<AppNotification>>((ref) async {
-  try {
-    final apiClient = ref.watch(apiClientProvider);
-    final response = await apiClient.get('/notifications');
-    final list = response['notifications'] as List<dynamic>? ?? [];
-    return list
-        .whereType<Map<String, dynamic>>()
-        .map(AppNotification.fromJson)
-        .toList(growable: false);
-  } catch (_) {
-    return const [];
-  }
+  final apiClient = ref.watch(apiClientProvider);
+  final response = await apiClient.get('/notifications');
+  final list = response['notifications'] as List<dynamic>? ?? [];
+  return list
+      .whereType<Map<String, dynamic>>()
+      .map(AppNotification.fromJson)
+      .toList(growable: false);
 });
 
 final notificationsUnreadCountProvider = FutureProvider.autoDispose<int>((ref) async {

@@ -1,5 +1,6 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "../../lib/prisma.js";
+import { assertServiceablePincode } from "../service-area/service-area.service.js";
 
 type SavedAddressInput = {
   label: string;
@@ -62,6 +63,11 @@ async function getAddressForUserOrThrow(userId: string, addressId: string) {
 }
 
 export async function createAddress(userId: string, addressData: SavedAddressInput) {
+  await assertServiceablePincode({
+    pincode: addressData.pincode,
+    city: addressData.city
+  });
+
   return prisma.$transaction(async (tx) => {
     if (addressData.isDefault) {
       await tx.savedAddress.updateMany({
@@ -95,7 +101,11 @@ export async function listAddresses(userId: string) {
 }
 
 export async function updateAddress(userId: string, addressId: string, addressData: SavedAddressUpdateInput) {
-  await getAddressForUserOrThrow(userId, addressId);
+  const existing = await getAddressForUserOrThrow(userId, addressId);
+  await assertServiceablePincode({
+    pincode: addressData.pincode,
+    city: addressData.city ?? existing.city
+  });
 
   return prisma.$transaction(async (tx) => {
     if (addressData.isDefault) {

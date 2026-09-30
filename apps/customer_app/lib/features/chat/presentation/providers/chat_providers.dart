@@ -80,30 +80,28 @@ class ChatAttachment {
   };
 }
 
-final chatProvider = StreamProvider.family<List<ChatMessage>, String>((
-  ref,
-  bookingId,
-) async* {
-  final api = ref.watch(apiClientProvider);
+final chatProvider = StreamProvider.autoDispose
+    .family<List<ChatMessage>, String>((ref, bookingId) async* {
+      final api = ref.watch(apiClientProvider);
 
-  while (true) {
-    final data = await api.get('/chat/$bookingId');
-    final chatRoom = data['chatRoom'] as Map<String, dynamic>?;
-    final messages =
-        (chatRoom?['messages'] as List<dynamic>? ?? const [])
-            .whereType<Map<dynamic, dynamic>>()
-            .map((entry) {
-              final message = Map<String, dynamic>.from(entry);
-              final id = message['id'] as String? ?? '';
-              return ChatMessage.fromApi(id, message);
-            })
-            .toList(growable: false)
-          ..sort((a, b) => a.timestamp.compareTo(b.timestamp));
+      while (true) {
+        final data = await api.get('/chat/$bookingId');
+        final chatRoom = data['chatRoom'] as Map<String, dynamic>?;
+        final messages =
+            (chatRoom?['messages'] as List<dynamic>? ?? const [])
+                .whereType<Map<dynamic, dynamic>>()
+                .map((entry) {
+                  final message = Map<String, dynamic>.from(entry);
+                  final id = message['id'] as String? ?? '';
+                  return ChatMessage.fromApi(id, message);
+                })
+                .toList(growable: false)
+              ..sort((a, b) => a.timestamp.compareTo(b.timestamp));
 
-    yield messages;
-    await Future.delayed(const Duration(seconds: 3));
-  }
-});
+        yield messages;
+        await Future.delayed(const Duration(seconds: 3));
+      }
+    });
 
 final chatControllerProvider = Provider<ChatController>((ref) {
   return ChatController(ref.watch(apiClientProvider));

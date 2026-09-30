@@ -10,14 +10,17 @@ class ServiceAreaManagerPage extends ConsumerStatefulWidget {
   const ServiceAreaManagerPage({super.key});
 
   @override
-  ConsumerState<ServiceAreaManagerPage> createState() => _ServiceAreaManagerPageState();
+  ConsumerState<ServiceAreaManagerPage> createState() =>
+      _ServiceAreaManagerPageState();
 }
 
-class _ServiceAreaManagerPageState extends ConsumerState<ServiceAreaManagerPage> {
+class _ServiceAreaManagerPageState
+    extends ConsumerState<ServiceAreaManagerPage> {
   late final _ServiceAreaAdminApi _api;
   late Future<_ServiceAreaSnapshot> _snapshotFuture;
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
+  bool _isMutating = false;
 
   @override
   void initState() {
@@ -37,6 +40,7 @@ class _ServiceAreaManagerPageState extends ConsumerState<ServiceAreaManagerPage>
   }
 
   Future<void> _reload() async {
+    if (!mounted) return;
     setState(() {
       _snapshotFuture = _loadSnapshot();
     });
@@ -47,7 +51,18 @@ class _ServiceAreaManagerPageState extends ConsumerState<ServiceAreaManagerPage>
     if (!mounted) {
       return;
     }
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  Future<void> _runMutation(Future<void> Function() action) async {
+    if (_isMutating) return;
+    setState(() => _isMutating = true);
+    try {
+      await action();
+    } finally {
+      if (mounted) setState(() => _isMutating = false);
+    }
   }
 
   List<_ServiceAreaRecord> _visibleAreas(_ServiceAreaSnapshot snapshot) {
@@ -67,75 +82,211 @@ class _ServiceAreaManagerPageState extends ConsumerState<ServiceAreaManagerPage>
   }
 
   Future<void> _createArea(_ServiceAreaSnapshot snapshot) async {
-    final payload = await _showEditor(snapshot);
-    if (payload == null) {
-      return;
-    }
+    await _runMutation(() async {
+      final payload = await _showEditor(snapshot);
+      if (payload == null) return;
+      try {
+        await _api.createServiceArea(payload);
+        await _reload();
+        await _showMessage('Service area created');
+      } catch (error) {
+        await _showMessage('Unable to create service area: $error');
+      }
+    });
+  }
+
+  Future<void> _createMarket() async {
+    await _runMutation(() async {
+      final payload = await _showMarketEditor();
+      if (payload == null) return;
+      try {
+        await _api.createMarket(payload);
+        await _reload();
+        await _showMessage(
+            'Market created. Add active pincode areas before accepting bookings.');
+      } catch (error) {
+        await _showMessage('Unable to create market: $error');
+      }
+    });
+  }
+
+  Future<void> _editMarket(_ServiceAreaCity city) async {
+    await _runMutation(() async {
+      final payload = await _showMarketEditor(existing: city);
+      if (payload == null) return;
+      try {
+        await _api.updateMarket(city.id, payload);
+        await _reload();
+        await _showMessage('Market updated');
+      } catch (error) {
+        await _showMessage('Unable to update market: $error');
+      }
+    });
+  }
+
+  Future<Map<String, dynamic>?> _showMarketEditor(
+      {_ServiceAreaCity? existing}) async {
+    final formKey = GlobalKey<FormState>();
+    final name = TextEditingController(text: existing?.name ?? '');
+    final state = TextEditingController(text: existing?.state ?? '');
+    final district = TextEditingController(text: existing?.district ?? '');
+    final slug = TextEditingController(text: existing?.slug ?? '');
+    var isActive = existing?.isActive ?? false;
     try {
-      await _api.createServiceArea(payload);
-      await _reload();
-      await _showMessage('Service area created');
-    } catch (error) {
-      await _showMessage('Unable to create service area: $error');
+      return await showDialog<Map<String, dynamic>>(
+        context: context,
+        builder: (dialogContext) => StatefulBuilder(
+          builder: (context, setDialogState) => AlertDialog(
+            title: Text(
+                existing == null ? 'Add launch market' : 'Edit launch market'),
+            content: SizedBox(
+              width: 520,
+              child: Form(
+                key: formKey,
+                child: Column(mainAxisSize: MainAxisSize.min, children: [
+                  TextFormField(
+                      controller: name,
+                      decoration: const InputDecoration(labelText: 'City *'),
+                      validator: _required),
+                  TextFormField(
+                      controller: state,
+                      decoration: const InputDecoration(labelText: 'State *'),
+                      validator: _required),
+                  TextFormField(
+                      controller: district,
+                      decoration:
+                          const InputDecoration(labelText: 'District *'),
+                      validator: _required),
+                  TextFormField(
+                    controller: slug,
+                    decoration:
+                        const InputDecoration(labelText: 'URL slug (optional)'),
+                  ),
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    value: isActive,
+                    onChanged: (value) async {
+                      if (value && !isActive) {
+                        final confirmed = await showDialog<bool>(
+                          context: context,
+                          builder: (confirmContext) => AlertDialog(
+                            title: const Text('Open this market?'),
+                            content: const Text(
+                                'Customers may book here wherever active pincode areas and services are configured.'),
+                            actions: [
+                              TextButton(
+                                  onPressed: () =>
+                                      Navigator.pop(confirmContext, false),
+                                  child: const Text('Keep staged')),
+                              FilledButton(
+                                  onPressed: () =>
+                                      Navigator.pop(confirmContext, true),
+                                  child: const Text('Open market')),
+                            ],
+                          ),
+                        );
+                        if (confirmed != true) return;
+                      }
+                      setDialogState(() => isActive = value);
+                    },
+                    title: const Text('Market is live'),
+                    subtitle: Text(isActive
+                        ? 'Available for service-area checks'
+                        : 'Staged; customers cannot book here'),
+                  ),
+                ]),
+              ),
+            ),
+            actions: [
+              TextButton(
+                  onPressed: () => Navigator.pop(dialogContext),
+                  child: const Text('Cancel')),
+              FilledButton(
+                onPressed: () {
+                  if (!formKey.currentState!.validate()) return;
+                  Navigator.pop(dialogContext, {
+                    'name': name.text.trim(),
+                    'state': state.text.trim(),
+                    'district': district.text.trim(),
+                    if (slug.text.trim().isNotEmpty) 'slug': slug.text.trim(),
+                    'isActive': isActive,
+                  });
+                },
+                child:
+                    Text(existing == null ? 'Create market' : 'Save changes'),
+              ),
+            ],
+          ),
+        ),
+      );
+    } finally {
+      name.dispose();
+      state.dispose();
+      district.dispose();
+      slug.dispose();
     }
   }
 
-  Future<void> _editArea(_ServiceAreaSnapshot snapshot, _ServiceAreaRecord area) async {
-    final payload = await _showEditor(snapshot, existing: area);
-    if (payload == null) {
-      return;
-    }
-    try {
-      await _api.updateServiceArea(area.id, payload);
-      await _reload();
-      await _showMessage('Service area updated');
-    } catch (error) {
-      await _showMessage('Unable to update service area: $error');
-    }
+  Future<void> _editArea(
+      _ServiceAreaSnapshot snapshot, _ServiceAreaRecord area) async {
+    await _runMutation(() async {
+      final payload = await _showEditor(snapshot, existing: area);
+      if (payload == null) return;
+      try {
+        await _api.updateServiceArea(area.id, payload);
+        await _reload();
+        await _showMessage('Service area updated');
+      } catch (error) {
+        await _showMessage('Unable to update service area: $error');
+      }
+    });
   }
 
   Future<void> _deleteArea(_ServiceAreaRecord area) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) {
-        return AlertDialog(
-          title: const Text('Delete service area?'),
-          content: Text('Remove ${area.name} (${area.city.name}) from the active configuration?'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(dialogContext).pop(false),
-              child: const Text('Cancel'),
-            ),
-            FilledButton.tonal(
-              onPressed: () => Navigator.of(dialogContext).pop(true),
-              child: const Text('Delete'),
-            ),
-          ],
-        );
-      },
-    );
+    await _runMutation(() async {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) {
+          return AlertDialog(
+            title: const Text('Delete service area?'),
+            content: Text(
+                'Remove ${area.name} (${area.city.name}) from the active configuration?'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(false),
+                child: const Text('Cancel'),
+              ),
+              FilledButton.tonal(
+                onPressed: () => Navigator.of(dialogContext).pop(true),
+                child: const Text('Delete'),
+              ),
+            ],
+          );
+        },
+      );
 
-    if (confirmed != true) {
-      return;
-    }
-
-    try {
-      await _api.deleteServiceArea(area.id);
-      await _reload();
-      await _showMessage('Service area deleted');
-    } catch (error) {
-      await _showMessage('Unable to delete service area: $error');
-    }
+      if (confirmed != true || !mounted) return;
+      try {
+        await _api.deleteServiceArea(area.id);
+        await _reload();
+        await _showMessage('Service area deleted');
+      } catch (error) {
+        await _showMessage('Unable to delete service area: $error');
+      }
+    });
   }
 
   Future<void> _toggleAreaActive(_ServiceAreaRecord area, bool isActive) async {
-    try {
-      await _api.updateServiceArea(area.id, {'isActive': isActive});
-      await _reload();
-      await _showMessage(isActive ? 'Service area activated' : 'Service area paused');
-    } catch (error) {
-      await _showMessage('Unable to update service area: $error');
-    }
+    await _runMutation(() async {
+      try {
+        await _api.updateServiceArea(area.id, {'isActive': isActive});
+        await _reload();
+        await _showMessage(
+            isActive ? 'Service area activated' : 'Service area paused');
+      } catch (error) {
+        await _showMessage('Unable to update service area: $error');
+      }
+    });
   }
 
   Future<Map<String, dynamic>?> _showEditor(
@@ -145,10 +296,14 @@ class _ServiceAreaManagerPageState extends ConsumerState<ServiceAreaManagerPage>
     final formKey = GlobalKey<FormState>();
     final nameController = TextEditingController(text: existing?.name ?? '');
     final slugController = TextEditingController(text: existing?.slug ?? '');
-    final exactPincodeController = TextEditingController(text: existing?.pincode ?? '');
-    final rangeStartController = TextEditingController(text: existing?.pincodeRangeStart ?? '');
-    final rangeEndController = TextEditingController(text: existing?.pincodeRangeEnd ?? '');
-    final cityId = ValueNotifier<String>(existing?.cityId ?? (snapshot.cities.isNotEmpty ? snapshot.cities.first.id : ''));
+    final exactPincodeController =
+        TextEditingController(text: existing?.pincode ?? '');
+    final rangeStartController =
+        TextEditingController(text: existing?.pincodeRangeStart ?? '');
+    final rangeEndController =
+        TextEditingController(text: existing?.pincodeRangeEnd ?? '');
+    final cityId = ValueNotifier<String>(existing?.cityId ??
+        (snapshot.cities.isNotEmpty ? snapshot.cities.first.id : ''));
     final isActive = ValueNotifier<bool>(existing?.isActive ?? true);
     final formError = ValueNotifier<String?>(null);
 
@@ -158,7 +313,8 @@ class _ServiceAreaManagerPageState extends ConsumerState<ServiceAreaManagerPage>
         barrierDismissible: false,
         builder: (dialogContext) {
           return AlertDialog(
-            title: Text(existing == null ? 'Create service area' : 'Edit service area'),
+            title: Text(
+                existing == null ? 'Create service area' : 'Edit service area'),
             content: SizedBox(
               width: 720,
               child: StatefulBuilder(
@@ -172,7 +328,8 @@ class _ServiceAreaManagerPageState extends ConsumerState<ServiceAreaManagerPage>
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           DropdownButtonFormField<String>(
-                            initialValue: cityId.value.isEmpty ? null : cityId.value,
+                            initialValue:
+                                cityId.value.isEmpty ? null : cityId.value,
                             decoration: const InputDecoration(
                               labelText: 'City *',
                               border: OutlineInputBorder(),
@@ -219,7 +376,8 @@ class _ServiceAreaManagerPageState extends ConsumerState<ServiceAreaManagerPage>
                             controller: slugController,
                             decoration: const InputDecoration(
                               labelText: 'Slug',
-                              helperText: 'Optional. Auto-generated from the name if left blank.',
+                              helperText:
+                                  'Optional. Auto-generated from the name if left blank.',
                               border: OutlineInputBorder(),
                             ),
                           ),
@@ -231,7 +389,8 @@ class _ServiceAreaManagerPageState extends ConsumerState<ServiceAreaManagerPage>
                                   controller: exactPincodeController,
                                   decoration: const InputDecoration(
                                     labelText: 'Exact pincode',
-                                    helperText: 'Optional if you are using a pincode range.',
+                                    helperText:
+                                        'Optional if you are using a pincode range.',
                                     border: OutlineInputBorder(),
                                   ),
                                   keyboardType: TextInputType.number,
@@ -296,7 +455,8 @@ class _ServiceAreaManagerPageState extends ConsumerState<ServiceAreaManagerPage>
                           SwitchListTile.adaptive(
                             contentPadding: EdgeInsets.zero,
                             title: const Text('Active'),
-                            subtitle: const Text('Only active areas can accept bookings.'),
+                            subtitle: const Text(
+                                'Only active areas can accept bookings.'),
                             value: isActive.value,
                             onChanged: (value) {
                               setState(() {
@@ -325,9 +485,12 @@ class _ServiceAreaManagerPageState extends ConsumerState<ServiceAreaManagerPage>
                   final end = rangeEndController.text.trim();
 
                   String? error;
-                  final exactValid = exact.isEmpty || RegExp(r'^[1-9][0-9]{5}$').hasMatch(exact);
-                  final startValid = start.isEmpty || RegExp(r'^[1-9][0-9]{5}$').hasMatch(start);
-                  final endValid = end.isEmpty || RegExp(r'^[1-9][0-9]{5}$').hasMatch(end);
+                  final exactValid = exact.isEmpty ||
+                      RegExp(r'^[1-9][0-9]{5}$').hasMatch(exact);
+                  final startValid = start.isEmpty ||
+                      RegExp(r'^[1-9][0-9]{5}$').hasMatch(start);
+                  final endValid =
+                      end.isEmpty || RegExp(r'^[1-9][0-9]{5}$').hasMatch(end);
 
                   if (cityId.value.isEmpty) {
                     error = 'Choose a city';
@@ -336,9 +499,13 @@ class _ServiceAreaManagerPageState extends ConsumerState<ServiceAreaManagerPage>
                   } else if (!exactValid || !startValid || !endValid) {
                     error = 'A valid 6-digit pincode is required';
                   } else if (exact.isEmpty && (start.isEmpty || end.isEmpty)) {
-                    error = 'Enter either an exact pincode or both range fields';
-                  } else if (start.isNotEmpty && end.isNotEmpty && int.parse(start) > int.parse(end)) {
-                    error = 'Range start must be less than or equal to range end';
+                    error =
+                        'Enter either an exact pincode or both range fields';
+                  } else if (start.isNotEmpty &&
+                      end.isNotEmpty &&
+                      int.parse(start) > int.parse(end)) {
+                    error =
+                        'Range start must be less than or equal to range end';
                   }
 
                   if (error != null) {
@@ -393,7 +560,8 @@ class _ServiceAreaManagerPageState extends ConsumerState<ServiceAreaManagerPage>
         builder: (context, snapshot) {
           final loading = snapshot.connectionState == ConnectionState.waiting;
           final data = snapshot.data;
-          final visibleAreas = data == null ? const <_ServiceAreaRecord>[] : _visibleAreas(data);
+          final visibleAreas =
+              data == null ? const <_ServiceAreaRecord>[] : _visibleAreas(data);
 
           return SingleChildScrollView(
             padding: EdgeInsets.all(isCompact ? 20 : 32),
@@ -406,7 +574,8 @@ class _ServiceAreaManagerPageState extends ConsumerState<ServiceAreaManagerPage>
                         children: [
                           Text(
                             'Service Areas',
-                            style: GoogleFonts.poppins(fontSize: 30, fontWeight: FontWeight.w800),
+                            style: GoogleFonts.poppins(
+                                fontSize: 30, fontWeight: FontWeight.w800),
                           ),
                           const SizedBox(height: 8),
                           Text(
@@ -414,11 +583,23 @@ class _ServiceAreaManagerPageState extends ConsumerState<ServiceAreaManagerPage>
                             style: GoogleFonts.inter(color: Colors.black54),
                           ),
                           const SizedBox(height: 16),
-                          FilledButton.icon(
-                            onPressed: loading || data == null ? null : () => _createArea(data),
-                            icon: const Icon(Icons.add_location_alt_rounded),
-                            label: const Text('Add service area'),
-                          ),
+                          Wrap(spacing: 8, runSpacing: 8, children: [
+                            OutlinedButton.icon(
+                                onPressed:
+                                    loading || data == null || _isMutating
+                                        ? null
+                                        : _createMarket,
+                                icon: const Icon(Icons.add_business_outlined),
+                                label: const Text('Add market')),
+                            FilledButton.icon(
+                                onPressed:
+                                    loading || data == null || _isMutating
+                                        ? null
+                                        : () => _createArea(data),
+                                icon:
+                                    const Icon(Icons.add_location_alt_rounded),
+                                label: const Text('Add pincode area')),
+                          ]),
                         ],
                       )
                     : Row(
@@ -430,20 +611,34 @@ class _ServiceAreaManagerPageState extends ConsumerState<ServiceAreaManagerPage>
                             children: [
                               Text(
                                 'Service Areas',
-                                style: GoogleFonts.poppins(fontSize: 34, fontWeight: FontWeight.w800),
+                                style: GoogleFonts.poppins(
+                                    fontSize: 34, fontWeight: FontWeight.w800),
                               ),
                               const SizedBox(height: 8),
                               Text(
                                 'Control where the marketplace is open and how far each zone reaches.',
-                                style: GoogleFonts.inter(color: Colors.black54, fontSize: 16),
+                                style: GoogleFonts.inter(
+                                    color: Colors.black54, fontSize: 16),
                               ),
                             ],
                           ),
-                          FilledButton.icon(
-                            onPressed: loading || data == null ? null : () => _createArea(data),
-                            icon: const Icon(Icons.add_location_alt_rounded),
-                            label: const Text('Add service area'),
-                          ),
+                          Wrap(spacing: 8, children: [
+                            OutlinedButton.icon(
+                                onPressed:
+                                    loading || data == null || _isMutating
+                                        ? null
+                                        : _createMarket,
+                                icon: const Icon(Icons.add_business_outlined),
+                                label: const Text('Add market')),
+                            FilledButton.icon(
+                                onPressed:
+                                    loading || data == null || _isMutating
+                                        ? null
+                                        : () => _createArea(data),
+                                icon:
+                                    const Icon(Icons.add_location_alt_rounded),
+                                label: const Text('Add pincode area')),
+                          ]),
                         ],
                       ),
                 const SizedBox(height: 24),
@@ -454,12 +649,32 @@ class _ServiceAreaManagerPageState extends ConsumerState<ServiceAreaManagerPage>
                     spacing: 20,
                     runSpacing: 20,
                     children: [
-                      _StatCard(label: 'Areas', value: '${data.serviceAreas.length}', icon: Icons.place_rounded, color: const Color(0xFF2563EB)),
-                      _StatCard(label: 'Active', value: '${data.activeCount}', icon: Icons.check_circle_rounded, color: const Color(0xFF0F766E)),
-                      _StatCard(label: 'Cities', value: '${data.cities.length}', icon: Icons.location_city_rounded, color: const Color(0xFF8B5CF6)),
-                      _StatCard(label: 'Range rules', value: '${data.rangeCount}', icon: Icons.alt_route_rounded, color: const Color(0xFFF59E0B)),
+                      _StatCard(
+                          label: 'Areas',
+                          value: '${data.serviceAreas.length}',
+                          icon: Icons.place_rounded,
+                          color: const Color(0xFF2563EB)),
+                      _StatCard(
+                          label: 'Active',
+                          value: '${data.activeCount}',
+                          icon: Icons.check_circle_rounded,
+                          color: const Color(0xFF0F766E)),
+                      _StatCard(
+                          label: 'Live markets',
+                          value:
+                              '${data.cities.where((city) => city.isActive).length}',
+                          icon: Icons.location_city_rounded,
+                          color: const Color(0xFF8B5CF6)),
+                      _StatCard(
+                          label: 'Range rules',
+                          value: '${data.rangeCount}',
+                          icon: Icons.alt_route_rounded,
+                          color: const Color(0xFFF59E0B)),
                     ],
                   ),
+                  const SizedBox(height: 24),
+                  _MarketCoveragePanel(
+                      cities: data.cities, onEdit: _editMarket),
                   const SizedBox(height: 24),
                   LayoutBuilder(
                     builder: (context, constraints) {
@@ -469,10 +684,12 @@ class _ServiceAreaManagerPageState extends ConsumerState<ServiceAreaManagerPage>
                               children: [
                                 TextField(
                                   controller: _searchController,
-                                  onChanged: (value) => setState(() => _searchQuery = value),
+                                  onChanged: (value) =>
+                                      setState(() => _searchQuery = value),
                                   decoration: const InputDecoration(
                                     prefixIcon: Icon(Icons.search_rounded),
-                                    hintText: 'Search by area, city, or pincode',
+                                    hintText:
+                                        'Search by area, city, or pincode',
                                     border: OutlineInputBorder(),
                                   ),
                                 ),
@@ -483,10 +700,12 @@ class _ServiceAreaManagerPageState extends ConsumerState<ServiceAreaManagerPage>
                                 Expanded(
                                   child: TextField(
                                     controller: _searchController,
-                                    onChanged: (value) => setState(() => _searchQuery = value),
+                                    onChanged: (value) =>
+                                        setState(() => _searchQuery = value),
                                     decoration: const InputDecoration(
                                       prefixIcon: Icon(Icons.search_rounded),
-                                      hintText: 'Search by area, city, or pincode',
+                                      hintText:
+                                          'Search by area, city, or pincode',
                                       border: OutlineInputBorder(),
                                     ),
                                   ),
@@ -511,12 +730,18 @@ class _ServiceAreaManagerPageState extends ConsumerState<ServiceAreaManagerPage>
                           ...visibleAreas.map(
                             (area) => Padding(
                               padding: const EdgeInsets.only(bottom: 14),
-                      child: _ServiceAreaTile(
-                        area: area,
-                        onTap: () => context.push('/service-areas/${area.id}', extra: area),
-                        onEdit: () => _editArea(data, area),
-                        onDelete: () => _deleteArea(area),
-                        onToggleActive: (value) => _toggleAreaActive(area, value),
+                              child: AbsorbPointer(
+                                absorbing: _isMutating,
+                                child: _ServiceAreaTile(
+                                  area: area,
+                                  onTap: () => context.push(
+                                      '/service-areas/${area.id}',
+                                      extra: area),
+                                  onEdit: () => _editArea(data, area),
+                                  onDelete: () => _deleteArea(area),
+                                  onToggleActive: (value) =>
+                                      _toggleAreaActive(area, value),
+                                ),
                               ),
                             ),
                           ),
@@ -526,7 +751,8 @@ class _ServiceAreaManagerPageState extends ConsumerState<ServiceAreaManagerPage>
                               child: Center(
                                 child: Text(
                                   'No matching service areas',
-                                  style: GoogleFonts.inter(color: Colors.black54),
+                                  style:
+                                      GoogleFonts.inter(color: Colors.black54),
                                 ),
                               ),
                             ),
@@ -578,72 +804,87 @@ class _ServiceAreaTile extends StatelessWidget {
         child: Padding(
           padding: const EdgeInsets.all(20),
           child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              width: 52,
-              height: 52,
-              decoration: BoxDecoration(
-                color: area.isActive ? const Color(0xFF0F766E).withValues(alpha: 0.12) : const Color(0xFF94A3B8).withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(16),
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 52,
+                height: 52,
+                decoration: BoxDecoration(
+                  color: area.isActive
+                      ? const Color(0xFF0F766E).withValues(alpha: 0.12)
+                      : const Color(0xFF94A3B8).withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Icon(
+                  area.isActive
+                      ? Icons.check_circle_rounded
+                      : Icons.pause_circle_rounded,
+                  color: area.isActive
+                      ? const Color(0xFF0F766E)
+                      : const Color(0xFF64748B),
+                ),
               ),
-              child: Icon(
-                area.isActive ? Icons.check_circle_rounded : Icons.pause_circle_rounded,
-                color: area.isActive ? const Color(0xFF0F766E) : const Color(0xFF64748B),
-              ),
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          area.name,
-                          style: GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.w700),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            area.name,
+                            style: GoogleFonts.poppins(
+                                fontSize: 18, fontWeight: FontWeight.w700),
+                          ),
                         ),
-                      ),
-                      Switch.adaptive(value: area.isActive, onChanged: onToggleActive),
-                    ],
+                        Switch.adaptive(
+                            value: area.isActive, onChanged: onToggleActive),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      '${area.city.name} • ${area.slug}',
+                      style: GoogleFonts.inter(color: Colors.black54),
+                    ),
+                    const SizedBox(height: 10),
+                    Wrap(
+                      spacing: 10,
+                      runSpacing: 10,
+                      children: [
+                        _Chip(label: coverage, icon: Icons.route_rounded),
+                        _Chip(
+                            label: area.isActive ? 'Active' : 'Paused',
+                            icon: area.isActive
+                                ? Icons.check_rounded
+                                : Icons.pause_rounded),
+                        if (area.pincodeRangeStart != null &&
+                            area.pincodeRangeEnd != null)
+                          const _Chip(
+                              label: 'Range mode',
+                              icon: Icons.alt_route_rounded),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 12),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  TextButton.icon(
+                    onPressed: onEdit,
+                    icon: const Icon(Icons.edit_rounded),
+                    label: const Text('Edit'),
                   ),
-                  const SizedBox(height: 6),
-                  Text(
-                    '${area.city.name} • ${area.slug}',
-                    style: GoogleFonts.inter(color: Colors.black54),
-                  ),
-                  const SizedBox(height: 10),
-                  Wrap(
-                    spacing: 10,
-                    runSpacing: 10,
-                    children: [
-                      _Chip(label: coverage, icon: Icons.route_rounded),
-                      _Chip(label: area.isActive ? 'Active' : 'Paused', icon: area.isActive ? Icons.check_rounded : Icons.pause_rounded),
-                      if (area.pincodeRangeStart != null && area.pincodeRangeEnd != null)
-                        const _Chip(label: 'Range mode', icon: Icons.alt_route_rounded),
-                    ],
+                  TextButton.icon(
+                    onPressed: onDelete,
+                    icon: const Icon(Icons.delete_outline_rounded),
+                    label: const Text('Delete'),
                   ),
                 ],
               ),
-            ),
-            const SizedBox(width: 12),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                TextButton.icon(
-                  onPressed: onEdit,
-                  icon: const Icon(Icons.edit_rounded),
-                  label: const Text('Edit'),
-                ),
-                TextButton.icon(
-                  onPressed: onDelete,
-                  icon: const Icon(Icons.delete_outline_rounded),
-                  label: const Text('Delete'),
-                ),
-              ],
-            ),
-          ],
+            ],
           ),
         ),
       ),
@@ -660,12 +901,14 @@ class ServiceAreaDetailPage extends ConsumerStatefulWidget {
   final String areaId;
 
   @override
-  ConsumerState<ServiceAreaDetailPage> createState() => _ServiceAreaDetailPageState();
+  ConsumerState<ServiceAreaDetailPage> createState() =>
+      _ServiceAreaDetailPageState();
 }
 
 class _ServiceAreaDetailPageState extends ConsumerState<ServiceAreaDetailPage> {
   late final _ServiceAreaAdminApi _api;
-  late Future<({ _ServiceAreaSnapshot snapshot, _ServiceAreaRecord area })?> _future;
+  late Future<({_ServiceAreaSnapshot snapshot, _ServiceAreaRecord area})?>
+      _future;
   bool _busy = false;
 
   @override
@@ -675,7 +918,8 @@ class _ServiceAreaDetailPageState extends ConsumerState<ServiceAreaDetailPage> {
     _future = _load();
   }
 
-  Future<({ _ServiceAreaSnapshot snapshot, _ServiceAreaRecord area })?> _load() async {
+  Future<({_ServiceAreaSnapshot snapshot, _ServiceAreaRecord area})?>
+      _load() async {
     final snapshot = await _api.fetchSnapshot();
     _ServiceAreaRecord? area;
     for (final item in snapshot.serviceAreas) {
@@ -765,15 +1009,18 @@ class _ServiceAreaDetailPageState extends ConsumerState<ServiceAreaDetailPage> {
           ),
         ],
       ),
-      body: FutureBuilder<({ _ServiceAreaSnapshot snapshot, _ServiceAreaRecord area })?>(
+      body: FutureBuilder<
+          ({_ServiceAreaSnapshot snapshot, _ServiceAreaRecord area})?>(
         future: _future,
         builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting && !snapshot.hasData) {
+          if (snapshot.connectionState == ConnectionState.waiting &&
+              !snapshot.hasData) {
             return const Center(child: CircularProgressIndicator());
           }
 
           if (snapshot.hasError) {
-            return Center(child: Text('Unable to load service area: ${snapshot.error}'));
+            return Center(
+                child: Text('Unable to load service area: ${snapshot.error}'));
           }
 
           final data = snapshot.data;
@@ -786,15 +1033,19 @@ class _ServiceAreaDetailPageState extends ConsumerState<ServiceAreaDetailPage> {
                   children: [
                     const Icon(Icons.search_off_rounded, size: 48),
                     const SizedBox(height: 12),
-                    Text('Service area not found', style: tt.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
+                    Text('Service area not found',
+                        style: tt.titleLarge
+                            ?.copyWith(fontWeight: FontWeight.w800)),
                     const SizedBox(height: 8),
                     Text(
                       'This service area is not present in the current snapshot.',
                       textAlign: TextAlign.center,
-                      style: tt.bodyMedium?.copyWith(color: cs.onSurfaceVariant),
+                      style:
+                          tt.bodyMedium?.copyWith(color: cs.onSurfaceVariant),
                     ),
                     const SizedBox(height: 16),
-                    FilledButton(onPressed: _reload, child: const Text('Reload')),
+                    FilledButton(
+                        onPressed: _reload, child: const Text('Reload')),
                   ],
                 ),
               ),
@@ -822,8 +1073,12 @@ class _ServiceAreaDetailPageState extends ConsumerState<ServiceAreaDetailPage> {
                       borderRadius: BorderRadius.circular(16),
                     ),
                     child: Icon(
-                      area.isActive ? Icons.check_circle_rounded : Icons.pause_circle_rounded,
-                      color: area.isActive ? const Color(0xFF0F766E) : const Color(0xFF64748B),
+                      area.isActive
+                          ? Icons.check_circle_rounded
+                          : Icons.pause_circle_rounded,
+                      color: area.isActive
+                          ? const Color(0xFF0F766E)
+                          : const Color(0xFF64748B),
                     ),
                   ),
                   const SizedBox(width: 14),
@@ -831,9 +1086,13 @@ class _ServiceAreaDetailPageState extends ConsumerState<ServiceAreaDetailPage> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(area.name, style: tt.headlineSmall?.copyWith(fontWeight: FontWeight.w900)),
+                        Text(area.name,
+                            style: tt.headlineSmall
+                                ?.copyWith(fontWeight: FontWeight.w900)),
                         const SizedBox(height: 6),
-                        Text('${area.city.name} • ${area.slug}', style: tt.bodyMedium?.copyWith(color: cs.onSurfaceVariant)),
+                        Text('${area.city.name} • ${area.slug}',
+                            style: tt.bodyMedium
+                                ?.copyWith(color: cs.onSurfaceVariant)),
                       ],
                     ),
                   ),
@@ -856,7 +1115,8 @@ class _ServiceAreaDetailPageState extends ConsumerState<ServiceAreaDetailPage> {
               _DetailLine(label: 'City slug', value: area.city.slug),
               _DetailLine(label: 'Slug', value: area.slug),
               _DetailLine(label: 'Coverage', value: coverage),
-              _DetailLine(label: 'Status', value: area.isActive ? 'Active' : 'Paused'),
+              _DetailLine(
+                  label: 'Status', value: area.isActive ? 'Active' : 'Paused'),
               const SizedBox(height: 20),
               Wrap(
                 spacing: 12,
@@ -919,11 +1179,13 @@ class _DetailLine extends StatelessWidget {
             width: 120,
             child: Text(
               label,
-              style: tt.bodyMedium?.copyWith(color: cs.onSurfaceVariant, fontWeight: FontWeight.w700),
+              style: tt.bodyMedium?.copyWith(
+                  color: cs.onSurfaceVariant, fontWeight: FontWeight.w700),
             ),
           ),
           Expanded(
-            child: Text(value, style: tt.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
+            child: Text(value,
+                style: tt.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
           ),
         ],
       ),
@@ -944,7 +1206,8 @@ class _DetailChip extends StatelessWidget {
         color: Colors.black.withValues(alpha: 0.04),
         borderRadius: BorderRadius.circular(999),
       ),
-      child: Text(label, style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700)),
+      child: Text(label,
+          style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700)),
     );
   }
 }
@@ -962,7 +1225,8 @@ class _DetailBadge extends StatelessWidget {
         color: const Color(0xFF94A3B8).withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(999),
       ),
-      child: Text(label, style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700)),
+      child: Text(label,
+          style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700)),
     );
   }
 }
@@ -987,7 +1251,8 @@ class _Chip extends StatelessWidget {
         children: [
           Icon(icon, size: 16, color: Colors.black54),
           const SizedBox(width: 6),
-          Text(label, style: GoogleFonts.inter(fontSize: 12, color: Colors.black87)),
+          Text(label,
+              style: GoogleFonts.inter(fontSize: 12, color: Colors.black87)),
         ],
       ),
     );
@@ -1032,8 +1297,12 @@ class _StatCard extends StatelessWidget {
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(label, style: GoogleFonts.inter(fontSize: 12, color: Colors.black54)),
-              Text(value, style: GoogleFonts.poppins(fontSize: 22, fontWeight: FontWeight.w700)),
+              Text(label,
+                  style:
+                      GoogleFonts.inter(fontSize: 12, color: Colors.black54)),
+              Text(value,
+                  style: GoogleFonts.poppins(
+                      fontSize: 22, fontWeight: FontWeight.w700)),
             ],
           ),
         ],
@@ -1048,7 +1317,8 @@ class _ServiceAreaAdminApi {
   final Dio _dio;
 
   Future<_ServiceAreaSnapshot> fetchSnapshot() async {
-    final response = await _dio.get<Map<String, dynamic>>('/admin/service-areas');
+    final response =
+        await _dio.get<Map<String, dynamic>>('/admin/service-areas');
     final data = response.data ?? <String, dynamic>{};
     final cities = (data['cities'] as List? ?? const [])
         .whereType<Map<String, dynamic>>()
@@ -1059,6 +1329,14 @@ class _ServiceAreaAdminApi {
         .map((json) => _ServiceAreaRecord.fromJson(json, cities))
         .toList(growable: false);
     return _ServiceAreaSnapshot(cities: cities, serviceAreas: serviceAreas);
+  }
+
+  Future<void> createMarket(Map<String, dynamic> data) async {
+    await _dio.post('/admin/markets', data: data);
+  }
+
+  Future<void> updateMarket(String id, Map<String, dynamic> data) async {
+    await _dio.patch('/admin/markets/$id', data: data);
   }
 
   Future<void> createServiceArea(Map<String, dynamic> data) async {
@@ -1084,28 +1362,100 @@ class _ServiceAreaSnapshot {
   final List<_ServiceAreaRecord> serviceAreas;
 
   int get activeCount => serviceAreas.where((area) => area.isActive).length;
-  int get rangeCount => serviceAreas.where((area) => area.pincodeRangeStart != null && area.pincodeRangeEnd != null).length;
+  int get rangeCount => serviceAreas
+      .where((area) =>
+          area.pincodeRangeStart != null && area.pincodeRangeEnd != null)
+      .length;
+}
+
+class _MarketCoveragePanel extends StatelessWidget {
+  const _MarketCoveragePanel({required this.cities, required this.onEdit});
+
+  final List<_ServiceAreaCity> cities;
+  final ValueChanged<_ServiceAreaCity> onEdit;
+
+  @override
+  Widget build(BuildContext context) {
+    final activeMarkets = cities.where((city) => city.isActive).length;
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [
+            const Expanded(
+              child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Launch markets',
+                        style: TextStyle(
+                            fontSize: 18, fontWeight: FontWeight.w700)),
+                    SizedBox(height: 4),
+                    Text(
+                        'State → district → city. Live markets still require active pincode areas.'),
+                  ]),
+            ),
+            Chip(label: Text('$activeMarkets live')),
+          ]),
+          const SizedBox(height: 12),
+          if (cities.isEmpty)
+            const Text('No markets configured yet.')
+          else
+            ...cities.map((city) => ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: Icon(
+                    city.isActive
+                        ? Icons.public_rounded
+                        : Icons.pause_circle_outline_rounded,
+                    color: city.isActive
+                        ? const Color(0xFF0F766E)
+                        : Colors.black45,
+                  ),
+                  title: Text(city.name),
+                  subtitle: Text(
+                      '${city.state} · ${city.district} · ${city.isActive ? 'Live' : 'Staged'}'),
+                  trailing: IconButton(
+                    tooltip: 'Edit market',
+                    onPressed: () => onEdit(city),
+                    icon: const Icon(Icons.edit_outlined),
+                  ),
+                )),
+        ]),
+      ),
+    );
+  }
 }
 
 class _ServiceAreaCity {
   const _ServiceAreaCity({
     required this.id,
     required this.name,
+    required this.state,
+    required this.district,
     required this.slug,
+    required this.isActive,
   });
 
   final String id;
   final String name;
+  final String state;
+  final String district;
   final String slug;
+  final bool isActive;
 
   factory _ServiceAreaCity.fromJson(Map<String, dynamic> json) {
     return _ServiceAreaCity(
       id: json['id']?.toString() ?? '',
       name: json['name']?.toString() ?? '',
+      state: json['state']?.toString() ?? '',
+      district: json['district']?.toString() ?? '',
       slug: json['slug']?.toString() ?? '',
+      isActive: json['isActive'] == true,
     );
   }
 }
+
+String? _required(String? value) =>
+    (value ?? '').trim().isEmpty ? 'This field is required' : null;
 
 class _ServiceAreaRecord {
   const _ServiceAreaRecord({
@@ -1139,8 +1489,20 @@ class _ServiceAreaRecord {
       (item) => item.id == cityId,
       orElse: () => _ServiceAreaCity(
         id: cityId,
-        name: json['city'] is Map ? (json['city'] as Map)['name']?.toString() ?? '' : '',
-        slug: json['city'] is Map ? (json['city'] as Map)['slug']?.toString() ?? '' : '',
+        name: json['city'] is Map
+            ? (json['city'] as Map)['name']?.toString() ?? ''
+            : '',
+        state: json['city'] is Map
+            ? (json['city'] as Map)['state']?.toString() ?? ''
+            : '',
+        district: json['city'] is Map
+            ? (json['city'] as Map)['district']?.toString() ?? ''
+            : '',
+        slug: json['city'] is Map
+            ? (json['city'] as Map)['slug']?.toString() ?? ''
+            : '',
+        isActive:
+            json['city'] is Map && (json['city'] as Map)['isActive'] == true,
       ),
     );
 

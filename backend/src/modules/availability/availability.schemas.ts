@@ -31,7 +31,33 @@ const availabilitySlotSchema = z
 
 export const setWeeklyAvailabilitySchema = z.object({
   body: z.object({
-    slots: z.array(availabilitySlotSchema)
+    slots: z.array(availabilitySlotSchema).superRefine((slots, ctx) => {
+      const byDay = new Map<number, Array<{ index: number; start: number; end: number }>>();
+      slots.forEach((slot, index) => {
+        const [startHour, startMinute] = slot.startTime.split(":").map(Number);
+        const [endHour, endMinute] = slot.endTime.split(":").map(Number);
+        const daySlots = byDay.get(slot.dayOfWeek) ?? [];
+        daySlots.push({
+          index,
+          start: startHour * 60 + startMinute,
+          end: endHour * 60 + endMinute
+        });
+        byDay.set(slot.dayOfWeek, daySlots);
+      });
+
+      for (const daySlots of byDay.values()) {
+        daySlots.sort((left, right) => left.start - right.start);
+        for (let index = 1; index < daySlots.length; index += 1) {
+          if (daySlots[index]!.start < daySlots[index - 1]!.end) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              path: [daySlots[index]!.index, "startTime"],
+              message: "Availability time slots on the same day cannot overlap"
+            });
+          }
+        }
+      }
+    })
   }).strict(),
   query: emptyObjectSchema,
   params: emptyObjectSchema

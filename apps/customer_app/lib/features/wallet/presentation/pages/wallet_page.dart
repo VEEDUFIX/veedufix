@@ -12,7 +12,10 @@ class WalletPage extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('My Wallet', style: TextStyle(fontWeight: FontWeight.bold)),
+        title: const Text(
+          'My Wallet',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
           onPressed: () => context.pop(),
@@ -58,27 +61,26 @@ class WalletPage extends ConsumerWidget {
                   const PremiumEmptyState(
                     icon: Icons.account_balance_wallet_outlined,
                     title: 'No transactions yet',
-                    subtitle: 'Your wallet credits and debits will appear here.',
+                    subtitle:
+                        'Your wallet credits and debits will appear here.',
                   )
                 else
-                  ...wallet.transactions.map((tx) => _TransactionCard(transaction: tx)),
+                  ...wallet.transactions.map(
+                    (tx) => _TransactionCard(transaction: tx),
+                  ),
               ],
             ),
           );
         },
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, stack) => Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text('Error loading wallet: $error'),
-              const SizedBox(height: 16),
-              ElevatedButton(
-                onPressed: () => ref.invalidate(walletProvider),
-                child: const Text('Retry'),
-              ),
-            ],
-          ),
+        error: (error, stack) => PremiumRetryState(
+          title: 'Could not load wallet',
+          subtitle: 'Check your connection and try again.',
+          icon: Icons.account_balance_wallet_outlined,
+          onRetry: () => ref.invalidate(walletProvider),
+          onRefresh: () async {
+            await ref.refresh(walletProvider.future).then<void>((_) {});
+          },
         ),
       ),
     );
@@ -96,14 +98,8 @@ class _BalanceHeroCard extends StatelessWidget {
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(AbzioTheme.cardRadius),
-        gradient: const LinearGradient(
-          colors: [
-            Color(0xFF8B5CF6), // Purple
-            Color(0xFF6D28D9), // Darker purple
-          ],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
+        color: AbzioTheme.lightCard,
+        border: Border.all(color: AbzioTheme.lightBorder),
         boxShadow: AbzioTheme.eliteShadow,
       ),
       child: Column(
@@ -112,18 +108,27 @@ class _BalanceHeroCard extends StatelessWidget {
           const Text(
             'Available Balance',
             style: TextStyle(
-              color: Colors.white70,
-              fontSize: 16,
-              fontWeight: FontWeight.w500,
+              color: AbzioTheme.lightTextSecondary,
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
             ),
           ),
           const SizedBox(height: 8),
           Text(
             '₹${balance.toStringAsFixed(2)}',
             style: const TextStyle(
-              color: Colors.white,
-              fontSize: 36,
-              fontWeight: FontWeight.w900,
+              color: AbzioTheme.lightTextPrimary,
+              fontSize: 32,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 14),
+          Container(
+            width: 40,
+            height: 3,
+            decoration: BoxDecoration(
+              color: AbzioTheme.accentColor,
+              borderRadius: BorderRadius.circular(2),
             ),
           ),
         ],
@@ -137,38 +142,68 @@ class _TransactionCard extends StatelessWidget {
   final WalletTransaction transaction;
 
   String _formatDate(DateTime date) {
-    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    return '${date.day.toString().padLeft(2, '0')} ${months[date.month - 1]}';
+    const months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
+    final day =
+        '${date.day.toString().padLeft(2, '0')} ${months[date.month - 1]}';
+    return date.year == DateTime.now().year ? day : '$day ${date.year}';
+  }
+
+  String _formatReference(String reference) {
+    if (reference.trim().isEmpty) return 'Wallet transaction';
+    return reference
+        .toLowerCase()
+        .split('_')
+        .where((part) => part.isNotEmpty)
+        .map((part) => '${part[0].toUpperCase()}${part.substring(1)}')
+        .join(' ');
   }
 
   @override
   Widget build(BuildContext context) {
-    final isCredit = transaction.type == 'CREDIT';
+    final type = transaction.type.toUpperCase();
+    final isDebit = type.contains('DEBIT') || type == 'PAYOUT_PENDING';
+    final isCredit = !isDebit && transaction.amount >= 0;
+    final amount = transaction.amount.abs();
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: PremiumGlassCard(
-      child: ListTile(
-        leading: CircleAvatar(
-          backgroundColor: isCredit ? Colors.green.withValues(alpha: 0.2) : Colors.red.withValues(alpha: 0.2),
-          child: Icon(
-            isCredit ? Icons.arrow_upward : Icons.arrow_downward,
-            color: isCredit ? Colors.green : Colors.red,
+        child: ListTile(
+          leading: CircleAvatar(
+            backgroundColor: isCredit
+                ? Colors.green.withValues(alpha: 0.2)
+                : Colors.red.withValues(alpha: 0.2),
+            child: Icon(
+              isCredit ? Icons.arrow_upward : Icons.arrow_downward,
+              color: isCredit ? Colors.green : Colors.red,
+            ),
+          ),
+          title: Text(
+            _formatReference(transaction.referenceType),
+            style: const TextStyle(fontWeight: FontWeight.bold),
+          ),
+          subtitle: Text(_formatDate(transaction.createdAt)),
+          trailing: Text(
+            '${isCredit ? '+' : '-'}₹${amount.toStringAsFixed(2)}',
+            style: TextStyle(
+              color: isCredit ? Colors.green : Colors.red,
+              fontWeight: FontWeight.bold,
+              fontSize: 16,
+            ),
           ),
         ),
-        title: Text(
-          transaction.referenceType,
-          style: const TextStyle(fontWeight: FontWeight.bold),
-        ),
-        subtitle: Text(_formatDate(transaction.createdAt)),
-        trailing: Text(
-          '${isCredit ? '+' : '-'}₹${transaction.amount.toStringAsFixed(2)}',
-          style: TextStyle(
-            color: isCredit ? Colors.green : Colors.red,
-            fontWeight: FontWeight.bold,
-            fontSize: 16,
-          ),
-        ),
-      ),
       ),
     );
   }

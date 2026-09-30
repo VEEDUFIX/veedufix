@@ -8,6 +8,7 @@ import {
   requestWorkerPayout
 } from "./wallet.service.js";
 import { logger } from "../../lib/logger.js";
+import { AppError } from "../../lib/app-error.js";
 
 export async function getWalletHandler(request: AuthenticatedRequest, response: Response) {
   try {
@@ -26,6 +27,9 @@ export async function getWalletHandler(request: AuthenticatedRequest, response: 
       referralCode: summary.referralCode,
       totalReferrals: summary.totalReferrals,
       referralEarnings: summary.referralEarnings,
+      referralRewardAmount: summary.referralRewardAmount,
+      referralsEnabled: summary.referralsEnabled,
+      referralMaxSuccessfulPerReferrer: summary.referralMaxSuccessfulPerReferrer,
       transactions
     });
   } catch (error) {
@@ -44,7 +48,17 @@ export async function applyReferralHandler(request: AuthenticatedRequest, respon
     response.json(result);
   } catch (error) {
     logger.error({ error }, "Failed to apply referral code");
-    if (error instanceof Error && (error.message.includes("Invalid") || error.message.includes("Cannot") || error.message.includes("already"))) {
+    if (error instanceof AppError) {
+      response.status(error.statusCode).json({ message: error.message });
+      return;
+    }
+    if (error instanceof Error && (
+      error.message.includes("Invalid") ||
+      error.message.includes("Cannot") ||
+      error.message.includes("already") ||
+      error.message.includes("not currently available") ||
+      error.message.includes("limit reached")
+    )) {
       response.status(400).json({ message: "Unable to apply referral code" });
     } else {
       response.status(500).json({ message: "Internal server error" });
@@ -78,8 +92,16 @@ export async function requestPayoutHandler(request: AuthenticatedRequest, respon
     });
   } catch (error) {
     logger.error({ error }, "Failed to request payout");
+    if (error instanceof AppError) {
+      response.status(error.statusCode).json({ message: error.message });
+      return;
+    }
     if (error instanceof Error) {
-      if (error.message === "Minimum payout amount is 100" || error.message === "Payout amount must have no more than two decimal places") {
+      if (error.message.startsWith("Minimum payout amount is ") || error.message === "Payout amount must have no more than two decimal places") {
+        response.status(400).json({ message: error.message });
+        return;
+      }
+      if (error.message.includes("payouts are temporarily paused")) {
         response.status(400).json({ message: error.message });
         return;
       }

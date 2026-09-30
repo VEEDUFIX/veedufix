@@ -117,22 +117,32 @@ class HomeServiceCard extends StatelessWidget {
                         Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(
-                              'Starts at',
-                              style: GoogleFonts.inter(
-                                fontSize: 10.5,
-                                fontWeight: FontWeight.w500,
-                                color: const Color(0xFF777777),
+                            if (service.startingPrice > 0) ...[
+                              Text(
+                                'Starts at',
+                                style: GoogleFonts.inter(
+                                  fontSize: 10.5,
+                                  fontWeight: FontWeight.w500,
+                                  color: const Color(0xFF777777),
+                                ),
                               ),
-                            ),
-                            Text(
-                              '₹${service.startingPrice.toInt()}',
-                              style: GoogleFonts.inter(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w800,
-                                color: const Color(0xFF111111),
+                              Text(
+                                '₹${service.startingPrice.toInt()}',
+                                style: GoogleFonts.inter(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w800,
+                                  color: const Color(0xFF111111),
+                                ),
                               ),
-                            ),
+                            ] else
+                              Text(
+                                'Get a quote',
+                                style: GoogleFonts.inter(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w700,
+                                  color: const Color(0xFF111111),
+                                ),
+                              ),
                           ],
                         ),
                         Container(
@@ -146,11 +156,11 @@ class HomeServiceCard extends StatelessWidget {
                             border: Border.all(color: const Color(0xFFE1E1E1)),
                           ),
                           child: Text(
-                            'Add',
+                            'View',
                             style: GoogleFonts.inter(
                               fontSize: 13,
                               fontWeight: FontWeight.w800,
-                              color: const Color(0xFF6D3FEA),
+                              color: const Color(0xFFC6A769),
                             ),
                           ),
                         ),

@@ -84,11 +84,15 @@ class CatalogCategory {
       isActive: json['isActive'] as bool? ?? true,
       featured: json['featured'] as bool? ?? false,
       popular: json['popular'] as bool? ?? false,
-      subcategories: _decodeList(json['subcategories'], CatalogSubcategory.fromJson),
+      subcategories:
+          _decodeList(json['subcategories'], CatalogSubcategory.fromJson),
       serviceCount: (json['_count'] is Map<String, dynamic>)
-          ? ((json['_count'] as Map<String, dynamic>)['services'] as num?)?.toInt() ?? 0
+          ? ((json['_count'] as Map<String, dynamic>)['services'] as num?)
+                  ?.toInt() ??
+              0
           : (json['serviceCount'] as num?)?.toInt() ?? 0,
-      translations: _decodeList(json['translations'], CatalogTranslation.fromJson),
+      translations:
+          _decodeList(json['translations'], CatalogTranslation.fromJson),
     );
   }
 
@@ -105,9 +109,11 @@ class CatalogCategory {
       'isActive': isActive,
       'featured': featured,
       'popular': popular,
-      'subcategories': subcategories.map((item) => item.toJson()).toList(growable: false),
+      'subcategories':
+          subcategories.map((item) => item.toJson()).toList(growable: false),
       'serviceCount': serviceCount,
-      'translations': translations.map((item) => item.toJson()).toList(growable: false),
+      'translations':
+          translations.map((item) => item.toJson()).toList(growable: false),
     };
   }
 }
@@ -162,8 +168,10 @@ class CatalogSubcategory {
       rating: _toDouble(json['rating']),
       reviewCount: (json['reviewCount'] as num?)?.toInt() ?? 0,
       isActive: json['isActive'] as bool? ?? true,
-      services: _decodeList(json['catalogServices'] ?? json['services'], CatalogService.fromJson),
-      translations: _decodeList(json['translations'], CatalogTranslation.fromJson),
+      services: _decodeList(
+          json['catalogServices'] ?? json['services'], CatalogService.fromJson),
+      translations:
+          _decodeList(json['translations'], CatalogTranslation.fromJson),
     );
   }
 
@@ -183,7 +191,8 @@ class CatalogSubcategory {
       'reviewCount': reviewCount,
       'isActive': isActive,
       'services': services.map((item) => item.toJson()).toList(growable: false),
-      'translations': translations.map((item) => item.toJson()).toList(growable: false),
+      'translations':
+          translations.map((item) => item.toJson()).toList(growable: false),
     };
   }
 
@@ -242,10 +251,13 @@ class CatalogServiceRequirement {
   final int sortOrder;
 
   factory CatalogServiceRequirement.fromJson(Map<String, dynamic> json) {
+    final relatedSkill = json['skill'] is Map<String, dynamic>
+        ? json['skill'] as Map<String, dynamic>
+        : const <String, dynamic>{};
     return CatalogServiceRequirement(
-      id: json['id'] as String? ?? '',
-      name: json['name'] as String? ?? '',
-      slug: json['slug'] as String? ?? '',
+      id: json['id'] as String? ?? relatedSkill['id'] as String? ?? '',
+      name: json['name'] as String? ?? relatedSkill['name'] as String? ?? '',
+      slug: json['slug'] as String? ?? relatedSkill['slug'] as String? ?? '',
       isMandatory: json['isMandatory'] as bool? ?? true,
       sortOrder: (json['sortOrder'] as num?)?.toInt() ?? 0,
     );
@@ -410,7 +422,8 @@ class CatalogService {
       description: json['description'] as String?,
       shortDescription: json['shortDescription'] as String?,
       startingPrice: _toDouble(json['startingPrice']),
-      estimatedDurationMins: (json['estimatedDurationMins'] as num?)?.toInt() ?? 0,
+      estimatedDurationMins:
+          (json['estimatedDurationMins'] as num?)?.toInt() ?? 0,
       warrantyDays: (json['warrantyDays'] as num?)?.toInt() ?? 0,
       gstApplicable: json['gstApplicable'] as bool? ?? true,
       emergencyAvailable: json['emergencyAvailable'] as bool? ?? false,
@@ -431,16 +444,26 @@ class CatalogService {
           ? CatalogCategory.fromJson(json['category'] as Map<String, dynamic>)
           : null,
       subcategory: json['subcategory'] is Map<String, dynamic>
-          ? CatalogSubcategory.fromJson(json['subcategory'] as Map<String, dynamic>)
+          ? CatalogSubcategory.fromJson(
+              json['subcategory'] as Map<String, dynamic>)
           : null,
-      translations: _decodeList(json['translations'], CatalogTranslation.fromJson),
+      translations:
+          _decodeList(json['translations'], CatalogTranslation.fromJson),
       images: _decodeList(json['images'], CatalogServiceImage.fromJson),
-      requiredSkills: _decodeList(json['requiredSkills'], CatalogServiceRequirement.fromJson),
-      requiredTools: _decodeList(json['requiredTools'], CatalogServiceRequirement.fromJson),
-      requiredDocuments: _decodeList(json['requiredDocuments'], CatalogServiceRequirement.fromJson),
-      pricingRules: _decodeList(json['pricingRules'], CatalogPriceRule.fromJson),
-      inclusions: (json['inclusions'] as List<dynamic>? ?? []).map((e) => e as String).toList(),
-      exclusions: (json['exclusions'] as List<dynamic>? ?? []).map((e) => e as String).toList(),
+      requiredSkills: _decodeList(
+          json['requiredSkills'], CatalogServiceRequirement.fromJson),
+      requiredTools: _decodeList(
+          json['requiredTools'], CatalogServiceRequirement.fromJson),
+      requiredDocuments: _decodeList(
+          json['requiredDocuments'], CatalogServiceRequirement.fromJson),
+      pricingRules:
+          _decodeList(json['pricingRules'], CatalogPriceRule.fromJson),
+      inclusions: (json['inclusions'] as List<dynamic>? ?? [])
+          .map((e) => e as String)
+          .toList(),
+      exclusions: (json['exclusions'] as List<dynamic>? ?? [])
+          .map((e) => e as String)
+          .toList(),
     );
   }
 
@@ -474,12 +497,18 @@ class CatalogService {
       'sortOrder': sortOrder,
       'category': category?.toJson(),
       'subcategory': subcategory?.toJson(),
-      'translations': translations.map((item) => item.toJson()).toList(growable: false),
+      'translations':
+          translations.map((item) => item.toJson()).toList(growable: false),
       'images': images.map((item) => item.toJson()).toList(growable: false),
-      'requiredSkills': requiredSkills.map((item) => item.toJson()).toList(growable: false),
-      'requiredTools': requiredTools.map((item) => item.toJson()).toList(growable: false),
-      'requiredDocuments': requiredDocuments.map((item) => item.toJson()).toList(growable: false),
-      'pricingRules': pricingRules.map((item) => item.toJson()).toList(growable: false),
+      'requiredSkills':
+          requiredSkills.map((item) => item.toJson()).toList(growable: false),
+      'requiredTools':
+          requiredTools.map((item) => item.toJson()).toList(growable: false),
+      'requiredDocuments': requiredDocuments
+          .map((item) => item.toJson())
+          .toList(growable: false),
+      'pricingRules':
+          pricingRules.map((item) => item.toJson()).toList(growable: false),
       'inclusions': inclusions,
       'exclusions': exclusions,
     };
@@ -490,7 +519,8 @@ class CatalogService {
     final subcategoryName = subcategory?.name.trim();
     final parts = <String>[
       if (categoryName != null && categoryName.isNotEmpty) categoryName,
-      if (subcategoryName != null && subcategoryName.isNotEmpty) subcategoryName,
+      if (subcategoryName != null && subcategoryName.isNotEmpty)
+        subcategoryName,
     ];
     return parts.isEmpty ? '' : parts.join(' · ');
   }
@@ -542,7 +572,8 @@ double _toDouble(dynamic value) {
   return 0;
 }
 
-List<T> _decodeList<T>(dynamic value, T Function(Map<String, dynamic>) builder) {
+List<T> _decodeList<T>(
+    dynamic value, T Function(Map<String, dynamic>) builder) {
   if (value is! List) {
     return <T>[];
   }

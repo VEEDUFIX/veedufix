@@ -9,11 +9,7 @@ const emptyObjectSchema = z.object({}).strict();
 const pincodeSchema = z
   .string()
   .trim()
-  .regex(/^[1-9][0-9]{5}$/, "A valid 6-digit pincode is required")
-  .refine(
-    (val) => val.startsWith("600"),
-    "We currently serve only Chennai (pincodes starting with 600)"
-  );
+  .regex(/^[1-9][0-9]{5}$/, "A valid 6-digit pincode is required");
 
 const latSchema = z.coerce.number().min(-90).max(90);
 const lngSchema = z.coerce.number().min(-180).max(180);

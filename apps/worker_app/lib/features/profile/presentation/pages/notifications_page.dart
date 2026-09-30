@@ -44,41 +44,50 @@ class NotificationsPage extends ConsumerWidget {
               children: [
                 _NotificationList(
                   notifications: notifications,
-                  onRefresh: () async => ref.refresh(notificationsProvider.future),
-                  onDismiss: (notificationId) => _markNotificationRead(ref, notificationId),
+                  onRefresh: () async =>
+                      ref.refresh(notificationsProvider.future),
+                  onDismiss: (notificationId) =>
+                      _markNotificationRead(ref, notificationId),
                 ),
                 _NotificationList(
-                  notifications: notifications.where((n) => n.type == 'BOOKING' || n.type == 'JOB').toList(),
-                  onRefresh: () async => ref.refresh(notificationsProvider.future),
-                  onDismiss: (notificationId) => _markNotificationRead(ref, notificationId),
+                  notifications: notifications
+                      .where((n) => n.type == 'BOOKING' || n.type == 'JOB')
+                      .toList(),
+                  onRefresh: () async =>
+                      ref.refresh(notificationsProvider.future),
+                  onDismiss: (notificationId) =>
+                      _markNotificationRead(ref, notificationId),
                 ),
                 _NotificationList(
-                  notifications: notifications.where((n) => n.type == 'PAYMENT' || n.type == 'EARNINGS').toList(),
-                  onRefresh: () async => ref.refresh(notificationsProvider.future),
-                  onDismiss: (notificationId) => _markNotificationRead(ref, notificationId),
+                  notifications: notifications
+                      .where((n) => n.type == 'PAYMENT' || n.type == 'EARNINGS')
+                      .toList(),
+                  onRefresh: () async =>
+                      ref.refresh(notificationsProvider.future),
+                  onDismiss: (notificationId) =>
+                      _markNotificationRead(ref, notificationId),
                 ),
                 _NotificationList(
-                  notifications: notifications.where((n) => n.type == 'SYSTEM' || n.type == 'INFO').toList(),
-                  onRefresh: () async => ref.refresh(notificationsProvider.future),
-                  onDismiss: (notificationId) => _markNotificationRead(ref, notificationId),
+                  notifications: notifications
+                      .where((n) => n.type == 'SYSTEM' || n.type == 'INFO')
+                      .toList(),
+                  onRefresh: () async =>
+                      ref.refresh(notificationsProvider.future),
+                  onDismiss: (notificationId) =>
+                      _markNotificationRead(ref, notificationId),
                 ),
               ],
             );
           },
           loading: () => const Center(child: CircularProgressIndicator()),
-          error: (error, stack) => Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Icon(Icons.error_outline, size: 48, color: Colors.red),
-                const SizedBox(height: 16),
-                Text('Error loading notifications', style: Theme.of(context).textTheme.titleMedium),
-                TextButton(
-                  onPressed: () => ref.refresh(notificationsProvider),
-                  child: const Text('Retry'),
-                ),
-              ],
-            ),
+          error: (error, stack) => PremiumRetryState(
+            title: 'Could not load notifications',
+            subtitle: 'Check your connection and try again.',
+            icon: Icons.notifications_off_outlined,
+            onRetry: () => ref.invalidate(notificationsProvider),
+            onRefresh: () async {
+              await ref.refresh(notificationsProvider.future).then<void>((_) {});
+            },
           ),
         ),
       ),
@@ -133,7 +142,8 @@ class _NotificationList extends StatelessWidget {
   }
 }
 
-Future<void> _markAllNotificationsRead(BuildContext context, WidgetRef ref) async {
+Future<void> _markAllNotificationsRead(
+    BuildContext context, WidgetRef ref) async {
   try {
     await ref.read(notificationsRepositoryProvider).markAllAsRead();
     ref.invalidate(notificationsProvider);

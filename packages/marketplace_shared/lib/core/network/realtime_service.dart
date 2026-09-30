@@ -25,12 +25,16 @@ class RealtimeService {
 
   WebSocketChannel? _trackingChannel;
   WebSocketChannel? _notificationChannel;
-  
-  final _trackingStreamController = StreamController<Map<String, dynamic>>.broadcast();
-  final _notificationStreamController = StreamController<Map<String, dynamic>>.broadcast();
 
-  Stream<Map<String, dynamic>> get trackingStream => _trackingStreamController.stream;
-  Stream<Map<String, dynamic>> get notificationStream => _notificationStreamController.stream;
+  final _trackingStreamController =
+      StreamController<Map<String, dynamic>>.broadcast();
+  final _notificationStreamController =
+      StreamController<Map<String, dynamic>>.broadcast();
+
+  Stream<Map<String, dynamic>> get trackingStream =>
+      _trackingStreamController.stream;
+  Stream<Map<String, dynamic>> get notificationStream =>
+      _notificationStreamController.stream;
 
   String get _wsBaseUrl {
     if (_environment.apiBaseUrl.startsWith('https')) {
@@ -46,13 +50,15 @@ class RealtimeService {
 
     final url = Uri.parse('$_wsBaseUrl/tracking/ws?bookingId=$bookingId');
     _trackingChannel = WebSocketChannel.connect(url, protocols: [token]);
-    
+
     _trackingChannel!.stream.listen(
       (message) {
         try {
           final data = jsonDecode(message as String) as Map<String, dynamic>;
           if (data['type'] == 'tracking.event') {
-            _trackingStreamController.add(data['payload'] as Map<String, dynamic>);
+            final payload = Map<String, dynamic>.from(data['payload'] as Map);
+            payload['timestamp'] ??= data['timestamp'];
+            _trackingStreamController.add(payload);
           }
         } catch (_) {}
       },
@@ -86,13 +92,14 @@ class RealtimeService {
 
     final url = Uri.parse('$_wsBaseUrl/notifications/ws');
     _notificationChannel = WebSocketChannel.connect(url, protocols: [token]);
-    
+
     _notificationChannel!.stream.listen(
       (message) {
         try {
           final data = jsonDecode(message as String) as Map<String, dynamic>;
           if (data['type'] == 'notification.event') {
-            _notificationStreamController.add(data['payload'] as Map<String, dynamic>);
+            _notificationStreamController
+                .add(data['payload'] as Map<String, dynamic>);
           }
         } catch (_) {}
       },

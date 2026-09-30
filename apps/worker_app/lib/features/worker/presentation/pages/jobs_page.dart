@@ -307,7 +307,11 @@ class _JobTabContent extends ConsumerWidget {
     final jobsAsync = ref.watch(workerJobsProvider(tab));
 
     return RefreshIndicator(
-      onRefresh: () async => ref.refresh(workerJobsProvider(tab).future),
+      onRefresh: () async {
+        try {
+          await ref.refresh(workerJobsProvider(tab).future).then<void>((_) {});
+        } catch (_) {}
+      },
       child: jobsAsync.when(
         data: (jobs) {
           if (jobs.isEmpty) {
@@ -336,7 +340,55 @@ class _JobTabContent extends ConsumerWidget {
           );
         },
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, s) => const Center(child: Text('Error loading jobs.')),
+        error: (e, s) => ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.all(24),
+          children: [
+            SizedBox(
+              height: MediaQuery.sizeOf(context).height * 0.5,
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    Icons.cloud_off_rounded,
+                    size: 42,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    appText(
+                      context,
+                      'Could not load jobs',
+                      'வேலைகளை ஏற்ற முடியவில்லை',
+                    ),
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w800,
+                        ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    appText(
+                      context,
+                      'Check your connection and try again.',
+                      'இணைப்பைச் சரிபார்த்து மீண்டும் முயற்சிக்கவும்.',
+                    ),
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
+                  ),
+                  const SizedBox(height: 14),
+                  FilledButton.icon(
+                    onPressed: () => ref.invalidate(workerJobsProvider(tab)),
+                    icon: const Icon(Icons.refresh_rounded),
+                    label:
+                        Text(appText(context, 'Try again', 'மீண்டும் முயற்சி')),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -347,7 +399,7 @@ class _JobCard extends ConsumerWidget {
   final WorkerJob job;
   final String tab;
 
-  Future<void> _openNavigation(WorkerJob job) async {
+  Future<void> _openNavigation(BuildContext context, WorkerJob job) async {
     final lat = job.destinationLatitude;
     final lng = job.destinationLongitude;
     if (lat != null && lng != null) {
@@ -358,7 +410,7 @@ class _JobCard extends ConsumerWidget {
         'travelmode': 'driving',
         'dir_action': 'navigate',
       });
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
+      await _launchDirections(context, uri);
       return;
     }
 
@@ -371,6 +423,19 @@ class _JobCard extends ConsumerWidget {
         .cast<String>()
         .join(', ');
     if (query.isEmpty) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              appText(
+                context,
+                'No destination is available for this job.',
+                'இந்த வேலைக்கான இடம் கிடைக்கவில்லை.',
+              ),
+            ),
+          ),
+        );
+      }
       return;
     }
     final uri = Uri.https('www.google.com', '/maps/dir/', {
@@ -380,7 +445,40 @@ class _JobCard extends ConsumerWidget {
       'travelmode': 'driving',
       'dir_action': 'navigate',
     });
-    await launchUrl(uri, mode: LaunchMode.externalApplication);
+    await _launchDirections(context, uri);
+  }
+
+  Future<void> _launchDirections(BuildContext context, Uri uri) async {
+    try {
+      final opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
+      if (!opened && context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              appText(
+                context,
+                'Could not open navigation.',
+                'வழிசெலுத்தலைத் திறக்க முடியவில்லை.',
+              ),
+            ),
+          ),
+        );
+      }
+    } catch (_) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              appText(
+                context,
+                'Could not open navigation.',
+                'வழிசெலுத்தலைத் திறக்க முடியவில்லை.',
+              ),
+            ),
+          ),
+        );
+      }
+    }
   }
 
   Future<void> _showJobDetails(
@@ -529,7 +627,7 @@ class _JobCard extends ConsumerWidget {
                         child: FilledButton.tonalIcon(
                           onPressed: () {
                             Navigator.of(sheetContext).pop();
-                            _openNavigation(job);
+                            _openNavigation(context, job);
                           },
                           icon: const Icon(Icons.navigation_rounded),
                           label: const Text('Navigate'),

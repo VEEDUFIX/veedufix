@@ -13,7 +13,7 @@ class ReviewsPage extends ConsumerWidget {
     final tt = Theme.of(context).textTheme;
 
     final authState = ref.watch(authControllerProvider);
-    
+
     return authState.when(
       data: (session) {
         if (session == null) {
@@ -35,7 +35,9 @@ class ReviewsPage extends ConsumerWidget {
               icon: Icon(Icons.arrow_back, color: cs.onSurface),
               onPressed: () => context.pop(),
             ),
-            title: Text('Reviews & Ratings', style: tt.titleLarge?.copyWith(fontWeight: FontWeight.w600, color: cs.onSurface)),
+            title: Text('Reviews & Ratings',
+                style: tt.titleLarge?.copyWith(
+                    fontWeight: FontWeight.w600, color: cs.onSurface)),
           ),
           body: profileAsync.when(
             data: (profile) {
@@ -43,7 +45,8 @@ class ReviewsPage extends ConsumerWidget {
                 ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
 
               return RefreshIndicator(
-                onRefresh: () async => ref.refresh(workerProfileProvider(workerId).future),
+                onRefresh: () async =>
+                    ref.refresh(workerProfileProvider(workerId).future),
                 child: SingleChildScrollView(
                   physics: const AlwaysScrollableScrollPhysics(),
                   child: Padding(
@@ -53,11 +56,17 @@ class ReviewsPage extends ConsumerWidget {
                       children: [
                         _buildOverallRating(cs, tt, profile),
                         const SizedBox(height: 32),
-                        Text('Badges Earned', style: tt.titleMedium?.copyWith(fontWeight: FontWeight.bold, color: cs.onSurface)),
+                        Text('Badges Earned',
+                            style: tt.titleMedium?.copyWith(
+                                fontWeight: FontWeight.bold,
+                                color: cs.onSurface)),
                         const SizedBox(height: 16),
                         _buildBadgesScroll(cs, tt, profile, reviews),
                         const SizedBox(height: 32),
-                        Text('Recent Reviews', style: tt.titleMedium?.copyWith(fontWeight: FontWeight.bold, color: cs.onSurface)),
+                        Text('Recent Reviews',
+                            style: tt.titleMedium?.copyWith(
+                                fontWeight: FontWeight.bold,
+                                color: cs.onSurface)),
                         const SizedBox(height: 16),
                         if (reviews.isEmpty)
                           const PremiumEmptyState(
@@ -70,7 +79,8 @@ class ReviewsPage extends ConsumerWidget {
                             shrinkWrap: true,
                             physics: const NeverScrollableScrollPhysics(),
                             itemCount: reviews.length,
-                            separatorBuilder: (_, __) => const SizedBox(height: 16),
+                            separatorBuilder: (_, __) =>
+                                const SizedBox(height: 16),
                             itemBuilder: (context, index) {
                               final review = reviews[index];
                               return _buildReviewItem(
@@ -87,39 +97,42 @@ class ReviewsPage extends ConsumerWidget {
               );
             },
             loading: () => const Center(child: CircularProgressIndicator()),
-            error: (err, stack) => Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Icon(Icons.error_outline, color: Colors.red, size: 48),
-                  const SizedBox(height: 16),
-                  Text('Failed to load reviews', style: tt.titleMedium),
-                  TextButton(
-                    onPressed: () => ref.refresh(workerProfileProvider(workerId)),
-                    child: const Text('Retry'),
-                  ),
-                ],
-              ),
+            error: (err, stack) => PremiumRetryState(
+              title: 'Could not load reviews',
+              subtitle: 'Check your connection and try again.',
+              icon: Icons.star_outline_rounded,
+              onRetry: () => ref.invalidate(workerProfileProvider(workerId)),
+              onRefresh: () async {
+                await ref.refresh(workerProfileProvider(workerId).future).then<void>((_) {});
+              },
             ),
           ),
         );
       },
-      loading: () => const Scaffold(body: Center(child: CircularProgressIndicator())),
+      loading: () =>
+          const Scaffold(body: Center(child: CircularProgressIndicator())),
       error: (_, __) => const Scaffold(body: Center(child: Text('Auth error'))),
     );
   }
 
-  Widget _buildOverallRating(ColorScheme cs, TextTheme tt, WorkerPublicProfile profile) {
+  Widget _buildOverallRating(
+      ColorScheme cs, TextTheme tt, WorkerPublicProfile profile) {
     final reviews = profile.reviews;
     final total = reviews.length;
-    
+
     int count5 = 0, count4 = 0, count3 = 0, count2 = 0, count1 = 0;
     for (var r in reviews) {
-      if (r.rating >= 4.5) { count5++; }
-      else if (r.rating >= 3.5) { count4++; }
-      else if (r.rating >= 2.5) { count3++; }
-      else if (r.rating >= 1.5) { count2++; }
-      else { count1++; }
+      if (r.rating >= 4.5) {
+        count5++;
+      } else if (r.rating >= 3.5) {
+        count4++;
+      } else if (r.rating >= 2.5) {
+        count3++;
+      } else if (r.rating >= 1.5) {
+        count2++;
+      } else {
+        count1++;
+      }
     }
 
     double pct(int count) => total == 0 ? 0 : count / total;
@@ -136,13 +149,18 @@ class ReviewsPage extends ConsumerWidget {
                 crossAxisAlignment: CrossAxisAlignment.baseline,
                 textBaseline: TextBaseline.alphabetic,
                 children: [
-                  Text(profile.averageRating.toStringAsFixed(1), style: tt.displayMedium?.copyWith(fontWeight: FontWeight.bold, color: cs.onSurface)),
+                  Text(profile.averageRating.toStringAsFixed(1),
+                      style: tt.displayMedium?.copyWith(
+                          fontWeight: FontWeight.bold, color: cs.onSurface)),
                   const SizedBox(width: 4),
-                  const Icon(Icons.star_rounded, color: Color(0xFFF59E0B), size: 32),
+                  const Icon(Icons.star_rounded,
+                      color: Color(0xFFF59E0B), size: 32),
                 ],
               ),
               const SizedBox(height: 4),
-              Text('$total reviews', style: tt.bodyMedium?.copyWith(color: cs.onSurface.withValues(alpha: 0.6))),
+              Text('$total reviews',
+                  style: tt.bodyMedium
+                      ?.copyWith(color: cs.onSurface.withValues(alpha: 0.6))),
             ],
           ),
         ),
@@ -167,10 +185,13 @@ class ReviewsPage extends ConsumerWidget {
     );
   }
 
-  Widget _buildRatingBar(int star, double percentage, ColorScheme cs, TextTheme tt) {
+  Widget _buildRatingBar(
+      int star, double percentage, ColorScheme cs, TextTheme tt) {
     return Row(
       children: [
-        Text('$star', style: tt.bodySmall?.copyWith(fontWeight: FontWeight.bold, color: cs.onSurface)),
+        Text('$star',
+            style: tt.bodySmall
+                ?.copyWith(fontWeight: FontWeight.bold, color: cs.onSurface)),
         Icon(Icons.star, size: 12, color: cs.onSurface.withValues(alpha: 0.5)),
         const SizedBox(width: 8),
         Expanded(
@@ -179,7 +200,8 @@ class ReviewsPage extends ConsumerWidget {
             child: LinearProgressIndicator(
               value: percentage,
               backgroundColor: cs.onSurface.withValues(alpha: 0.1),
-              valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFFF59E0B)),
+              valueColor:
+                  const AlwaysStoppedAnimation<Color>(Color(0xFFF59E0B)),
               minHeight: 8,
             ),
           ),
@@ -188,32 +210,39 @@ class ReviewsPage extends ConsumerWidget {
     );
   }
 
-  Widget _buildBadgesScroll(ColorScheme cs, TextTheme tt, WorkerPublicProfile profile, List<WorkerPublicProfileReview> reviews) {
+  Widget _buildBadgesScroll(ColorScheme cs, TextTheme tt,
+      WorkerPublicProfile profile, List<WorkerPublicProfileReview> reviews) {
     final List<Widget> badges = [];
 
     // Derive badges based on real data
     if (profile.averageRating >= 4.5) {
-      badges.add(_buildBadgeItem('Top Rated', Icons.emoji_events, const Color(0xFF8B5CF6), cs, tt));
+      badges.add(_buildBadgeItem(
+          'Top Rated', Icons.emoji_events, const Color(0xFF8B5CF6), cs, tt));
       badges.add(const SizedBox(width: 12));
     }
-    
+
     // 5-star streak on the latest 3 reviews
     final latestReviews = reviews.take(3).toList(growable: false);
-    if (latestReviews.length == 3 && latestReviews.every((r) => r.rating == 5.0)) {
-      badges.add(_buildBadgeItem('5-Star Streak', Icons.star, const Color(0xFFF59E0B), cs, tt));
+    if (latestReviews.length == 3 &&
+        latestReviews.every((r) => r.rating == 5.0)) {
+      badges.add(_buildBadgeItem(
+          '5-Star Streak', Icons.star, const Color(0xFFF59E0B), cs, tt));
       badges.add(const SizedBox(width: 12));
     }
 
     if (profile.completedJobsCount >= 50) {
-      badges.add(_buildBadgeItem('Master', Icons.verified, const Color(0xFF3B82F6), cs, tt));
+      badges.add(_buildBadgeItem(
+          'Master', Icons.verified, const Color(0xFF3B82F6), cs, tt));
       badges.add(const SizedBox(width: 12));
     } else if (profile.completedJobsCount >= 10) {
-      badges.add(_buildBadgeItem('Experienced', Icons.work, const Color(0xFF14B8A6), cs, tt));
+      badges.add(_buildBadgeItem(
+          'Experienced', Icons.work, const Color(0xFF14B8A6), cs, tt));
       badges.add(const SizedBox(width: 12));
     }
 
     if (badges.isEmpty) {
-      badges.add(Text('No badges yet', style: tt.bodyMedium?.copyWith(color: cs.onSurfaceVariant)));
+      badges.add(Text('No badges yet',
+          style: tt.bodyMedium?.copyWith(color: cs.onSurfaceVariant)));
     } else {
       badges.removeLast(); // remove trailing SizedBox
     }
@@ -226,7 +255,8 @@ class ReviewsPage extends ConsumerWidget {
     );
   }
 
-  Widget _buildBadgeItem(String title, IconData icon, Color color, ColorScheme cs, TextTheme tt) {
+  Widget _buildBadgeItem(
+      String title, IconData icon, Color color, ColorScheme cs, TextTheme tt) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
@@ -239,7 +269,9 @@ class ReviewsPage extends ConsumerWidget {
         children: [
           Icon(icon, color: color, size: 20),
           const SizedBox(width: 8),
-          Text(title, style: tt.labelLarge?.copyWith(color: color, fontWeight: FontWeight.bold)),
+          Text(title,
+              style: tt.labelLarge
+                  ?.copyWith(color: color, fontWeight: FontWeight.bold)),
         ],
       ),
     );
@@ -250,10 +282,10 @@ class ReviewsPage extends ConsumerWidget {
     required TextTheme tt,
     required WorkerPublicProfileReview review,
   }) {
-    final String initials = review.customerName.isNotEmpty 
-      ? review.customerName.substring(0, 1).toUpperCase() 
-      : '?';
-      
+    final String initials = review.customerName.isNotEmpty
+        ? review.customerName.substring(0, 1).toUpperCase()
+        : '?';
+
     final dateStr = DateFormat.yMMMd().format(review.createdAt);
 
     return Container(
@@ -272,15 +304,21 @@ class ReviewsPage extends ConsumerWidget {
                 imageUrl: review.customerAvatarUrl,
                 radius: 18,
                 backgroundColor: cs.primary.withValues(alpha: 0.1),
-                fallback: Text(initials, style: tt.titleMedium?.copyWith(color: cs.primary, fontWeight: FontWeight.bold)),
+                fallback: Text(initials,
+                    style: tt.titleMedium?.copyWith(
+                        color: cs.primary, fontWeight: FontWeight.bold)),
               ),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(review.customerName, style: tt.titleMedium?.copyWith(fontWeight: FontWeight.bold, color: cs.onSurface)),
-                    Text(dateStr, style: tt.bodySmall?.copyWith(color: cs.onSurface.withValues(alpha: 0.6))),
+                    Text(review.customerName,
+                        style: tt.titleMedium?.copyWith(
+                            fontWeight: FontWeight.bold, color: cs.onSurface)),
+                    Text(dateStr,
+                        style: tt.bodySmall?.copyWith(
+                            color: cs.onSurface.withValues(alpha: 0.6))),
                   ],
                 ),
               ),
@@ -292,16 +330,21 @@ class ReviewsPage extends ConsumerWidget {
                 ),
                 child: Row(
                   children: [
-                    const Icon(Icons.star_rounded, color: Color(0xFFF59E0B), size: 16),
+                    const Icon(Icons.star_rounded,
+                        color: Color(0xFFF59E0B), size: 16),
                     const SizedBox(width: 4),
-                    Text(review.rating.toStringAsFixed(1), style: tt.labelMedium?.copyWith(fontWeight: FontWeight.bold, color: const Color(0xFFF59E0B))),
+                    Text(review.rating.toStringAsFixed(1),
+                        style: tt.labelMedium?.copyWith(
+                            fontWeight: FontWeight.bold,
+                            color: const Color(0xFFF59E0B))),
                   ],
                 ),
               ),
             ],
           ),
           const SizedBox(height: 12),
-          Text(review.comment ?? '', style: tt.bodyMedium?.copyWith(color: cs.onSurface)),
+          Text(review.comment ?? '',
+              style: tt.bodyMedium?.copyWith(color: cs.onSurface)),
         ],
       ),
     );

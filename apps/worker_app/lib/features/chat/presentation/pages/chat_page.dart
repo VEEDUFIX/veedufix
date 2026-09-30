@@ -56,14 +56,16 @@ class _WorkerChatPageState extends ConsumerState<WorkerChatPage>
   }
 
   Future<void> _pickAttachment() async {
-    final picked = await _picker.pickImage(source: ImageSource.gallery, imageQuality: 80);
+    final picked =
+        await _picker.pickImage(source: ImageSource.gallery, imageQuality: 80);
     if (picked == null) return;
     try {
-      final attachment = await ref.read(chatControllerProvider).uploadAttachment(
-        bookingId: widget.bookingId,
-        bytes: await picked.readAsBytes(),
-        filename: picked.name,
-      );
+      final attachment =
+          await ref.read(chatControllerProvider).uploadAttachment(
+                bookingId: widget.bookingId,
+                bytes: await picked.readAsBytes(),
+                filename: picked.name,
+              );
       if (!mounted) return;
       setState(() {
         _draftAttachments.add(attachment);
@@ -121,7 +123,9 @@ class _WorkerChatPageState extends ConsumerState<WorkerChatPage>
 
   String _formatDateSeparator(DateTime date) {
     final now = DateTime.now();
-    if (date.year == now.year && date.month == now.month && date.day == now.day) {
+    if (date.year == now.year &&
+        date.month == now.month &&
+        date.day == now.day) {
       return 'Today';
     }
     final yesterday = now.subtract(const Duration(days: 1));
@@ -234,105 +238,116 @@ class _WorkerChatPageState extends ConsumerState<WorkerChatPage>
         children: [
           Expanded(
             child: ref.watch(chatProvider(widget.bookingId)).when(
-              loading: () => const Center(child: CircularProgressIndicator()),
-              error: (err, stack) => Center(child: Text('Error: $err')),
-              data: (messages) {
-                final auth = ref.read(authControllerProvider).valueOrNull;
-                if (auth != null) {
-                  WidgetsBinding.instance.addPostFrameCallback((_) {
-                    ref.read(chatControllerProvider).markAsRead(
-                          bookingId: widget.bookingId,
-                          userId: auth.user.id,
-                        );
-                  });
-                }
-                if (messages.isEmpty) {
-                  return Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(24),
-                          decoration: BoxDecoration(
-                            color: cs.primary.withValues(alpha: 0.1),
-                            shape: BoxShape.circle,
-                          ),
-                          child: Icon(Icons.chat_bubble_outline_rounded,
-                              size: 48, color: cs.primary),
+                  loading: () =>
+                      const Center(child: CircularProgressIndicator()),
+                  error: (err, stack) => PremiumRetryState(
+                    title: 'Could not load messages',
+                    subtitle: 'Check your connection and try again.',
+                    icon: Icons.chat_bubble_outline_rounded,
+                    onRetry: () =>
+                        ref.invalidate(chatProvider(widget.bookingId)),
+                    onRefresh: () async {
+                      await ref.refresh(chatProvider(widget.bookingId).future).then<void>((_) {});
+                    },
+                  ),
+                  data: (messages) {
+                    final auth = ref.read(authControllerProvider).valueOrNull;
+                    if (auth != null) {
+                      WidgetsBinding.instance.addPostFrameCallback((_) {
+                        ref.read(chatControllerProvider).markAsRead(
+                              bookingId: widget.bookingId,
+                              userId: auth.user.id,
+                            );
+                      });
+                    }
+                    if (messages.isEmpty) {
+                      return Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(24),
+                              decoration: BoxDecoration(
+                                color: cs.primary.withValues(alpha: 0.1),
+                                shape: BoxShape.circle,
+                              ),
+                              child: Icon(Icons.chat_bubble_outline_rounded,
+                                  size: 48, color: cs.primary),
+                            ),
+                            const SizedBox(height: 16),
+                            Text(
+                              'Start the conversation',
+                              style: tt.titleMedium?.copyWith(
+                                  fontWeight: FontWeight.w600,
+                                  color: cs.onSurface),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              'Say hi to the customer to let them know you\'re ready.',
+                              style: tt.bodySmall
+                                  ?.copyWith(color: cs.onSurfaceVariant),
+                            ),
+                          ],
                         ),
-                        const SizedBox(height: 16),
-                        Text(
-                          'Start the conversation',
-                          style: tt.titleMedium?.copyWith(
-                              fontWeight: FontWeight.w600,
-                              color: cs.onSurface),
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          'Say hi to the customer to let them know you\'re ready.',
-                          style: tt.bodySmall
-                              ?.copyWith(color: cs.onSurfaceVariant),
-                        ),
-                      ],
-                    ),
-                  );
-                }
-
-                WidgetsBinding.instance.addPostFrameCallback((_) {
-                  _scrollToBottom();
-                });
-
-                return ListView.builder(
-                  controller: _scrollController,
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                  itemCount: messages.length,
-                  itemBuilder: (context, index) {
-                    final message = messages[index];
-                    final isMe = message.senderId == auth?.user.id;
-
-                    bool showDateSeparator = false;
-                    if (index == 0) {
-                      showDateSeparator = true;
-                    } else {
-                      final prevMessage = messages[index - 1];
-                      showDateSeparator = _isDifferentDay(
-                          prevMessage.timestamp, message.timestamp);
+                      );
                     }
 
-                    return Column(
-                      children: [
-                        if (showDateSeparator)
-                          Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 16),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 12, vertical: 4),
-                              decoration: BoxDecoration(
-                                color: cs.surfaceContainerHighest,
-                                borderRadius: BorderRadius.circular(12),
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      _scrollToBottom();
+                    });
+
+                    return ListView.builder(
+                      controller: _scrollController,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 20, vertical: 12),
+                      itemCount: messages.length,
+                      itemBuilder: (context, index) {
+                        final message = messages[index];
+                        final isMe = message.senderId == auth?.user.id;
+
+                        bool showDateSeparator = false;
+                        if (index == 0) {
+                          showDateSeparator = true;
+                        } else {
+                          final prevMessage = messages[index - 1];
+                          showDateSeparator = _isDifferentDay(
+                              prevMessage.timestamp, message.timestamp);
+                        }
+
+                        return Column(
+                          children: [
+                            if (showDateSeparator)
+                              Padding(
+                                padding:
+                                    const EdgeInsets.symmetric(vertical: 16),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 12, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: cs.surfaceContainerHighest,
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: Text(
+                                    _formatDateSeparator(message.timestamp),
+                                    style: tt.labelSmall
+                                        ?.copyWith(color: cs.onSurfaceVariant),
+                                  ),
+                                ),
                               ),
-                              child: Text(
-                                _formatDateSeparator(message.timestamp),
-                                style: tt.labelSmall
-                                    ?.copyWith(color: cs.onSurfaceVariant),
-                              ),
+                            _buildMessageBubble(
+                              text: message.text,
+                              isMe: isMe,
+                              time: _formatTime(message.timestamp),
+                              cs: cs,
+                              tt: tt,
+                              attachments: message.attachments,
                             ),
-                          ),
-                        _buildMessageBubble(
-                          text: message.text,
-                          isMe: isMe,
-                          time: _formatTime(message.timestamp),
-                          cs: cs,
-                          tt: tt,
-                          attachments: message.attachments,
-                        ),
-                      ],
+                          ],
+                        );
+                      },
                     );
                   },
-                );
-              },
-            ),
+                ),
           ),
           FadeTransition(
             opacity: _quickReplyFadeAnim,
@@ -387,7 +402,8 @@ class _WorkerChatPageState extends ConsumerState<WorkerChatPage>
                         color: cs.surfaceContainerHighest,
                         shape: BoxShape.circle,
                       ),
-                      child: Icon(Icons.attach_file_rounded, color: cs.onSurfaceVariant),
+                      child: Icon(Icons.attach_file_rounded,
+                          color: cs.onSurfaceVariant),
                     ),
                   ),
                   const SizedBox(width: 10),
@@ -396,7 +412,8 @@ class _WorkerChatPageState extends ConsumerState<WorkerChatPage>
                       padding: const EdgeInsets.symmetric(horizontal: 18),
                       decoration: BoxDecoration(
                         color: cs.surfaceContainerHighest,
-                        borderRadius: BorderRadius.circular(AbzioTheme.cardRadius),
+                        borderRadius:
+                            BorderRadius.circular(AbzioTheme.cardRadius),
                       ),
                       child: TextField(
                         controller: _messageController,
@@ -434,8 +451,7 @@ class _WorkerChatPageState extends ConsumerState<WorkerChatPage>
                       ),
                       child: Icon(
                         Icons.send_rounded,
-                        color:
-                            _isTyping ? cs.onPrimary : cs.onSurfaceVariant,
+                        color: _isTyping ? cs.onPrimary : cs.onSurfaceVariant,
                         size: 20,
                       ),
                     ),
@@ -550,7 +566,9 @@ class _AttachmentPreview extends StatelessWidget {
         borderRadius: BorderRadius.circular(14),
         child: Container(
           constraints: const BoxConstraints(maxWidth: 240, maxHeight: 180),
-          color: isMe ? Colors.white.withValues(alpha: 0.08) : cs.surfaceContainerHighest,
+          color: isMe
+              ? Colors.white.withValues(alpha: 0.08)
+              : cs.surfaceContainerHighest,
           child: Image.network(
             attachment.url,
             fit: BoxFit.cover,
@@ -559,11 +577,13 @@ class _AttachmentPreview extends StatelessWidget {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.broken_image_rounded, color: isMe ? cs.onPrimary : cs.onSurfaceVariant),
+                  Icon(Icons.broken_image_rounded,
+                      color: isMe ? cs.onPrimary : cs.onSurfaceVariant),
                   const SizedBox(width: 8),
                   Text(
                     attachment.name ?? 'Image',
-                    style: tt.labelMedium?.copyWith(color: isMe ? cs.onPrimary : cs.onSurfaceVariant),
+                    style: tt.labelMedium?.copyWith(
+                        color: isMe ? cs.onPrimary : cs.onSurfaceVariant),
                   ),
                 ],
               ),
@@ -577,17 +597,21 @@ class _AttachmentPreview extends StatelessWidget {
       margin: const EdgeInsets.only(top: 6),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
-        color: isMe ? Colors.white.withValues(alpha: 0.08) : cs.surfaceContainerHighest,
+        color: isMe
+            ? Colors.white.withValues(alpha: 0.08)
+            : cs.surfaceContainerHighest,
         borderRadius: BorderRadius.circular(12),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.insert_drive_file_rounded, size: 18, color: isMe ? cs.onPrimary : cs.onSurfaceVariant),
+          Icon(Icons.insert_drive_file_rounded,
+              size: 18, color: isMe ? cs.onPrimary : cs.onSurfaceVariant),
           const SizedBox(width: 8),
           Text(
             attachment.name ?? 'File',
-            style: tt.labelMedium?.copyWith(color: isMe ? cs.onPrimary : cs.onSurfaceVariant),
+            style: tt.labelMedium
+                ?.copyWith(color: isMe ? cs.onPrimary : cs.onSurfaceVariant),
           ),
         ],
       ),

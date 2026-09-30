@@ -43,6 +43,7 @@ describe('Platform Settings Service', () => {
     it('returns platform config, invoice sequence, commissions, and cities', async () => {
       vi.mocked(prisma.platformConfig.upsert).mockResolvedValue({
         key: 'primary', gstin: 'GST123', legalBusinessName: 'Inc', registeredAddress: '123 St',
+        minimumWorkerPayout: new Prisma.Decimal(150), referralRewardAmount: new Prisma.Decimal(75),
         createdAt: new Date(), updatedAt: new Date()
       });
       vi.mocked(prisma.invoiceSequence.upsert).mockResolvedValue({
@@ -61,6 +62,8 @@ describe('Platform Settings Service', () => {
 
       const res = await getPlatformSettings();
       expect(res.platformConfig.gstin).toBe('GST123');
+      expect(res.platformConfig.minimumWorkerPayout).toBe(150);
+      expect(res.platformConfig.referralRewardAmount).toBe(75);
       expect(res.invoiceSequence.currentValue).toBe(10);
       expect(res.commissions[0].rate).toBe(20);
       expect(res.cities[0].name).toBe('Chennai');
@@ -71,6 +74,7 @@ describe('Platform Settings Service', () => {
     it('saves settings and logs audit', async () => {
       vi.mocked(prisma.platformConfig.upsert).mockResolvedValue({
         key: 'primary', gstin: 'GST123', legalBusinessName: 'Inc', registeredAddress: '123 St',
+        minimumWorkerPayout: new Prisma.Decimal(125), referralRewardAmount: new Prisma.Decimal(50),
         createdAt: new Date(), updatedAt: new Date()
       });
       vi.mocked(prisma.invoiceSequence.upsert).mockResolvedValue({
@@ -83,6 +87,8 @@ describe('Platform Settings Service', () => {
       const payload = {
         gstin: 'GST999',
         legalBusinessName: 'New Inc',
+        minimumWorkerPayout: 250,
+        referralRewardAmount: 80,
         invoiceSequenceCurrentValue: 100
       };
 
@@ -94,9 +100,27 @@ describe('Platform Settings Service', () => {
           gstin: 'GST999',
           legalBusinessName: 'New Inc',
           registeredAddress: null,
-          invoiceSequenceCurrentValue: 100
+          invoiceSequenceCurrentValue: 100,
+          minimumWorkerPayout: 250,
+          referralRewardAmount: 80,
+          referralsEnabled: null,
+          referralMaxSuccessfulPerReferrer: null,
+          payoutsPaused: null,
+          payoutPauseReason: null
         }
       }));
+      expect(prisma.platformConfig.upsert).toHaveBeenCalledWith(expect.objectContaining({
+        update: expect.objectContaining({ minimumWorkerPayout: 250, referralRewardAmount: 80 })
+      }));
+    });
+
+    it('rejects invalid financial controls', async () => {
+      await expect(savePlatformSettings({ minimumWorkerPayout: 0 })).rejects.toMatchObject({ statusCode: 400 });
+      await expect(savePlatformSettings({ referralRewardAmount: -1 })).rejects.toMatchObject({ statusCode: 400 });
+      await expect(savePlatformSettings({ referralRewardAmount: 1.001 })).rejects.toMatchObject({ statusCode: 400 });
+      await expect(savePlatformSettings({ referralMaxSuccessfulPerReferrer: 1.5 })).rejects.toMatchObject({ statusCode: 400 });
+      await expect(savePlatformSettings({ payoutsPaused: true })).rejects.toMatchObject({ statusCode: 400 });
+      expect(prisma.$transaction).not.toHaveBeenCalled();
     });
   });
 

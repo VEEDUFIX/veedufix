@@ -22,6 +22,13 @@ class AppBackdrop extends StatelessWidget {
   Widget build(BuildContext context) {
     final brightness = Theme.of(context).brightness;
     final isDark = brightness == Brightness.dark;
+    if (variant != AppBackdropVariant.admin) {
+      return ColoredBox(
+        color: isDark ? const Color(0xFF16120D) : const Color(0xFFF9F5EC),
+        child: child,
+      );
+    }
+
     final base = switch (variant) {
       AppBackdropVariant.customer => const Color(0xFFF9F5EC),
       AppBackdropVariant.worker => const Color(0xFFF5F7FB),
@@ -59,17 +66,20 @@ class AppBackdrop extends StatelessWidget {
           Positioned(
             top: -120,
             left: -90,
-            child: _BackdropOrb(color: orbA.withValues(alpha: isDark ? 0.12 : 0.18), size: 260),
+            child: _BackdropOrb(
+                color: orbA.withValues(alpha: isDark ? 0.12 : 0.18), size: 260),
           ),
           Positioned(
             top: 70,
             right: -80,
-            child: _BackdropOrb(color: orbB.withValues(alpha: isDark ? 0.12 : 0.14), size: 220),
+            child: _BackdropOrb(
+                color: orbB.withValues(alpha: isDark ? 0.12 : 0.14), size: 220),
           ),
           Positioned(
             bottom: -120,
             left: 60,
-            child: _BackdropOrb(color: orbB.withValues(alpha: isDark ? 0.08 : 0.12), size: 240),
+            child: _BackdropOrb(
+                color: orbB.withValues(alpha: isDark ? 0.08 : 0.12), size: 240),
           ),
           Positioned.fill(
             child: BackdropFilter(

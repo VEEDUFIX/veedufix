@@ -1,9 +1,10 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:marketplace_shared/marketplace_shared.dart';
+import 'package:share_plus/share_plus.dart';
 
 final bookingInvoiceProvider = FutureProvider.autoDispose
     .family<_BookingInvoice, String>((ref, bookingId) async {
@@ -52,8 +53,9 @@ class BookingInvoicePage extends ConsumerWidget {
         actions: [
           invoiceAsync.whenOrNull(
                 data: (invoice) => IconButton(
+                  tooltip: 'Share invoice summary',
                   icon: const Icon(Icons.share_rounded),
-                  onPressed: () => _shareInvoice(context, invoice),
+                  onPressed: () => _shareInvoice(invoice),
                 ),
               ) ??
               const SizedBox.shrink(),
@@ -61,32 +63,16 @@ class BookingInvoicePage extends ConsumerWidget {
       ),
       body: invoiceAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, _) => Center(
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const PremiumEmptyState(
-                  icon: Icons.receipt_long_outlined,
-                  title: 'Invoice not found',
-                  subtitle: 'Could not load invoice details.',
-                ),
-                const SizedBox(height: 16),
-                FilledButton(
-                  onPressed: () =>
-                      ref.invalidate(bookingInvoiceProvider(bookingId)),
-                  child: const Text('Try again'),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  error.toString(),
-                  textAlign: TextAlign.center,
-                  style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant),
-                ),
-              ],
-            ),
-          ),
+        error: (error, _) => PremiumRetryState(
+          icon: Icons.receipt_long_outlined,
+          title: 'Could not load invoice',
+          subtitle: _invoiceErrorMessage(error),
+          onRetry: () => ref.invalidate(bookingInvoiceProvider(bookingId)),
+          onRefresh: () async {
+            await ref
+                .refresh(bookingInvoiceProvider(bookingId).future)
+                .then<void>((_) {});
+          },
         ),
         data: (invoice) => RefreshIndicator(
           onRefresh: () async {
@@ -103,29 +89,86 @@ class BookingInvoicePage extends ConsumerWidget {
     );
   }
 
-  void _shareInvoice(BuildContext context, _BookingInvoice invoice) {
+  Future<void> _shareInvoice(_BookingInvoice invoice) async {
+    final lineItems = invoice.lineItems
+        .map(
+          (item) =>
+              '${item.description} × ${item.quantity}\n'
+              '  Taxable value: ${_money(item.basePrice)}\n'
+              '  GST (${item.gstRate.toStringAsFixed(2)}%): ${_money(item.gstAmount)}\n'
+              '  Line total: ${_money(item.total)}',
+        )
+        .join('\n');
     final text =
         '''
-VeeduFix Invoice
+VeeduFix Tax Invoice
 Invoice No: ${invoice.invoiceNumber}
 Booking Ref: #${invoice.bookingCode.isEmpty ? invoice.bookingId : invoice.bookingCode}
-Issued: ${DateFormat('d MMM y').format(invoice.issuedAt)}
+Issued: ${DateFormat('d MMM y').format(invoice.issuedAt.toLocal())}
 Business: ${invoice.legalBusinessName}
 GSTIN: ${invoice.platformGstin}
+${invoice.customerGstin?.trim().isNotEmpty == true ? 'Customer GSTIN: ${invoice.customerGstin}' : ''}
+Items:
+$lineItems
+
+Subtotal (before discount): ${_money(invoice.subtotalAmount)}
+Discount: -${_money(invoice.discountAmount)}
+GST: ${_money(invoice.totalGstAmount)}
 Grand Total: ${_money(invoice.grandTotal)}
 ''';
-    Clipboard.setData(ClipboardData(text: text));
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Invoice copied to clipboard')),
+    await Share.share(
+      text,
+      subject: 'VeeduFix invoice ${invoice.invoiceNumber}',
     );
   }
 }
+
+String _invoiceErrorMessage(Object error) {
+  if (error is DioException) {
+    final data = error.response?.data;
+    final message = data is Map ? data['message']?.toString() : null;
+    if (message?.toLowerCase().contains('after payment capture') == true) {
+      return 'Your invoice will be available once your payment is confirmed.';
+    }
+    if (error.type == DioExceptionType.connectionError ||
+        error.type == DioExceptionType.connectionTimeout ||
+        error.type == DioExceptionType.receiveTimeout) {
+      return 'Check your internet connection and try again.';
+    }
+  }
+  return 'We could not retrieve this invoice right now. Please try again shortly.';
+}
+
+String _bookingStatusLabel(String status) => switch (status.toUpperCase()) {
+  'COMPLETED' => 'Completed',
+  'IN_PROGRESS' => 'In progress',
+  'WORKER_ASSIGNED' => 'Professional assigned',
+  'EN_ROUTE' => 'Professional on the way',
+  'ARRIVED' => 'Professional arrived',
+  'ACCEPTED' => 'Accepted',
+  'PENDING' => 'Pending',
+  'CANCELLED' || 'CANCELLED_MANUAL' || 'CANCELLED_NO_SHOW' => 'Cancelled',
+  'REFUNDED' => 'Refunded',
+  _ =>
+    status.trim().isEmpty
+        ? 'Invoice issued'
+        : status.toLowerCase().replaceAll('_', ' '),
+};
+
+Color _bookingStatusColor(BuildContext context, String status) =>
+    switch (status.toUpperCase()) {
+      'COMPLETED' => const Color(0xFF2D7A57),
+      'CANCELLED' ||
+      'CANCELLED_MANUAL' ||
+      'CANCELLED_NO_SHOW' ||
+      'REFUNDED' => Theme.of(context).colorScheme.error,
+      _ => const Color(0xFFAA7C2F),
+    };
 
 class _InvoiceBody extends StatelessWidget {
   const _InvoiceBody({required this.invoice});
 
   final _BookingInvoice invoice;
-  static const _green = Color(0xFF10B981);
 
   @override
   Widget build(BuildContext context) {
@@ -139,12 +182,8 @@ class _InvoiceBody extends StatelessWidget {
           width: double.infinity,
           padding: const EdgeInsets.all(20),
           decoration: BoxDecoration(
-            gradient: const LinearGradient(
-              colors: [Color(0xFF111827), Color(0xFF1F2937)],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
-            borderRadius: BorderRadius.circular(24),
+            color: const Color(0xFF1D1B17),
+            borderRadius: BorderRadius.circular(20),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -165,18 +204,23 @@ class _InvoiceBody extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 8),
-              Text(
-                invoice.registeredAddress,
-                style: tt.bodyMedium?.copyWith(
-                  color: Colors.white.withValues(alpha: 0.82),
+              if (invoice.registeredAddress.trim().isNotEmpty)
+                Text(
+                  invoice.registeredAddress,
+                  style: tt.bodyMedium?.copyWith(
+                    color: Colors.white.withValues(alpha: 0.82),
+                  ),
                 ),
-              ),
               const SizedBox(height: 16),
               Wrap(
                 spacing: 10,
                 runSpacing: 10,
                 children: [
-                  _HeaderChip(label: 'Invoice #', value: invoice.invoiceNumber),
+                  if (invoice.invoiceNumber.trim().isNotEmpty)
+                    _HeaderChip(
+                      label: 'Invoice #',
+                      value: invoice.invoiceNumber,
+                    ),
                   _HeaderChip(
                     label: 'Booking',
                     value: invoice.bookingCode.isEmpty
@@ -185,9 +229,12 @@ class _InvoiceBody extends StatelessWidget {
                   ),
                   _HeaderChip(
                     label: 'Issued',
-                    value: DateFormat('d MMM y').format(invoice.issuedAt),
+                    value: DateFormat(
+                      'd MMM y',
+                    ).format(invoice.issuedAt.toLocal()),
                   ),
-                  _HeaderChip(label: 'GSTIN', value: invoice.platformGstin),
+                  if (invoice.platformGstin.trim().isNotEmpty)
+                    _HeaderChip(label: 'GSTIN', value: invoice.platformGstin),
                 ],
               ),
             ],
@@ -212,17 +259,26 @@ class _InvoiceBody extends StatelessWidget {
               ),
               const SizedBox(height: 4),
               Text(
-                invoice.customerName,
+                invoice.customerName.trim().isNotEmpty
+                    ? invoice.customerName
+                    : 'Customer',
                 style: tt.titleLarge?.copyWith(fontWeight: FontWeight.w800),
               ),
               const SizedBox(height: 4),
               Text(
-                invoice.bookingStatus,
+                _bookingStatusLabel(invoice.bookingStatus),
                 style: tt.bodyMedium?.copyWith(
-                  color: _green,
+                  color: _bookingStatusColor(context, invoice.bookingStatus),
                   fontWeight: FontWeight.w600,
                 ),
               ),
+              if (invoice.customerGstin?.trim().isNotEmpty == true) ...[
+                const SizedBox(height: 4),
+                Text(
+                  'GSTIN: ${invoice.customerGstin}',
+                  style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+                ),
+              ],
             ],
           ),
         ),
@@ -232,7 +288,16 @@ class _InvoiceBody extends StatelessWidget {
           style: tt.titleLarge?.copyWith(fontWeight: FontWeight.w800),
         ),
         const SizedBox(height: 10),
-        ...invoice.lineItems.map((item) => _InvoiceLineCard(item: item)),
+        if (invoice.lineItems.isEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            child: Text(
+              'No line items are available for this invoice.',
+              style: tt.bodyMedium?.copyWith(color: cs.onSurfaceVariant),
+            ),
+          )
+        else
+          ...invoice.lineItems.map((item) => _InvoiceLineCard(item: item)),
         const SizedBox(height: 16),
         Container(
           width: double.infinity,
@@ -250,10 +315,13 @@ class _InvoiceBody extends StatelessWidget {
                 value: _money(invoice.subtotalAmount),
               ),
               const SizedBox(height: 8),
-              _SummaryRow(
-                label: 'Discount',
-                value: '-${_money(invoice.discountAmount)}',
-              ),
+              if (invoice.discountAmount > 0) ...[
+                const SizedBox(height: 8),
+                _SummaryRow(
+                  label: 'Discount',
+                  value: '-${_money(invoice.discountAmount)}',
+                ),
+              ],
               const SizedBox(height: 8),
               _SummaryRow(label: 'GST', value: _money(invoice.totalGstAmount)),
               const Divider(height: 24),
@@ -275,7 +343,7 @@ class _InvoiceBody extends StatelessWidget {
             border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.5)),
           ),
           child: Text(
-            'Prices are GST-inclusive. SAC codes and GST breakdowns are stored for compliance and invoicing, even though the checkout price stays unchanged.',
+            'Prices include applicable GST. See each line item for its tax breakdown.',
             style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant),
           ),
         ),
@@ -331,9 +399,11 @@ class _InvoiceLineCard extends StatelessWidget {
             spacing: 8,
             runSpacing: 8,
             children: [
-              _Tag(label: 'SAC ${item.sacCode}'),
+              if (item.sacCode.isNotEmpty && item.sacCode != 'PENDING')
+                _Tag(label: 'SAC ${item.sacCode}'),
               _Tag(label: 'Qty ${item.quantity}'),
-              _Tag(label: 'GST ${item.gstRate.toStringAsFixed(2)}%'),
+              if (item.gstRate > 0)
+                _Tag(label: 'GST ${item.gstRate.toStringAsFixed(2)}%'),
             ],
           ),
           const SizedBox(height: 12),
@@ -354,32 +424,37 @@ class _HeaderChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.14)),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            label,
-            style: Theme.of(
-              context,
-            ).textTheme.labelSmall?.copyWith(color: Colors.white70),
-          ),
-          const SizedBox(height: 2),
-          Text(
-            value,
-            style: Theme.of(context).textTheme.labelLarge?.copyWith(
-              color: Colors.white,
-              fontWeight: FontWeight.w700,
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 190),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.14)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              label,
+              style: Theme.of(
+                context,
+              ).textTheme.labelSmall?.copyWith(color: Colors.white70),
             ),
-          ),
-        ],
+            const SizedBox(height: 2),
+            Text(
+              value,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                color: Colors.white,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

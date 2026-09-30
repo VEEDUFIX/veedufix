@@ -1,0 +1,3 @@
+ALTER TABLE "PlatformConfig"
+ADD COLUMN "minimumWorkerPayout" DECIMAL(12,2) NOT NULL DEFAULT 100.00,
+ADD COLUMN "referralRewardAmount" DECIMAL(12,2) NOT NULL DEFAULT 100.00;

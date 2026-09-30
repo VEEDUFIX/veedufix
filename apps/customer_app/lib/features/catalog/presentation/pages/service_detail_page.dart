@@ -19,29 +19,58 @@ class ServiceDetailPage extends ConsumerWidget {
     return serviceAsync.when(
       loading: () => Scaffold(
         backgroundColor: colorScheme.surface,
+        appBar: AppBar(
+          backgroundColor: colorScheme.surface,
+          leading: IconButton(
+            onPressed: () => context.pop(),
+            icon: const Icon(Icons.arrow_back_rounded),
+            tooltip: 'Back',
+          ),
+        ),
         body: const Center(child: CircularProgressIndicator()),
       ),
       error: (error, stack) => Scaffold(
         backgroundColor: colorScheme.surface,
+        appBar: AppBar(
+          backgroundColor: colorScheme.surface,
+          leading: IconButton(
+            onPressed: () => context.pop(),
+            icon: const Icon(Icons.arrow_back_rounded),
+            tooltip: 'Back',
+          ),
+        ),
         body: Center(
           child: Padding(
             padding: const EdgeInsets.all(24),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(Icons.error_outline_rounded, size: 52),
+                Icon(
+                  Icons.cloud_off_rounded,
+                  size: 48,
+                  color: colorScheme.onSurfaceVariant,
+                ),
                 const SizedBox(height: 12),
                 Text(
                   'Unable to load service',
-                  style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
+                  style: Theme.of(
+                    context,
+                  ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  '$error',
+                  'Check your connection and try again.',
                   textAlign: TextAlign.center,
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: colorScheme.onSurfaceVariant,
-                      ),
+                    color: colorScheme.onSurfaceVariant,
+                  ),
+                ),
+                const SizedBox(height: 20),
+                FilledButton.icon(
+                  onPressed: () =>
+                      ref.invalidate(serviceDetailProvider(serviceId)),
+                  icon: const Icon(Icons.refresh_rounded),
+                  label: const Text('Try again'),
                 ),
               ],
             ),
@@ -62,26 +91,18 @@ class _ServiceDetailView extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final colorScheme = Theme.of(context).colorScheme;
     final textTheme = Theme.of(context).textTheme;
-    final heroImage = service.images.isNotEmpty ? service.images.firstWhere((item) => item.isPrimary, orElse: () => service.images.first) : null;
-    final price = service.pricingRules.isNotEmpty ? service.pricingRules.first.price : service.startingPrice;
+    final heroImage = service.images.isNotEmpty
+        ? service.images.firstWhere(
+            (item) => item.isPrimary,
+            orElse: () => service.images.first,
+          )
+        : null;
+    final price = service.startingPrice;
     final description = service.description?.trim().isNotEmpty == true
         ? service.description!.trim()
         : service.shortDescription?.trim().isNotEmpty == true
-            ? service.shortDescription!.trim()
-            : 'Professional service with verified delivery standards and transparent pricing.';
-    final inclusions = service.inclusions.isNotEmpty
-        ? service.inclusions
-        : const <String>[
-            'Verified professional handling',
-            'Tools and setup guidance included',
-            'Transparent pricing before booking',
-          ];
-    final exclusions = service.exclusions.isNotEmpty
-        ? service.exclusions
-        : const <String>[
-            'Spare parts or replacements',
-            'Major structural work',
-          ];
+        ? service.shortDescription!.trim()
+        : 'Professional service with verified delivery standards and transparent pricing.';
 
     return Scaffold(
       backgroundColor: colorScheme.surface,
@@ -109,7 +130,9 @@ class _ServiceDetailView extends ConsumerWidget {
               Padding(
                 padding: const EdgeInsets.only(right: 8),
                 child: TapScale(
-                  onTap: () => ref.read(favoritesProvider.notifier).toggleFavorite(service.id),
+                  onTap: () => ref
+                      .read(favoritesProvider.notifier)
+                      .toggleFavorite(service.id),
                   child: Container(
                     width: 40,
                     height: 40,
@@ -119,8 +142,12 @@ class _ServiceDetailView extends ConsumerWidget {
                       boxShadow: AbzioTheme.eliteShadow,
                     ),
                     child: Icon(
-                      ref.watch(isFavoriteProvider(service.id)) ? Icons.favorite_rounded : Icons.favorite_border_rounded,
-                      color: ref.watch(isFavoriteProvider(service.id)) ? Colors.redAccent : colorScheme.onSurfaceVariant,
+                      ref.watch(isFavoriteProvider(service.id))
+                          ? Icons.favorite_rounded
+                          : Icons.favorite_border_rounded,
+                      color: ref.watch(isFavoriteProvider(service.id))
+                          ? Colors.redAccent
+                          : colorScheme.onSurfaceVariant,
                       size: 20,
                     ),
                   ),
@@ -136,7 +163,10 @@ class _ServiceDetailView extends ConsumerWidget {
                     Image.network(
                       heroImage.url,
                       fit: BoxFit.cover,
-                      errorBuilder: (context, error, stack) => _HeroFallback(colorScheme: colorScheme, service: service),
+                      errorBuilder: (context, error, stack) => _HeroFallback(
+                        colorScheme: colorScheme,
+                        service: service,
+                      ),
                     )
                   else
                     _HeroFallback(colorScheme: colorScheme, service: service),
@@ -161,161 +191,261 @@ class _ServiceDetailView extends ConsumerWidget {
           SliverPadding(
             padding: const EdgeInsets.fromLTRB(20, 0, 20, 140),
             sliver: SliverList(
-              delegate: SliverChildListDelegate(
-                [
-                  const SizedBox(height: 8),
-                  if (service.hierarchyLabel.isNotEmpty) ...[
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: [
-                        _MetaChip(icon: Icons.category_rounded, label: service.category?.name ?? 'Category'),
-                        if (service.subcategory != null)
-                          _MetaChip(icon: Icons.subdirectory_arrow_right_rounded, label: service.subcategory!.name),
-                        if (service.code.trim().isNotEmpty)
-                          _MetaChip(icon: Icons.badge_rounded, label: service.code),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-                  ],
-                  Text(
-                    service.name,
-                    style: textTheme.headlineMedium?.copyWith(
-                      fontWeight: FontWeight.w900,
-                      letterSpacing: -0.6,
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  Row(
-                    children: [
-                      const Icon(Icons.star_rounded, size: 18, color: Color(0xFFF59E0B)),
-                      const SizedBox(width: 4),
-                      Text(
-                        service.rating > 0 ? service.rating.toStringAsFixed(1) : 'New',
-                        style: textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w700),
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        '(${service.reviewCount} reviews)',
-                        style: textTheme.bodyMedium?.copyWith(color: colorScheme.onSurfaceVariant),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
+              delegate: SliverChildListDelegate([
+                const SizedBox(height: 8),
+                if (service.hierarchyLabel.isNotEmpty) ...[
                   Wrap(
                     spacing: 8,
                     runSpacing: 8,
                     children: [
-                      _MetaChip(icon: Icons.payments_rounded, label: '₹${price.toInt()}'),
-                      _MetaChip(icon: Icons.timer_rounded, label: '${service.estimatedDurationMins} mins'),
-                      _MetaChip(icon: Icons.verified_rounded, label: service.gstApplicable ? 'GST applies' : 'GST included'),
-                      _MetaChip(icon: Icons.home_work_rounded, label: service.homeVisit ? 'Home visit' : 'On-site'),
-                      if (service.emergencyAvailable)
-                        const _MetaChip(icon: Icons.flash_on_rounded, label: 'Emergency available'),
-                      if (service.warrantyDays > 0)
-                        _MetaChip(icon: Icons.shield_rounded, label: '${service.warrantyDays} day warranty'),
+                      _MetaChip(
+                        icon: Icons.category_rounded,
+                        label: service.category?.name ?? 'Category',
+                      ),
+                      if (service.subcategory != null)
+                        _MetaChip(
+                          icon: Icons.subdirectory_arrow_right_rounded,
+                          label: service.subcategory!.name,
+                        ),
+                      if (service.code.trim().isNotEmpty)
+                        _MetaChip(
+                          icon: Icons.badge_rounded,
+                          label: service.code,
+                        ),
                     ],
                   ),
-                  if (service.requiresSiteVisit)
-                    Container(
-                      margin: const EdgeInsets.only(top: 12),
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF0D9488).withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: const Color(0xFF0D9488).withValues(alpha: 0.3)),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(Icons.home_repair_service_rounded,
-                              size: 16, color: Color(0xFF0D9488)),
-                          const SizedBox(width: 8),
-                          Text(
-                            price > 0 ? 'Site Visit Required — we assess before you pay' : 'Free Site Visit — we assess before you pay',
-                            style: const TextStyle(
-                              color: Color(0xFF0D9488),
-                              fontWeight: FontWeight.w700,
-                              fontSize: 13,
-                            ),
-                          ),
-                        ],
+                  const SizedBox(height: 16),
+                ],
+                Text(
+                  service.name,
+                  style: textTheme.headlineMedium?.copyWith(
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: -0.6,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    const Icon(
+                      Icons.star_rounded,
+                      size: 18,
+                      color: Color(0xFFF59E0B),
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      service.rating > 0
+                          ? service.rating.toStringAsFixed(1)
+                          : 'New',
+                      style: textTheme.bodyMedium?.copyWith(
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
-                  const SizedBox(height: 24),
-                  _SectionHeader(
-                    title: 'About this service',
-                    subtitle: description,
+                    const SizedBox(width: 8),
+                    Text(
+                      '(${service.reviewCount} reviews)',
+                      style: textTheme.bodyMedium?.copyWith(
+                        color: colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    _MetaChip(
+                      icon: Icons.payments_rounded,
+                      label: price > 0
+                          ? 'From ₹${_formatRupees(price)}'
+                          : service.requiresSiteVisit
+                          ? 'Price after assessment'
+                          : 'Price on request',
+                    ),
+                    if (service.estimatedDurationMins > 0)
+                      _MetaChip(
+                        icon: Icons.timer_rounded,
+                        label: '${service.estimatedDurationMins} mins',
+                      ),
+                    _MetaChip(
+                      icon: Icons.receipt_long_rounded,
+                      label: service.gstApplicable ? 'GST may apply' : 'No GST',
+                    ),
+                    _MetaChip(
+                      icon: Icons.home_work_rounded,
+                      label: service.homeVisit
+                          ? 'At your home'
+                          : 'Service location',
+                    ),
+                    if (service.emergencyAvailable)
+                      const _MetaChip(
+                        icon: Icons.flash_on_rounded,
+                        label: 'Emergency available',
+                      ),
+                    if (service.warrantyDays > 0)
+                      _MetaChip(
+                        icon: Icons.shield_rounded,
+                        label: '${service.warrantyDays} day warranty',
+                      ),
+                  ],
+                ),
+                if (service.requiresSiteVisit)
+                  Container(
+                    margin: const EdgeInsets.only(top: 12),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 8,
+                    ),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF0D9488).withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: const Color(0xFF0D9488).withValues(alpha: 0.3),
+                      ),
+                    ),
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.home_repair_service_rounded,
+                          size: 16,
+                          color: Color(0xFF0D9488),
+                        ),
+                        SizedBox(width: 8),
+                        Text(
+                          'A site visit is needed before final pricing.',
+                          style: TextStyle(
+                            color: Color(0xFF0D9488),
+                            fontWeight: FontWeight.w700,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                  const SizedBox(height: 20),
+                const SizedBox(height: 24),
+                _SectionHeader(
+                  title: 'About this service',
+                  subtitle: description,
+                ),
+                const SizedBox(height: 20),
+                if (service.inclusions.isNotEmpty)
                   _SectionCard(
                     title: 'What is included',
                     icon: Icons.check_circle_rounded,
                     accent: const Color(0xFF10B981),
-                    child: _BulletList(items: inclusions, positive: true),
+                    child: _BulletList(
+                      items: service.inclusions,
+                      positive: true,
+                    ),
                   ),
+                if (service.inclusions.isNotEmpty &&
+                    service.exclusions.isNotEmpty)
                   const SizedBox(height: 16),
+                if (service.exclusions.isNotEmpty)
                   _SectionCard(
                     title: 'What is not included',
                     icon: Icons.cancel_rounded,
                     accent: colorScheme.error,
-                    child: _BulletList(items: exclusions, positive: false),
-                  ),
-                  const SizedBox(height: 16),
-                  if (service.requiredSkills.isNotEmpty || service.requiredTools.isNotEmpty || service.requiredDocuments.isNotEmpty)
-                    _SectionCard(
-                      title: 'Preparation checklist',
-                      icon: Icons.fact_check_rounded,
-                      accent: colorScheme.primary,
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          if (service.requiredSkills.isNotEmpty) ...[
-                            Text('Skills', style: textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800)),
-                            const SizedBox(height: 8),
-                            Wrap(
-                              spacing: 8,
-                              runSpacing: 8,
-                              children: service.requiredSkills.map((item) => _MetaChip(icon: Icons.workspace_premium_rounded, label: item.name)).toList(growable: false),
-                            ),
-                            const SizedBox(height: 16),
-                          ],
-                          if (service.requiredTools.isNotEmpty) ...[
-                            Text('Tools', style: textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800)),
-                            const SizedBox(height: 8),
-                            Wrap(
-                              spacing: 8,
-                              runSpacing: 8,
-                              children: service.requiredTools.map((item) => _MetaChip(icon: Icons.handyman_rounded, label: item.name)).toList(growable: false),
-                            ),
-                            const SizedBox(height: 16),
-                          ],
-                          if (service.requiredDocuments.isNotEmpty) ...[
-                            Text('Documents', style: textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800)),
-                            const SizedBox(height: 8),
-                            Wrap(
-                              spacing: 8,
-                              runSpacing: 8,
-                              children: service.requiredDocuments.map((item) => _MetaChip(icon: Icons.description_rounded, label: item.name)).toList(growable: false),
-                            ),
-                          ],
-                        ],
-                      ),
+                    child: _BulletList(
+                      items: service.exclusions,
+                      positive: false,
                     ),
+                  ),
+                if (service.inclusions.isNotEmpty ||
+                    service.exclusions.isNotEmpty)
                   const SizedBox(height: 16),
+                if (service.requiredSkills.isNotEmpty ||
+                    service.requiredTools.isNotEmpty ||
+                    service.requiredDocuments.isNotEmpty)
                   _SectionCard(
-                    title: 'Cancellation policy',
-                    icon: Icons.info_outline_rounded,
-                    accent: colorScheme.tertiary,
-                    child: Text(
-                      service.cancellationPolicy?.trim().isNotEmpty == true
-                          ? service.cancellationPolicy!.trim()
-                          : 'You can cancel from My Bookings. If a payment was captured, refund eligibility is reviewed separately; cancellation does not issue a refund automatically.',
-                      style: textTheme.bodyMedium?.copyWith(height: 1.5),
+                    title: 'Preparation checklist',
+                    icon: Icons.fact_check_rounded,
+                    accent: colorScheme.primary,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if (service.requiredSkills.isNotEmpty) ...[
+                          Text(
+                            'Skills',
+                            style: textTheme.titleSmall?.copyWith(
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: service.requiredSkills
+                                .map(
+                                  (item) => _MetaChip(
+                                    icon: Icons.workspace_premium_rounded,
+                                    label: item.name,
+                                  ),
+                                )
+                                .toList(growable: false),
+                          ),
+                          const SizedBox(height: 16),
+                        ],
+                        if (service.requiredTools.isNotEmpty) ...[
+                          Text(
+                            'Tools',
+                            style: textTheme.titleSmall?.copyWith(
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: service.requiredTools
+                                .map(
+                                  (item) => _MetaChip(
+                                    icon: Icons.handyman_rounded,
+                                    label: item.name,
+                                  ),
+                                )
+                                .toList(growable: false),
+                          ),
+                          const SizedBox(height: 16),
+                        ],
+                        if (service.requiredDocuments.isNotEmpty) ...[
+                          Text(
+                            'Documents',
+                            style: textTheme.titleSmall?.copyWith(
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: service.requiredDocuments
+                                .map(
+                                  (item) => _MetaChip(
+                                    icon: Icons.description_rounded,
+                                    label: item.name,
+                                  ),
+                                )
+                                .toList(growable: false),
+                          ),
+                        ],
+                      ],
                     ),
                   ),
-                ],
-              ),
+                const SizedBox(height: 16),
+                _SectionCard(
+                  title: 'Cancellation policy',
+                  icon: Icons.info_outline_rounded,
+                  accent: colorScheme.tertiary,
+                  child: Text(
+                    service.cancellationPolicy?.trim().isNotEmpty == true
+                        ? service.cancellationPolicy!.trim()
+                        : 'You can cancel from My Bookings. If a payment was captured, refund eligibility is reviewed separately; cancellation does not issue a refund automatically.',
+                    style: textTheme.bodyMedium?.copyWith(height: 1.5),
+                  ),
+                ),
+              ]),
             ),
           ),
         ],
@@ -328,11 +458,12 @@ class _ServiceDetailView extends ConsumerWidget {
   }
 }
 
+String _formatRupees(double amount) => amount == amount.truncateToDouble()
+    ? amount.toStringAsFixed(0)
+    : amount.toStringAsFixed(2);
+
 class _HeroFallback extends StatelessWidget {
-  const _HeroFallback({
-    required this.colorScheme,
-    required this.service,
-  });
+  const _HeroFallback({required this.colorScheme, required this.service});
 
   final ColorScheme colorScheme;
   final CatalogService service;
@@ -353,10 +484,7 @@ class _HeroFallback extends StatelessWidget {
 }
 
 class _SectionHeader extends StatelessWidget {
-  const _SectionHeader({
-    required this.title,
-    required this.subtitle,
-  });
+  const _SectionHeader({required this.title, required this.subtitle});
 
   final String title;
   final String subtitle;
@@ -408,7 +536,9 @@ class _SectionCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: colorScheme.surface,
         borderRadius: BorderRadius.circular(AbzioTheme.cardRadius),
-        border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.6)),
+        border: Border.all(
+          color: colorScheme.outlineVariant.withValues(alpha: 0.6),
+        ),
         boxShadow: AbzioTheme.eliteShadow,
       ),
       child: Column(
@@ -430,8 +560,8 @@ class _SectionCard extends StatelessWidget {
                 child: Text(
                   title,
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w800,
-                      ),
+                    fontWeight: FontWeight.w800,
+                  ),
                 ),
               ),
             ],
@@ -445,10 +575,7 @@ class _SectionCard extends StatelessWidget {
 }
 
 class _MetaChip extends StatelessWidget {
-  const _MetaChip({
-    required this.icon,
-    required this.label,
-  });
+  const _MetaChip({required this.icon, required this.label});
 
   final IconData icon;
   final String label;
@@ -470,9 +597,9 @@ class _MetaChip extends StatelessWidget {
           Text(
             label,
             style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                  color: colorScheme.primary,
-                  fontWeight: FontWeight.w700,
-                ),
+              color: colorScheme.primary,
+              fontWeight: FontWeight.w700,
+            ),
           ),
         ],
       ),
@@ -481,10 +608,7 @@ class _MetaChip extends StatelessWidget {
 }
 
 class _BulletList extends StatelessWidget {
-  const _BulletList({
-    required this.items,
-    required this.positive,
-  });
+  const _BulletList({required this.items, required this.positive});
 
   final List<String> items;
   final bool positive;
@@ -501,7 +625,9 @@ class _BulletList extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Icon(
-                    positive ? Icons.check_circle_rounded : Icons.remove_circle_rounded,
+                    positive
+                        ? Icons.check_circle_rounded
+                        : Icons.remove_circle_rounded,
                     size: 18,
                     color: positive ? colorScheme.primary : colorScheme.error,
                   ),
@@ -509,7 +635,9 @@ class _BulletList extends StatelessWidget {
                   Expanded(
                     child: Text(
                       item,
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(height: 1.5),
+                      style: Theme.of(
+                        context,
+                      ).textTheme.bodyMedium?.copyWith(height: 1.5),
                     ),
                   ),
                 ],
@@ -522,10 +650,7 @@ class _BulletList extends StatelessWidget {
 }
 
 class _BookingBottomBar extends ConsumerWidget {
-  const _BookingBottomBar({
-    required this.service,
-    required this.price,
-  });
+  const _BookingBottomBar({required this.service, required this.price});
 
   final CatalogService service;
   final double price;
@@ -535,7 +660,7 @@ class _BookingBottomBar extends ConsumerWidget {
     final colorScheme = Theme.of(context).colorScheme;
     final textTheme = Theme.of(context).textTheme;
     return Container(
-      padding: EdgeInsets.fromLTRB(20, 16, 20, MediaQuery.paddingOf(context).bottom + 16),
+      padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
       decoration: BoxDecoration(
         color: colorScheme.surface,
         boxShadow: AbzioTheme.eliteShadow,
@@ -548,53 +673,43 @@ class _BookingBottomBar extends ConsumerWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Starting from',
-                  style: textTheme.labelSmall?.copyWith(color: colorScheme.onSurfaceVariant),
+                  price > 0 ? 'Starting from' : 'Pricing',
+                  style: textTheme.labelSmall?.copyWith(
+                    color: colorScheme.onSurfaceVariant,
+                  ),
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  '₹${price.toInt()}',
-                  style: textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w900),
+                  price > 0
+                      ? '₹${_formatRupees(price)}'
+                      : service.requiresSiteVisit
+                      ? 'After assessment'
+                      : 'On request',
+                  style: textTheme.headlineSmall?.copyWith(
+                    fontWeight: FontWeight.w900,
+                  ),
                 ),
               ],
             ),
           ),
-          TapScale(
-            onTap: () {
-              ref.read(cartProvider.notifier).addService(service);
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: const Text('Added to cart'),
-                  action: SnackBarAction(
-                    label: 'VIEW',
-                    onPressed: () => context.push('/cart'),
-                  ),
-                ),
-              );
-            },
-            child: Container(
-              height: 56,
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              decoration: BoxDecoration(
-                color: colorScheme.primary,
-                borderRadius: BorderRadius.circular(AbzioTheme.cardRadius),
-                boxShadow: [
-                  BoxShadow(
-                    color: colorScheme.primary.withValues(alpha: 0.28),
-                    blurRadius: 18,
-                    offset: const Offset(0, 8),
-                  ),
-                ],
-              ),
-              child: Center(
-                child: Text(
-                  'Add to Cart',
-                  style: textTheme.titleMedium?.copyWith(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-              ),
+          SizedBox(
+            height: 52,
+            child: FilledButton(
+              onPressed: service.isActive
+                  ? () {
+                      ref.read(cartProvider.notifier).addService(service);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: const Text('Added to cart'),
+                          action: SnackBarAction(
+                            label: 'VIEW CART',
+                            onPressed: () => context.push('/cart'),
+                          ),
+                        ),
+                      );
+                    }
+                  : null,
+              child: Text(service.isActive ? 'Add to Cart' : 'Unavailable'),
             ),
           ),
         ],

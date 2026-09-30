@@ -3,6 +3,7 @@ import { writeAuditLog } from "../../lib/audit.js";
 import { type AuthenticatedRequest } from "../../middleware/auth.js";
 import {
   exportTaxInvoicesCsv,
+  exportFinancialReconciliationCsv,
   getAnnualSummary,
   getGstSummary,
   getRevenueSummary
@@ -76,6 +77,33 @@ export async function exportTaxSummaryCsvHandler(
 
     response.setHeader("Content-Type", "text/csv");
     response.setHeader("Content-Disposition", `attachment; filename="tax-summary-${Date.now()}.csv"`);
+    response.status(200).send(csv);
+  } catch (error) {
+    sendError(response, error);
+  }
+}
+
+export async function exportFinancialReconciliationCsvHandler(
+  request: AuthenticatedRequest,
+  response: Response
+): Promise<void> {
+  try {
+    const startDate = String(request.query.startDate);
+    const endDate = String(request.query.endDate);
+    const csv = await exportFinancialReconciliationCsv(startDate, endDate);
+    const adminId = request.auth?.userId;
+    if (adminId) {
+      void writeAuditLog({
+        adminId,
+        action: "tax_summary.exported",
+        targetType: "tax_summary",
+        targetId: `${startDate}:${endDate}`,
+        note: "Financial payout reconciliation CSV exported",
+        metadata: { exportType: "payout_reconciliation", startDate, endDate }
+      });
+    }
+    response.setHeader("Content-Type", "text/csv");
+    response.setHeader("Content-Disposition", `attachment; filename="finance-reconciliation-${Date.now()}.csv"`);
     response.status(200).send(csv);
   } catch (error) {
     sendError(response, error);

@@ -46,6 +46,9 @@ describe('Service Area Service', () => {
 
       const res = await findServiceableArea({ pincode: '600001' });
       expect(res!.name).toBe('Chennai Central');
+      expect(prisma.serviceArea.findMany).toHaveBeenCalledWith(expect.objectContaining({
+        where: expect.objectContaining({ isActive: true, city: { isActive: true } })
+      }));
     });
 
     it('matches pincode within range', async () => {

@@ -1,4 +1,9 @@
+import 'dart:convert';
+import 'dart:js_interop';
+import 'dart:typed_data';
+
 import 'package:dio/dio.dart';
+import 'package:web/web.dart' as web;
 
 class FinancePayoutQueueResponse {
   const FinancePayoutQueueResponse({
@@ -255,6 +260,33 @@ class FinanceApi {
 
   final Dio _dio;
 
+  Future<bool> downloadCsv(String url, String fileName) async {
+    final response = await _dio.get<List<int>>(
+      url,
+      options: Options(responseType: ResponseType.bytes),
+    );
+    final bytes = response.data;
+    if (bytes == null || bytes.isEmpty) {
+      throw StateError('The export returned an empty file');
+    }
+    final csv = utf8.decode(Uint8List.fromList(bytes));
+    final blob = web.Blob(
+      <JSAny>[csv.toJS].toJS,
+      web.BlobPropertyBag(type: 'text/csv;charset=utf-8'),
+    );
+    final objectUrl = web.URL.createObjectURL(blob);
+    final anchor = web.HTMLAnchorElement()
+      ..href = objectUrl
+      ..download = fileName;
+    web.document.body?.append(anchor);
+    anchor.click();
+    anchor.remove();
+    Future<void>.delayed(const Duration(seconds: 1), () {
+      web.URL.revokeObjectURL(objectUrl);
+    });
+    return true;
+  }
+
   Future<FinancePayoutQueueResponse> fetchPayouts({
     String? status,
     int page = 1,
@@ -305,6 +337,20 @@ class FinanceApi {
       'attempted': (data['attempted'] as num?)?.toInt() ?? 0,
       'succeeded': (data['succeeded'] as num?)?.toInt() ?? 0,
       'failed': (data['failed'] as num?)?.toInt() ?? 0,
+    };
+  }
+
+  Future<Map<String, int>> releasePendingPayouts() async {
+    final response = await _dio.post<Map<String, dynamic>>(
+      '/admin/payouts/release-pending',
+      data: const {},
+    );
+    final data = response.data ?? const <String, dynamic>{};
+    return {
+      'attempted': (data['attempted'] as num?)?.toInt() ?? 0,
+      'succeeded': (data['succeeded'] as num?)?.toInt() ?? 0,
+      'failed': (data['failed'] as num?)?.toInt() ?? 0,
+      'paused': data['paused'] == true ? 1 : 0,
     };
   }
 
@@ -386,6 +432,14 @@ class FinanceApi {
   }) {
     final base = _dio.options.baseUrl.replaceAll(RegExp(r'/$'), '');
     return '$base/api/admin/tax-summary/export/csv?startDate=${_formatDate(startDate)}&endDate=${_formatDate(endDate)}';
+  }
+
+  String taxReconciliationCsvUrl({
+    required DateTime startDate,
+    required DateTime endDate,
+  }) {
+    final base = _dio.options.baseUrl.replaceAll(RegExp(r'/$'), '');
+    return '$base/api/admin/tax-summary/export/reconciliation.csv?startDate=${_formatDate(startDate)}&endDate=${_formatDate(endDate)}';
   }
 }
 

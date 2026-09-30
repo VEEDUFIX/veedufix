@@ -20,7 +20,7 @@ export async function getOpsAlertsHandler(request: Request, response: Response):
 }
 
 export async function updateOpsAlertStatusHandler(request: AuthenticatedRequest, response: Response): Promise<void> {
-  const { alertId } = request.params;
+  const alertId = String(request.params.alertId);
   const body = request.body as { status: "open" | "acknowledged" | "resolved"; resolutionNote?: string };
   const alert = await updateOpsAlertStatus({
     alertId,

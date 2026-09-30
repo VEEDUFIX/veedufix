@@ -23,7 +23,12 @@ class WorkerWalletTransaction {
         'PAYOUT' => 'Payout Withdrawn',
         'BONUS' => 'Bonus',
         'REFERRAL_BONUS' => 'Referral Bonus',
-        _ => type.replaceAll('_', ' ').toLowerCase().split(' ').map((w) => '${w[0].toUpperCase()}${w.substring(1)}').join(' '),
+        _ => type
+            .replaceAll('_', ' ')
+            .toLowerCase()
+            .split(' ')
+            .map((w) => '${w[0].toUpperCase()}${w.substring(1)}')
+            .join(' '),
       };
 
   factory WorkerWalletTransaction.fromJson(Map<String, dynamic> json) =>
@@ -32,7 +37,8 @@ class WorkerWalletTransaction {
         type: json['type'] as String? ?? 'CREDIT',
         amount: (json['amount'] as num?)?.toDouble() ?? 0.0,
         balanceAfter: (json['balanceAfter'] as num?)?.toDouble() ?? 0.0,
-        createdAt: DateTime.tryParse(json['createdAt'] as String? ?? '') ?? DateTime.now(),
+        createdAt: DateTime.tryParse(json['createdAt'] as String? ?? '') ??
+            DateTime.now(),
         note: json['note'] as String?,
       );
 }
@@ -42,20 +48,30 @@ class WorkerWallet {
     required this.balance,
     required this.totalEarnings,
     required this.pendingPayout,
+    required this.minimumPayout,
+    required this.payoutsPaused,
+    this.payoutPauseReason,
     required this.transactions,
   });
 
   final double balance;
   final double totalEarnings;
   final double pendingPayout;
+  final double minimumPayout;
+  final bool payoutsPaused;
+  final String? payoutPauseReason;
   final List<WorkerWalletTransaction> transactions;
 
   factory WorkerWallet.fromJson(Map<String, dynamic> json) => WorkerWallet(
         balance: (json['balance'] as num?)?.toDouble() ?? 0.0,
         totalEarnings: (json['totalEarnings'] as num?)?.toDouble() ?? 0.0,
         pendingPayout: (json['pendingPayout'] as num?)?.toDouble() ?? 0.0,
+        minimumPayout: (json['minimumPayout'] as num?)?.toDouble() ?? 100.0,
+        payoutsPaused: json['payoutsPaused'] as bool? ?? false,
+        payoutPauseReason: json['payoutPauseReason'] as String?,
         transactions: (json['transactions'] as List<dynamic>? ?? [])
-            .map((t) => WorkerWalletTransaction.fromJson(t as Map<String, dynamic>))
+            .map((t) =>
+                WorkerWalletTransaction.fromJson(t as Map<String, dynamic>))
             .toList(),
       );
 }

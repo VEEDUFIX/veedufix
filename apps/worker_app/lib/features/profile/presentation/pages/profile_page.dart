@@ -7,7 +7,8 @@ import 'package:marketplace_shared/marketplace_shared.dart';
 import '../../../../core/notifications/worker_device_token.dart';
 import '../providers/worker_profile_providers.dart';
 
-final workerAuthSessionsProvider = FutureProvider.autoDispose<List<WorkerAuthSession>>((ref) async {
+final workerAuthSessionsProvider =
+    FutureProvider.autoDispose<List<WorkerAuthSession>>((ref) async {
   final api = ref.watch(apiClientProvider);
   final data = await api.get('/auth/sessions');
   return (data['sessions'] as List<dynamic>? ?? [])
@@ -32,11 +33,14 @@ class WorkerAuthSession {
   final bool isCurrent;
   final bool isActive;
 
-  factory WorkerAuthSession.fromJson(Map<String, dynamic> json) => WorkerAuthSession(
+  factory WorkerAuthSession.fromJson(Map<String, dynamic> json) =>
+      WorkerAuthSession(
         id: json['id'] as String? ?? '',
         provider: json['provider'] as String? ?? 'PHONE',
-        createdAt: DateTime.tryParse(json['createdAt'] as String? ?? '') ?? DateTime.now(),
-        updatedAt: DateTime.tryParse(json['updatedAt'] as String? ?? '') ?? DateTime.now(),
+        createdAt: DateTime.tryParse(json['createdAt'] as String? ?? '') ??
+            DateTime.now(),
+        updatedAt: DateTime.tryParse(json['updatedAt'] as String? ?? '') ??
+            DateTime.now(),
         isCurrent: json['isCurrent'] as bool? ?? false,
         isActive: json['isActive'] as bool? ?? false,
       );
@@ -56,39 +60,22 @@ class ProfilePage extends ConsumerWidget {
       ),
       error: (error, stack) => Scaffold(
         appBar: AppBar(title: const Text('Profile')),
-        body: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(Icons.error_outline_rounded, size: 48),
-                const SizedBox(height: 12),
-                Text(
-                  'Failed to load profile',
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  error.toString(),
-                  textAlign: TextAlign.center,
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      ),
-                ),
-                const SizedBox(height: 16),
-                FilledButton(
-                  onPressed: () => ref.refresh(workerAccountProfileProvider),
-                  child: const Text('Try again'),
-                ),
-              ],
-            ),
-          ),
+        body: PremiumRetryState(
+          title: 'Could not load profile',
+          subtitle: 'Check your connection and try again.',
+          icon: Icons.person_outline_rounded,
+          onRetry: () => ref.invalidate(workerAccountProfileProvider),
+          onRefresh: () async {
+            await ref.refresh(workerAccountProfileProvider.future).then<void>((_) {});
+          },
         ),
       ),
       data: (account) {
-        final userMap = (account['user'] as Map<String, dynamic>?) ?? <String, dynamic>{};
-        final workerProfile = (userMap['workerProfile'] as Map<String, dynamic>?) ?? <String, dynamic>{};
+        final userMap =
+            (account['user'] as Map<String, dynamic>?) ?? <String, dynamic>{};
+        final workerProfile =
+            (userMap['workerProfile'] as Map<String, dynamic>?) ??
+                <String, dynamic>{};
 
         return _ProfileContent(
           sessionUser: session?.user,
@@ -119,7 +106,8 @@ class _ProfileContent extends ConsumerWidget {
         sessionUser?.name ??
         'Guest worker';
     final avatarUrl = _nonEmpty(userMap['avatarUrl']) ?? sessionUser?.avatarUrl;
-    final verificationStatus = _nonEmpty(workerProfile['verificationStatus']) ?? 'PENDING';
+    final verificationStatus =
+        _nonEmpty(workerProfile['verificationStatus']) ?? 'PENDING';
     final averageRating = _doubleValue(workerProfile['averageRating']);
     final completedJobsCount = _intValue(workerProfile['completedJobsCount']);
     final experienceYears = _intValue(workerProfile['experienceYears']) > 0
@@ -128,7 +116,8 @@ class _ProfileContent extends ConsumerWidget {
     final isAvailable = workerProfile['isAvailable'] as bool? ?? false;
     final bio = _nonEmpty(workerProfile['bio']);
     final skills = _skillNames(workerProfile['skills']);
-    final primaryService = skills.isEmpty ? 'No primary service selected' : skills.first;
+    final primaryService =
+        skills.isEmpty ? 'No primary service selected' : skills.first;
     final serviceArea = _serviceAreaSummary(workerProfile);
     final hasProfessionalDocument = _hasProfessionalDocument(workerProfile);
     final progress = _profileProgress(
@@ -189,7 +178,8 @@ class _ProfileContent extends ConsumerWidget {
                 children: [
                   CircleAvatar(
                     radius: 32,
-                    backgroundColor: Theme.of(context).colorScheme.primaryContainer,
+                    backgroundColor:
+                        Theme.of(context).colorScheme.primaryContainer,
                     child: avatarUrl == null
                         ? Text(
                             _initial(userName),
@@ -222,26 +212,39 @@ class _ProfileContent extends ConsumerWidget {
                             Expanded(
                               child: Text(
                                 userName,
-                                style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .titleLarge
+                                    ?.copyWith(
                                       fontWeight: FontWeight.w900,
                                     ),
                               ),
                             ),
                             Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 10, vertical: 6),
                               decoration: BoxDecoration(
                                 color: verificationStatus == 'VERIFIED'
-                                    ? const Color(0xFF10B981).withValues(alpha: 0.12)
-                                    : Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
+                                    ? const Color(0xFF10B981)
+                                        .withValues(alpha: 0.12)
+                                    : Theme.of(context)
+                                        .colorScheme
+                                        .surfaceContainerHighest
+                                        .withValues(alpha: 0.35),
                                 borderRadius: BorderRadius.circular(999),
                               ),
                               child: Text(
                                 _friendlyVerificationLabel(verificationStatus),
-                                style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .labelSmall
+                                    ?.copyWith(
                                       fontWeight: FontWeight.w800,
                                       color: verificationStatus == 'VERIFIED'
                                           ? const Color(0xFF10B981)
-                                          : Theme.of(context).colorScheme.onSurfaceVariant,
+                                          : Theme.of(context)
+                                              .colorScheme
+                                              .onSurfaceVariant,
                                     ),
                               ),
                             ),
@@ -249,10 +252,13 @@ class _ProfileContent extends ConsumerWidget {
                         ),
                         const SizedBox(height: 4),
                         Text(
-                        'PARTNER',
-                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                color: Theme.of(context).colorScheme.onSurfaceVariant,
-                              ),
+                          'PARTNER',
+                          style:
+                              Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .onSurfaceVariant,
+                                  ),
                         ),
                         const SizedBox(height: 10),
                         Row(
@@ -267,8 +273,13 @@ class _ProfileContent extends ConsumerWidget {
                             const SizedBox(width: 10),
                             Text(
                               '${(progress * 100).round()}% complete',
-                              style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .labelSmall
+                                  ?.copyWith(
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .onSurfaceVariant,
                                     fontWeight: FontWeight.w700,
                                   ),
                             ),
@@ -292,16 +303,29 @@ class _ProfileContent extends ConsumerWidget {
             children: [
               TapScale(
                 onTap: () => context.push('/reviews'),
-                child: PremiumStatCard(label: 'Rating', value: averageRating.toStringAsFixed(1), icon: Icons.star_rounded, accentColor: const Color(0xFFF59E0B)),
+                child: PremiumStatCard(
+                    label: 'Rating',
+                    value: averageRating.toStringAsFixed(1),
+                    icon: Icons.star_rounded,
+                    accentColor: const Color(0xFFF59E0B)),
               ),
-              PremiumStatCard(label: 'Jobs completed', value: completedJobsCount.toString(), icon: Icons.check_circle_rounded, accentColor: const Color(0xFF10B981)),
-              PremiumStatCard(label: 'Experience', value: '${experienceYears}y', icon: Icons.military_tech_rounded, accentColor: const Color(0xFFC2A15E)),
+              PremiumStatCard(
+                  label: 'Jobs completed',
+                  value: completedJobsCount.toString(),
+                  icon: Icons.check_circle_rounded,
+                  accentColor: const Color(0xFF10B981)),
+              PremiumStatCard(
+                  label: 'Experience',
+                  value: '${experienceYears}y',
+                  icon: Icons.military_tech_rounded,
+                  accentColor: const Color(0xFFC2A15E)),
             ],
           ),
           const SizedBox(height: 18),
           const PremiumSectionHeader(
             title: 'Work profile',
-            subtitle: 'Manage your identity, services, and professional credentials.',
+            subtitle:
+                'Manage your identity, services, and professional credentials.',
           ),
           const SizedBox(height: 12),
           _SectionCard(
@@ -313,14 +337,17 @@ class _ProfileContent extends ConsumerWidget {
           ),
           _SectionCard(
             title: 'Experience & skills',
-            subtitle: '$experienceYears years • $primaryService • ${skills.length} skills',
+            subtitle:
+                '$experienceYears years • $primaryService • ${skills.length} skills',
             icon: Icons.build_circle_rounded,
             accent: const Color(0xFFC2A15E),
             onTap: () => context.push('/profile/experience'),
           ),
           _SectionCard(
             title: 'Services',
-            subtitle: skills.isEmpty ? 'Add the services you provide.' : skills.take(3).join(', '),
+            subtitle: skills.isEmpty
+                ? 'Add the services you provide.'
+                : skills.take(3).join(', '),
             icon: Icons.home_repair_service_rounded,
             accent: const Color(0xFFC2A15E),
             onTap: () => context.push('/profile/services'),
@@ -353,9 +380,13 @@ class _ProfileContent extends ConsumerWidget {
           const SizedBox(height: 12),
           _SectionCard(
             title: 'Professional documents',
-            subtitle: hasProfessionalDocument ? 'Documents uploaded • Review or replace' : 'No additional documents required',
+            subtitle: hasProfessionalDocument
+                ? 'Documents uploaded • Review or replace'
+                : 'No additional documents required',
             icon: Icons.badge_rounded,
-            accent: hasProfessionalDocument ? const Color(0xFF16A34A) : const Color(0xFFC2A15E),
+            accent: hasProfessionalDocument
+                ? const Color(0xFF16A34A)
+                : const Color(0xFFC2A15E),
             onTap: () => context.push('/profile/documents'),
           ),
           const SizedBox(height: 18),
@@ -375,7 +406,8 @@ class _ProfileContent extends ConsumerWidget {
           ),
           _SectionCard(
             title: 'Service preferences',
-            subtitle: '${_urgentJobsLabel(workerProfile)} • ${workerProfile['workType'] == 'PART_TIME' ? 'Part-time preference' : 'Full-time preference'}',
+            subtitle:
+                '${_urgentJobsLabel(workerProfile)} • ${workerProfile['workType'] == 'PART_TIME' ? 'Part-time preference' : 'Full-time preference'}',
             icon: Icons.tune_rounded,
             accent: const Color(0xFFC2A15E),
             onTap: () => context.push('/availability'),
@@ -426,7 +458,8 @@ class _ProfileContent extends ConsumerWidget {
           const SizedBox(height: 18),
           const PremiumSectionHeader(
             title: 'Security',
-            subtitle: 'Review signed-in devices and end other sessions anytime.',
+            subtitle:
+                'Review signed-in devices and end other sessions anytime.',
           ),
           const SizedBox(height: 12),
           const _WorkerSecuritySessionsCard(),
@@ -439,7 +472,8 @@ class _ProfileContent extends ConsumerWidget {
           _AccountStatusCard(
             identityVerified: verificationStatus == 'VERIFIED',
             servicesActive: skills.isNotEmpty,
-            paymentsAdded: bankDetails != 'Add bank or UPI details for payouts.',
+            paymentsAdded:
+                bankDetails != 'Add bank or UPI details for payouts.',
             profileComplete: progress >= 0.75,
           ),
           _ActionTile(
@@ -450,10 +484,15 @@ class _ProfileContent extends ConsumerWidget {
                 context: context,
                 builder: (dialogContext) => AlertDialog(
                   title: const Text('Log out of Veedufix?'),
-                  content: const Text('You can sign in again anytime using your registered mobile number.'),
+                  content: const Text(
+                      'You can sign in again anytime using your registered mobile number.'),
                   actions: [
-                    TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Cancel')),
-                    FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('Log out')),
+                    TextButton(
+                        onPressed: () => Navigator.pop(dialogContext, false),
+                        child: const Text('Cancel')),
+                    FilledButton(
+                        onPressed: () => Navigator.pop(dialogContext, true),
+                        child: const Text('Log out')),
                   ],
                 ),
               );
@@ -492,7 +531,9 @@ class _ProfileContent extends ConsumerWidget {
   }
 
   static String _serviceAreaSummary(Map<String, dynamic> profile) {
-    final city = _nonEmpty(profile['city']) ?? _nonEmpty(profile['addressLine1']) ?? 'Add your city';
+    final city = _nonEmpty(profile['city']) ??
+        _nonEmpty(profile['addressLine1']) ??
+        'Add your city';
     final areas = _nonEmpty(profile['serviceAreas']);
     final pincode = _nonEmpty(profile['pincode']);
     final travel = profile['serviceRadiusKm']?.toString();
@@ -507,7 +548,8 @@ class _ProfileContent extends ConsumerWidget {
   static String _availabilitySummary(Map<String, dynamic> profile) {
     final slots = profile['availabilitySlots'];
     if (slots is List && slots.isNotEmpty) {
-      final daySlots = slots.whereType<Map<String, dynamic>>().toList(growable: false);
+      final daySlots =
+          slots.whereType<Map<String, dynamic>>().toList(growable: false);
       final days = daySlots
           .map((slot) => slot['dayOfWeek'])
           .whereType<num>()
@@ -532,16 +574,22 @@ class _ProfileContent extends ConsumerWidget {
         .whereType<RegExpMatch>()
         .map((match) => int.tryParse(match.group(1) ?? '0') ?? 0)
         .toList(growable: false);
-    return years.isEmpty ? 0 : years.reduce((left, right) => left > right ? left : right);
+    return years.isEmpty
+        ? 0
+        : years.reduce((left, right) => left > right ? left : right);
   }
 
   static String _urgentJobsLabel(Map<String, dynamic> profile) {
-    return profile['acceptsUrgentJobs'] == true ? 'Emergency jobs on' : 'Emergency jobs off';
+    return profile['acceptsUrgentJobs'] == true
+        ? 'Emergency jobs on'
+        : 'Emergency jobs off';
   }
 
   static bool _hasProfessionalDocument(Map<String, dynamic> profile) {
     final skills = profile['skills'];
-    return skills is List && skills.any((skill) => skill is Map && skill['hasCertificationDoc'] == true);
+    return skills is List &&
+        skills.any(
+            (skill) => skill is Map && skill['hasCertificationDoc'] == true);
   }
 
   static String _friendlyVerificationLabel(String status) {
@@ -617,14 +665,22 @@ class _AccountStatusCard extends StatelessWidget {
                   child: Row(
                     children: [
                       Icon(
-                        item.value ? Icons.check_circle_rounded : Icons.radio_button_unchecked_rounded,
+                        item.value
+                            ? Icons.check_circle_rounded
+                            : Icons.radio_button_unchecked_rounded,
                         size: 18,
-                        color: item.value ? const Color(0xFF16A34A) : const Color(0xFF9A9287),
+                        color: item.value
+                            ? const Color(0xFF16A34A)
+                            : const Color(0xFF9A9287),
                       ),
                       const SizedBox(width: 10),
                       Expanded(child: Text(item.key)),
                       if (!item.value)
-                        const Text('Action required', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Color(0xFF9A9287))),
+                        const Text('Action required',
+                            style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                                color: Color(0xFF9A9287))),
                     ],
                   ),
                 ),
@@ -649,7 +705,8 @@ class _WorkerSecuritySessionsCard extends ConsumerWidget {
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: sessionsAsync.when(
-          loading: () => const Center(child: Padding(
+          loading: () => const Center(
+              child: Padding(
             padding: EdgeInsets.all(12),
             child: CircularProgressIndicator(),
           )),
@@ -661,7 +718,9 @@ class _WorkerSecuritySessionsCard extends ConsumerWidget {
                 children: [
                   Icon(Icons.devices_rounded, color: cs.primary),
                   const SizedBox(width: 8),
-                  Text('Signed-in devices', style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
+                  Text('Signed-in devices',
+                      style: tt.titleMedium
+                          ?.copyWith(fontWeight: FontWeight.w800)),
                   const Spacer(),
                   TextButton(
                     onPressed: () async {
@@ -669,26 +728,38 @@ class _WorkerSecuritySessionsCard extends ConsumerWidget {
                         context: context,
                         builder: (dialogContext) => AlertDialog(
                           title: const Text('Sign out other devices?'),
-                          content: const Text('Other devices will need to sign in again. This device will stay signed in.'),
+                          content: const Text(
+                              'Other devices will need to sign in again. This device will stay signed in.'),
                           actions: [
-                            TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Cancel')),
-                            FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('Sign out others')),
+                            TextButton(
+                                onPressed: () =>
+                                    Navigator.pop(dialogContext, false),
+                                child: const Text('Cancel')),
+                            FilledButton(
+                                onPressed: () =>
+                                    Navigator.pop(dialogContext, true),
+                                child: const Text('Sign out others')),
                           ],
                         ),
                       );
                       if (confirmed != true || !context.mounted) return;
                       try {
-                        await ref.read(apiClientProvider).delete('/auth/sessions');
+                        await ref
+                            .read(apiClientProvider)
+                            .delete('/auth/sessions');
                         ref.invalidate(workerAuthSessionsProvider);
                       } catch (error) {
                         if (context.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not sign out other devices: $error')));
+                          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                              content: Text(
+                                  'Could not sign out other devices: $error')));
                         }
                         return;
                       }
                       if (context.mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Other sessions signed out')),
+                          const SnackBar(
+                              content: Text('Other sessions signed out')),
                         );
                       }
                     },
@@ -698,7 +769,8 @@ class _WorkerSecuritySessionsCard extends ConsumerWidget {
               ),
               const SizedBox(height: 12),
               if (sessions.isEmpty)
-                Text('No active sessions found.', style: tt.bodyMedium?.copyWith(color: cs.onSurfaceVariant))
+                Text('No active sessions found.',
+                    style: tt.bodyMedium?.copyWith(color: cs.onSurfaceVariant))
               else
                 ExpansionTile(
                   tilePadding: EdgeInsets.zero,
@@ -718,24 +790,38 @@ class _WorkerSecuritySessionsCard extends ConsumerWidget {
                       child: Container(
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
-                          color: cs.surfaceContainerHighest.withValues(alpha: 0.35),
+                          color: cs.surfaceContainerHighest
+                              .withValues(alpha: 0.35),
                           borderRadius: BorderRadius.circular(14),
                         ),
                         child: Row(
                           children: [
-                            Icon(session.isCurrent ? Icons.smartphone_rounded : Icons.devices_other_rounded, size: 18, color: cs.primary),
+                            Icon(
+                                session.isCurrent
+                                    ? Icons.smartphone_rounded
+                                    : Icons.devices_other_rounded,
+                                size: 18,
+                                color: cs.primary),
                             const SizedBox(width: 10),
                             Expanded(
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Text(session.provider.toUpperCase(), style: tt.labelLarge?.copyWith(fontWeight: FontWeight.w700)),
-                                  Text('Last active ${DateFormat('d MMM, h:mm a').format(session.updatedAt)}', style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
+                                  Text(session.provider.toUpperCase(),
+                                      style: tt.labelLarge?.copyWith(
+                                          fontWeight: FontWeight.w700)),
+                                  Text(
+                                      'Last active ${DateFormat('d MMM, h:mm a').format(session.updatedAt)}',
+                                      style: tt.bodySmall?.copyWith(
+                                          color: cs.onSurfaceVariant)),
                                 ],
                               ),
                             ),
                             if (session.isCurrent)
-                              Text('Current', style: tt.labelSmall?.copyWith(color: cs.primary, fontWeight: FontWeight.w700)),
+                              Text('Current',
+                                  style: tt.labelSmall?.copyWith(
+                                      color: cs.primary,
+                                      fontWeight: FontWeight.w700)),
                           ],
                         ),
                       ),
@@ -821,7 +907,10 @@ class _ActionTile extends StatelessWidget {
               height: 46,
               width: 46,
               decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.75),
+                color: Theme.of(context)
+                    .colorScheme
+                    .primaryContainer
+                    .withValues(alpha: 0.75),
                 borderRadius: BorderRadius.circular(AbzioTheme.buttonRadius),
               ),
               child: Icon(icon, color: Theme.of(context).colorScheme.primary),

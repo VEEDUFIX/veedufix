@@ -20,7 +20,7 @@ class _SchedulePageState extends ConsumerState<SchedulePage> {
     super.initState();
     final now = DateTime.now();
     // 1 = Monday, 7 = Sunday
-    final weekday = now.weekday; 
+    final weekday = now.weekday;
     _currentWeekStart = now.subtract(Duration(days: weekday - 1));
     _selectedDayIndex = weekday - 1;
   }
@@ -56,6 +56,7 @@ class _SchedulePageState extends ConsumerState<SchedulePage> {
         ),
         actions: [
           IconButton(
+            tooltip: 'Manage availability',
             onPressed: () => context.push('/availability'),
             icon: Icon(Icons.add_rounded, color: cs.primary),
           ),
@@ -68,58 +69,67 @@ class _SchedulePageState extends ConsumerState<SchedulePage> {
           children: [
             // Weekly Calendar
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
               decoration: BoxDecoration(
                 color: cs.surface,
                 boxShadow: AbzioTheme.eliteShadow,
               ),
               child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: List.generate(7, (index) {
                   final isSelected = _selectedDayIndex == index;
                   final date = _currentWeekStart.add(Duration(days: index));
-                  
-                  return TapScale(
-                    onTap: () => setState(() => _selectedDayIndex = index),
-                    child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 200),
-                      width: 44,
-                      height: 64,
-                      decoration: BoxDecoration(
-                        color: isSelected ? cs.primary : Colors.transparent,
-                        borderRadius: BorderRadius.circular(AbzioTheme.cardRadius),
-                        border: Border.all(
-                          color: isSelected ? Colors.transparent : cs.outlineVariant.withValues(alpha: 0.5),
-                        ),
-                        boxShadow: isSelected
-                            ? [
-                                BoxShadow(
-                                  color: cs.primary.withValues(alpha: 0.3),
-                                  blurRadius: 12,
-                                  offset: const Offset(0, 4),
+
+                  return Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 2),
+                      child: TapScale(
+                        onTap: () => setState(() => _selectedDayIndex = index),
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 200),
+                          height: 64,
+                          decoration: BoxDecoration(
+                            color: isSelected ? cs.primary : Colors.transparent,
+                            borderRadius:
+                                BorderRadius.circular(AbzioTheme.cardRadius),
+                            border: Border.all(
+                              color: isSelected
+                                  ? Colors.transparent
+                                  : cs.outlineVariant.withValues(alpha: 0.5),
+                            ),
+                            boxShadow: isSelected
+                                ? [
+                                    BoxShadow(
+                                      color: cs.primary.withValues(alpha: 0.3),
+                                      blurRadius: 12,
+                                      offset: const Offset(0, 4),
+                                    ),
+                                  ]
+                                : [],
+                          ),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Text(
+                                daysList[index],
+                                style: tt.labelSmall?.copyWith(
+                                  color: isSelected
+                                      ? cs.onPrimary.withValues(alpha: 0.8)
+                                      : cs.onSurfaceVariant,
+                                  fontWeight: FontWeight.w600,
                                 ),
-                              ]
-                            : [],
-                      ),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Text(
-                            daysList[index],
-                            style: tt.labelSmall?.copyWith(
-                              color: isSelected ? cs.onPrimary.withValues(alpha: 0.8) : cs.onSurfaceVariant,
-                              fontWeight: FontWeight.w600,
-                            ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                date.day.toString(),
+                                style: tt.titleMedium?.copyWith(
+                                  color:
+                                      isSelected ? cs.onPrimary : cs.onSurface,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                            ],
                           ),
-                          const SizedBox(height: 4),
-                          Text(
-                            date.day.toString(),
-                            style: tt.titleMedium?.copyWith(
-                              color: isSelected ? cs.onPrimary : cs.onSurface,
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                        ],
+                        ),
                       ),
                     ),
                   );
@@ -131,7 +141,8 @@ class _SchedulePageState extends ConsumerState<SchedulePage> {
             Expanded(
               child: Builder(
                 builder: (context) {
-                  if (acceptedJobsAsync.isLoading || activeJobsAsync.isLoading) {
+                  if (acceptedJobsAsync.isLoading ||
+                      activeJobsAsync.isLoading) {
                     return const Center(child: CircularProgressIndicator());
                   }
 
@@ -140,7 +151,8 @@ class _SchedulePageState extends ConsumerState<SchedulePage> {
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          const Icon(Icons.error_outline_rounded, color: Colors.red, size: 48),
+                          const Icon(Icons.error_outline_rounded,
+                              color: Colors.red, size: 48),
                           const SizedBox(height: 16),
                           Text(
                             'Failed to load jobs',
@@ -160,40 +172,47 @@ class _SchedulePageState extends ConsumerState<SchedulePage> {
                   final activeJobs = activeJobsAsync.valueOrNull ?? [];
                   final allJobs = [...acceptedJobs, ...activeJobs];
 
-                  final selectedDate = _currentWeekStart.add(Duration(days: _selectedDayIndex));
-                  
+                  final selectedDate =
+                      _currentWeekStart.add(Duration(days: _selectedDayIndex));
+
                   final filteredJobs = allJobs.where((job) {
                     return job.scheduledAt.year == selectedDate.year &&
-                           job.scheduledAt.month == selectedDate.month &&
-                           job.scheduledAt.day == selectedDate.day;
+                        job.scheduledAt.month == selectedDate.month &&
+                        job.scheduledAt.day == selectedDate.day;
                   }).toList();
 
                   // Sort by time
-                  filteredJobs.sort((a, b) => a.scheduledAt.compareTo(b.scheduledAt));
+                  filteredJobs
+                      .sort((a, b) => a.scheduledAt.compareTo(b.scheduledAt));
 
                   if (filteredJobs.isEmpty) {
                     return ListView(
-                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 48),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 24, vertical: 48),
                       children: const [
                         PremiumEmptyState(
                           icon: Icons.event_available_rounded,
                           title: 'No jobs today',
-                          subtitle: 'Jobs scheduled on this day will appear here.',
+                          subtitle:
+                              'Jobs scheduled on this day will appear here.',
                         ),
                       ],
                     );
                   }
 
                   return ListView.builder(
-                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 24, vertical: 16),
                     itemCount: filteredJobs.length,
                     itemBuilder: (context, index) {
                       final job = filteredJobs[index];
                       final isLast = index == filteredJobs.length - 1;
                       final isActive = job.status.toLowerCase() == 'active';
-                      final accent = isActive ? const Color(0xFF10B981) : cs.primary;
-                      
-                      final timeStr = DateFormat('hh:mm a').format(job.scheduledAt);
+                      final accent =
+                          isActive ? const Color(0xFF10B981) : cs.primary;
+
+                      final timeStr =
+                          DateFormat('hh:mm a').format(job.scheduledAt);
 
                       return IntrinsicHeight(
                         child: Row(
@@ -228,7 +247,8 @@ class _SchedulePageState extends ConsumerState<SchedulePage> {
                                   Expanded(
                                     child: Container(
                                       width: 2,
-                                      color: cs.outlineVariant.withValues(alpha: 0.5),
+                                      color: cs.outlineVariant
+                                          .withValues(alpha: 0.5),
                                     ),
                                   ),
                               ],
@@ -242,14 +262,18 @@ class _SchedulePageState extends ConsumerState<SchedulePage> {
                                   padding: const EdgeInsets.all(16),
                                   decoration: BoxDecoration(
                                     color: accent.withValues(alpha: 0.05),
-                                    borderRadius: BorderRadius.circular(AbzioTheme.cardRadius),
-                                    border: Border.all(color: accent.withValues(alpha: 0.2)),
+                                    borderRadius: BorderRadius.circular(
+                                        AbzioTheme.cardRadius),
+                                    border: Border.all(
+                                        color: accent.withValues(alpha: 0.2)),
                                   ),
                                   child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: [
                                       Row(
-                                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.spaceBetween,
                                         children: [
                                           Expanded(
                                             child: Text(
@@ -261,10 +285,13 @@ class _SchedulePageState extends ConsumerState<SchedulePage> {
                                             ),
                                           ),
                                           Container(
-                                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                            padding: const EdgeInsets.symmetric(
+                                                horizontal: 8, vertical: 4),
                                             decoration: BoxDecoration(
-                                              color: accent.withValues(alpha: 0.1),
-                                              borderRadius: BorderRadius.circular(8),
+                                              color:
+                                                  accent.withValues(alpha: 0.1),
+                                              borderRadius:
+                                                  BorderRadius.circular(8),
                                             ),
                                             child: Text(
                                               // Assuming 1h duration as default or derived if available
@@ -288,7 +315,8 @@ class _SchedulePageState extends ConsumerState<SchedulePage> {
                                           const SizedBox(width: 6),
                                           Expanded(
                                             child: Text(
-                                              job.addressLabel ?? 'No address provided',
+                                              job.addressLabel ??
+                                                  'No address provided',
                                               style: tt.bodySmall?.copyWith(
                                                 color: cs.onSurfaceVariant,
                                               ),
@@ -317,4 +345,3 @@ class _SchedulePageState extends ConsumerState<SchedulePage> {
     );
   }
 }
-

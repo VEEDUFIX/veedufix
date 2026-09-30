@@ -28,7 +28,8 @@ class PremiumSectionHeader extends StatelessWidget {
             children: [
               Text(
                 title,
-                style: textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
+                style:
+                    textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
               ),
               if (subtitle != null) ...[
                 const SizedBox(height: 4),
@@ -93,7 +94,10 @@ class PremiumStatCard extends StatelessWidget {
                 Text(
                   label,
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.72),
+                        color: Theme.of(context)
+                            .colorScheme
+                            .onSurface
+                            .withValues(alpha: 0.72),
                       ),
                 ),
                 const SizedBox(height: 4),
@@ -164,7 +168,10 @@ class PremiumEmptyState extends StatelessWidget {
               height: 72,
               width: 72,
               decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.7),
+                color: Theme.of(context)
+                    .colorScheme
+                    .primaryContainer
+                    .withValues(alpha: 0.7),
                 borderRadius: BorderRadius.circular(AbzioTheme.cardRadius),
               ),
               child: Icon(
@@ -186,7 +193,10 @@ class PremiumEmptyState extends StatelessWidget {
               subtitle,
               textAlign: TextAlign.center,
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.72),
+                    color: Theme.of(context)
+                        .colorScheme
+                        .onSurface
+                        .withValues(alpha: 0.72),
                   ),
             ),
             if (actionLabel != null && onAction != null) ...[
@@ -194,13 +204,68 @@ class PremiumEmptyState extends StatelessWidget {
               FilledButton(
                 style: FilledButton.styleFrom(
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(AbzioTheme.buttonRadius),
+                    borderRadius:
+                        BorderRadius.circular(AbzioTheme.buttonRadius),
                   ),
                 ),
                 onPressed: onAction,
                 child: Text(actionLabel!),
               ),
             ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class PremiumRetryState extends StatelessWidget {
+  const PremiumRetryState({
+    super.key,
+    required this.title,
+    required this.subtitle,
+    required this.onRetry,
+    this.icon = Icons.cloud_off_rounded,
+    this.actionLabel = 'Try again',
+    this.onRefresh,
+  });
+
+  final String title;
+  final String subtitle;
+  final VoidCallback onRetry;
+  final IconData icon;
+  final String actionLabel;
+  final Future<void> Function()? onRefresh;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) => RefreshIndicator(
+        onRefresh: () async {
+          if (onRefresh == null) {
+            onRetry();
+            return;
+          }
+          try {
+            await onRefresh!();
+          } catch (_) {}
+        },
+        child: ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.all(24),
+          children: [
+            ConstrainedBox(
+              constraints: BoxConstraints(minHeight: constraints.maxHeight),
+              child: Center(
+                child: PremiumEmptyState(
+                  icon: icon,
+                  title: title,
+                  subtitle: subtitle,
+                  actionLabel: actionLabel,
+                  onAction: onRetry,
+                ),
+              ),
+            ),
           ],
         ),
       ),

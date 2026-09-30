@@ -10,7 +10,8 @@ class WorkerProfileEditPage extends ConsumerStatefulWidget {
   const WorkerProfileEditPage({super.key});
 
   @override
-  ConsumerState<WorkerProfileEditPage> createState() => _WorkerProfileEditPageState();
+  ConsumerState<WorkerProfileEditPage> createState() =>
+      _WorkerProfileEditPageState();
 }
 
 class _WorkerProfileEditPageState extends ConsumerState<WorkerProfileEditPage> {
@@ -68,7 +69,8 @@ class _WorkerProfileEditPageState extends ConsumerState<WorkerProfileEditPage> {
             ),
           ),
         ),
-        title: Text('Edit Profile', style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
+        title: Text('Edit Profile',
+            style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
         actions: [
           Padding(
             padding: const EdgeInsets.only(right: 12),
@@ -82,7 +84,8 @@ class _WorkerProfileEditPageState extends ConsumerState<WorkerProfileEditPage> {
                     )
                   : Text(
                       'Save',
-                      style: tt.labelLarge?.copyWith(color: cs.primary, fontWeight: FontWeight.w800),
+                      style: tt.labelLarge?.copyWith(
+                          color: cs.primary, fontWeight: FontWeight.w800),
                     ),
             ),
           ),
@@ -90,13 +93,23 @@ class _WorkerProfileEditPageState extends ConsumerState<WorkerProfileEditPage> {
       ),
       body: profileAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, _) => const Center(child: Text('Unable to load profile.')),
+        error: (error, _) => PremiumRetryState(
+          title: 'Could not load profile',
+          subtitle: 'Check your connection and try again.',
+          icon: Icons.person_outline_rounded,
+          onRetry: () => ref.invalidate(workerEditProfileProvider),
+          onRefresh: () async {
+            await ref.refresh(workerEditProfileProvider.future).then<void>((_) {});
+          },
+        ),
         data: (profile) {
           _initFromProfile(profile);
           final workerId = profile['id'] as String? ?? '';
-          final isIdentityVerified = profile['verificationStatus'] == 'VERIFIED';
-          final publicProfileAsync =
-              workerId.isEmpty ? const AsyncValue<WorkerPublicProfile>.loading() : ref.watch(workerPublicProfileProvider(workerId));
+          final isIdentityVerified =
+              profile['verificationStatus'] == 'VERIFIED';
+          final publicProfileAsync = workerId.isEmpty
+              ? const AsyncValue<WorkerPublicProfile>.loading()
+              : ref.watch(workerPublicProfileProvider(workerId));
           final categoriesAsync = ref.watch(workerSkillCategoriesProvider);
 
           return Form(
@@ -108,10 +121,12 @@ class _WorkerProfileEditPageState extends ConsumerState<WorkerProfileEditPage> {
                   child: Stack(
                     children: [
                       MarketplaceNetworkAvatar(
-                        imageUrl: _avatarUrlOverride ?? profile['avatarUrl'] as String?,
+                        imageUrl: _avatarUrlOverride ??
+                            profile['avatarUrl'] as String?,
                         radius: 52,
                         backgroundColor: cs.primaryContainer,
-                        fallback: Icon(Icons.person_rounded, size: 48, color: cs.onPrimaryContainer),
+                        fallback: Icon(Icons.person_rounded,
+                            size: 48, color: cs.onPrimaryContainer),
                       ),
                       Positioned(
                         right: 0,
@@ -126,7 +141,8 @@ class _WorkerProfileEditPageState extends ConsumerState<WorkerProfileEditPage> {
                               shape: BoxShape.circle,
                               border: Border.all(color: cs.surface, width: 2),
                             ),
-                            child: Icon(Icons.camera_alt_rounded, size: 16, color: cs.onPrimary),
+                            child: Icon(Icons.camera_alt_rounded,
+                                size: 16, color: cs.onPrimary),
                           ),
                         ),
                       ),
@@ -139,7 +155,8 @@ class _WorkerProfileEditPageState extends ConsumerState<WorkerProfileEditPage> {
                   children: [
                     _StatPill(
                       icon: Icons.star_rounded,
-                      label: ((profile['averageRating'] as num?) ?? 0).toStringAsFixed(1),
+                      label: ((profile['averageRating'] as num?) ?? 0)
+                          .toStringAsFixed(1),
                       color: const Color(0xFFF59E0B),
                     ),
                     const SizedBox(width: 12),
@@ -156,18 +173,28 @@ class _WorkerProfileEditPageState extends ConsumerState<WorkerProfileEditPage> {
                 TextFormField(
                   controller: _nameCtrl,
                   enabled: !isIdentityVerified,
-                  decoration: _inputDeco(context, hint: 'Your legal full name', icon: Icons.person_rounded).copyWith(
-                    suffixIcon: isIdentityVerified ? const Icon(Icons.lock_outline_rounded) : null,
-                    helperText: isIdentityVerified ? 'Verified identity changes require support review.' : null,
+                  decoration: _inputDeco(context,
+                          hint: 'Your legal full name',
+                          icon: Icons.person_rounded)
+                      .copyWith(
+                    suffixIcon: isIdentityVerified
+                        ? const Icon(Icons.lock_outline_rounded)
+                        : null,
+                    helperText: isIdentityVerified
+                        ? 'Verified identity changes require support review.'
+                        : null,
                   ),
-                  validator: (value) => value == null || value.isEmpty ? 'Required' : null,
+                  validator: (value) =>
+                      value == null || value.isEmpty ? 'Required' : null,
                 ),
                 const SizedBox(height: 16),
                 const _FieldLabel(label: 'Display Name'),
                 const SizedBox(height: 8),
                 TextFormField(
                   controller: _displayNameCtrl,
-                  decoration: _inputDeco(context, hint: 'Name shown to customers', icon: Icons.badge_rounded),
+                  decoration: _inputDeco(context,
+                      hint: 'Name shown to customers',
+                      icon: Icons.badge_rounded),
                 ),
                 const SizedBox(height: 16),
                 const _FieldLabel(label: 'Bio'),
@@ -175,7 +202,9 @@ class _WorkerProfileEditPageState extends ConsumerState<WorkerProfileEditPage> {
                 TextFormField(
                   controller: _bioCtrl,
                   maxLines: 4,
-                  decoration: _inputDeco(context, hint: 'Tell customers about your experience and skills...'),
+                  decoration: _inputDeco(context,
+                      hint:
+                          'Tell customers about your experience and skills...'),
                 ),
                 const SizedBox(height: 16),
                 const _FieldLabel(label: 'Years of Experience'),
@@ -183,9 +212,12 @@ class _WorkerProfileEditPageState extends ConsumerState<WorkerProfileEditPage> {
                 TextFormField(
                   controller: _expCtrl,
                   keyboardType: TextInputType.number,
-                  decoration: _inputDeco(context, hint: '0', icon: Icons.work_outline_rounded),
+                  decoration: _inputDeco(context,
+                      hint: '0', icon: Icons.work_outline_rounded),
                   validator: (value) {
-                    if (value != null && value.isNotEmpty && int.tryParse(value) == null) {
+                    if (value != null &&
+                        value.isNotEmpty &&
+                        int.tryParse(value) == null) {
                       return 'Enter a whole number';
                     }
                     return null;
@@ -194,20 +226,26 @@ class _WorkerProfileEditPageState extends ConsumerState<WorkerProfileEditPage> {
                 const SizedBox(height: 20),
                 _SectionCard(
                   title: 'Skills',
-                  subtitle: 'Add the service categories you handle so customers can find you faster.',
+                  subtitle:
+                      'Add the service categories you handle so customers can find you faster.',
                   trailing: TapScale(
-                    onTap: categoriesAsync.hasValue && publicProfileAsync.hasValue
-                        ? () => _openSkillPicker(
-                              workerId,
-                              context,
-                              categoriesAsync.valueOrNull ?? const [],
-                              publicProfileAsync.valueOrNull?.skills.map((skill) => skill.categorySlug).toSet() ?? <String>{},
-                            )
-                        : null,
+                    onTap:
+                        categoriesAsync.hasValue && publicProfileAsync.hasValue
+                            ? () => _openSkillPicker(
+                                  workerId,
+                                  context,
+                                  categoriesAsync.valueOrNull ?? const [],
+                                  publicProfileAsync.valueOrNull?.skills
+                                          .map((skill) => skill.categorySlug)
+                                          .toSet() ??
+                                      <String>{},
+                                )
+                            : null,
                     child: Chip(
                       avatar: const Icon(Icons.add_rounded, size: 18),
                       label: const Text('Add skill'),
-                      backgroundColor: cs.primaryContainer.withValues(alpha: 0.7),
+                      backgroundColor:
+                          cs.primaryContainer.withValues(alpha: 0.7),
                       side: BorderSide.none,
                     ),
                   ),
@@ -231,7 +269,8 @@ class _WorkerProfileEditPageState extends ConsumerState<WorkerProfileEditPage> {
                                   color: cs.error.withValues(alpha: 0.12),
                                   borderRadius: BorderRadius.circular(14),
                                 ),
-                                child: Icon(Icons.badge_rounded, color: cs.error),
+                                child:
+                                    Icon(Icons.badge_rounded, color: cs.error),
                               ),
                               const SizedBox(width: 12),
                               Expanded(
@@ -240,7 +279,8 @@ class _WorkerProfileEditPageState extends ConsumerState<WorkerProfileEditPage> {
                                   children: [
                                     Text(
                                       'Unable to load skills',
-                                      style: tt.titleSmall?.copyWith(fontWeight: FontWeight.w800),
+                                      style: tt.titleSmall?.copyWith(
+                                          fontWeight: FontWeight.w800),
                                     ),
                                     const SizedBox(height: 4),
                                     Text(
@@ -263,7 +303,8 @@ class _WorkerProfileEditPageState extends ConsumerState<WorkerProfileEditPage> {
                       if (skills.isEmpty) {
                         return Text(
                           'No skills added yet.',
-                          style: tt.bodyMedium?.copyWith(color: cs.onSurfaceVariant),
+                          style: tt.bodyMedium
+                              ?.copyWith(color: cs.onSurfaceVariant),
                         );
                       }
 
@@ -273,7 +314,8 @@ class _WorkerProfileEditPageState extends ConsumerState<WorkerProfileEditPage> {
                         children: skills
                             .map(
                               (skill) => Chip(
-                                avatar: const Icon(Icons.handyman_rounded, size: 18),
+                                avatar: const Icon(Icons.handyman_rounded,
+                                    size: 18),
                                 label: Text(skill.categoryName),
                                 backgroundColor: cs.surfaceContainerHighest,
                               ),
@@ -286,13 +328,15 @@ class _WorkerProfileEditPageState extends ConsumerState<WorkerProfileEditPage> {
                 const SizedBox(height: 16),
                 _SectionCard(
                   title: 'Portfolio',
-                  subtitle: 'Show recent work so customers can trust your quality before they book.',
+                  subtitle:
+                      'Show recent work so customers can trust your quality before they book.',
                   trailing: TapScale(
                     onTap: () => _pickPortfolioPhoto(workerId),
                     child: Chip(
                       avatar: const Icon(Icons.photo_library_rounded, size: 18),
                       label: const Text('Add photo'),
-                      backgroundColor: cs.primaryContainer.withValues(alpha: 0.7),
+                      backgroundColor:
+                          cs.primaryContainer.withValues(alpha: 0.7),
                       side: BorderSide.none,
                     ),
                   ),
@@ -316,7 +360,8 @@ class _WorkerProfileEditPageState extends ConsumerState<WorkerProfileEditPage> {
                                   color: cs.error.withValues(alpha: 0.12),
                                   borderRadius: BorderRadius.circular(14),
                                 ),
-                                child: Icon(Icons.photo_library_rounded, color: cs.error),
+                                child: Icon(Icons.photo_library_rounded,
+                                    color: cs.error),
                               ),
                               const SizedBox(width: 12),
                               Expanded(
@@ -325,7 +370,8 @@ class _WorkerProfileEditPageState extends ConsumerState<WorkerProfileEditPage> {
                                   children: [
                                     Text(
                                       'Unable to load portfolio',
-                                      style: tt.titleSmall?.copyWith(fontWeight: FontWeight.w800),
+                                      style: tt.titleSmall?.copyWith(
+                                          fontWeight: FontWeight.w800),
                                     ),
                                     const SizedBox(height: 4),
                                     Text(
@@ -351,16 +397,20 @@ class _WorkerProfileEditPageState extends ConsumerState<WorkerProfileEditPage> {
                             width: double.infinity,
                             padding: const EdgeInsets.all(16),
                             decoration: BoxDecoration(
-                              color: cs.surfaceContainerHighest.withValues(alpha: 0.35),
+                              color: cs.surfaceContainerHighest
+                                  .withValues(alpha: 0.35),
                               borderRadius: BorderRadius.circular(18),
-                              border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.25)),
+                              border: Border.all(
+                                  color: cs.outlineVariant
+                                      .withValues(alpha: 0.25)),
                             ),
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
                                   'No portfolio photos yet',
-                                  style: tt.titleSmall?.copyWith(fontWeight: FontWeight.w800),
+                                  style: tt.titleSmall
+                                      ?.copyWith(fontWeight: FontWeight.w800),
                                 ),
                                 const SizedBox(height: 4),
                                 Text(
@@ -380,7 +430,8 @@ class _WorkerProfileEditPageState extends ConsumerState<WorkerProfileEditPage> {
                         shrinkWrap: true,
                         physics: const NeverScrollableScrollPhysics(),
                         itemCount: publicProfile.portfolioPhotos.length,
-                        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                        gridDelegate:
+                            const SliverGridDelegateWithFixedCrossAxisCount(
                           crossAxisCount: 2,
                           mainAxisSpacing: 12,
                           crossAxisSpacing: 12,
@@ -455,7 +506,8 @@ class _WorkerProfileEditPageState extends ConsumerState<WorkerProfileEditPage> {
     );
   }
 
-  InputDecoration _inputDeco(BuildContext context, {String? hint, IconData? icon}) {
+  InputDecoration _inputDeco(BuildContext context,
+      {String? hint, IconData? icon}) {
     final cs = Theme.of(context).colorScheme;
     return InputDecoration(
       hintText: hint,
@@ -471,7 +523,8 @@ class _WorkerProfileEditPageState extends ConsumerState<WorkerProfileEditPage> {
 
   Future<void> _pickPhoto() async {
     final picker = ImagePicker();
-    final image = await picker.pickImage(source: ImageSource.gallery, imageQuality: 80);
+    final image =
+        await picker.pickImage(source: ImageSource.gallery, imageQuality: 80);
     if (image == null || !mounted) {
       return;
     }
@@ -508,7 +561,8 @@ class _WorkerProfileEditPageState extends ConsumerState<WorkerProfileEditPage> {
     }
 
     final picker = ImagePicker();
-    final image = await picker.pickImage(source: ImageSource.gallery, imageQuality: 85);
+    final image =
+        await picker.pickImage(source: ImageSource.gallery, imageQuality: 85);
     if (image == null || !mounted) {
       return;
     }
@@ -541,10 +595,13 @@ class _WorkerProfileEditPageState extends ConsumerState<WorkerProfileEditPage> {
     List<CatalogCategory> categories,
     Set<String> selectedSlugs,
   ) async {
-    final filtered = categories.where((category) => !selectedSlugs.contains(category.slug)).toList(growable: false);
+    final filtered = categories
+        .where((category) => !selectedSlugs.contains(category.slug))
+        .toList(growable: false);
     if (filtered.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('All available skills are already added.')),
+        const SnackBar(
+            content: Text('All available skills are already added.')),
       );
       return;
     }
@@ -562,7 +619,8 @@ class _WorkerProfileEditPageState extends ConsumerState<WorkerProfileEditPage> {
                 return true;
               }
               final needle = query.toLowerCase().trim();
-              return category.name.toLowerCase().contains(needle) || category.slug.toLowerCase().contains(needle);
+              return category.name.toLowerCase().contains(needle) ||
+                  category.slug.toLowerCase().contains(needle);
             }).toList(growable: false);
 
             return SafeArea(
@@ -574,7 +632,10 @@ class _WorkerProfileEditPageState extends ConsumerState<WorkerProfileEditPage> {
                   children: [
                     Text(
                       'Add a skill',
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+                      style: Theme.of(context)
+                          .textTheme
+                          .titleMedium
+                          ?.copyWith(fontWeight: FontWeight.w800),
                     ),
                     const SizedBox(height: 8),
                     TextField(
@@ -588,23 +649,31 @@ class _WorkerProfileEditPageState extends ConsumerState<WorkerProfileEditPage> {
                     ConstrainedBox(
                       constraints: const BoxConstraints(maxHeight: 420),
                       child: visible.isEmpty
-                          ? const Center(child: Padding(padding: EdgeInsets.all(20), child: Text('No matches found.')))
+                          ? const Center(
+                              child: Padding(
+                                  padding: EdgeInsets.all(20),
+                                  child: Text('No matches found.')))
                           : ListView.separated(
                               shrinkWrap: true,
                               itemCount: visible.length,
-                              separatorBuilder: (_, __) => const Divider(height: 1),
+                              separatorBuilder: (_, __) =>
+                                  const Divider(height: 1),
                               itemBuilder: (context, index) {
                                 final category = visible[index];
                                 return ListTile(
                                   contentPadding: EdgeInsets.zero,
                                   leading: CircleAvatar(
-                                    backgroundColor: Theme.of(context).colorScheme.primaryContainer,
+                                    backgroundColor: Theme.of(context)
+                                        .colorScheme
+                                        .primaryContainer,
                                     child: const Icon(Icons.handyman_rounded),
                                   ),
                                   title: Text(category.name),
                                   subtitle: Text(category.slug),
-                                  trailing: const Icon(Icons.chevron_right_rounded),
-                                  onTap: () => Navigator.of(sheetContext).pop(category),
+                                  trailing:
+                                      const Icon(Icons.chevron_right_rounded),
+                                  onTap: () =>
+                                      Navigator.of(sheetContext).pop(category),
                                 );
                               },
                             ),
@@ -625,7 +694,7 @@ class _WorkerProfileEditPageState extends ConsumerState<WorkerProfileEditPage> {
     try {
       final repo = ref.read(workerProfileRepositoryProvider);
       await repo.addSkill(chosen.id);
-      
+
       ref.invalidate(workerEditProfileProvider);
       ref.invalidate(workerPublicProfileProvider(workerId));
       if (!context.mounted) {
@@ -649,9 +718,13 @@ class _WorkerProfileEditPageState extends ConsumerState<WorkerProfileEditPage> {
       return;
     }
     await ref.read(workerProfileUpdateProvider.notifier).update({
-      if (ref.read(workerEditProfileProvider).valueOrNull?['verificationStatus'] != 'VERIFIED')
+      if (ref
+              .read(workerEditProfileProvider)
+              .valueOrNull?['verificationStatus'] !=
+          'VERIFIED')
         'fullName': _nameCtrl.text.trim(),
-      if (_displayNameCtrl.text.isNotEmpty) 'displayName': _displayNameCtrl.text.trim(),
+      if (_displayNameCtrl.text.isNotEmpty)
+        'displayName': _displayNameCtrl.text.trim(),
       'bio': _bioCtrl.text.trim().isEmpty ? null : _bioCtrl.text.trim(),
       if (_expCtrl.text.isNotEmpty) 'experienceYears': int.parse(_expCtrl.text),
     });
@@ -718,7 +791,8 @@ class _SectionCard extends StatelessWidget {
                   children: [
                     Text(
                       title,
-                      style: tt.titleSmall?.copyWith(fontWeight: FontWeight.w800),
+                      style:
+                          tt.titleSmall?.copyWith(fontWeight: FontWeight.w800),
                     ),
                     const SizedBox(height: 4),
                     Text(
@@ -740,7 +814,8 @@ class _SectionCard extends StatelessWidget {
 }
 
 class _StatPill extends StatelessWidget {
-  const _StatPill({required this.icon, required this.label, required this.color});
+  const _StatPill(
+      {required this.icon, required this.label, required this.color});
   final IconData icon;
   final String label;
   final Color color;

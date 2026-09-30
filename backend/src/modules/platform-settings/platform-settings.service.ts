@@ -97,6 +97,12 @@ export async function getPlatformSettings() {
       gstin: platformConfig.gstin,
       legalBusinessName: platformConfig.legalBusinessName,
       registeredAddress: platformConfig.registeredAddress,
+      minimumWorkerPayout: toNumber(platformConfig.minimumWorkerPayout),
+      referralRewardAmount: toNumber(platformConfig.referralRewardAmount),
+      referralsEnabled: platformConfig.referralsEnabled,
+      referralMaxSuccessfulPerReferrer: platformConfig.referralMaxSuccessfulPerReferrer,
+      payoutsPaused: platformConfig.payoutsPaused,
+      payoutPauseReason: platformConfig.payoutPauseReason,
       createdAt: platformConfig.createdAt.toISOString(),
       updatedAt: platformConfig.updatedAt.toISOString()
     },
@@ -126,11 +132,56 @@ export async function savePlatformSettings(
   const gstin = typeof payload.gstin === "string" ? payload.gstin.trim() : null;
   const legalBusinessName = typeof payload.legalBusinessName === "string" ? payload.legalBusinessName.trim() : null;
   const registeredAddress = typeof payload.registeredAddress === "string" ? payload.registeredAddress.trim() : null;
+  const minimumWorkerPayout = payload.minimumWorkerPayout === undefined
+    ? undefined
+    : typeof payload.minimumWorkerPayout === "number"
+      ? payload.minimumWorkerPayout
+      : Number(payload.minimumWorkerPayout);
+  const referralRewardAmount = payload.referralRewardAmount === undefined
+    ? undefined
+    : typeof payload.referralRewardAmount === "number"
+      ? payload.referralRewardAmount
+      : Number(payload.referralRewardAmount);
+  const referralsEnabled = typeof payload.referralsEnabled === "boolean" ? payload.referralsEnabled : undefined;
+  const payoutsPaused = typeof payload.payoutsPaused === "boolean" ? payload.payoutsPaused : undefined;
+  const payoutPauseReason = payload.payoutPauseReason === undefined
+    ? undefined
+    : typeof payload.payoutPauseReason === "string"
+      ? payload.payoutPauseReason.trim().slice(0, 240) || null
+      : null;
+  const referralMaxSuccessfulPerReferrer = payload.referralMaxSuccessfulPerReferrer === undefined
+    ? undefined
+    : typeof payload.referralMaxSuccessfulPerReferrer === "number"
+      ? payload.referralMaxSuccessfulPerReferrer
+      : Number(payload.referralMaxSuccessfulPerReferrer);
   const invoiceSequenceCurrentValue = typeof payload.invoiceSequenceCurrentValue === "number"
     ? payload.invoiceSequenceCurrentValue
     : typeof payload.invoiceSequenceCurrentValue === "string"
       ? Number(payload.invoiceSequenceCurrentValue)
       : undefined;
+
+  for (const [name, value, allowZero] of [
+    ["minimumWorkerPayout", minimumWorkerPayout, false],
+    ["referralRewardAmount", referralRewardAmount, true]
+  ] as const) {
+    if (value === undefined) continue;
+    if (!Number.isFinite(value) || value >= 10_000_000_000 || (allowZero ? value < 0 : value <= 0)) {
+      throw AppError.badRequest(`${name} must be ${allowZero ? "zero or greater" : "greater than zero"}`);
+    }
+    if (Math.abs(value * 100 - Math.round(value * 100)) > 1e-8) {
+      throw AppError.badRequest(`${name} supports at most two decimal places`);
+    }
+  }
+  if (
+    referralMaxSuccessfulPerReferrer !== undefined &&
+    (!Number.isInteger(referralMaxSuccessfulPerReferrer) || referralMaxSuccessfulPerReferrer < 0 || referralMaxSuccessfulPerReferrer > 100_000)
+  ) {
+    throw AppError.badRequest("Referral limit must be a whole number from 0 to 100000");
+  }
+  if (payoutsPaused === true && !payoutPauseReason) {
+    throw AppError.badRequest("Add a short reason before pausing partner payouts");
+  }
+  const effectivePayoutPauseReason = payoutsPaused === false ? null : payoutPauseReason;
 
   await prisma.$transaction([
     prisma.platformConfig.upsert({
@@ -139,12 +190,24 @@ export async function savePlatformSettings(
         key: "primary",
         gstin: gstin || null,
         legalBusinessName: legalBusinessName || null,
-        registeredAddress: registeredAddress || null
+        registeredAddress: registeredAddress || null,
+        ...(minimumWorkerPayout === undefined ? {} : { minimumWorkerPayout }),
+        ...(referralRewardAmount === undefined ? {} : { referralRewardAmount }),
+        ...(referralsEnabled === undefined ? {} : { referralsEnabled }),
+        ...(referralMaxSuccessfulPerReferrer === undefined ? {} : { referralMaxSuccessfulPerReferrer }),
+        ...(payoutsPaused === undefined ? {} : { payoutsPaused }),
+        ...(effectivePayoutPauseReason === undefined ? {} : { payoutPauseReason: effectivePayoutPauseReason })
       },
       update: {
         gstin: gstin || null,
         legalBusinessName: legalBusinessName || null,
-        registeredAddress: registeredAddress || null
+        registeredAddress: registeredAddress || null,
+        ...(minimumWorkerPayout === undefined ? {} : { minimumWorkerPayout }),
+        ...(referralRewardAmount === undefined ? {} : { referralRewardAmount }),
+        ...(referralsEnabled === undefined ? {} : { referralsEnabled }),
+        ...(referralMaxSuccessfulPerReferrer === undefined ? {} : { referralMaxSuccessfulPerReferrer }),
+        ...(payoutsPaused === undefined ? {} : { payoutsPaused }),
+        ...(effectivePayoutPauseReason === undefined ? {} : { payoutPauseReason: effectivePayoutPauseReason })
       }
     }),
     invoiceSequenceCurrentValue === undefined || Number.isNaN(invoiceSequenceCurrentValue)
@@ -175,6 +238,12 @@ export async function savePlatformSettings(
       gstin,
       legalBusinessName,
       registeredAddress,
+      minimumWorkerPayout: minimumWorkerPayout ?? null,
+      referralRewardAmount: referralRewardAmount ?? null,
+      referralsEnabled: referralsEnabled ?? null,
+      referralMaxSuccessfulPerReferrer: referralMaxSuccessfulPerReferrer ?? null,
+      payoutsPaused: payoutsPaused ?? null,
+      payoutPauseReason: effectivePayoutPauseReason ?? null,
       invoiceSequenceCurrentValue: invoiceSequenceCurrentValue ?? null
     }
   });
@@ -200,8 +269,17 @@ export async function saveCommission(
   const fixedFee = typeof payload.fixedFee === "number" ? payload.fixedFee : Number(payload.fixedFee);
   const isActive = typeof payload.isActive === "boolean" ? payload.isActive : true;
 
-  if (Number.isNaN(rate) || Number.isNaN(fixedFee)) {
+  if (!Number.isFinite(rate) || !Number.isFinite(fixedFee)) {
     throw AppError.badRequest("rate and fixedFee are required");
+  }
+  if (rate < 0 || rate > 100 || fixedFee < 0) {
+    throw AppError.badRequest("Commission must be 0–100% and fixed fee cannot be negative");
+  }
+  if (
+    Math.abs(rate * 100 - Math.round(rate * 100)) > 1e-8 ||
+    Math.abs(fixedFee * 100 - Math.round(fixedFee * 100)) > 1e-8
+  ) {
+    throw AppError.badRequest("Commission and fixed fee support at most two decimal places");
   }
 
   const existing = commissionId

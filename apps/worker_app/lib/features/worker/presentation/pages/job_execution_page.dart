@@ -30,8 +30,10 @@ class JobExecutionPage extends ConsumerStatefulWidget {
 
 class _JobExecutionPageState extends ConsumerState<JobExecutionPage> {
   final TextEditingController _arrivalOtpController = TextEditingController();
-  final TextEditingController _completionOtpController = TextEditingController();
+  final TextEditingController _completionOtpController =
+      TextEditingController();
   bool _loadingBooking = true;
+  bool _bookingLoadFailed = false;
 
   @override
   void initState() {
@@ -42,8 +44,15 @@ class _JobExecutionPageState extends ConsumerState<JobExecutionPage> {
   }
 
   Future<void> _resolveBooking() async {
+    if (mounted) {
+      setState(() {
+        _loadingBooking = true;
+        _bookingLoadFailed = false;
+      });
+    }
     try {
-      final booking = await ref.read(jobExecutionBookingProvider(widget.bookingId).future);
+      final booking =
+          await ref.read(jobExecutionBookingProvider(widget.bookingId).future);
       if (!mounted) {
         return;
       }
@@ -58,6 +67,7 @@ class _JobExecutionPageState extends ConsumerState<JobExecutionPage> {
       ref.read(locationBroadcasterProvider.notifier).start(booking.bookingId);
       setState(() {
         _loadingBooking = false;
+        _bookingLoadFailed = false;
       });
     } catch (_) {
       if (!mounted) {
@@ -65,6 +75,7 @@ class _JobExecutionPageState extends ConsumerState<JobExecutionPage> {
       }
       setState(() {
         _loadingBooking = false;
+        _bookingLoadFailed = true;
       });
     }
   }
@@ -91,7 +102,8 @@ class _JobExecutionPageState extends ConsumerState<JobExecutionPage> {
         'travelmode': 'driving',
         'dir_action': 'navigate',
       });
-      final launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
+      final launched =
+          await launchUrl(uri, mode: LaunchMode.externalApplication);
       if (!launched && mounted) {
         _showSnackBar('Could not open Google Maps.');
       }
@@ -132,11 +144,59 @@ class _JobExecutionPageState extends ConsumerState<JobExecutionPage> {
       }
       return Scaffold(
         appBar: AppBar(title: const Text('Job execution')),
-        body: const Center(
-          child: PremiumEmptyState(
-            icon: Icons.assignment_late_rounded,
-            title: 'Missing job details',
-            subtitle: 'Open this flow from a job in the Jobs tab.',
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  _bookingLoadFailed
+                      ? Icons.cloud_off_rounded
+                      : Icons.assignment_late_rounded,
+                  size: 42,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+                const SizedBox(height: 14),
+                Text(
+                  _bookingLoadFailed
+                      ? 'Could not load this job'
+                      : 'Job details unavailable',
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w800,
+                      ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  _bookingLoadFailed
+                      ? 'Check your connection and try again.'
+                      : 'This job may no longer be assigned to you. Open it from the Jobs tab.',
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                ),
+                if (_bookingLoadFailed) ...[
+                  const SizedBox(height: 16),
+                  FilledButton.icon(
+                    onPressed: _loadingBooking
+                        ? null
+                        : () {
+                            ref.invalidate(workerJobsProvider('accepted'));
+                            ref.invalidate(workerJobsProvider('active'));
+                            ref.invalidate(workerDashboardStatsProvider);
+                            ref.invalidate(
+                              jobExecutionBookingProvider(widget.bookingId),
+                            );
+                            _resolveBooking();
+                          },
+                    icon: const Icon(Icons.refresh_rounded),
+                    label: const Text('Try again'),
+                  ),
+                ],
+              ],
+            ),
           ),
         ),
       );
@@ -162,7 +222,8 @@ class _JobExecutionPageState extends ConsumerState<JobExecutionPage> {
             JobStepCard(
               stepNumber: 1,
               title: 'Mark arrived',
-              subtitle: 'Capture your GPS and notify the customer that you are on site.',
+              subtitle:
+                  'Capture your GPS and notify the customer that you are on site.',
               accentColor: booking.accentColor,
               isActive: state.currentStep == 1,
               isCompleted: state.currentStep > 1 || state.summary != null,
@@ -215,7 +276,8 @@ class _JobExecutionPageState extends ConsumerState<JobExecutionPage> {
             JobStepCard(
               stepNumber: 5,
               title: 'After photos',
-              subtitle: 'Capture the finished work after the checklist is done.',
+              subtitle:
+                  'Capture the finished work after the checklist is done.',
               accentColor: booking.accentColor,
               isActive: state.currentStep == 5,
               isCompleted: state.currentStep > 5 || state.summary != null,
@@ -252,7 +314,7 @@ class _JobExecutionPageState extends ConsumerState<JobExecutionPage> {
             ),
 
             // ── Generate Quote button (site-visit / large jobs) ──────────────
-            if (!completed) ...[  
+            if (!completed) ...[
               const SizedBox(height: 20),
               SizedBox(
                 width: double.infinity,

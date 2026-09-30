@@ -3,7 +3,30 @@ import { AppError } from "../../lib/app-error.js";
 import { env } from "../../config/env.js";
 import { logger } from "../../lib/logger.js";
 
-const REFERRAL_REWARD_AMOUNT = 100.0; // ₹100 for both referrer and referee
+const DEFAULT_REFERRAL_REWARD_AMOUNT = 100.0;
+const DEFAULT_MINIMUM_WORKER_PAYOUT = 100.0;
+
+async function getMoneyControls() {
+  const config = await db.platformConfig.findUnique({
+    where: { key: "primary" },
+    select: {
+      minimumWorkerPayout: true,
+      referralRewardAmount: true,
+      referralsEnabled: true,
+      referralMaxSuccessfulPerReferrer: true,
+      payoutsPaused: true,
+      payoutPauseReason: true
+    }
+  });
+  return {
+    minimumWorkerPayout: Number(config?.minimumWorkerPayout ?? DEFAULT_MINIMUM_WORKER_PAYOUT),
+    referralRewardAmount: Number(config?.referralRewardAmount ?? DEFAULT_REFERRAL_REWARD_AMOUNT),
+    referralsEnabled: config?.referralsEnabled ?? true,
+    referralMaxSuccessfulPerReferrer: config?.referralMaxSuccessfulPerReferrer ?? 0,
+    payoutsPaused: config?.payoutsPaused ?? false,
+    payoutPauseReason: config?.payoutPauseReason ?? null
+  };
+}
 
 export async function getWalletBalance(userId: string) {
   const user = await db.user.findUnique({
@@ -19,10 +42,13 @@ export async function getWalletBalance(userId: string) {
 }
 
 export async function getWalletSummary(userId: string) {
-  const user = await db.user.findUnique({
-    where: { id: userId },
-    select: { walletBalance: true, referralCode: true }
-  });
+  const [user, moneyControls] = await Promise.all([
+    db.user.findUnique({
+      where: { id: userId },
+      select: { walletBalance: true, referralCode: true }
+    }),
+    getMoneyControls()
+  ]);
 
   if (!user) {
     throw AppError.notFound("User not found");
@@ -44,7 +70,10 @@ export async function getWalletSummary(userId: string) {
     walletBalance: user.walletBalance,
     referralCode: user.referralCode,
     totalReferrals,
-    referralEarnings
+    referralEarnings,
+    referralRewardAmount: moneyControls.referralRewardAmount,
+    referralsEnabled: moneyControls.referralsEnabled,
+    referralMaxSuccessfulPerReferrer: moneyControls.referralMaxSuccessfulPerReferrer
   };
 }
 
@@ -62,8 +91,13 @@ export async function requestWorkerPayout(input: {
   amount: number;
   upiId?: string;
 }) {
-  if (!Number.isFinite(input.amount) || input.amount < 100) {
-    throw AppError.badRequest("Minimum payout amount is 100");
+  const moneyControls = await getMoneyControls();
+  if (moneyControls.payoutsPaused) {
+    throw AppError.badRequest(moneyControls.payoutPauseReason || "Partner payouts are temporarily paused by Veedufix");
+  }
+  const minimumWorkerPayout = moneyControls.minimumWorkerPayout;
+  if (!Number.isFinite(input.amount) || input.amount < minimumWorkerPayout) {
+    throw AppError.badRequest(`Minimum payout amount is ${minimumWorkerPayout}`);
   }
   if (Math.abs(input.amount * 100 - Math.round(input.amount * 100)) > 1e-8) {
     throw AppError.badRequest("Payout amount must have no more than two decimal places");
@@ -140,6 +174,10 @@ export async function requestWorkerPayout(input: {
 }
 
 export async function applyReferralCode(userId: string, referralCode: string) {
+  const { referralRewardAmount, referralsEnabled, referralMaxSuccessfulPerReferrer } = await getMoneyControls();
+  if (!referralsEnabled || referralRewardAmount <= 0) {
+    throw AppError.badRequest("Referral rewards are not currently available");
+  }
   const referrer = await db.user.findUnique({
     where: { referralCode }
   });
@@ -163,13 +201,26 @@ export async function applyReferralCode(userId: string, referralCode: string) {
 
   // Wrap in a transaction to prevent duplicate rewards under concurrent requests
   await db.$transaction(async (tx) => {
+    const rewardSlot = await tx.user.updateMany({
+      where: {
+        id: referrer.id,
+        ...(referralMaxSuccessfulPerReferrer > 0
+          ? { referralRewardsIssued: { lt: referralMaxSuccessfulPerReferrer } }
+          : {})
+      },
+      data: { referralRewardsIssued: { increment: 1 } }
+    });
+    if (rewardSlot.count === 0) {
+      throw AppError.badRequest("Referral reward limit reached");
+    }
+
     // Create the referral record
     await tx.referral.create({
       data: {
         referrerId: referrer.id,
         referredUserId: userId,
         status: "completed",
-        rewardAmount: REFERRAL_REWARD_AMOUNT
+        rewardAmount: referralRewardAmount
       }
     });
 
@@ -177,7 +228,7 @@ export async function applyReferralCode(userId: string, referralCode: string) {
     const updatedReferrer = await tx.user.update({
       where: { id: referrer.id },
       data: {
-        walletBalance: { increment: REFERRAL_REWARD_AMOUNT }
+        walletBalance: { increment: referralRewardAmount }
       }
     });
 
@@ -186,7 +237,7 @@ export async function applyReferralCode(userId: string, referralCode: string) {
       data: {
         userId: referrer.id,
         type: "REFERRAL_BONUS",
-        amount: REFERRAL_REWARD_AMOUNT,
+        amount: referralRewardAmount,
         referenceType: "REFERRAL_BONUS",
         balanceAfter: updatedReferrer.walletBalance
       }
@@ -196,7 +247,7 @@ export async function applyReferralCode(userId: string, referralCode: string) {
     const updatedReferred = await tx.user.update({
       where: { id: userId },
       data: {
-        walletBalance: { increment: REFERRAL_REWARD_AMOUNT }
+        walletBalance: { increment: referralRewardAmount }
       }
     });
 
@@ -205,14 +256,14 @@ export async function applyReferralCode(userId: string, referralCode: string) {
       data: {
         userId: userId,
         type: "REFERRAL_BONUS_RECEIVED",
-        amount: REFERRAL_REWARD_AMOUNT,
+        amount: referralRewardAmount,
         referenceType: "REFERRAL_BONUS_RECEIVED",
         balanceAfter: updatedReferred.walletBalance
       }
     });
   });
 
-  return { success: true, rewardAmount: REFERRAL_REWARD_AMOUNT };
+  return { success: true, rewardAmount: referralRewardAmount };
 }
 
 export async function getTransactions(userId: string, workerId?: string) {

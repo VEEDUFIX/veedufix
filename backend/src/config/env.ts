@@ -84,6 +84,8 @@ const envSchema = z.object({
 
   // ── CORS ──────────────────────────────────────────────────────────────────
   APP_CORS_ORIGIN: z.string().default("http://localhost:3000"),
+  SENTRY_TRACES_SAMPLE_RATE: z.coerce.number().min(0).max(1).default(0.1),
+  SENTRY_PROFILES_SAMPLE_RATE: z.coerce.number().min(0).max(1).default(0.1),
 
   // ── Google ────────────────────────────────────────────────────────────────
   GOOGLE_SERVER_CLIENT_ID: z.string().optional(),

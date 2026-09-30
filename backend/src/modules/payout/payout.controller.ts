@@ -1,6 +1,6 @@
 import { type NextFunction, type Response } from "express";
 import { type AuthenticatedRequest } from "../../middleware/auth.js";
-import { getAllPayouts, retryPayout, bulkRetryFailedPayouts, exportPayoutsCsv } from "./payout.service.js";
+import { getAllPayouts, retryPayout, bulkRetryFailedPayouts, exportPayoutsCsv, releasePendingPayouts } from "./payout.service.js";
 import { writeAuditLog } from "../../lib/audit.js";
 
 function sendError(response: Response, error: unknown): void {
@@ -59,6 +59,25 @@ export async function bulkRetryPayoutsHandler(
     const adminId = request.auth!.userId;
     const result = await bulkRetryFailedPayouts();
     void writeAuditLog({ adminId, action: "payout.bulk_retried", targetType: "payout", targetId: "bulk", metadata: { ...result } });
+    response.status(200).json(result);
+  } catch (error) {
+    sendError(response, error);
+  }
+}
+
+export async function releasePendingPayoutsHandler(
+  request: AuthenticatedRequest,
+  response: Response
+) {
+  try {
+    const result = await releasePendingPayouts();
+    void writeAuditLog({
+      adminId: request.auth!.userId,
+      action: "payout.pending_released",
+      targetType: "payout",
+      targetId: "pending",
+      metadata: { ...result }
+    });
     response.status(200).json(result);
   } catch (error) {
     sendError(response, error);

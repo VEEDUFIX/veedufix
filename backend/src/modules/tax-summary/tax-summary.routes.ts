@@ -9,6 +9,7 @@ import {
 } from "./tax-summary.schemas.js";
 import {
   exportTaxSummaryCsvHandler,
+  exportFinancialReconciliationCsvHandler,
   getTaxAnnualSummaryHandler,
   getTaxGstSummaryHandler,
   getTaxRevenueSummaryHandler
@@ -21,3 +22,4 @@ taxSummaryRouter.get("/gst", validate(taxSummaryGstQuerySchema), getTaxGstSummar
 taxSummaryRouter.get("/revenue", validate(taxSummaryRevenueQuerySchema), getTaxRevenueSummaryHandler);
 taxSummaryRouter.get("/annual", validate(taxSummaryAnnualQuerySchema), getTaxAnnualSummaryHandler);
 taxSummaryRouter.get("/export/csv", validate(taxSummaryExportQuerySchema), exportTaxSummaryCsvHandler);
+taxSummaryRouter.get("/export/reconciliation.csv", validate(taxSummaryExportQuerySchema), exportFinancialReconciliationCsvHandler);

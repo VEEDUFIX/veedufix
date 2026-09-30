@@ -14,22 +14,43 @@ class CatalogRepositoryImpl implements CatalogRepository {
     final data = await remoteDataSource.getHomeCatalog();
     return HomeCatalogResult(
       categories: _decodeList(data['categories'], CatalogCategory.fromJson),
-      featured: _decodeList(data['featuredServices'] ?? data['featured'], CatalogService.fromJson),
-      trending: _decodeList(data['trendingServices'] ?? data['trending'], CatalogService.fromJson),
-      recommended: _decodeList(data['recommendedServices'] ?? data['recommended'], CatalogService.fromJson),
+      featured: _decodeList(data['featuredServices'] ?? data['featured'],
+          CatalogService.fromJson),
+      trending: _decodeList(data['trendingServices'] ?? data['trending'],
+          CatalogService.fromJson),
+      recommended: _decodeList(
+          data['recommendedServices'] ?? data['recommended'],
+          CatalogService.fromJson),
     );
   }
 
   @override
   Future<CatalogService> getServiceDetails(String slug) async {
     final data = await remoteDataSource.getServiceDetails(slug);
-    return CatalogService.fromJson(data);
+    final rawService = data['service'];
+    final service = rawService is Map<String, dynamic> ? rawService : data;
+    final effectivePrice = data['effectivePrice'];
+    final parsedEffectivePrice = effectivePrice is num
+        ? effectivePrice.toDouble()
+        : effectivePrice is String
+            ? double.tryParse(effectivePrice)
+            : null;
+    if (parsedEffectivePrice != null &&
+        parsedEffectivePrice.isFinite &&
+        parsedEffectivePrice >= 0) {
+      return CatalogService.fromJson({
+        ...service,
+        'startingPrice': parsedEffectivePrice,
+      });
+    }
+    return CatalogService.fromJson(service);
   }
 
   @override
   Future<List<CatalogService>> searchCatalog(String query) async {
     final data = await remoteDataSource.searchCatalog(query);
-    return _decodeList(data['results'] ?? data['data'] ?? data['items'] ?? data, CatalogService.fromJson);
+    return _decodeList(data['results'] ?? data['data'] ?? data['items'] ?? data,
+        CatalogService.fromJson);
   }
 
   @override
@@ -38,8 +59,12 @@ class CatalogRepositoryImpl implements CatalogRepository {
     return _decodeList(data['data'] ?? data, CatalogService.fromJson);
   }
 
-  List<T> _decodeList<T>(dynamic value, T Function(Map<String, dynamic>) builder) {
+  List<T> _decodeList<T>(
+      dynamic value, T Function(Map<String, dynamic>) builder) {
     if (value is! List) return <T>[];
-    return value.whereType<Map<String, dynamic>>().map(builder).toList(growable: false);
+    return value
+        .whereType<Map<String, dynamic>>()
+        .map(builder)
+        .toList(growable: false);
   }
 }

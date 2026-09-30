@@ -168,7 +168,15 @@ usersRouter.get("/me/bookings", requireAuth, async (request: AuthenticatedReques
   } else if (tab === "cancelled") {
     statusFilter = ["CANCELLED", "REFUNDED", "CANCELLED_MANUAL", "CANCELLED_NO_SHOW"];
   } else {
-    statusFilter = ["PENDING", "ACCEPTED", "WORKER_ASSIGNED", "EN_ROUTE", "ARRIVED", "IN_PROGRESS"];
+    statusFilter = [
+      "PENDING",
+      "ACCEPTED",
+      "WORKER_ASSIGNED",
+      "EN_ROUTE",
+      "ARRIVED",
+      "IN_PROGRESS",
+      "DISPATCH_FAILED"
+    ];
   }
 
   const bookings = await prisma.booking.findMany({
@@ -176,7 +184,7 @@ usersRouter.get("/me/bookings", requireAuth, async (request: AuthenticatedReques
       customerId: userId,
       status: { in: statusFilter }
     },
-    orderBy: { scheduledAt: "desc" },
+    orderBy: { scheduledAt: tab === "upcoming" ? "asc" : "desc" },
     include: {
       services: {
         include: {
@@ -431,7 +439,14 @@ usersRouter.get("/bookings/:bookingId", requireAuth, async (request: Authenticat
         },
       },
       address: {
-        select: { label: true, line1: true, pincode: true, city: { select: { name: true } } },
+        select: {
+          label: true,
+          line1: true,
+          pincode: true,
+          latitude: true,
+          longitude: true,
+          city: { select: { name: true } }
+        },
       },
       sparePartRequest: true,
       jobExecution: {
@@ -460,6 +475,8 @@ usersRouter.get("/bookings/:bookingId", requireAuth, async (request: Authenticat
       addressId: booking.addressId,
       addressLine1: booking.address?.line1 ?? null,
       addressPincode: booking.address?.pincode ?? null,
+      addressLatitude: booking.address?.latitude != null ? Number(booking.address.latitude) : null,
+      addressLongitude: booking.address?.longitude != null ? Number(booking.address.longitude) : null,
       cityName: booking.address?.city?.name ?? null,
       totalAmount: Number(booking.totalAmount),
       serviceName: booking.services[0]?.service?.name ?? booking.services[0]?.serviceSubcategory?.name ?? "Service",
@@ -891,11 +908,18 @@ usersRouter.get("/worker/wallet", requireAuth, requireRole("WORKER"), async (req
 
   const lastTx = transactions[0];
   const balance = lastTx ? Number(lastTx.balanceAfter) : 0;
+  const platformConfig = await prisma.platformConfig.findUnique({
+    where: { key: "primary" },
+    select: { minimumWorkerPayout: true, payoutsPaused: true, payoutPauseReason: true }
+  });
 
   response.status(200).json({
     balance,
     totalEarnings,
     pendingPayout,
+    minimumPayout: Number(platformConfig?.minimumWorkerPayout ?? 100),
+    payoutsPaused: platformConfig?.payoutsPaused ?? false,
+    payoutPauseReason: platformConfig?.payoutPauseReason ?? null,
     transactions: transactions.map((t: any) => ({
       id: t.id,
       type: t.type,

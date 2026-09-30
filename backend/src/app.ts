@@ -54,17 +54,54 @@ import { adminPlatformSettingsRouter } from "./modules/platform-settings/platfor
 import { taxSummaryRouter } from "./modules/tax-summary/tax-summary.routes.js";
 import { customQuoteRouter } from "./modules/bookings/custom-quote.routes.js";
 import { sparePartsRouter } from "./modules/bookings/spare-parts.routes.js";
+import { clientIpKey } from "./lib/rate-limit.js";
+
+function scrubSentryRequest<T extends Sentry.Event>(event: T): T {
+  if (!event.request) {
+    return event;
+  }
+
+  const sensitiveHeaders = new Set([
+    "authorization",
+    "cookie",
+    "set-cookie",
+    "proxy-authorization",
+    "x-api-key",
+    "x-auth-token"
+  ]);
+  const headers = Object.fromEntries(
+    Object.entries(event.request.headers ?? {}).filter(
+      ([name]) => !sensitiveHeaders.has(name.toLowerCase())
+    )
+  );
+
+  event.request = {
+    ...event.request,
+    headers,
+    data: undefined,
+    cookies: undefined,
+    query_string: undefined,
+    url: event.request.url?.split("?", 1)[0]
+  };
+  return event;
+}
 
 export function createApp() {
   const app = express();
 
   Sentry.init({
     dsn: process.env.SENTRY_DSN || "",
+    environment: env.NODE_ENV,
+    sendDefaultPii: false,
     integrations: [
       nodeProfilingIntegration(),
     ],
-    tracesSampleRate: 1.0,
-    profilesSampleRate: 1.0,
+    tracesSampleRate: env.NODE_ENV === "production" ? env.SENTRY_TRACES_SAMPLE_RATE : 0,
+    profilesSampleRate: env.NODE_ENV === "production"
+      ? Math.min(env.SENTRY_PROFILES_SAMPLE_RATE, env.SENTRY_TRACES_SAMPLE_RATE)
+      : 0,
+    beforeSend: scrubSentryRequest,
+    beforeSendTransaction: scrubSentryRequest,
   });
 
   app.use(
@@ -102,6 +139,7 @@ export function createApp() {
         // session calls. Keep the global guard broad and rely on the tighter
         // endpoint-specific limits for OTP and token abuse protection.
         limit: env.NODE_ENV === "production" ? 1000 : 1000,
+        keyGenerator: clientIpKey,
         standardHeaders: true,
         legacyHeaders: false
       })

@@ -4,7 +4,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:marketplace_shared/marketplace_shared.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../../data/finance_api.dart';
 
@@ -224,14 +223,74 @@ class _PayoutsLedgerPageState extends ConsumerState<PayoutsLedgerPage> {
     }
   }
 
-  Future<void> _exportCsv() async {
-    final url = _api.payoutsCsvUrl(status: _selectedStatus);
-    final uri = Uri.parse(url);
-    if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
+  Future<void> _releasePending() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Release pending payouts?'),
+        content: const Text(
+          'This will attempt settlement for eligible pending payouts. Failed attempts remain in the ledger for review.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Release pending'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
+    setState(() => _busy = true);
+    try {
+      final result = await _api.releasePendingPayouts();
+      if (!mounted) return;
+      if (result['paused'] == 1) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Payouts are paused in Platform Settings')),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Release complete: ${result['succeeded'] ?? 0}/${result['attempted'] ?? 0} succeeded',
+            ),
+          ),
+        );
+      }
+      await _reload();
+    } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Could not open CSV download link')),
+        SnackBar(content: Text(error.toString())),
       );
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _exportCsv() async {
+    setState(() => _busy = true);
+    try {
+      final saved = await _api.downloadCsv(
+        _api.payoutsCsvUrl(status: _selectedStatus),
+        'veedufix-payouts.csv',
+      );
+      if (!mounted || !saved) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Payout CSV downloaded')),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Payout export failed: $error')),
+      );
+    } finally {
+      if (mounted) setState(() => _busy = false);
     }
   }
 
@@ -281,6 +340,11 @@ class _PayoutsLedgerPageState extends ConsumerState<PayoutsLedgerPage> {
               onPressed: _bulkRetry,
               icon: const Icon(Icons.replay_rounded, size: 18),
               label: const Text('Retry all failed'),
+            ),
+            TextButton.icon(
+              onPressed: _releasePending,
+              icon: const Icon(Icons.play_arrow_rounded, size: 18),
+              label: const Text('Release pending'),
             ),
           ],
           IconButton(

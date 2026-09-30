@@ -11,7 +11,7 @@ class HomeHeroBanner extends StatefulWidget {
     this.services = const [],
   });
 
-  final VoidCallback onTap;
+  final ValueChanged<CatalogService?> onTap;
   final List<CatalogService> services;
 
   @override
@@ -85,7 +85,7 @@ class _HomeHeroBannerState extends State<HomeHeroBanner> {
             onPageChanged: (index) => setState(() => _activeIndex = index),
             itemBuilder: (context, index) => _HeroSlide(
               service: slides.isEmpty ? null : slides[index],
-              onTap: widget.onTap,
+              onTap: () => widget.onTap(slides.isEmpty ? null : slides[index]),
             ),
           ),
           if (pageCount > 1)

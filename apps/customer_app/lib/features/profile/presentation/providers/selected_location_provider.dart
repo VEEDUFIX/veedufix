@@ -1,5 +1,8 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:marketplace_shared/marketplace_shared.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class SelectedLocation {
@@ -34,32 +37,87 @@ class SelectedLocation {
 
 final selectedLocationProvider =
     StateNotifierProvider<SelectedLocationController, SelectedLocation?>(
-  SelectedLocationController.new,
-);
+      SelectedLocationController.new,
+    );
 
 class SelectedLocationController extends StateNotifier<SelectedLocation?> {
   SelectedLocationController(this.ref) : super(null) {
-    _load();
+    final userId = ref
+        .read(authControllerProvider)
+        .valueOrNull
+        ?.user
+        .id;
+    _storageScope = _scopeFor(userId);
+    ref.listen(
+      authControllerProvider.select((auth) => auth.valueOrNull?.user.id),
+      (previousUserId, userId) {
+        final nextScope = _scopeFor(userId);
+        if (nextScope != _storageScope) {
+          _storageScope = nextScope;
+          if (mounted) {
+            state = null;
+          }
+          unawaited(_load(nextScope));
+        }
+      },
+    );
+    unawaited(_load(_storageScope));
   }
 
   final Ref ref;
+  String _storageScope = 'guest';
+  int _loadGeneration = 0;
 
-  static const _latKey = 'customer_selected_location_lat';
-  static const _lngKey = 'customer_selected_location_lng';
-  static const _labelKey = 'customer_selected_location_label';
+  static String _scopeFor(String? userId) => userId == null
+      ? 'guest'
+      : Uri.encodeComponent(userId);
 
-  Future<void> _load() async {
-    final prefs = await SharedPreferences.getInstance();
-    final lat = prefs.getDouble(_latKey);
-    final lng = prefs.getDouble(_lngKey);
-    if (lat == null || lng == null) {
-      return;
+  static String _key(String scope, String field) =>
+      'customer_selected_location_${scope}_$field';
+
+  Future<void> _load(String scope) async {
+    final generation = ++_loadGeneration;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (!mounted ||
+          generation != _loadGeneration ||
+          scope != _storageScope) {
+        return;
+      }
+      final lat = prefs.getDouble(_key(scope, 'lat'));
+      final lng = prefs.getDouble(_key(scope, 'lng'));
+      if (lat == null || lng == null) {
+        return;
+      }
+      if (!_isValidCoordinate(lat, lng)) {
+        await _removeSavedLocation(prefs, scope);
+        return;
+      }
+      state = SelectedLocation(
+        latitude: lat,
+        longitude: lng,
+        label: prefs.getString(_key(scope, 'label')),
+      );
+    } catch (_) {
+      // The last selected location is a convenience; startup can continue without it.
     }
-    state = SelectedLocation(
-      latitude: lat,
-      longitude: lng,
-      label: prefs.getString(_labelKey),
-    );
+  }
+
+  static bool _isValidCoordinate(double latitude, double longitude) =>
+      latitude.isFinite &&
+      longitude.isFinite &&
+      latitude >= -90 &&
+      latitude <= 90 &&
+      longitude >= -180 &&
+      longitude <= 180;
+
+  Future<void> _removeSavedLocation(
+    SharedPreferences prefs,
+    String scope,
+  ) async {
+    await prefs.remove(_key(scope, 'lat'));
+    await prefs.remove(_key(scope, 'lng'));
+    await prefs.remove(_key(scope, 'label'));
   }
 
   Future<void> setLocation({
@@ -67,21 +125,35 @@ class SelectedLocationController extends StateNotifier<SelectedLocation?> {
     required double longitude,
     String? label,
   }) async {
+    if (!_isValidCoordinate(latitude, longitude)) {
+      throw ArgumentError('Choose a valid map location.');
+    }
+    final scope = _storageScope;
     final next = SelectedLocation(
       latitude: latitude,
       longitude: longitude,
       label: label,
     );
-    state = next;
-
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setDouble(_latKey, latitude);
-    await prefs.setDouble(_lngKey, longitude);
+    await prefs.setDouble(_key(scope, 'lat'), latitude);
+    await prefs.setDouble(_key(scope, 'lng'), longitude);
     final value = label?.trim() ?? '';
     if (value.isEmpty) {
-      await prefs.remove(_labelKey);
+      await prefs.remove(_key(scope, 'label'));
     } else {
-      await prefs.setString(_labelKey, value);
+      await prefs.setString(_key(scope, 'label'), value);
     }
+    if (mounted && scope == _storageScope) {
+      state = next;
+    }
+  }
+
+  Future<void> clearLocation() async {
+    final scope = _storageScope;
+    if (mounted) {
+      state = null;
+    }
+    final prefs = await SharedPreferences.getInstance();
+    await _removeSavedLocation(prefs, scope);
   }
 }

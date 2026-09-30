@@ -337,6 +337,7 @@ async function resolveCategoryBySlug(slug: string) {
       include: {
         translations: true,
         subcategories: {
+          where: { isActive: true },
           orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
           include: {
             translations: true,

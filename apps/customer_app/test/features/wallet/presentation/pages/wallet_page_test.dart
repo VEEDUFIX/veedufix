@@ -36,6 +36,9 @@ void main() {
               referralCode: 'VEEDU123',
               totalReferrals: 0,
               referralEarnings: 0.0,
+              referralRewardAmount: 100.0,
+              referralsEnabled: true,
+              referralMaxSuccessfulPerReferrer: 0,
               transactions: [],
             )),
       ],
@@ -56,6 +59,9 @@ void main() {
               referralCode: 'VEEDU123',
               totalReferrals: 1,
               referralEarnings: 500.0,
+              referralRewardAmount: 100.0,
+              referralsEnabled: true,
+              referralMaxSuccessfulPerReferrer: 0,
               transactions: [
                 WalletTransaction(
                   id: 'tx1',

@@ -217,6 +217,9 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
   bool _paymentVerificationFailed = false;
   bool _scheduleForLater = false;
   String? _selectedAddressId;
+  String? _verificationOrderId;
+  String? _verificationPaymentId;
+  String? _verificationSignature;
   DateTime _selectedScheduleDate = DateTime.now();
   String? _selectedScheduleSlot;
   PaymentOrder? _activeOrder;
@@ -262,7 +265,9 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
             .where(
               (slot) =>
                   _dateKey(slot.scheduledFor) ==
-                  _dateKey(_selectedScheduleDate),
+                      _dateKey(_selectedScheduleDate) &&
+                  slot.availableProviders > 0 &&
+                  slot.scheduledFor.isAfter(DateTime.now()),
             )
             .toList(growable: false);
     final selectedSlotIso =
@@ -299,514 +304,604 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
           style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w800),
         ),
       ),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(20, 8, 20, 120),
-        children: [
-          // ── Order summary ───────────────────────────────────────────────
-          const _SectionHeader(title: 'Order Summary'),
-          const SizedBox(height: 10),
-          PremiumGlassCard(
-            child: Padding(
-              padding: const EdgeInsets.all(18),
-              child: Column(
-                children: [
-                  ...widget.items.map(
-                    (item) => Padding(
-                      padding: const EdgeInsets.only(bottom: 10),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Expanded(
-                            child: Column(
+      body: widget.items.isEmpty
+          ? Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.shopping_bag_outlined,
+                      size: 56,
+                      color: cs.onSurfaceVariant,
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      'No services to check out',
+                      style: tt.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Add a service to your cart before booking.',
+                      textAlign: TextAlign.center,
+                      style: tt.bodyMedium?.copyWith(
+                        color: cs.onSurfaceVariant,
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    FilledButton.icon(
+                      onPressed: () => context.go('/search'),
+                      icon: const Icon(Icons.search_rounded),
+                      label: const Text('Browse services'),
+                    ),
+                  ],
+                ),
+              ),
+            )
+          : ListView(
+              padding: const EdgeInsets.fromLTRB(20, 8, 20, 120),
+              children: [
+                // ── Order summary ───────────────────────────────────────────────
+                const _SectionHeader(title: 'Order Summary'),
+                const SizedBox(height: 10),
+                PremiumGlassCard(
+                  child: Padding(
+                    padding: const EdgeInsets.all(18),
+                    child: Column(
+                      children: [
+                        ...widget.items.map(
+                          (item) => Padding(
+                            padding: const EdgeInsets.only(bottom: 10),
+                            child: Row(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text(
-                                  item.serviceName,
-                                  style: tt.bodyMedium?.copyWith(
-                                    fontWeight: FontWeight.w700,
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        item.serviceName,
+                                        style: tt.bodyMedium?.copyWith(
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                      ),
+                                      Text(
+                                        '× ${item.quantity}',
+                                        style: tt.bodySmall?.copyWith(
+                                          color: cs.onSurfaceVariant,
+                                        ),
+                                      ),
+                                    ],
                                   ),
                                 ),
                                 Text(
-                                  '× ${item.quantity}',
-                                  style: tt.bodySmall?.copyWith(
-                                    color: cs.onSurfaceVariant,
+                                  '₹${item.total.toStringAsFixed(2)}',
+                                  style: tt.bodyMedium?.copyWith(
+                                    fontWeight: FontWeight.w700,
                                   ),
                                 ),
                               ],
                             ),
                           ),
-                          Text(
-                            '₹${item.total.toStringAsFixed(2)}',
-                            style: tt.bodyMedium?.copyWith(
-                              fontWeight: FontWeight.w700,
+                        ),
+                        const Divider(height: 16),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              'Subtotal',
+                              style: tt.bodyMedium?.copyWith(
+                                color: cs.onSurfaceVariant,
+                              ),
                             ),
-                          ),
-                        ],
-                      ),
+                            Text(
+                              '₹${_subtotal.toStringAsFixed(2)}',
+                              style: tt.bodyMedium?.copyWith(
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              'Taxes & fees',
+                              style: tt.bodySmall?.copyWith(
+                                color: cs.onSurfaceVariant,
+                              ),
+                            ),
+                            Text(
+                              'Confirmed before payment',
+                              textAlign: TextAlign.end,
+                              style: tt.bodySmall?.copyWith(
+                                color: cs.onSurfaceVariant,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                     ),
                   ),
-                  const Divider(height: 16),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        'Subtotal',
-                        style: tt.bodyMedium?.copyWith(
-                          color: cs.onSurfaceVariant,
-                        ),
-                      ),
-                      Text(
-                        '₹${_subtotal.toStringAsFixed(2)}',
-                        style: tt.bodyMedium?.copyWith(
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ],
+                ),
+                const SizedBox(height: 20),
+
+                const _SectionHeader(title: 'Service address'),
+                const SizedBox(height: 10),
+                PremiumGlassCard(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: addressesState.isLoading
+                        ? const Center(child: CircularProgressIndicator())
+                        : addressesState.hasError
+                        ? Row(
+                            children: [
+                              const Expanded(
+                                child: Text('Could not load addresses.'),
+                              ),
+                              TextButton.icon(
+                                onPressed: () => ref.invalidate(
+                                  cartCheckoutAddressesProvider,
+                                ),
+                                icon: const Icon(
+                                  Icons.refresh_rounded,
+                                  size: 18,
+                                ),
+                                label: const Text('Retry'),
+                              ),
+                            ],
+                          )
+                        : addresses.isEmpty
+                        ? Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                'Add a service address before booking.',
+                              ),
+                              Align(
+                                alignment: Alignment.centerRight,
+                                child: TextButton.icon(
+                                  onPressed: _openAddresses,
+                                  icon: const Icon(
+                                    Icons.add_location_alt_outlined,
+                                  ),
+                                  label: const Text('Add address'),
+                                ),
+                              ),
+                            ],
+                          )
+                        : Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              DropdownButtonFormField<String>(
+                                key: ValueKey(selectedAddress?.id),
+                                initialValue: selectedAddress?.id,
+                                isExpanded: true,
+                                decoration: const InputDecoration(
+                                  labelText:
+                                      'Where should we provide the service?',
+                                  border: OutlineInputBorder(),
+                                ),
+                                items: addresses
+                                    .map(
+                                      (address) => DropdownMenuItem<String>(
+                                        value: address.id,
+                                        child: Text(
+                                          '${address.label} · ${address.city} ${address.pincode}',
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                    )
+                                    .toList(growable: false),
+                                onChanged: (value) =>
+                                    setState(() => _selectedAddressId = value),
+                              ),
+                              if (selectedAddress != null) ...[
+                                const SizedBox(height: 8),
+                                Text(
+                                  selectedAddress.displayAddress,
+                                  style: tt.bodySmall?.copyWith(
+                                    color: cs.onSurfaceVariant,
+                                  ),
+                                ),
+                              ],
+                              Align(
+                                alignment: Alignment.centerRight,
+                                child: TextButton.icon(
+                                  onPressed: _openAddresses,
+                                  icon: const Icon(
+                                    Icons.edit_location_alt_outlined,
+                                  ),
+                                  label: const Text('Manage addresses'),
+                                ),
+                              ),
+                            ],
+                          ),
                   ),
-                  const SizedBox(height: 6),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        'Taxes & fees',
-                        style: tt.bodySmall?.copyWith(
-                          color: cs.onSurfaceVariant,
+                ),
+                const SizedBox(height: 20),
+
+                const _SectionHeader(title: 'When do you need the service?'),
+                const SizedBox(height: 10),
+                SegmentedButton<bool>(
+                  segments: const [
+                    ButtonSegment(value: false, label: Text('Instant')),
+                    ButtonSegment(value: true, label: Text('Schedule')),
+                  ],
+                  selected: {_scheduleForLater},
+                  onSelectionChanged: (selection) => setState(() {
+                    _scheduleForLater = selection.first;
+                    _selectedScheduleSlot = null;
+                  }),
+                ),
+                if (_scheduleForLater) ...[
+                  const SizedBox(height: 14),
+                  SizedBox(
+                    height: 72,
+                    child: ListView.separated(
+                      scrollDirection: Axis.horizontal,
+                      itemCount: scheduleDays.length,
+                      separatorBuilder: (_, __) => const SizedBox(width: 8),
+                      itemBuilder: (context, index) {
+                        final date = scheduleDays[index];
+                        final selected =
+                            _dateKey(date) == _dateKey(_selectedScheduleDate);
+                        return ChoiceChip(
+                          selected: selected,
+                          label: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(index == 0 ? 'Today' : _weekdayShort(date)),
+                              Text('${date.day}/${date.month}'),
+                            ],
+                          ),
+                          onSelected: (_) => setState(() {
+                            _selectedScheduleDate = date;
+                            _selectedScheduleSlot = null;
+                          }),
+                        );
+                      },
+                    ),
+                  ),
+                  if (selectedAddress == null)
+                    const Text(
+                      'Choose a service address to see available times.',
+                    )
+                  else if (slotsState?.isLoading ?? true)
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 14),
+                      child: Center(child: CircularProgressIndicator()),
+                    )
+                  else if (slotsState?.hasError ?? false)
+                    Row(
+                      children: [
+                        const Expanded(
+                          child: Text('Could not load available times.'),
+                        ),
+                        TextButton(
+                          onPressed: () => ref.invalidate(
+                            cartCheckoutScheduleSlotsProvider(scheduleKey!),
+                          ),
+                          child: const Text('Retry'),
+                        ),
+                      ],
+                    )
+                  else if (slotsForDay.isEmpty)
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 8),
+                      child: Text(
+                        'No appointment times are available on this day. Choose another date.',
+                      ),
+                    )
+                  else
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: slotsForDay
+                          .map((slot) {
+                            final slotIso = slot.scheduledFor
+                                .toUtc()
+                                .toIso8601String();
+                            final selected = slotIso == selectedSlotIso;
+                            final time = TimeOfDay.fromDateTime(
+                              slot.scheduledFor,
+                            ).format(context);
+                            return ChoiceChip(
+                              selected: selected,
+                              label: Text(time),
+                              onSelected: (_) => setState(
+                                () => _selectedScheduleSlot = slotIso,
+                              ),
+                            );
+                          })
+                          .toList(growable: false),
+                    ),
+                ],
+                const SizedBox(height: 20),
+
+                // ── Coupon code ─────────────────────────────────────────────────
+                const _SectionHeader(title: 'Promo Code'),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: _couponController,
+                        textCapitalization: TextCapitalization.characters,
+                        decoration: InputDecoration(
+                          hintText: 'Enter coupon code',
+                          prefixIcon: const Icon(
+                            Icons.discount_rounded,
+                            size: 18,
+                          ),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(14),
+                            borderSide: BorderSide.none,
+                          ),
+                          filled: true,
+                          fillColor: cs.surfaceContainerHighest.withValues(
+                            alpha: 0.5,
+                          ),
+                        ),
+                        enabled: !_couponApplied,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    TapScale(
+                      onTap: _couponApplied
+                          ? () => setState(() {
+                              _couponApplied = false;
+                              _couponController.clear();
+                            })
+                          : _applyCoupon,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 14,
+                        ),
+                        decoration: BoxDecoration(
+                          color: _couponApplied
+                              ? cs.errorContainer
+                              : cs.primaryContainer,
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        child: Text(
+                          _couponApplied ? 'Remove' : 'Apply',
+                          style: tt.labelLarge?.copyWith(
+                            color: _couponApplied
+                                ? cs.onErrorContainer
+                                : cs.onPrimaryContainer,
+                            fontWeight: FontWeight.w700,
+                          ),
                         ),
                       ),
+                    ),
+                  ],
+                ),
+                if (_couponApplied) ...[
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.info_outline_rounded,
+                        size: 16,
+                        color: cs.onSurfaceVariant,
+                      ),
+                      const SizedBox(width: 6),
                       Text(
-                        'Included',
+                        'The code will be validated before payment.',
                         style: tt.bodySmall?.copyWith(
                           color: cs.onSurfaceVariant,
+                          fontWeight: FontWeight.w600,
                         ),
                       ),
                     ],
                   ),
                 ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 20),
+                const SizedBox(height: 20),
 
-          const _SectionHeader(title: 'Service address'),
-          const SizedBox(height: 10),
-          PremiumGlassCard(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: addressesState.isLoading
-                  ? const Center(child: CircularProgressIndicator())
-                  : addressesState.hasError
-                  ? Row(
-                      children: [
-                        const Expanded(
-                          child: Text('Could not load your saved addresses.'),
-                        ),
-                        TextButton(
-                          onPressed: () =>
-                              ref.invalidate(cartCheckoutAddressesProvider),
-                          child: const Text('Retry'),
-                        ),
+                // ── Total ───────────────────────────────────────────────────────
+                Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        cs.primary.withValues(alpha: 0.1),
+                        cs.secondary.withValues(alpha: 0.05),
                       ],
-                    )
-                  : addresses.isEmpty
-                  ? Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text('Add a service address before booking.'),
-                        Align(
-                          alignment: Alignment.centerRight,
-                          child: TextButton.icon(
-                            onPressed: _openAddresses,
-                            icon: const Icon(Icons.add_location_alt_outlined),
-                            label: const Text('Add address'),
-                          ),
-                        ),
-                      ],
-                    )
-                  : Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        DropdownButtonFormField<String>(
-                          key: ValueKey(selectedAddress?.id),
-                          initialValue: selectedAddress?.id,
-                          isExpanded: true,
-                          decoration: const InputDecoration(
-                            labelText: 'Where should we provide the service?',
-                            border: OutlineInputBorder(),
-                          ),
-                          items: addresses
-                              .map(
-                                (address) => DropdownMenuItem<String>(
-                                  value: address.id,
-                                  child: Text(
-                                    '${address.label} · ${address.city} ${address.pincode}',
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
-                              )
-                              .toList(growable: false),
-                          onChanged: (value) =>
-                              setState(() => _selectedAddressId = value),
-                        ),
-                        if (selectedAddress != null) ...[
-                          const SizedBox(height: 8),
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    borderRadius: BorderRadius.circular(AbzioTheme.cardRadius),
+                    border: Border.all(
+                      color: cs.primary.withValues(alpha: 0.2),
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
                           Text(
-                            selectedAddress.displayAddress,
+                            'Estimated service amount',
+                            style: tt.labelMedium?.copyWith(
+                              color: cs.onSurfaceVariant,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            '₹${_subtotal.toStringAsFixed(2)}',
+                            style: tt.headlineSmall?.copyWith(
+                              fontWeight: FontWeight.w900,
+                              color: cs.primary,
+                            ),
+                          ),
+                          const SizedBox(height: 3),
+                          Text(
+                            'Final amount confirmed before payment',
                             style: tt.bodySmall?.copyWith(
                               color: cs.onSurfaceVariant,
                             ),
                           ),
                         ],
-                        Align(
-                          alignment: Alignment.centerRight,
-                          child: TextButton.icon(
-                            onPressed: _openAddresses,
-                            icon: const Icon(Icons.edit_location_alt_outlined),
-                            label: const Text('Manage addresses'),
+                      ),
+                      Icon(
+                        Icons.lock_rounded,
+                        color: cs.primary.withValues(alpha: 0.5),
+                        size: 28,
+                      ),
+                    ],
+                  ),
+                ),
+
+                // ── Error ───────────────────────────────────────────────────────
+                if (checkoutState.hasError) ...[
+                  const SizedBox(height: 12),
+                  Container(
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: cs.errorContainer,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.error_outline_rounded,
+                          color: cs.error,
+                          size: 18,
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            _checkoutErrorMessage(checkoutState.error),
+                            style: tt.bodySmall?.copyWith(
+                              color: cs.onErrorContainer,
+                            ),
                           ),
                         ),
                       ],
                     ),
-            ),
-          ),
-          const SizedBox(height: 20),
-
-          const _SectionHeader(title: 'When do you need the service?'),
-          const SizedBox(height: 10),
-          SegmentedButton<bool>(
-            segments: const [
-              ButtonSegment(value: false, label: Text('Instant')),
-              ButtonSegment(value: true, label: Text('Schedule')),
-            ],
-            selected: {_scheduleForLater},
-            onSelectionChanged: (selection) => setState(() {
-              _scheduleForLater = selection.first;
-              _selectedScheduleSlot = null;
-            }),
-          ),
-          if (_scheduleForLater) ...[
-            const SizedBox(height: 14),
-            SizedBox(
-              height: 72,
-              child: ListView.separated(
-                scrollDirection: Axis.horizontal,
-                itemCount: scheduleDays.length,
-                separatorBuilder: (_, __) => const SizedBox(width: 8),
-                itemBuilder: (context, index) {
-                  final date = scheduleDays[index];
-                  final selected =
-                      _dateKey(date) == _dateKey(_selectedScheduleDate);
-                  return ChoiceChip(
-                    selected: selected,
-                    label: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(index == 0 ? 'Today' : _weekdayShort(date)),
-                        Text('${date.day}/${date.month}'),
-                      ],
-                    ),
-                    onSelected: (_) => setState(() {
-                      _selectedScheduleDate = date;
-                      _selectedScheduleSlot = null;
-                    }),
-                  );
-                },
-              ),
-            ),
-            if (selectedAddress == null)
-              const Text('Choose a service address to see available times.')
-            else if (slotsState?.isLoading ?? true)
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 14),
-                child: Center(child: CircularProgressIndicator()),
-              )
-            else if (slotsState?.hasError ?? false)
-              Row(
-                children: [
-                  const Expanded(
-                    child: Text('Could not load available times.'),
-                  ),
-                  TextButton(
-                    onPressed: () => ref.invalidate(
-                      cartCheckoutScheduleSlotsProvider(scheduleKey!),
-                    ),
-                    child: const Text('Retry'),
                   ),
                 ],
-              )
-            else if (slotsForDay.isEmpty)
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 8),
-                child: Text(
-                  'No appointment times are available on this day. Choose another date.',
-                ),
-              )
-            else
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: slotsForDay
-                    .map((slot) {
-                      final slotIso = slot.scheduledFor
-                          .toUtc()
-                          .toIso8601String();
-                      final selected = slotIso == selectedSlotIso;
-                      final time = TimeOfDay.fromDateTime(
-                        slot.scheduledFor,
-                      ).format(context);
-                      return ChoiceChip(
-                        selected: selected,
-                        label: Text(time),
-                        onSelected: (_) =>
-                            setState(() => _selectedScheduleSlot = slotIso),
-                      );
-                    })
-                    .toList(growable: false),
-              ),
-          ],
-          const SizedBox(height: 20),
-
-          // ── Coupon code ─────────────────────────────────────────────────
-          const _SectionHeader(title: 'Promo Code'),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: _couponController,
-                  textCapitalization: TextCapitalization.characters,
-                  decoration: InputDecoration(
-                    hintText: 'Enter coupon code',
-                    prefixIcon: const Icon(Icons.discount_rounded, size: 18),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(14),
-                      borderSide: BorderSide.none,
-                    ),
-                    filled: true,
-                    fillColor: cs.surfaceContainerHighest.withValues(
-                      alpha: 0.5,
+                if (_paymentVerificationFailed) ...[
+                  const SizedBox(height: 12),
+                  Text(
+                    'Payment may have been received, but booking confirmation is pending. Please contact support instead of trying to pay again.',
+                    style: tt.bodySmall?.copyWith(
+                      color: cs.error,
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
-                  enabled: !_couponApplied,
-                ),
-              ),
-              const SizedBox(width: 10),
-              TapScale(
-                onTap: _couponApplied
-                    ? () => setState(() {
-                        _couponApplied = false;
-                        _couponController.clear();
-                      })
-                    : _applyCoupon,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 14,
-                  ),
-                  decoration: BoxDecoration(
-                    color: _couponApplied
-                        ? cs.errorContainer
-                        : cs.primaryContainer,
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                  child: Text(
-                    _couponApplied ? 'Remove' : 'Apply',
-                    style: tt.labelLarge?.copyWith(
-                      color: _couponApplied
-                          ? cs.onErrorContainer
-                          : cs.onPrimaryContainer,
-                      fontWeight: FontWeight.w700,
+                  TextButton.icon(
+                    onPressed: () => context.push(
+                      '/support?autoCompose=true&category=payment&subject=${Uri.encodeComponent('Payment confirmation pending')}&message=${Uri.encodeComponent('My payment may have been received, but the booking confirmation did not complete. Please check the payment and booking status.')}',
                     ),
+                    icon: const Icon(Icons.support_agent_rounded),
+                    label: const Text('Contact support'),
                   ),
-                ),
-              ),
-            ],
-          ),
-          if (_couponApplied) ...[
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                Icon(
-                  Icons.info_outline_rounded,
-                  size: 16,
-                  color: cs.onSurfaceVariant,
-                ),
-                const SizedBox(width: 6),
-                Text(
-                  'Code added. Eligibility is confirmed before payment.',
-                  style: tt.bodySmall?.copyWith(
-                    color: cs.onSurfaceVariant,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
-            ),
-          ],
-          const SizedBox(height: 20),
-
-          // ── Total ───────────────────────────────────────────────────────
-          Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [
-                  cs.primary.withValues(alpha: 0.1),
-                  cs.secondary.withValues(alpha: 0.05),
-                ],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-              borderRadius: BorderRadius.circular(AbzioTheme.cardRadius),
-              border: Border.all(color: cs.primary.withValues(alpha: 0.2)),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Estimated service amount',
-                      style: tt.labelMedium?.copyWith(
-                        color: cs.onSurfaceVariant,
+                  if (_verificationOrderId != null &&
+                      _verificationPaymentId != null &&
+                      _verificationSignature != null)
+                    TextButton.icon(
+                      onPressed: _isVerifyingPayment
+                          ? null
+                          : _retryPaymentVerification,
+                      icon: _isVerifyingPayment
+                          ? const SizedBox.square(
+                              dimension: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.refresh_rounded),
+                      label: Text(
+                        _isVerifyingPayment
+                            ? 'Confirming payment…'
+                            : 'Retry confirmation',
                       ),
                     ),
-                    const SizedBox(height: 4),
-                    Text(
-                      '₹${_subtotal.toStringAsFixed(2)}',
-                      style: tt.headlineSmall?.copyWith(
-                        fontWeight: FontWeight.w900,
-                        color: cs.primary,
-                      ),
-                    ),
-                    const SizedBox(height: 3),
-                    Text(
-                      'Final amount shown in Razorpay',
-                      style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant),
-                    ),
-                  ],
-                ),
-                Icon(
-                  Icons.lock_rounded,
-                  color: cs.primary.withValues(alpha: 0.5),
-                  size: 28,
-                ),
-              ],
-            ),
-          ),
-
-          // ── Error ───────────────────────────────────────────────────────
-          if (checkoutState.hasError) ...[
-            const SizedBox(height: 12),
-            Container(
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: cs.errorContainer,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Row(
-                children: [
-                  Icon(Icons.error_outline_rounded, color: cs.error, size: 18),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      _checkoutErrorMessage(checkoutState.error),
-                      style: tt.bodySmall?.copyWith(color: cs.onErrorContainer),
+                ],
+                if (_paymentAttemptFailed && _activeOrder != null) ...[
+                  const SizedBox(height: 12),
+                  Text(
+                    'Payment was not completed. Your booking ${_activeOrder!.bookingCode} is saved; retrying will not create another booking.',
+                    style: tt.bodySmall?.copyWith(
+                      color: cs.error,
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
                 ],
-              ),
+              ],
             ),
-          ],
-          if (_paymentVerificationFailed) ...[
-            const SizedBox(height: 12),
-            Text(
-              'Payment may have been received, but booking confirmation is pending. Please contact support instead of trying to pay again.',
-              style: tt.bodySmall?.copyWith(
-                color: cs.error,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            TextButton.icon(
-              onPressed: () => context.push(
-                '/support?autoCompose=true&category=payment&subject=${Uri.encodeComponent('Payment confirmation pending')}&message=${Uri.encodeComponent('My payment may have been received, but the booking confirmation did not complete. Please check the payment and booking status.')}',
-              ),
-              icon: const Icon(Icons.support_agent_rounded),
-              label: const Text('Contact support'),
-            ),
-          ],
-          if (_paymentAttemptFailed && _activeOrder != null) ...[
-            const SizedBox(height: 12),
-            Text(
-              'Payment was not completed. Your booking ${_activeOrder!.bookingCode} is saved; retrying will not create another booking.',
-              style: tt.bodySmall?.copyWith(
-                color: cs.error,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ],
-        ],
-      ),
 
       // ── Pay button ─────────────────────────────────────────────────────
-      bottomNavigationBar: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
-          child: SizedBox(
-            width: double.infinity,
-            child: FilledButton(
-              onPressed:
-                  isLoading ||
-                      _isLaunchingPayment ||
-                      _paymentVerificationFailed ||
-                      addressesState.isLoading ||
-                      selectedAddress == null ||
-                      (_scheduleForLater &&
-                          ((slotsState?.isLoading ?? true) ||
-                              selectedSlotIso == null))
-                  ? null
-                  : () => _pay(
-                      selectedAddress.id,
-                      scheduledFor: _scheduleForLater
-                          ? DateTime.parse(selectedSlotIso!).toUtc()
-                          : null,
+      bottomNavigationBar: widget.items.isEmpty
+          ? null
+          : SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+                child: SizedBox(
+                  width: double.infinity,
+                  child: FilledButton(
+                    onPressed:
+                        isLoading ||
+                            _isLaunchingPayment ||
+                            _paymentVerificationFailed ||
+                            addressesState.isLoading ||
+                            selectedAddress == null ||
+                            (_scheduleForLater &&
+                                ((slotsState?.isLoading ?? true) ||
+                                    selectedSlotIso == null))
+                        ? null
+                        : () => _pay(
+                            selectedAddress.id,
+                            scheduledFor: _scheduleForLater
+                                ? DateTime.parse(selectedSlotIso!).toUtc()
+                                : null,
+                          ),
+                    style: FilledButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 18),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(
+                          AbzioTheme.buttonRadius,
+                        ),
+                      ),
                     ),
-              style: FilledButton.styleFrom(
-                padding: const EdgeInsets.symmetric(vertical: 18),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(AbzioTheme.buttonRadius),
+                    child: isLoading
+                        ? const SizedBox(
+                            width: 22,
+                            height: 22,
+                            child: CircularProgressIndicator(
+                              color: Colors.white,
+                              strokeWidth: 2.5,
+                            ),
+                          )
+                        : Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const Icon(Icons.payment_rounded, size: 20),
+                              const SizedBox(width: 10),
+                              Text(
+                                _paymentAttemptFailed
+                                    ? 'Retry payment'
+                                    : 'Continue to secure payment',
+                                style: Theme.of(context).textTheme.titleSmall
+                                    ?.copyWith(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.w800,
+                                    ),
+                              ),
+                            ],
+                          ),
+                  ),
                 ),
               ),
-              child: isLoading
-                  ? const SizedBox(
-                      width: 22,
-                      height: 22,
-                      child: CircularProgressIndicator(
-                        color: Colors.white,
-                        strokeWidth: 2.5,
-                      ),
-                    )
-                  : Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        const Icon(Icons.payment_rounded, size: 20),
-                        const SizedBox(width: 10),
-                        Text(
-                          _paymentAttemptFailed
-                              ? 'Retry payment'
-                              : 'Continue to secure payment',
-                          style: Theme.of(context).textTheme.titleSmall
-                              ?.copyWith(
-                                color: Colors.white,
-                                fontWeight: FontWeight.w800,
-                              ),
-                        ),
-                      ],
-                    ),
             ),
-          ),
-        ),
-      ),
     );
   }
 
@@ -948,6 +1043,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
   }
 
   Future<void> _onPaymentSuccess(PaymentSuccessResponse response) async {
+    if (!mounted) return;
     final order = _activeOrder;
     if (order == null || _isVerifyingPayment) return;
     if (response.orderId == null ||
@@ -970,23 +1066,49 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
       );
       return;
     }
-    setState(() => _isVerifyingPayment = true);
-    setState(() => _paymentAttemptFailed = false);
+    _verificationOrderId = response.orderId;
+    _verificationPaymentId = response.paymentId;
+    _verificationSignature = response.signature;
+    await _verifyCapturedPayment(order);
+  }
 
-    final success = await ref
-        .read(checkoutProvider.notifier)
-        .verifyPayment(
-          bookingId: order.bookingId,
-          orderId: response.orderId ?? order.orderId,
-          paymentId: response.paymentId ?? '',
-          signature: response.signature ?? '',
-        );
-
-    if (!mounted) {
+  Future<void> _retryPaymentVerification() async {
+    final order = _activeOrder;
+    if (order == null ||
+        _verificationOrderId == null ||
+        _verificationPaymentId == null ||
+        _verificationSignature == null ||
+        _isVerifyingPayment) {
       return;
     }
+    await _verifyCapturedPayment(order);
+  }
+
+  Future<void> _verifyCapturedPayment(PaymentOrder order) async {
+    if (!mounted) return;
+    final orderId = _verificationOrderId;
+    final paymentId = _verificationPaymentId;
+    final signature = _verificationSignature;
+    if (orderId == null || paymentId == null || signature == null) return;
+
+    setState(() {
+      _isVerifyingPayment = true;
+      _paymentAttemptFailed = false;
+    });
+    final success = await ref.read(checkoutProvider.notifier).verifyPayment(
+      bookingId: order.bookingId,
+      orderId: orderId,
+      paymentId: paymentId,
+      signature: signature,
+    );
+
+    if (!mounted) return;
 
     if (success) {
+      setState(() {
+        _isVerifyingPayment = false;
+        _paymentVerificationFailed = false;
+      });
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Row(

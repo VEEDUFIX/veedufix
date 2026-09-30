@@ -74,6 +74,18 @@ describe('Catalog Service', () => {
 
       const category = await catalogService.resolveCategoryBySlug('home-repair');
       expect(category.name).toBe('Home Repair');
+      expect(prisma.serviceCategory.findUnique).toHaveBeenCalledWith(
+        expect.objectContaining({
+          include: expect.objectContaining({
+            subcategories: expect.objectContaining({
+              where: { isActive: true },
+              include: expect.objectContaining({
+                catalogServices: expect.objectContaining({ where: { isActive: true } }),
+              }),
+            }),
+          }),
+        }),
+      );
     });
 
     it('returns null if not found', async () => {

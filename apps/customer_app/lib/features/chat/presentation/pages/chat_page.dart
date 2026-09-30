@@ -19,50 +19,84 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   final ScrollController _scrollController = ScrollController();
   final ImagePicker _picker = ImagePicker();
   final List<ChatAttachment> _draftAttachments = [];
+  final Set<String> _markedReadMessageIds = <String>{};
   bool _isTyping = false;
+  bool _isSending = false;
+  bool _isUploadingAttachment = false;
 
   Future<void> _pickAttachment() async {
-    final picked = await _picker.pickImage(source: ImageSource.gallery, imageQuality: 80);
-    if (picked == null) return;
+    if (_isUploadingAttachment || _isSending) return;
+    setState(() => _isUploadingAttachment = true);
     try {
-      final attachment = await ref.read(chatControllerProvider).uploadAttachment(
-        bookingId: widget.bookingId,
-        bytes: await picked.readAsBytes(),
-        filename: picked.name,
+      final picked = await _picker.pickImage(
+        source: ImageSource.gallery,
+        imageQuality: 80,
+        maxWidth: 1600,
+        maxHeight: 1600,
       );
+      if (picked == null || !mounted) return;
+      final attachment = await ref
+          .read(chatControllerProvider)
+          .uploadAttachment(
+            bookingId: widget.bookingId,
+            bytes: await picked.readAsBytes(),
+            filename: picked.name,
+          );
       if (!mounted) return;
       setState(() {
         _draftAttachments.add(attachment);
+        _isTyping =
+            _controller.text.trim().isNotEmpty || _draftAttachments.isNotEmpty;
       });
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Could not attach the selected image.')),
       );
+    } finally {
+      if (mounted) setState(() => _isUploadingAttachment = false);
     }
   }
 
-  void _send() {
+  Future<void> _send() async {
+    if (_isSending || _isUploadingAttachment) return;
     final text = _controller.text.trim();
     if (text.isEmpty && _draftAttachments.isEmpty) return;
-    
+
     final auth = ref.read(authControllerProvider).valueOrNull;
     if (auth == null) return;
 
-    ref.read(chatControllerProvider).sendMessage(
-      bookingId: widget.bookingId,
-      text: text,
-      senderId: auth.user.id,
-      attachments: [..._draftAttachments],
-    );
-    
-    setState(() {
-      _controller.clear();
-      _draftAttachments.clear();
-      _isTyping = false;
-    });
-    
-    Future.delayed(const Duration(milliseconds: 100), _scrollToBottom);
+    setState(() => _isSending = true);
+    try {
+      await ref
+          .read(chatControllerProvider)
+          .sendMessage(
+            bookingId: widget.bookingId,
+            text: text,
+            senderId: auth.user.id,
+            attachments: [..._draftAttachments],
+          );
+
+      if (!mounted) return;
+      setState(() {
+        _controller.clear();
+        _draftAttachments.clear();
+        _isTyping = false;
+      });
+
+      Future.delayed(const Duration(milliseconds: 100), _scrollToBottom);
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Message not sent. Check your connection and try again.',
+          ),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _isSending = false);
+    }
   }
 
   void _scrollToBottom() {
@@ -75,9 +109,18 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     }
   }
 
+  void _setQuickReply(String text) {
+    setState(() {
+      _controller.text = text;
+      _controller.selection = TextSelection.collapsed(offset: text.length);
+      _isTyping = true;
+    });
+  }
+
   String _formatTime(DateTime time) {
-    final h = time.hour.toString().padLeft(2, '0');
-    final m = time.minute.toString().padLeft(2, '0');
+    final localTime = time.toLocal();
+    final h = localTime.hour.toString().padLeft(2, '0');
+    final m = localTime.minute.toString().padLeft(2, '0');
     return '$h:$m';
   }
 
@@ -95,7 +138,9 @@ class _ChatPageState extends ConsumerState<ChatPage> {
 
     final bookingAsync = ref.watch(bookingDetailProvider(widget.bookingId));
     final workerName = bookingAsync.valueOrNull?.worker?.name ?? 'Professional';
-    final workerInitial = workerName.isNotEmpty ? workerName[0].toUpperCase() : 'P';
+    final workerInitial = workerName.trim().isNotEmpty
+        ? workerName.trim()[0].toUpperCase()
+        : 'P';
 
     return Scaffold(
       backgroundColor: cs.surface,
@@ -121,8 +166,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
           children: [
             CircleAvatar(
               radius: 20,
-              backgroundColor:
-                  const Color(0xFFC2A15E).withValues(alpha: 0.15),
+              backgroundColor: const Color(0xFFC2A15E).withValues(alpha: 0.15),
               child: Text(
                 workerInitial,
                 style: tt.titleMedium?.copyWith(
@@ -135,12 +179,14 @@ class _ChatPageState extends ConsumerState<ChatPage> {
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(workerName,
-                    style: tt.titleSmall
-                        ?.copyWith(fontWeight: FontWeight.w800)),
-                Text('Online · Arriving soon',
-                    style: tt.labelSmall
-                        ?.copyWith(color: const Color(0xFF10B981))),
+                Text(
+                  workerName,
+                  style: tt.titleSmall?.copyWith(fontWeight: FontWeight.w800),
+                ),
+                Text(
+                  'Booking professional',
+                  style: tt.labelSmall?.copyWith(color: cs.onSurfaceVariant),
+                ),
               ],
             ),
           ],
@@ -155,11 +201,14 @@ class _ChatPageState extends ConsumerState<ChatPage> {
               child: Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF10B981).withValues(alpha: 0.1),
+                  color: cs.primary.withValues(alpha: 0.1),
                   shape: BoxShape.circle,
                 ),
-                child: const Icon(Icons.call_rounded,
-                    color: Color(0xFF10B981), size: 20),
+                child: Icon(
+                  Icons.support_agent_rounded,
+                  color: cs.primary,
+                  size: 20,
+                ),
               ),
             ),
           ),
@@ -169,42 +218,99 @@ class _ChatPageState extends ConsumerState<ChatPage> {
         children: [
           // ── Message list ─────────────────────────────────────────────────
           Expanded(
-            child: ref.watch(chatProvider(widget.bookingId)).when(
-              loading: () => const Center(child: CircularProgressIndicator()),
-              error: (err, stack) => Center(child: Text('Error: $err')),
-              data: (messages) {
-                final auth = ref.read(authControllerProvider).valueOrNull;
-                if (auth != null) {
-                  WidgetsBinding.instance.addPostFrameCallback((_) {
-                    ref.read(chatControllerProvider).markAsRead(
-                          bookingId: widget.bookingId,
-                          userId: auth.user.id,
-                        );
-                  });
-                }
-                WidgetsBinding.instance.addPostFrameCallback((_) {
-                  _scrollToBottom();
-                });
-                return ListView.builder(
-                  controller: _scrollController,
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                  itemCount: messages.length,
-                  itemBuilder: (context, index) {
-                    final message = messages[index];
-                    final isMe = message.senderId == auth?.user.id;
-                    return _BubbleTile(
-                      message: _ChatMessage(
-                        text: message.text,
-                        isMe: isMe,
-                        time: _formatTime(message.timestamp),
-                        workerInitial: workerInitial,
-                        attachments: message.attachments,
+            child: ref
+                .watch(chatProvider(widget.bookingId))
+                .when(
+                  loading: () =>
+                      const Center(child: CircularProgressIndicator()),
+                  error: (err, stack) => PremiumRetryState(
+                    title: 'Could not load messages',
+                    subtitle: 'Check your connection and try again.',
+                    icon: Icons.chat_bubble_outline_rounded,
+                    onRetry: () =>
+                        ref.invalidate(chatProvider(widget.bookingId)),
+                    onRefresh: () async {
+                      await ref
+                          .refresh(chatProvider(widget.bookingId).future)
+                          .then<void>((_) {});
+                    },
+                  ),
+                  data: (messages) {
+                    final auth = ref.read(authControllerProvider).valueOrNull;
+                    final shouldFollowLatest =
+                        !_scrollController.hasClients ||
+                        _scrollController.position.maxScrollExtent -
+                                _scrollController.position.pixels <=
+                            120;
+                    if (auth != null) {
+                      final pendingReadIds = messages
+                          .where(
+                            (message) =>
+                                !message.isRead &&
+                                message.senderId != auth.user.id &&
+                                message.id.isNotEmpty &&
+                                !_markedReadMessageIds.contains(message.id),
+                          )
+                          .map((message) => message.id)
+                          .toSet();
+                      if (pendingReadIds.isNotEmpty) {
+                        _markedReadMessageIds.addAll(pendingReadIds);
+                        WidgetsBinding.instance.addPostFrameCallback((_) {
+                          if (!mounted) return;
+                          ref
+                              .read(chatControllerProvider)
+                              .markAsRead(
+                                bookingId: widget.bookingId,
+                                userId: auth.user.id,
+                              )
+                              .catchError((_) {
+                                _markedReadMessageIds.removeAll(pendingReadIds);
+                              });
+                        });
+                      }
+                    }
+                    if (shouldFollowLatest) {
+                      WidgetsBinding.instance.addPostFrameCallback((_) {
+                        _scrollToBottom();
+                      });
+                    }
+                    return ListView.builder(
+                      controller: _scrollController,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 20,
+                        vertical: 12,
                       ),
+                      itemCount: messages.isEmpty ? 1 : messages.length,
+                      itemBuilder: (context, index) {
+                        if (messages.isEmpty) {
+                          return Padding(
+                            padding: const EdgeInsets.only(top: 100),
+                            child: Center(
+                              child: Text(
+                                'No messages yet. Start the conversation about your booking.',
+                                textAlign: TextAlign.center,
+                                style: tt.bodyMedium?.copyWith(
+                                  color: cs.onSurfaceVariant,
+                                ),
+                              ),
+                            ),
+                          );
+                        }
+                        final message = messages[index];
+                        final isMe = message.senderId == auth?.user.id;
+                        return _BubbleTile(
+                          message: _ChatMessage(
+                            text: message.text,
+                            isMe: isMe,
+                            time: _formatTime(message.timestamp),
+                            workerInitial: workerInitial,
+                            attachments: message.attachments,
+                          ),
+                        );
+                      },
                     );
                   },
-                );
-              },
-            ),
+                ),
           ),
 
           // ── Quick replies ─────────────────────────────────────────────────
@@ -215,23 +321,32 @@ class _ChatPageState extends ConsumerState<ChatPage> {
               scrollDirection: Axis.horizontal,
               children: [
                 _QuickReply(
-                    label: 'On my way',
-                    onTap: () {
-                      _controller.text = 'On my way!';
-                      _send();
-                    }),
+                  label: 'I’m at the address',
+                  onTap: _isSending
+                      ? null
+                      : () {
+                          _setQuickReply('I’m at the service address.');
+                          _send();
+                        },
+                ),
                 _QuickReply(
-                    label: 'Running 5 mins late',
-                    onTap: () {
-                      _controller.text = 'Running 5 mins late, sorry!';
-                      _send();
-                    }),
+                  label: 'Please call me',
+                  onTap: _isSending
+                      ? null
+                      : () {
+                          _setQuickReply('Please call me when you can.');
+                          _send();
+                        },
+                ),
                 _QuickReply(
-                    label: 'Please hurry',
-                    onTap: () {
-                      _controller.text = 'Please hurry up!';
-                      _send();
-                    }),
+                  label: 'Running late',
+                  onTap: _isSending
+                      ? null
+                      : () {
+                          _setQuickReply('I’m running about 5 minutes late.');
+                          _send();
+                        },
+                ),
               ],
             ),
           ),
@@ -243,15 +358,17 @@ class _ChatPageState extends ConsumerState<ChatPage> {
               child: Wrap(
                 spacing: 8,
                 runSpacing: 8,
-                children: _draftAttachments.map((attachment) {
-                  return Chip(
-                    avatar: const Icon(Icons.image_rounded, size: 18),
-                    label: Text(attachment.name ?? 'Attachment'),
-                    onDeleted: () {
-                      setState(() => _draftAttachments.remove(attachment));
-                    },
-                  );
-                }).toList(growable: false),
+                children: _draftAttachments
+                    .map((attachment) {
+                      return Chip(
+                        avatar: const Icon(Icons.image_rounded, size: 18),
+                        label: Text(attachment.name ?? 'Attachment'),
+                        onDeleted: () {
+                          setState(() => _draftAttachments.remove(attachment));
+                        },
+                      );
+                    })
+                    .toList(growable: false),
               ),
             ),
 
@@ -267,7 +384,9 @@ class _ChatPageState extends ConsumerState<ChatPage> {
               child: Row(
                 children: [
                   TapScale(
-                    onTap: _pickAttachment,
+                    onTap: _isSending || _isUploadingAttachment
+                        ? null
+                        : _pickAttachment,
                     child: Container(
                       width: 48,
                       height: 48,
@@ -275,7 +394,10 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                         color: cs.surfaceContainerHighest,
                         shape: BoxShape.circle,
                       ),
-                      child: Icon(Icons.attach_file_rounded, color: cs.onSurfaceVariant),
+                      child: Icon(
+                        Icons.attach_file_rounded,
+                        color: cs.onSurfaceVariant,
+                      ),
                     ),
                   ),
                   const SizedBox(width: 10),
@@ -284,17 +406,24 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                       padding: const EdgeInsets.symmetric(horizontal: 18),
                       decoration: BoxDecoration(
                         color: cs.surfaceContainerHighest,
-                        borderRadius: BorderRadius.circular(AbzioTheme.cardRadius),
+                        borderRadius: BorderRadius.circular(
+                          AbzioTheme.cardRadius,
+                        ),
                       ),
                       child: TextField(
                         controller: _controller,
-                        onChanged: (v) =>
-                            setState(() => _isTyping = v.trim().isNotEmpty),
+                        onChanged: (v) => setState(
+                          () => _isTyping =
+                              v.trim().isNotEmpty ||
+                              _draftAttachments.isNotEmpty,
+                        ),
+                        readOnly: _isSending,
                         textCapitalization: TextCapitalization.sentences,
                         decoration: InputDecoration(
                           hintText: 'Type a message…',
-                          hintStyle: tt.bodyMedium
-                              ?.copyWith(color: cs.onSurfaceVariant),
+                          hintStyle: tt.bodyMedium?.copyWith(
+                            color: cs.onSurfaceVariant,
+                          ),
                           border: InputBorder.none,
                         ),
                       ),
@@ -302,7 +431,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                   ),
                   const SizedBox(width: 10),
                   TapScale(
-                    onTap: _send,
+                    onTap: _isSending || _isUploadingAttachment ? null : _send,
                     child: AnimatedContainer(
                       duration: const Duration(milliseconds: 200),
                       width: 48,
@@ -320,13 +449,21 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                               ]
                             : null,
                       ),
-                      child: Icon(
-                        Icons.send_rounded,
-                        color: _isTyping
-                            ? cs.onPrimary
-                            : cs.onSurfaceVariant,
-                        size: 20,
-                      ),
+                      child: _isSending
+                          ? const Padding(
+                              padding: EdgeInsets.all(14),
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
+                            )
+                          : Icon(
+                              Icons.send_rounded,
+                              color: _isTyping
+                                  ? cs.onPrimary
+                                  : cs.onSurfaceVariant,
+                              size: 20,
+                            ),
                     ),
                   ),
                 ],
@@ -369,34 +506,39 @@ class _BubbleTile extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: Row(
-        mainAxisAlignment:
-            isMe ? MainAxisAlignment.end : MainAxisAlignment.start,
+        mainAxisAlignment: isMe
+            ? MainAxisAlignment.end
+            : MainAxisAlignment.start,
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
           if (!isMe) ...[
             CircleAvatar(
               radius: 14,
               backgroundColor: const Color(0xFFC2A15E).withValues(alpha: 0.15),
-              child: Text(message.workerInitial,
-                  style: const TextStyle(
-                      color: Color(0xFFC2A15E),
-                      fontSize: 11,
-                      fontWeight: FontWeight.w800)),
+              child: Text(
+                message.workerInitial,
+                style: const TextStyle(
+                  color: Color(0xFFC2A15E),
+                  fontSize: 11,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
             ),
             const SizedBox(width: 8),
           ],
           Flexible(
             child: Column(
-              crossAxisAlignment:
-                  isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+              crossAxisAlignment: isMe
+                  ? CrossAxisAlignment.end
+                  : CrossAxisAlignment.start,
               children: [
                 Container(
                   padding: const EdgeInsets.symmetric(
-                      horizontal: 16, vertical: 12),
+                    horizontal: 16,
+                    vertical: 12,
+                  ),
                   decoration: BoxDecoration(
-                    color: isMe
-                        ? cs.primary
-                        : cs.surfaceContainerHighest,
+                    color: isMe ? cs.primary : cs.surfaceContainerHighest,
                     borderRadius: BorderRadius.only(
                       topLeft: const Radius.circular(18),
                       topRight: const Radius.circular(18),
@@ -415,16 +557,15 @@ class _BubbleTile extends StatelessWidget {
                 ),
                 if (message.attachments.isNotEmpty) ...[
                   const SizedBox(height: 8),
-                  ...message.attachments.map((attachment) => _AttachmentPreview(
-                        attachment: attachment,
-                        isMe: isMe,
-                      )),
+                  ...message.attachments.map(
+                    (attachment) =>
+                        _AttachmentPreview(attachment: attachment, isMe: isMe),
+                  ),
                 ],
                 const SizedBox(height: 4),
                 Text(
                   message.time,
-                  style: tt.labelSmall
-                      ?.copyWith(color: cs.onSurfaceVariant),
+                  style: tt.labelSmall?.copyWith(color: cs.onSurfaceVariant),
                 ),
               ],
             ),
@@ -452,7 +593,9 @@ class _AttachmentPreview extends StatelessWidget {
         borderRadius: BorderRadius.circular(14),
         child: Container(
           constraints: const BoxConstraints(maxWidth: 240, maxHeight: 180),
-          color: isMe ? Colors.white.withValues(alpha: 0.08) : cs.surfaceContainerHighest,
+          color: isMe
+              ? Colors.white.withValues(alpha: 0.08)
+              : cs.surfaceContainerHighest,
           child: Image.network(
             attachment.url,
             fit: BoxFit.cover,
@@ -461,11 +604,16 @@ class _AttachmentPreview extends StatelessWidget {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.broken_image_rounded, color: isMe ? cs.onPrimary : cs.onSurfaceVariant),
+                  Icon(
+                    Icons.broken_image_rounded,
+                    color: isMe ? cs.onPrimary : cs.onSurfaceVariant,
+                  ),
                   const SizedBox(width: 8),
                   Text(
                     attachment.name ?? 'Image',
-                    style: tt.labelMedium?.copyWith(color: isMe ? cs.onPrimary : cs.onSurfaceVariant),
+                    style: tt.labelMedium?.copyWith(
+                      color: isMe ? cs.onPrimary : cs.onSurfaceVariant,
+                    ),
                   ),
                 ],
               ),
@@ -479,17 +627,25 @@ class _AttachmentPreview extends StatelessWidget {
       margin: const EdgeInsets.only(top: 6),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
-        color: isMe ? Colors.white.withValues(alpha: 0.08) : cs.surfaceContainerHighest,
+        color: isMe
+            ? Colors.white.withValues(alpha: 0.08)
+            : cs.surfaceContainerHighest,
         borderRadius: BorderRadius.circular(12),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.insert_drive_file_rounded, size: 18, color: isMe ? cs.onPrimary : cs.onSurfaceVariant),
+          Icon(
+            Icons.insert_drive_file_rounded,
+            size: 18,
+            color: isMe ? cs.onPrimary : cs.onSurfaceVariant,
+          ),
           const SizedBox(width: 8),
           Text(
             attachment.name ?? 'File',
-            style: tt.labelMedium?.copyWith(color: isMe ? cs.onPrimary : cs.onSurfaceVariant),
+            style: tt.labelMedium?.copyWith(
+              color: isMe ? cs.onPrimary : cs.onSurfaceVariant,
+            ),
           ),
         ],
       ),
@@ -500,7 +656,7 @@ class _AttachmentPreview extends StatelessWidget {
 class _QuickReply extends StatelessWidget {
   const _QuickReply({required this.label, required this.onTap});
   final String label;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -518,9 +674,9 @@ class _QuickReply extends StatelessWidget {
           child: Text(
             label,
             style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                  color: cs.primary,
-                  fontWeight: FontWeight.w600,
-                ),
+              color: cs.primary,
+              fontWeight: FontWeight.w600,
+            ),
           ),
         ),
       ),

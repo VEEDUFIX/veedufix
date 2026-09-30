@@ -16,12 +16,14 @@ class ProfessionalCard extends StatelessWidget {
     return SizedBox(
       width: 200,
       child: TapScale(
-        onTap: () => context.push(
-          Uri(
-            path: '/search',
-            queryParameters: {'q': professional.name},
-          ).toString(),
-        ),
+        onTap: professional.id.isEmpty
+            ? null
+            : () => context.push(
+                  Uri(
+                    path: '/professional',
+                    queryParameters: {'id': professional.id},
+                  ).toString(),
+                ),
         child: Container(
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
@@ -116,20 +118,30 @@ class ProfessionalCard extends StatelessWidget {
                     Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        const Icon(
-                          Icons.star_rounded,
-                          size: 13,
-                          color: Color(0xFFF59E0B),
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          professional.rating.toStringAsFixed(1),
-                          style: GoogleFonts.inter(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: const Color(0xFF111111),
+                        if (professional.rating > 0) ...[
+                          const Icon(
+                            Icons.star_rounded,
+                            size: 13,
+                            color: Color(0xFFF59E0B),
                           ),
-                        ),
+                          const SizedBox(width: 4),
+                          Text(
+                            professional.rating.toStringAsFixed(1),
+                            style: GoogleFonts.inter(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: const Color(0xFF111111),
+                            ),
+                          ),
+                        ] else
+                          Text(
+                            'New',
+                            style: GoogleFonts.inter(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                              color: const Color(0xFF6B6B6B),
+                            ),
+                          ),
                       ],
                     ),
                     Text(

@@ -46,14 +46,14 @@ class WorkerWalletPage extends ConsumerWidget {
       ),
       body: walletAsync.when(
         loading: () => const _WalletLoadingView(),
-        error: (_, __) => Center(
-          child: PremiumEmptyState(
-            icon: Icons.account_balance_wallet_outlined,
-            title: 'Could not load wallet',
-            subtitle: 'Check your connection and try again.',
-            actionLabel: 'Retry',
-            onAction: () => ref.invalidate(workerWalletProvider),
-          ),
+        error: (_, __) => PremiumRetryState(
+          icon: Icons.account_balance_wallet_outlined,
+          title: 'Could not load wallet',
+          subtitle: 'Check your connection and try again.',
+          onRetry: () => ref.invalidate(workerWalletProvider),
+          onRefresh: () async {
+            await ref.refresh(workerWalletProvider.future).then<void>((_) {});
+          },
         ),
         data: (wallet) => RefreshIndicator(
           onRefresh: () async {
@@ -126,7 +126,9 @@ class _WalletBody extends ConsumerWidget {
               ),
               const SizedBox(height: 14),
               Text(
-                'Withdrawals start at ₹100 and are usually processed within 24 hours.',
+                wallet.payoutsPaused
+                    ? wallet.payoutPauseReason ?? 'Partner payouts are temporarily paused.'
+                    : 'Withdrawals start at ₹${wallet.minimumPayout.toStringAsFixed(2)}. Processing time can vary; track each request below.',
                 style:
                     tt.bodySmall?.copyWith(color: Colors.white70, height: 1.3),
               ),
@@ -145,19 +147,23 @@ class _WalletBody extends ConsumerWidget {
 
         // ── Withdraw CTA ─────────────────────────────────────────────────
         TapScale(
-          onTap: hasPayoutDetails
-              ? () =>
-                  _showPayoutSheet(context, ref, wallet.balance, payoutUpiId)
-              : () => context.push('/profile/bank-details'),
+          onTap: wallet.payoutsPaused
+              ? () => ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text(wallet.payoutPauseReason ?? 'Partner payouts are temporarily paused.')),
+                  )
+              : hasPayoutDetails
+                  ? () => _showPayoutSheet(context, ref, wallet.balance,
+                      payoutUpiId, wallet.minimumPayout)
+                  : () => context.push('/profile/bank-details'),
           child: Container(
             padding: const EdgeInsets.symmetric(vertical: 16),
             decoration: BoxDecoration(
-              color: hasPayoutDetails
+              color: hasPayoutDetails && !wallet.payoutsPaused
                   ? cs.primaryContainer.withValues(alpha: 0.4)
                   : cs.surfaceContainerHighest.withValues(alpha: 0.55),
               borderRadius: BorderRadius.circular(AbzioTheme.buttonRadius),
               border: Border.all(
-                  color: hasPayoutDetails
+                  color: hasPayoutDetails && !wallet.payoutsPaused
                       ? cs.primary.withValues(alpha: 0.3)
                       : cs.outlineVariant),
             ),
@@ -165,17 +171,19 @@ class _WalletBody extends ConsumerWidget {
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Icon(
-                  hasPayoutDetails
+                  hasPayoutDetails && !wallet.payoutsPaused
                       ? Icons.payments_rounded
                       : Icons.person_rounded,
-                  color: hasPayoutDetails ? cs.primary : cs.onSurfaceVariant,
+                  color: hasPayoutDetails && !wallet.payoutsPaused ? cs.primary : cs.onSurfaceVariant,
                   size: 20,
                 ),
                 const SizedBox(width: 10),
                 Text(
-                  hasPayoutDetails ? 'Request payout' : 'Add payout details',
+                  wallet.payoutsPaused
+                      ? 'Payouts paused'
+                      : hasPayoutDetails ? 'Request payout' : 'Add payout details',
                   style: tt.titleSmall?.copyWith(
-                    color: hasPayoutDetails ? cs.primary : cs.onSurface,
+                    color: hasPayoutDetails && !wallet.payoutsPaused ? cs.primary : cs.onSurface,
                     fontWeight: FontWeight.w800,
                   ),
                 ),
@@ -244,7 +252,7 @@ class _WalletBody extends ConsumerWidget {
   }
 
   void _showPayoutSheet(BuildContext context, WidgetRef ref, double balance,
-      String? payoutUpiId) {
+      String? payoutUpiId, double minimumPayout) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -253,6 +261,7 @@ class _WalletBody extends ConsumerWidget {
         availableBalance: balance,
         ref: ref,
         payoutUpiId: payoutUpiId,
+        minimumPayout: minimumPayout,
       ),
     );
   }
@@ -524,10 +533,12 @@ class _PayoutSheet extends ConsumerStatefulWidget {
     required this.availableBalance,
     required this.ref,
     required this.payoutUpiId,
+    required this.minimumPayout,
   });
   final double availableBalance;
   final WidgetRef ref;
   final String? payoutUpiId;
+  final double minimumPayout;
 
   @override
   ConsumerState<_PayoutSheet> createState() => _PayoutSheetState();
@@ -536,7 +547,7 @@ class _PayoutSheet extends ConsumerStatefulWidget {
 class _PayoutSheetState extends ConsumerState<_PayoutSheet> {
   final _amountController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
-  static const _presetAmounts = [100.0, 500.0, 1000.0];
+  static const _presetAmounts = [500.0, 1000.0];
 
   @override
   void dispose() {
@@ -551,8 +562,9 @@ class _PayoutSheetState extends ConsumerState<_PayoutSheet> {
     final payoutState = ref.watch(payoutRequestProvider);
     final isLoading = payoutState.isLoading;
     final presetAmounts = _eligiblePresetAmounts();
-    final showFullBalanceChip = widget.availableBalance >= 100 &&
-        !presetAmounts.any((amount) => amount == widget.availableBalance);
+    final showFullBalanceChip =
+        widget.availableBalance >= widget.minimumPayout &&
+            !presetAmounts.any((amount) => amount == widget.availableBalance);
 
     return Padding(
       padding:
@@ -588,7 +600,7 @@ class _PayoutSheetState extends ConsumerState<_PayoutSheet> {
                 style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant),
               ),
               const SizedBox(height: 20),
-              if (widget.availableBalance < 100) ...[
+              if (widget.availableBalance < widget.minimumPayout) ...[
                 Container(
                   width: double.infinity,
                   padding: const EdgeInsets.all(14),
@@ -605,7 +617,7 @@ class _PayoutSheetState extends ConsumerState<_PayoutSheet> {
                       const SizedBox(width: 10),
                       Expanded(
                         child: Text(
-                          'You need at least ₹100 to request a payout. Keep earning and come back once your balance crosses the threshold.',
+                          'You need at least ₹${widget.minimumPayout.toStringAsFixed(2)} to request a payout. Keep earning and come back once your balance crosses the threshold.',
                           style: tt.bodySmall
                               ?.copyWith(color: cs.onSurface, height: 1.35),
                         ),
@@ -675,15 +687,15 @@ class _PayoutSheetState extends ConsumerState<_PayoutSheet> {
                   if (amount > widget.availableBalance) {
                     return 'Insufficient balance';
                   }
-                  if (amount < 100) {
-                    return 'Minimum withdrawal is ₹100';
+                  if (amount < widget.minimumPayout) {
+                    return 'Minimum withdrawal is ₹${widget.minimumPayout.toStringAsFixed(2)}';
                   }
                   return null;
                 },
               ),
               const SizedBox(height: 8),
               Text(
-                'Minimum withdrawal is ₹100. Higher amounts will process in the same payout queue.',
+                'Minimum withdrawal is ₹${widget.minimumPayout.toStringAsFixed(2)}. Higher amounts will process in the same payout queue.',
                 style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant),
               ),
               const SizedBox(height: 14),
@@ -742,9 +754,11 @@ class _PayoutSheetState extends ConsumerState<_PayoutSheet> {
   }
 
   List<double> _eligiblePresetAmounts() {
-    return _presetAmounts
-        .where((amount) => amount <= widget.availableBalance && amount >= 100)
-        .toList(growable: false);
+    return <double>{widget.minimumPayout, ..._presetAmounts}
+        .where((amount) =>
+            amount <= widget.availableBalance && amount >= widget.minimumPayout)
+        .toList(growable: false)
+      ..sort();
   }
 
   String _formatPresetAmount(double amount) {

@@ -22,7 +22,8 @@ class WalletTransaction {
       amount: (json['amount'] as num?)?.toDouble() ?? 0.0,
       referenceType: json['referenceType'] as String? ?? '',
       referenceId: json['referenceId'] as String?,
-      createdAt: DateTime.tryParse(json['createdAt'] as String? ?? '') ?? DateTime.now(),
+      createdAt: DateTime.tryParse(json['createdAt'] as String? ?? '') ??
+          DateTime.now(),
     );
   }
 }
@@ -33,6 +34,9 @@ class WalletDetails {
     required this.referralCode,
     required this.totalReferrals,
     required this.referralEarnings,
+    required this.referralRewardAmount,
+    required this.referralsEnabled,
+    required this.referralMaxSuccessfulPerReferrer,
     required this.transactions,
   });
 
@@ -40,6 +44,9 @@ class WalletDetails {
   final String referralCode;
   final int totalReferrals;
   final double referralEarnings;
+  final double referralRewardAmount;
+  final bool referralsEnabled;
+  final int referralMaxSuccessfulPerReferrer;
   final List<WalletTransaction> transactions;
 
   factory WalletDetails.fromJson(Map<String, dynamic> json) {
@@ -49,6 +56,11 @@ class WalletDetails {
       referralCode: json['referralCode'] as String? ?? '',
       totalReferrals: (json['totalReferrals'] as num?)?.toInt() ?? 0,
       referralEarnings: (json['referralEarnings'] as num?)?.toDouble() ?? 0.0,
+      referralRewardAmount:
+          (json['referralRewardAmount'] as num?)?.toDouble() ?? 100.0,
+      referralsEnabled: json['referralsEnabled'] as bool? ?? true,
+      referralMaxSuccessfulPerReferrer:
+          (json['referralMaxSuccessfulPerReferrer'] as num?)?.toInt() ?? 0,
       transactions: txList
           .whereType<Map<String, dynamic>>()
           .map(WalletTransaction.fromJson)

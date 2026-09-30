@@ -55,7 +55,12 @@ class _AvailabilityNotifier extends StateNotifier<AsyncValue<bool>> {
 
 final locationBroadcasterProvider =
     StateNotifierProvider<_LocationBroadcaster, void>((ref) {
-  return _LocationBroadcaster(ref);
+  final broadcaster = _LocationBroadcaster(ref);
+  ref.listen<JobExecutionState>(
+    jobExecutionProvider,
+    (_, __) => broadcaster.onExecutionChanged(),
+  );
+  return broadcaster;
 });
 
 class _LocationBroadcaster extends StateNotifier<void> {
@@ -64,17 +69,18 @@ class _LocationBroadcaster extends StateNotifier<void> {
   final Ref _ref;
   Timer? _timer;
   String? _activeBookingId;
+  bool _isBroadcasting = false;
 
   void start(String bookingId) {
-    if (_activeBookingId == bookingId) return;
+    if (_activeBookingId == bookingId) {
+      return;
+    }
     stop();
     _activeBookingId = bookingId;
     _syncWithJobState();
-    _ref.listen<JobExecutionState>(
-      jobExecutionProvider,
-      (_, __) => _syncWithJobState(),
-    );
   }
+
+  void onExecutionChanged() => _syncWithJobState();
 
   void stop() {
     _timer?.cancel();
@@ -85,9 +91,13 @@ class _LocationBroadcaster extends StateNotifier<void> {
   void _syncWithJobState() {
     final execution = _ref.read(jobExecutionProvider);
     final bookingId = _activeBookingId;
-    final hasActiveBooking =
-        bookingId != null && execution.hasBooking && execution.booking!.bookingId == bookingId;
-    final shouldTrack = hasActiveBooking && execution.summary == null && execution.currentStep >= 2 && execution.currentStep < 7;
+    final hasActiveBooking = bookingId != null &&
+        execution.hasBooking &&
+        execution.booking!.bookingId == bookingId;
+    final shouldTrack = hasActiveBooking &&
+        execution.summary == null &&
+        execution.currentStep >= 2 &&
+        execution.currentStep < 7;
 
     if (!shouldTrack) {
       _timer?.cancel();
@@ -104,12 +114,22 @@ class _LocationBroadcaster extends StateNotifier<void> {
   }
 
   Future<void> _broadcast() async {
+    if (_isBroadcasting) {
+      return;
+    }
+    final bookingId = _activeBookingId;
+    if (bookingId == null) {
+      return;
+    }
+    _isBroadcasting = true;
     try {
       final execution = _ref.read(jobExecutionProvider);
-      final bookingId = _activeBookingId;
       final hasActiveBooking =
-          bookingId != null && execution.hasBooking && execution.booking!.bookingId == bookingId;
-      final shouldTrack = hasActiveBooking && execution.summary == null && execution.currentStep >= 2 && execution.currentStep < 7;
+          execution.hasBooking && execution.booking!.bookingId == bookingId;
+      final shouldTrack = hasActiveBooking &&
+          execution.summary == null &&
+          execution.currentStep >= 2 &&
+          execution.currentStep < 7;
       if (!shouldTrack) {
         _timer?.cancel();
         _timer = null;
@@ -118,13 +138,28 @@ class _LocationBroadcaster extends StateNotifier<void> {
 
       final permission = await Geolocator.checkPermission();
       if (permission == LocationPermission.denied ||
-          permission == LocationPermission.deniedForever) { return; }
+          permission == LocationPermission.deniedForever) {
+        return;
+      }
       final pos = await Geolocator.getCurrentPosition(
-        locationSettings: const LocationSettings(accuracy: LocationAccuracy.high),
+        locationSettings:
+            const LocationSettings(accuracy: LocationAccuracy.high),
       );
+      final latestExecution = _ref.read(jobExecutionProvider);
+      if (_activeBookingId != bookingId ||
+          !latestExecution.hasBooking ||
+          latestExecution.booking!.bookingId != bookingId ||
+          latestExecution.summary != null ||
+          latestExecution.currentStep < 2 ||
+          latestExecution.currentStep >= 7) {
+        return;
+      }
       final realtime = _ref.read(realtimeServiceProvider);
       realtime.sendLocationUpdate(pos.latitude, pos.longitude);
-    } catch (_) {}
+    } catch (_) {
+    } finally {
+      _isBroadcasting = false;
+    }
   }
 
   @override

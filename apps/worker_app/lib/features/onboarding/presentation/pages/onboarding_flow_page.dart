@@ -53,6 +53,7 @@ class _OnboardingFlowPageState extends ConsumerState<OnboardingFlowPage> {
   final _businessAddress = TextEditingController();
   final _gstin = TextEditingController();
   final _visitCharge = TextEditingController(text: 'Platform pricing');
+  final _serviceSearch = TextEditingController();
   final Map<String, TextEditingController> _years = {};
   final Map<String, TextEditingController> _expertise = {};
   final Map<String, Set<String>> _skills = {};
@@ -85,7 +86,8 @@ class _OnboardingFlowPageState extends ConsumerState<OnboardingFlowPage> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final query = GoRouterState.of(context).uri.queryParameters;
-      final step = int.tryParse(query['step'] ?? '')?.clamp(0, _totalSteps - 1) ?? 0;
+      final step =
+          int.tryParse(query['step'] ?? '')?.clamp(0, _totalSteps - 1) ?? 0;
       ref.read(onboardingControllerProvider.notifier).setStep(step);
       _pageController.jumpToPage(step);
       unawaited(ref.read(onboardingControllerProvider.notifier).bootstrap(
@@ -119,6 +121,7 @@ class _OnboardingFlowPageState extends ConsumerState<OnboardingFlowPage> {
       _businessAddress,
       _gstin,
       _visitCharge,
+      _serviceSearch,
       ..._years.values,
       ..._expertise.values,
     ]) {
@@ -131,7 +134,9 @@ class _OnboardingFlowPageState extends ConsumerState<OnboardingFlowPage> {
   void _seed(WorkerOnboardingProfile profile) {
     _fullName.text = profile.fullName ?? '';
     _dateOfBirth = profile.dateOfBirth;
-    _dob.text = profile.dateOfBirth == null ? '' : DateFormat.yMMMd().format(profile.dateOfBirth!);
+    _dob.text = profile.dateOfBirth == null
+        ? ''
+        : DateFormat.yMMMd().format(profile.dateOfBirth!);
     _gender = switch (profile.gender) {
       'MALE' => 'Male',
       'FEMALE' => 'Female',
@@ -152,20 +157,30 @@ class _OnboardingFlowPageState extends ConsumerState<OnboardingFlowPage> {
     _areas.text = profile.serviceAreas ??
         (legacyAreaMarkerIndex < 0
             ? ''
-            : savedAddress.substring(legacyAreaMarkerIndex + legacyAreaMarker.length));
+            : savedAddress
+                .substring(legacyAreaMarkerIndex + legacyAreaMarker.length));
     _travelKm.text = '${profile.serviceRadiusKm ?? 8}';
     _workType = profile.workType == 'PART_TIME' ? 'Part-time' : 'Full-time';
     _urgentJobs = profile.acceptsUrgentJobs;
     if (profile.availabilitySlots.isNotEmpty) {
       _hasSavedAvailability = true;
       const dayCodes = <int, String>{
-        0: 'SUN', 1: 'MON', 2: 'TUE', 3: 'WED', 4: 'THU', 5: 'FRI', 6: 'SAT',
+        0: 'SUN',
+        1: 'MON',
+        2: 'TUE',
+        3: 'WED',
+        4: 'THU',
+        5: 'FRI',
+        6: 'SAT',
       };
       _workingDays
         ..clear()
-        ..addAll(profile.availabilitySlots.map((slot) => dayCodes[slot.dayOfWeek]).whereType<String>());
+        ..addAll(profile.availabilitySlots
+            .map((slot) => dayCodes[slot.dayOfWeek])
+            .whereType<String>());
       final firstSlot = profile.availabilitySlots.first;
-      _from = _parseTime(firstSlot.startTime, const TimeOfDay(hour: 9, minute: 0));
+      _from =
+          _parseTime(firstSlot.startTime, const TimeOfDay(hour: 9, minute: 0));
       _to = _parseTime(firstSlot.endTime, const TimeOfDay(hour: 19, minute: 0));
     }
     _pincodes.text = profile.pincode ?? '';
@@ -208,7 +223,9 @@ class _OnboardingFlowPageState extends ConsumerState<OnboardingFlowPage> {
         await controller.savePersonalDetails();
         final photo = _profilePhoto;
         if (photo != null) {
-          await ref.read(workerProfileRepositoryProvider).uploadAvatar(photo.path, photo.name);
+          await ref
+              .read(workerProfileRepositoryProvider)
+              .uploadAvatar(photo.path, photo.name);
           _profilePhoto = null;
           _profilePhotoUploaded = true;
           ref.invalidate(workerAccountProfileProvider);
@@ -289,7 +306,9 @@ class _OnboardingFlowPageState extends ConsumerState<OnboardingFlowPage> {
         if (file != null) await controller.saveIdentityDocument(file);
         final panFile = _panDoc;
         if (panFile != null && !_panDocUploaded) {
-          await ref.read(workerProfileRepositoryProvider).uploadWorkerDocumentFile(
+          await ref
+              .read(workerProfileRepositoryProvider)
+              .uploadWorkerDocumentFile(
                 type: 'pan',
                 imagePath: panFile.path,
                 filename: panFile.name,
@@ -324,7 +343,8 @@ class _OnboardingFlowPageState extends ConsumerState<OnboardingFlowPage> {
           _toast('Accept the safety declarations.');
           return;
         }
-        controller.updateComplianceDetails(agreementAccepted: true, dataConsentAccepted: true);
+        controller.updateComplianceDetails(
+            agreementAccepted: true, dataConsentAccepted: true);
         await controller.saveComplianceDetails();
         controller.nextStep();
         return;
@@ -351,10 +371,13 @@ class _OnboardingFlowPageState extends ConsumerState<OnboardingFlowPage> {
       final qualifications = _qualifications[category.id] ?? [];
       final summary = [
         category.name,
-        if ((_years[category.id]?.text ?? '').trim().isNotEmpty) '${_years[category.id]!.text.trim()} years',
+        if ((_years[category.id]?.text ?? '').trim().isNotEmpty)
+          '${_years[category.id]!.text.trim()} years',
         if (skills.isNotEmpty) 'Skills: ${skills.join(', ')}',
-        if (qualifications.isNotEmpty) 'Qualifications: ${qualifications.join(', ')}',
-        if ((_expertise[category.id]?.text ?? '').trim().isNotEmpty) _expertise[category.id]!.text.trim(),
+        if (qualifications.isNotEmpty)
+          'Qualifications: ${qualifications.join(', ')}',
+        if ((_expertise[category.id]?.text ?? '').trim().isNotEmpty)
+          _expertise[category.id]!.text.trim(),
       ].join(' - ');
       final limit = summary.length < 500 ? summary.length : 500;
       return summary.substring(0, limit);
@@ -378,17 +401,25 @@ class _OnboardingFlowPageState extends ConsumerState<OnboardingFlowPage> {
       if (summary == null) continue;
 
       final years = _years.putIfAbsent(category.id, TextEditingController.new);
-      final expertise = _expertise.putIfAbsent(category.id, TextEditingController.new);
+      final expertise =
+          _expertise.putIfAbsent(category.id, TextEditingController.new);
       final skillSet = _skills.putIfAbsent(category.id, () => <String>{});
-      final qualifications = _qualifications.putIfAbsent(category.id, () => <String>[]);
+      final qualifications =
+          _qualifications.putIfAbsent(category.id, () => <String>[]);
       final expertiseParts = <String>[];
       for (final item in summary.substring(prefix.length).split(' - ')) {
         if (item.endsWith(' years')) {
           years.text = item.substring(0, item.length - ' years'.length);
         } else if (item.startsWith('Skills: ')) {
-          skillSet.addAll(item.substring('Skills: '.length).split(', ').where((value) => value.isNotEmpty));
+          skillSet.addAll(item
+              .substring('Skills: '.length)
+              .split(', ')
+              .where((value) => value.isNotEmpty));
         } else if (item.startsWith('Qualifications: ')) {
-          qualifications.addAll(item.substring('Qualifications: '.length).split(', ').where((value) => value.isNotEmpty));
+          qualifications.addAll(item
+              .substring('Qualifications: '.length)
+              .split(', ')
+              .where((value) => value.isNotEmpty));
         } else {
           expertiseParts.add(item);
         }
@@ -402,7 +433,12 @@ class _OnboardingFlowPageState extends ConsumerState<OnboardingFlowPage> {
     if (parts.length < 2) return fallback;
     final hour = int.tryParse(parts[0]);
     final minute = int.tryParse(parts[1]);
-    if (hour == null || minute == null || hour < 0 || hour > 23 || minute < 0 || minute > 59) {
+    if (hour == null ||
+        minute == null ||
+        hour < 0 ||
+        hour > 23 ||
+        minute < 0 ||
+        minute > 59) {
       return fallback;
     }
     return TimeOfDay(hour: hour, minute: minute);
@@ -419,12 +455,16 @@ class _OnboardingFlowPageState extends ConsumerState<OnboardingFlowPage> {
           autofocus: true,
           textCapitalization: TextCapitalization.words,
           maxLength: 120,
-          decoration: const InputDecoration(labelText: 'Qualification or certificate'),
+          decoration:
+              const InputDecoration(labelText: 'Qualification or certificate'),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Cancel')),
+          TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Cancel')),
           FilledButton(
-            onPressed: () => Navigator.pop(dialogContext, controller.text.trim()),
+            onPressed: () =>
+                Navigator.pop(dialogContext, controller.text.trim()),
             child: const Text('Add'),
           ),
         ],
@@ -451,24 +491,34 @@ class _OnboardingFlowPageState extends ConsumerState<OnboardingFlowPage> {
             }
             return issue.toString();
           }).join(', ');
-          return message == null || message.isEmpty ? details : '$message: $details';
+          return message == null || message.isEmpty
+              ? details
+              : '$message: $details';
         }
         if (message != null && message.isNotEmpty) return message;
       }
-      if (error.response?.statusCode == 401 || error.response?.statusCode == 403) {
+      if (error.response?.statusCode == 401 ||
+          error.response?.statusCode == 403) {
         return 'Please sign in again to continue.';
       }
     }
     final text = error.toString();
-    if (text.contains('401') || text.contains('403')) return 'Please sign in again to continue.';
-    if (text.toLowerCase().contains('missing')) return 'Some required details are still missing.';
+    if (text.contains('401') || text.contains('403')) {
+      return 'Please sign in again to continue.';
+    }
+    if (text.toLowerCase().contains('missing')) {
+      return 'Some required details are still missing.';
+    }
     final detail = error.toString().replaceFirst('Exception: ', '').trim();
-    return detail.isEmpty ? 'Could not save this step. Please try again.' : detail;
+    return detail.isEmpty
+        ? 'Could not save this step. Please try again.'
+        : detail;
   }
 
   void _toast(String message) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(message)));
   }
 
   Future<void> _pickImage(ValueChanged<XFile> onPicked) async {
@@ -493,7 +543,8 @@ class _OnboardingFlowPageState extends ConsumerState<OnboardingFlowPage> {
       ),
     );
     if (source == null) return;
-    final file = await ImagePicker().pickImage(source: source, imageQuality: 86);
+    final file =
+        await ImagePicker().pickImage(source: source, imageQuality: 86);
     if (file != null) onPicked(file);
   }
 
@@ -513,7 +564,8 @@ class _OnboardingFlowPageState extends ConsumerState<OnboardingFlowPage> {
   }
 
   Future<void> _pickTime(bool start) async {
-    final picked = await showTimePicker(context: context, initialTime: start ? _from : _to);
+    final picked = await showTimePicker(
+        context: context, initialTime: start ? _from : _to);
     if (picked == null) return;
     setState(() {
       _hasEditedAvailability = true;
@@ -526,21 +578,24 @@ class _OnboardingFlowPageState extends ConsumerState<OnboardingFlowPage> {
   }
 
   List<CatalogCategory> _catalog(WorkerOnboardingState state) {
-    return state.categories.isEmpty ? _fallbackCategories : state.categories;
+    return state.categories;
   }
 
   List<CatalogCategory> _selectedCategories(WorkerOnboardingState state) {
     return _catalog(state)
-        .where((category) => state.draft.selectedCategoryIds.contains(category.id))
+        .where(
+            (category) => state.draft.selectedCategoryIds.contains(category.id))
         .toList(growable: false);
   }
 
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(onboardingControllerProvider);
-    ref.listen<WorkerOnboardingState>(onboardingControllerProvider, (previous, next) {
+    ref.listen<WorkerOnboardingState>(onboardingControllerProvider,
+        (previous, next) {
       if (!_seeded && next.profile != null) _seed(next.profile!);
-      if (previous?.currentStep != next.currentStep && _pageController.hasClients) {
+      if (previous?.currentStep != next.currentStep &&
+          _pageController.hasClients) {
         _pageController.animateToPage(
           next.currentStep,
           duration: const Duration(milliseconds: 280),
@@ -564,26 +619,106 @@ class _OnboardingFlowPageState extends ConsumerState<OnboardingFlowPage> {
               busy: state.isBusy,
               onBack: state.currentStep == 0
                   ? () => context.go('/login')
-                  : () => ref.read(onboardingControllerProvider.notifier).previousStep(),
+                  : () => ref
+                      .read(onboardingControllerProvider.notifier)
+                      .previousStep(),
             ),
             Expanded(
               child: PageView(
                 controller: _pageController,
                 physics: const NeverScrollableScrollPhysics(),
                 children: [
-                  _screen(0, state, 'Become a Veedufix Partner', 'Get local service jobs, grow your business, and earn with Veedufix.', Icons.engineering_rounded, _welcome()),
-                  _screen(1, state, 'Tell us about yourself', 'Keep this simple. Required fields are marked.', Icons.person_rounded, _basicProfile()),
-                  _screen(2, state, 'What services do you provide?', 'Select all services you are qualified to provide.', Icons.grid_view_rounded, _services(state)),
-                  _screen(3, state, 'Tell us about your experience', 'Add experience and relevant skills for every selected service.', Icons.workspace_premium_rounded, _experience(state)),
-                  _screen(4, state, 'Where and when do you work?', 'Set your service area, pincodes, travel radius, and weekly availability.', Icons.location_on_rounded, _workPreferences()),
-                  _screen(5, state, 'Verify your identity', 'We verify partners to keep Veedufix safe and trustworthy.', Icons.security_rounded, _kyc(state)),
-                  _screen(6, state, 'Add professional documents', 'Only upload certificates relevant to selected services.', Icons.badge_rounded, _professionalDocs(state)),
-                  _screen(7, state, 'Set up your payouts', 'Add bank details so Veedufix can send your earnings.', Icons.account_balance_rounded, _bank()),
-                  _screen(8, state, 'Business information', 'Optional. You can continue as an individual worker.', Icons.storefront_rounded, _business()),
-                  _screen(9, state, 'Set your service pricing', 'Review Veedufix standard pricing before continuing.', Icons.currency_rupee_rounded, _pricing()),
-                  _screen(10, state, 'Safety & trust', 'Confirm these declarations before profile review.', Icons.health_and_safety_rounded, _safety()),
-                  _screen(11, state, 'Review your information', 'Check everything before submitting for verification.', Icons.fact_check_rounded, _review(state)),
-                  _screen(12, state, 'You are almost ready!', 'Your Partner profile has been submitted for verification.', Icons.hourglass_top_rounded, _submitted()),
+                  _screen(
+                      0,
+                      state,
+                      'Become a Veedufix Partner',
+                      'Get local service jobs, grow your business, and earn with Veedufix.',
+                      Icons.engineering_rounded,
+                      _welcome()),
+                  _screen(
+                      1,
+                      state,
+                      'Tell us about yourself',
+                      'Keep this simple. Required fields are marked.',
+                      Icons.person_rounded,
+                      _basicProfile()),
+                  _screen(
+                      2,
+                      state,
+                      'What services do you provide?',
+                      'Select all services you are qualified to provide.',
+                      Icons.grid_view_rounded,
+                      _services(state)),
+                  _screen(
+                      3,
+                      state,
+                      'Tell us about your experience',
+                      'Add experience and relevant skills for every selected service.',
+                      Icons.workspace_premium_rounded,
+                      _experience(state)),
+                  _screen(
+                      4,
+                      state,
+                      'Where and when do you work?',
+                      'Set your service area, pincodes, travel radius, and weekly availability.',
+                      Icons.location_on_rounded,
+                      _workPreferences()),
+                  _screen(
+                      5,
+                      state,
+                      'Verify your identity',
+                      'We verify partners to keep Veedufix safe and trustworthy.',
+                      Icons.security_rounded,
+                      _kyc(state)),
+                  _screen(
+                      6,
+                      state,
+                      'Add professional documents',
+                      'Only upload certificates relevant to selected services.',
+                      Icons.badge_rounded,
+                      _professionalDocs(state)),
+                  _screen(
+                      7,
+                      state,
+                      'Set up your payouts',
+                      'Add bank details so Veedufix can send your earnings.',
+                      Icons.account_balance_rounded,
+                      _bank()),
+                  _screen(
+                      8,
+                      state,
+                      'Business information',
+                      'Optional. You can continue as an individual worker.',
+                      Icons.storefront_rounded,
+                      _business()),
+                  _screen(
+                      9,
+                      state,
+                      'Set your service pricing',
+                      'Review Veedufix standard pricing before continuing.',
+                      Icons.currency_rupee_rounded,
+                      _pricing()),
+                  _screen(
+                      10,
+                      state,
+                      'Safety & trust',
+                      'Confirm these declarations before profile review.',
+                      Icons.health_and_safety_rounded,
+                      _safety()),
+                  _screen(
+                      11,
+                      state,
+                      'Review your information',
+                      'Check everything before submitting for verification.',
+                      Icons.fact_check_rounded,
+                      _review(state)),
+                  _screen(
+                      12,
+                      state,
+                      'You are almost ready!',
+                      'Your Partner profile has been submitted for verification.',
+                      Icons.hourglass_top_rounded,
+                      _submitted()),
                 ],
               ),
             ),
@@ -597,7 +732,8 @@ class _OnboardingFlowPageState extends ConsumerState<OnboardingFlowPage> {
                     backgroundColor: _gold,
                     foregroundColor: _ink,
                     elevation: 0,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(18)),
                   ),
                   onPressed: state.isBusy ? null : _next,
                   child: Text(
@@ -621,7 +757,8 @@ class _OnboardingFlowPageState extends ConsumerState<OnboardingFlowPage> {
     );
   }
 
-  Widget _screen(int step, WorkerOnboardingState state, String title, String subtitle, IconData icon, Widget child) {
+  Widget _screen(int step, WorkerOnboardingState state, String title,
+      String subtitle, IconData icon, Widget child) {
     return Form(
       key: _formKeys[step],
       child: ListView(
@@ -645,15 +782,23 @@ class _OnboardingFlowPageState extends ConsumerState<OnboardingFlowPage> {
             Container(
               height: 148,
               width: double.infinity,
-              decoration: BoxDecoration(color: const Color(0xFFFFF3D3), borderRadius: BorderRadius.circular(26)),
-              child: const Icon(Icons.home_repair_service_rounded, color: _gold, size: 84),
+              decoration: BoxDecoration(
+                  color: const Color(0xFFFFF3D3),
+                  borderRadius: BorderRadius.circular(26)),
+              child: const Icon(Icons.home_repair_service_rounded,
+                  color: _gold, size: 84),
             ),
             const SizedBox(height: 18),
             const _Benefit(icon: Icons.work_rounded, label: 'Get local jobs'),
-            const _Benefit(icon: Icons.schedule_rounded, label: 'Flexible working hours'),
-            const _Benefit(icon: Icons.groups_rounded, label: 'Grow your customer base'),
-            const _Benefit(icon: Icons.verified_rounded, label: 'Secure digital payouts'),
-            TextButton(onPressed: () => context.go('/login'), child: const Text('Already registered? Sign In')),
+            const _Benefit(
+                icon: Icons.schedule_rounded, label: 'Flexible working hours'),
+            const _Benefit(
+                icon: Icons.groups_rounded, label: 'Grow your customer base'),
+            const _Benefit(
+                icon: Icons.verified_rounded, label: 'Secure digital payouts'),
+            TextButton(
+                onPressed: () => context.go('/login'),
+                child: const Text('Already registered? Sign In')),
           ],
         ),
       );
@@ -663,101 +808,284 @@ class _OnboardingFlowPageState extends ConsumerState<OnboardingFlowPage> {
           children: [
             InkWell(
               onTap: () => _pickImage((file) => setState(() {
-                _profilePhoto = file;
-                _profilePhotoUploaded = false;
-              })),
+                    _profilePhoto = file;
+                    _profilePhotoUploaded = false;
+                  })),
               child: CircleAvatar(
                 radius: 44,
                 backgroundColor: const Color(0xFFFFF3D3),
-                child: Icon(_profilePhoto == null && !_profilePhotoUploaded ? Icons.add_a_photo_rounded : Icons.check_rounded, color: _gold),
+                child: Icon(
+                    _profilePhoto == null && !_profilePhotoUploaded
+                        ? Icons.add_a_photo_rounded
+                        : Icons.check_rounded,
+                    color: _gold),
               ),
             ),
             const SizedBox(height: 16),
-            _field(_fullName, 'Full name', Icons.person_rounded, validator: _required),
+            _field(_fullName, 'Full name', Icons.person_rounded,
+                validator: _required),
             const SizedBox(height: 12),
             TextFormField(
               controller: _dob,
               readOnly: true,
               onTap: _pickDate,
-              decoration: const InputDecoration(labelText: 'Date of birth / age *', prefixIcon: Icon(Icons.cake_rounded)),
+              decoration: const InputDecoration(
+                  labelText: 'Date of birth / age *',
+                  prefixIcon: Icon(Icons.cake_rounded)),
               validator: (value) => _adultDate(value, _dateOfBirth),
             ),
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
               initialValue: _gender,
-              decoration: const InputDecoration(labelText: 'Gender *', prefixIcon: Icon(Icons.badge_rounded)),
-              items: const ['Male', 'Female', 'Other', 'Prefer not to say'].map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
+              decoration: const InputDecoration(
+                  labelText: 'Gender *', prefixIcon: Icon(Icons.badge_rounded)),
+              items: const ['Male', 'Female', 'Other', 'Prefer not to say']
+                  .map((e) => DropdownMenuItem(value: e, child: Text(e)))
+                  .toList(),
               onChanged: (value) => setState(() => _gender = value),
               validator: (value) => value == null ? 'Required' : null,
             ),
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
               initialValue: _language,
-              decoration: const InputDecoration(labelText: 'Preferred language *', prefixIcon: Icon(Icons.translate_rounded)),
-              items: const ['Tamil', 'English', 'Hindi', 'Malayalam', 'Telugu', 'Kannada'].map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
-              onChanged: (value) => setState(() => _language = value ?? _language),
+              decoration: const InputDecoration(
+                  labelText: 'Preferred language *',
+                  prefixIcon: Icon(Icons.translate_rounded)),
+              items: const [
+                'Tamil',
+                'English',
+                'Hindi',
+                'Malayalam',
+                'Telugu',
+                'Kannada'
+              ].map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
+              onChanged: (value) =>
+                  setState(() => _language = value ?? _language),
             ),
             const SizedBox(height: 12),
-            _field(_whatsapp, 'WhatsApp number (optional)', Icons.chat_rounded, keyboardType: TextInputType.phone, inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(10)], requiredMark: false, validator: _optionalPhone),
+            _field(_whatsapp, 'WhatsApp number (optional)', Icons.chat_rounded,
+                keyboardType: TextInputType.phone,
+                inputFormatters: [
+                  FilteringTextInputFormatter.digitsOnly,
+                  LengthLimitingTextInputFormatter(10)
+                ],
+                requiredMark: false,
+                validator: _optionalPhone),
             const SizedBox(height: 12),
-            _field(_emergencyName, 'Emergency contact name', Icons.contact_emergency_rounded, validator: _contactName),
+            _field(_emergencyName, 'Emergency contact name',
+                Icons.contact_emergency_rounded,
+                validator: _contactName),
             const SizedBox(height: 12),
-            _field(_emergencyPhone, 'Emergency contact number', Icons.phone_rounded, keyboardType: TextInputType.phone, inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(10)], validator: _phone),
+            _field(_emergencyPhone, 'Emergency contact number',
+                Icons.phone_rounded,
+                keyboardType: TextInputType.phone,
+                inputFormatters: [
+                  FilteringTextInputFormatter.digitsOnly,
+                  LengthLimitingTextInputFormatter(10)
+                ],
+                validator: _phone),
           ],
         ),
       );
 
   Widget _services(WorkerOnboardingState state) {
-    final categories = _catalog(state);
+    final query = _serviceSearch.text.trim().toLowerCase();
+    final categories = _catalog(state).where((category) {
+      return category.subcategories
+          .any((subcategory) => subcategory.services.any((service) {
+                return query.isEmpty ||
+                    category.name.toLowerCase().contains(query) ||
+                    subcategory.name.toLowerCase().contains(query) ||
+                    service.name.toLowerCase().contains(query);
+              }));
+    }).toList(growable: false);
+    final selectedServiceIds = state.draft.selectedServiceIds;
+    final totalAvailable = state.categories.fold<int>(
+      0,
+      (count, category) =>
+          count +
+          category.subcategories.fold<int>(
+              0, (sum, subcategory) => sum + subcategory.services.length),
+    );
+
     return Column(
       children: [
         if (state.isLoadingCategories) const LinearProgressIndicator(),
-        GridView.builder(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          itemCount: categories.length,
-          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 2,
-            crossAxisSpacing: 12,
-            mainAxisSpacing: 12,
-            childAspectRatio: 1.02,
+        TextField(
+          controller: _serviceSearch,
+          onChanged: (_) => setState(() {}),
+          decoration: const InputDecoration(
+            labelText: 'Search services',
+            prefixIcon: Icon(Icons.search_rounded),
+            hintText: 'Try cleaning, repair, installation...',
           ),
-          itemBuilder: (context, index) {
-            final category = categories[index];
-            final selected = state.draft.selectedCategoryIds.contains(category.id);
-            return _ServiceCard(
-              title: category.name,
-              icon: _iconFor(category),
-              selected: selected,
-              onTap: () => ref.read(onboardingControllerProvider.notifier).toggleCategory(category.id, !selected),
-            );
-          },
         ),
-        const SizedBox(height: 14),
-        ..._selectedCategories(state).map((category) => _SkillPreview(title: category.name, skills: _skillsFor(category))),
+        const SizedBox(height: 12),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: Text(
+            '${selectedServiceIds.length} selected · $totalAvailable available',
+            style: const TextStyle(color: _muted, fontWeight: FontWeight.w700),
+          ),
+        ),
+        const SizedBox(height: 10),
+        if (state.categories.isEmpty)
+          _Panel(
+            child: Column(
+              children: [
+                const Icon(Icons.home_repair_service_outlined,
+                    color: _gold, size: 36),
+                const SizedBox(height: 8),
+                Text(
+                  state.isLoadingCategories
+                      ? 'Loading available services...'
+                      : state.errorMessage ??
+                          'No active services are available yet. Please try again or contact Veedufix support.',
+                  textAlign: TextAlign.center,
+                ),
+                if (!state.isLoadingCategories) ...[
+                  const SizedBox(height: 8),
+                  TextButton.icon(
+                    onPressed: () => ref
+                        .read(onboardingControllerProvider.notifier)
+                        .refreshCatalog(),
+                    icon: const Icon(Icons.refresh_rounded),
+                    label: const Text('Try again'),
+                  ),
+                ],
+              ],
+            ),
+          )
+        else if (totalAvailable == 0)
+          const _Panel(
+            child: Text(
+              'There are no active services to select. Ask the admin team to activate services in Catalog Manager.',
+              textAlign: TextAlign.center,
+            ),
+          )
+        else if (categories.isEmpty)
+          const _Panel(child: Text('No services match your search.'))
+        else
+          ...categories.map((category) {
+            final subcategories = category.subcategories.where((subcategory) {
+              return subcategory.services.any((service) =>
+                  query.isEmpty ||
+                  category.name.toLowerCase().contains(query) ||
+                  subcategory.name.toLowerCase().contains(query) ||
+                  service.name.toLowerCase().contains(query));
+            }).toList(growable: false);
+            final services = category.subcategories
+                .expand((subcategory) => subcategory.services)
+                .toList(growable: false);
+            final selectedCount = services
+                .where((service) => selectedServiceIds.contains(service.id))
+                .length;
+            final allSelected =
+                services.isNotEmpty && selectedCount == services.length;
+
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: _Panel(
+                child: ExpansionTile(
+                  key: ValueKey('${category.id}-$query'),
+                  initiallyExpanded: query.isNotEmpty || selectedCount > 0,
+                  tilePadding: EdgeInsets.zero,
+                  childrenPadding: EdgeInsets.zero,
+                  leading: Icon(_iconFor(category), color: _gold),
+                  title: Text(category.name,
+                      style: const TextStyle(fontWeight: FontWeight.w800)),
+                  subtitle: Text(
+                      '${services.length} services · $selectedCount selected'),
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      TextButton(
+                        onPressed: () => ref
+                            .read(onboardingControllerProvider.notifier)
+                            .toggleCategory(category.id, !allSelected),
+                        child: Text(allSelected ? 'Clear' : 'Select all'),
+                      ),
+                      const Icon(Icons.expand_more_rounded),
+                    ],
+                  ),
+                  children: [
+                    for (final subcategory in subcategories)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(subcategory.name,
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.w700,
+                                    color: _muted)),
+                            const SizedBox(height: 6),
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 4,
+                              children: subcategory.services.where((service) {
+                                return query.isEmpty ||
+                                    category.name
+                                        .toLowerCase()
+                                        .contains(query) ||
+                                    subcategory.name
+                                        .toLowerCase()
+                                        .contains(query) ||
+                                    service.name.toLowerCase().contains(query);
+                              }).map((service) {
+                                return FilterChip(
+                                  label: Text(service.name),
+                                  selected:
+                                      selectedServiceIds.contains(service.id),
+                                  onSelected: (selected) => ref
+                                      .read(
+                                          onboardingControllerProvider.notifier)
+                                      .toggleService(service.id, selected),
+                                );
+                              }).toList(growable: false),
+                            ),
+                          ],
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            );
+          }),
       ],
     );
   }
 
   Widget _experience(WorkerOnboardingState state) {
     final categories = _selectedCategories(state);
-    if (categories.isEmpty) return const _Panel(child: Text('Select services first.'));
+    if (categories.isEmpty) {
+      return const _Panel(child: Text('Select services first.'));
+    }
     _seedExperienceFromProfile(state, categories);
     return Column(
       children: categories.map((category) {
-        final years = _years.putIfAbsent(category.id, TextEditingController.new);
-        final expertise = _expertise.putIfAbsent(category.id, TextEditingController.new);
-        final selectedSkills = _skills.putIfAbsent(category.id, () => <String>{});
-        final qualifications = _qualifications.putIfAbsent(category.id, () => <String>[]);
+        final years =
+            _years.putIfAbsent(category.id, TextEditingController.new);
+        final expertise =
+            _expertise.putIfAbsent(category.id, TextEditingController.new);
+        final selectedSkills =
+            _skills.putIfAbsent(category.id, () => <String>{});
+        final qualifications =
+            _qualifications.putIfAbsent(category.id, () => <String>[]);
         return Padding(
           padding: const EdgeInsets.only(bottom: 12),
           child: _Panel(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(category.name, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900)),
+                Text(category.name,
+                    style: Theme.of(context)
+                        .textTheme
+                        .titleMedium
+                        ?.copyWith(fontWeight: FontWeight.w900)),
                 const SizedBox(height: 12),
-                _field(years, 'Years of experience', Icons.timeline_rounded, keyboardType: TextInputType.number, validator: _required),
+                _field(years, 'Years of experience', Icons.timeline_rounded,
+                    keyboardType: TextInputType.number, validator: _required),
                 const SizedBox(height: 12),
                 Wrap(
                   spacing: 8,
@@ -766,7 +1094,9 @@ class _OnboardingFlowPageState extends ConsumerState<OnboardingFlowPage> {
                     return FilterChip(
                       label: Text(skill),
                       selected: selectedSkills.contains(skill),
-                      onSelected: (value) => setState(() => value ? selectedSkills.add(skill) : selectedSkills.remove(skill)),
+                      onSelected: (value) => setState(() => value
+                          ? selectedSkills.add(skill)
+                          : selectedSkills.remove(skill)),
                     );
                   }).toList(),
                 ),
@@ -774,8 +1104,12 @@ class _OnboardingFlowPageState extends ConsumerState<OnboardingFlowPage> {
                 TextFormField(
                   controller: expertise,
                   maxLines: 3,
-                  decoration: const InputDecoration(labelText: 'Tell customers about your expertise *', prefixIcon: Icon(Icons.description_rounded)),
-                  validator: (value) => (value ?? '').trim().length < 10 ? 'Add a short expertise note' : null,
+                  decoration: const InputDecoration(
+                      labelText: 'Tell customers about your expertise *',
+                      prefixIcon: Icon(Icons.description_rounded)),
+                  validator: (value) => (value ?? '').trim().length < 10
+                      ? 'Add a short expertise note'
+                      : null,
                 ),
                 const SizedBox(height: 10),
                 Wrap(
@@ -784,7 +1118,8 @@ class _OnboardingFlowPageState extends ConsumerState<OnboardingFlowPage> {
                   children: [
                     ...qualifications.map((item) => Chip(
                           label: Text(item),
-                          onDeleted: () => setState(() => qualifications.remove(item)),
+                          onDeleted: () =>
+                              setState(() => qualifications.remove(item)),
                         )),
                     ActionChip(
                       avatar: const Icon(Icons.add_rounded, size: 18),
@@ -804,20 +1139,37 @@ class _OnboardingFlowPageState extends ConsumerState<OnboardingFlowPage> {
   Widget _workPreferences() => _Panel(
         child: Column(
           children: [
-            _field(_city, 'City', Icons.location_city_rounded, validator: _required),
+            _field(_city, 'City', Icons.location_city_rounded,
+                validator: _required),
             const SizedBox(height: 12),
-            _field(_streetAddress, 'Street address', Icons.home_outlined, validator: _required),
+            _field(_streetAddress, 'Street address', Icons.home_outlined,
+                validator: _required),
             const SizedBox(height: 12),
-            _field(_areas, 'Areas/localities served', Icons.map_rounded, validator: _required),
+            _field(_areas, 'Areas/localities served', Icons.map_rounded,
+                validator: _required),
             const SizedBox(height: 12),
-            _field(_pincodes, 'Primary service pincode', Icons.pin_drop_rounded, keyboardType: TextInputType.number, inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(6)], validator: _pincodeValidator),
+            _field(_pincodes, 'Primary service pincode', Icons.pin_drop_rounded,
+                keyboardType: TextInputType.number,
+                inputFormatters: [
+                  FilteringTextInputFormatter.digitsOnly,
+                  LengthLimitingTextInputFormatter(6)
+                ],
+                validator: _pincodeValidator),
             const SizedBox(height: 12),
-            _field(_travelKm, 'Maximum travel distance (km)', Icons.route_rounded, keyboardType: TextInputType.number, inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(3)], validator: _travelDistanceValidator),
+            _field(
+                _travelKm, 'Maximum travel distance (km)', Icons.route_rounded,
+                keyboardType: TextInputType.number,
+                inputFormatters: [
+                  FilteringTextInputFormatter.digitsOnly,
+                  LengthLimitingTextInputFormatter(3)
+                ],
+                validator: _travelDistanceValidator),
             const SizedBox(height: 16),
             _sectionTitle('Working days'),
             Wrap(
               spacing: 8,
-              children: const ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'].map((day) {
+              children: const ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN']
+                  .map((day) {
                 return FilterChip(
                   label: Text(day),
                   selected: _workingDays.contains(day),
@@ -835,9 +1187,19 @@ class _OnboardingFlowPageState extends ConsumerState<OnboardingFlowPage> {
             const SizedBox(height: 14),
             Row(
               children: [
-                Expanded(child: OutlinedButton.icon(onPressed: () => _pickTime(true), icon: const Icon(Icons.schedule_rounded), label: Text(_from.format(context)))),
-                const Padding(padding: EdgeInsets.symmetric(horizontal: 8), child: Text('to')),
-                Expanded(child: OutlinedButton.icon(onPressed: () => _pickTime(false), icon: const Icon(Icons.schedule_rounded), label: Text(_to.format(context)))),
+                Expanded(
+                    child: OutlinedButton.icon(
+                        onPressed: () => _pickTime(true),
+                        icon: const Icon(Icons.schedule_rounded),
+                        label: Text(_from.format(context)))),
+                const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 8),
+                    child: Text('to')),
+                Expanded(
+                    child: OutlinedButton.icon(
+                        onPressed: () => _pickTime(false),
+                        icon: const Icon(Icons.schedule_rounded),
+                        label: Text(_to.format(context)))),
               ],
             ),
             const SizedBox(height: 12),
@@ -847,7 +1209,8 @@ class _OnboardingFlowPageState extends ConsumerState<OnboardingFlowPage> {
                 ButtonSegment(value: 'Full-time', label: Text('Full-time')),
                 ButtonSegment(value: 'Part-time', label: Text('Part-time')),
               ],
-              onSelectionChanged: (value) => setState(() => _workType = value.first),
+              onSelectionChanged: (value) =>
+                  setState(() => _workType = value.first),
             ),
             SwitchListTile.adaptive(
               contentPadding: EdgeInsets.zero,
@@ -862,38 +1225,69 @@ class _OnboardingFlowPageState extends ConsumerState<OnboardingFlowPage> {
   Widget _kyc(WorkerOnboardingState state) => _Panel(
         child: Column(
           children: [
-            _field(_aadhaar, 'Aadhaar / accepted ID number', Icons.credit_card_rounded, keyboardType: TextInputType.number, inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(12)], validator: _aadhaarValidator),
+            _field(_aadhaar, 'Aadhaar / accepted ID number',
+                Icons.credit_card_rounded,
+                keyboardType: TextInputType.number,
+                inputFormatters: [
+                  FilteringTextInputFormatter.digitsOnly,
+                  LengthLimitingTextInputFormatter(12)
+                ],
+                validator: _aadhaarValidator),
             const SizedBox(height: 12),
-            _field(_pan, 'PAN (optional)', Icons.badge_outlined, requiredMark: false),
+            _field(_pan, 'PAN (optional)', Icons.badge_outlined,
+                requiredMark: false),
             const SizedBox(height: 12),
             _UploadTile(
               title: 'Identity Proof',
               subtitle: 'Required for secure verification',
-              uploaded: state.draft.aadhaarDocumentFile != null || state.profile?.hasAadhaarDoc == true,
-              onTap: () => _pickImage((file) => ref.read(onboardingControllerProvider.notifier).setAadhaarDocumentFile(file)),
+              uploaded: state.draft.aadhaarDocumentFile != null ||
+                  state.profile?.hasAadhaarDoc == true,
+              onTap: () => _pickImage((file) => ref
+                  .read(onboardingControllerProvider.notifier)
+                  .setAadhaarDocumentFile(file)),
             ),
-            _UploadTile(title: 'PAN', subtitle: 'Optional unless requested for verification', uploaded: _panDocUploaded, onTap: () => _pickImage((file) => setState(() {
-              _panDoc = file;
-              _panDocUploaded = false;
-            }))),
-            const _InfoBox(text: 'If a selfie check is required, Veedufix will request it during verification.', icon: Icons.face_rounded),
-            const _InfoBox(text: 'Your documents are securely stored and used for verification purposes.', icon: Icons.lock_rounded),
+            _UploadTile(
+                title: 'PAN',
+                subtitle: 'Optional unless requested for verification',
+                uploaded: _panDocUploaded,
+                onTap: () => _pickImage((file) => setState(() {
+                      _panDoc = file;
+                      _panDocUploaded = false;
+                    }))),
+            const _InfoBox(
+                text:
+                    'If a selfie check is required, Veedufix will request it during verification.',
+                icon: Icons.face_rounded),
+            const _InfoBox(
+                text:
+                    'Your documents are securely stored and used for verification purposes.',
+                icon: Icons.lock_rounded),
           ],
         ),
       );
 
   Widget _professionalDocs(WorkerOnboardingState state) {
-    final required = _selectedCategories(state).where(_needsCertificate).toList();
+    final required =
+        _selectedCategories(state).where(_needsCertificate).toList();
     if (required.isEmpty) {
-      return const _Panel(child: Column(children: [Icon(Icons.check_circle_rounded, color: Color(0xFF16A34A), size: 42), SizedBox(height: 10), Text('Nothing required for your selected services.'), Text('You can skip for now.')]));
+      return const _Panel(
+          child: Column(children: [
+        Icon(Icons.check_circle_rounded, color: Color(0xFF16A34A), size: 42),
+        SizedBox(height: 10),
+        Text('Nothing required for your selected services.'),
+        Text('You can skip for now.')
+      ]));
     }
     return Column(
       children: required.map((category) {
         return _UploadTile(
           title: '${category.name} certification',
           subtitle: 'Upload only if this service requires proof',
-          uploaded: state.draft.certificationFiles.containsKey(category.id) || state.draft.certificationUrls[category.id] == true,
-          onTap: () => ref.read(onboardingControllerProvider.notifier).pickAndSetCertificationFile(category.id),
+          uploaded: state.draft.certificationFiles.containsKey(category.id) ||
+              state.draft.certificationUrls[category.id] == true,
+          onTap: () => ref
+              .read(onboardingControllerProvider.notifier)
+              .pickAndSetCertificationFile(category.id),
         );
       }).toList(),
     );
@@ -902,17 +1296,41 @@ class _OnboardingFlowPageState extends ConsumerState<OnboardingFlowPage> {
   Widget _bank() => _Panel(
         child: Column(
           children: [
-            _field(_accountHolder, 'Account holder name', Icons.person_pin_rounded, validator: (value) => _bankHolderValidator(value, _fullName.text)),
+            _field(
+                _accountHolder, 'Account holder name', Icons.person_pin_rounded,
+                validator: (value) =>
+                    _bankHolderValidator(value, _fullName.text)),
             const SizedBox(height: 12),
-            _field(_bankAccount, 'Bank account number', Icons.account_balance_rounded, keyboardType: TextInputType.number, validator: _bankAccountValidator),
+            _field(_bankAccount, 'Bank account number',
+                Icons.account_balance_rounded,
+                keyboardType: TextInputType.number,
+                validator: _bankAccountValidator),
             const SizedBox(height: 12),
-            _field(_confirmBankAccount, 'Confirm account number', Icons.check_circle_outline_rounded, keyboardType: TextInputType.number, inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(18)], validator: (value) => value == _bankAccount.text ? null : 'Account numbers do not match'),
+            _field(_confirmBankAccount, 'Confirm account number',
+                Icons.check_circle_outline_rounded,
+                keyboardType: TextInputType.number,
+                inputFormatters: [
+                  FilteringTextInputFormatter.digitsOnly,
+                  LengthLimitingTextInputFormatter(18)
+                ],
+                validator: (value) => value == _bankAccount.text
+                    ? null
+                    : 'Account numbers do not match'),
             const SizedBox(height: 12),
-            _field(_ifsc, 'IFSC', Icons.numbers_rounded, inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[a-zA-Z0-9]')), LengthLimitingTextInputFormatter(11)], validator: _ifscValidator),
+            _field(_ifsc, 'IFSC', Icons.numbers_rounded,
+                inputFormatters: [
+                  FilteringTextInputFormatter.allow(RegExp(r'[a-zA-Z0-9]')),
+                  LengthLimitingTextInputFormatter(11)
+                ],
+                validator: _ifscValidator),
             const SizedBox(height: 12),
-            _field(_upi, 'UPI ID (optional)', Icons.payments_rounded, requiredMark: false, validator: _upiValidator),
+            _field(_upi, 'UPI ID (optional)', Icons.payments_rounded,
+                requiredMark: false, validator: _upiValidator),
             const SizedBox(height: 12),
-            const _InfoBox(text: 'Bank account name may be checked against verified identity.', icon: Icons.verified_user_rounded),
+            const _InfoBox(
+                text:
+                    'Bank account name may be checked against verified identity.',
+                icon: Icons.verified_user_rounded),
           ],
         ),
       );
@@ -925,15 +1343,20 @@ class _OnboardingFlowPageState extends ConsumerState<OnboardingFlowPage> {
               value: _hasBusiness,
               onChanged: (value) => setState(() => _hasBusiness = value),
               title: const Text('I operate as a registered business'),
-              subtitle: const Text('No business registration? You can continue.'),
+              subtitle:
+                  const Text('No business registration? You can continue.'),
             ),
             if (_hasBusiness) ...[
               const SizedBox(height: 12),
-              _field(_businessName, 'Business name', Icons.store_rounded, requiredMark: false),
+              _field(_businessName, 'Business name', Icons.store_rounded,
+                  requiredMark: false),
               const SizedBox(height: 12),
-              _field(_businessAddress, 'Business address', Icons.location_on_rounded, requiredMark: false),
+              _field(_businessAddress, 'Business address',
+                  Icons.location_on_rounded,
+                  requiredMark: false),
               const SizedBox(height: 12),
-              _field(_gstin, 'GSTIN (optional)', Icons.receipt_long_rounded, requiredMark: false),
+              _field(_gstin, 'GSTIN (optional)', Icons.receipt_long_rounded,
+                  requiredMark: false),
             ],
           ],
         ),
@@ -947,12 +1370,18 @@ class _OnboardingFlowPageState extends ConsumerState<OnboardingFlowPage> {
               value: _platformPricing,
               onChanged: (value) => setState(() => _platformPricing = value),
               title: const Text('Use Veedufix platform pricing'),
-              subtitle: const Text('Recommended. Customers see admin-defined charges.'),
+              subtitle: const Text(
+                  'Recommended. Customers see admin-defined charges.'),
             ),
             if (_platformPricing)
-              const _InfoBox(text: 'Customers will see the applicable service charges before booking.', icon: Icons.currency_rupee_rounded)
+              const _InfoBox(
+                  text:
+                      'Customers will see the applicable service charges before booking.',
+                  icon: Icons.currency_rupee_rounded)
             else
-              _field(_visitCharge, 'Base visit / service charge', Icons.currency_rupee_rounded, keyboardType: TextInputType.number, requiredMark: false),
+              _field(_visitCharge, 'Base visit / service charge',
+                  Icons.currency_rupee_rounded,
+                  keyboardType: TextInputType.number, requiredMark: false),
           ],
         ),
       );
@@ -960,21 +1389,67 @@ class _OnboardingFlowPageState extends ConsumerState<OnboardingFlowPage> {
   Widget _safety() => _Panel(
         child: Column(
           children: [
-            _check('I confirm that the information provided is accurate.', _infoAccurate, (value) => setState(() => _infoAccurate = value)),
-            _check('I agree to follow Veedufix safety guidelines.', _safetyGuidelines, (value) => setState(() => _safetyGuidelines = value)),
-            _check('I agree to the Partner Terms & Conditions.', _termsAccepted, (value) => setState(() => _termsAccepted = value)),
-            const _InfoBox(text: 'Background verification or references may be requested before approval.', icon: Icons.health_and_safety_rounded),
+            _check(
+                'I confirm that the information provided is accurate.',
+                _infoAccurate,
+                (value) => setState(() => _infoAccurate = value)),
+            _check(
+                'I agree to follow Veedufix safety guidelines.',
+                _safetyGuidelines,
+                (value) => setState(() => _safetyGuidelines = value)),
+            _check('I agree to the Partner Terms & Conditions.', _termsAccepted,
+                (value) => setState(() => _termsAccepted = value)),
+            const _InfoBox(
+                text:
+                    'Background verification or references may be requested before approval.',
+                icon: Icons.health_and_safety_rounded),
           ],
         ),
       );
 
   Widget _review(WorkerOnboardingState state) => Column(
         children: [
-          _Summary(title: 'Personal Information', onEdit: () => ref.read(onboardingControllerProvider.notifier).setStep(1), rows: {'Name': _fullName.text, 'Mobile': state.profile?.phone ?? 'Linked', 'Language': _language}),
-          _Summary(title: 'Services', onEdit: () => ref.read(onboardingControllerProvider.notifier).setStep(2), rows: {'Selected': _selectedCategories(state).map((e) => e.name).join(', ')}),
-          _Summary(title: 'Service Area', onEdit: () => ref.read(onboardingControllerProvider.notifier).setStep(4), rows: {'City': _city.text, 'Pincodes': _pincodes.text, 'Days': _workingDays.join(', ')}),
-          _Summary(title: 'Verification', onEdit: () => ref.read(onboardingControllerProvider.notifier).setStep(5), rows: {'Identity': state.profile?.hasAadhaarDoc == true ? 'Uploaded' : 'Pending', 'PAN': _panDocUploaded ? 'Uploaded' : 'Optional'}),
-          _Summary(title: 'Payment', onEdit: () => ref.read(onboardingControllerProvider.notifier).setStep(7), rows: {'Bank': _bankAccount.text.isEmpty ? 'Not set' : 'Added'}),
+          _Summary(
+              title: 'Personal Information',
+              onEdit: () =>
+                  ref.read(onboardingControllerProvider.notifier).setStep(1),
+              rows: {
+                'Name': _fullName.text,
+                'Mobile': state.profile?.phone ?? 'Linked',
+                'Language': _language
+              }),
+          _Summary(
+              title: 'Services',
+              onEdit: () =>
+                  ref.read(onboardingControllerProvider.notifier).setStep(2),
+              rows: {
+                'Selected':
+                    _selectedCategories(state).map((e) => e.name).join(', ')
+              }),
+          _Summary(
+              title: 'Service Area',
+              onEdit: () =>
+                  ref.read(onboardingControllerProvider.notifier).setStep(4),
+              rows: {
+                'City': _city.text,
+                'Pincodes': _pincodes.text,
+                'Days': _workingDays.join(', ')
+              }),
+          _Summary(
+              title: 'Verification',
+              onEdit: () =>
+                  ref.read(onboardingControllerProvider.notifier).setStep(5),
+              rows: {
+                'Identity': state.profile?.hasAadhaarDoc == true
+                    ? 'Uploaded'
+                    : 'Pending',
+                'PAN': _panDocUploaded ? 'Uploaded' : 'Optional'
+              }),
+          _Summary(
+              title: 'Payment',
+              onEdit: () =>
+                  ref.read(onboardingControllerProvider.notifier).setStep(7),
+              rows: {'Bank': _bankAccount.text.isEmpty ? 'Not set' : 'Added'}),
         ],
       );
 
@@ -1003,13 +1478,21 @@ class _OnboardingFlowPageState extends ConsumerState<OnboardingFlowPage> {
   Widget _sectionTitle(String text) {
     return Align(
       alignment: Alignment.centerLeft,
-      child: Text(text, style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w900)),
+      child: Text(text,
+          style: Theme.of(context)
+              .textTheme
+              .titleSmall
+              ?.copyWith(fontWeight: FontWeight.w900)),
     );
   }
 }
 
 class _ProgressHeader extends StatelessWidget {
-  const _ProgressHeader({required this.currentStep, required this.totalSteps, required this.busy, required this.onBack});
+  const _ProgressHeader(
+      {required this.currentStep,
+      required this.totalSteps,
+      required this.busy,
+      required this.onBack});
   final int currentStep;
   final int totalSteps;
   final bool busy;
@@ -1022,26 +1505,38 @@ class _ProgressHeader extends StatelessWidget {
       margin: const EdgeInsets.fromLTRB(12, 8, 20, 14),
       child: Row(
         children: [
-          IconButton(onPressed: onBack, icon: const Icon(Icons.arrow_back_rounded)),
+          IconButton(
+              onPressed: onBack, icon: const Icon(Icons.arrow_back_rounded)),
           Expanded(
             child: Container(
               padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(color: _card, borderRadius: BorderRadius.circular(22), border: Border.all(color: _line)),
+              decoration: BoxDecoration(
+                  color: _card,
+                  borderRadius: BorderRadius.circular(22),
+                  border: Border.all(color: _line)),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
                     children: [
-                      Expanded(child: Text('Profile Completion $percent%', style: const TextStyle(fontWeight: FontWeight.w900))),
+                      Expanded(
+                          child: Text('Profile Completion $percent%',
+                              style: const TextStyle(
+                                  fontWeight: FontWeight.w900))),
                       _SaveBadge(busy: busy, compact: true),
                     ],
                   ),
                   const SizedBox(height: 8),
-                  Text('Step ${currentStep + 1} of $totalSteps', style: const TextStyle(color: _muted)),
+                  Text('Step ${currentStep + 1} of $totalSteps',
+                      style: const TextStyle(color: _muted)),
                   const SizedBox(height: 10),
                   ClipRRect(
                     borderRadius: BorderRadius.circular(999),
-                    child: LinearProgressIndicator(value: (currentStep + 1) / totalSteps, minHeight: 7, color: _gold, backgroundColor: const Color(0xFFF0E7D8)),
+                    child: LinearProgressIndicator(
+                        value: (currentStep + 1) / totalSteps,
+                        minHeight: 7,
+                        color: _gold,
+                        backgroundColor: const Color(0xFFF0E7D8)),
                   ),
                 ],
               ),
@@ -1054,7 +1549,8 @@ class _ProgressHeader extends StatelessWidget {
 }
 
 class _HeroPanel extends StatelessWidget {
-  const _HeroPanel({required this.title, required this.subtitle, required this.icon});
+  const _HeroPanel(
+      {required this.title, required this.subtitle, required this.icon});
   final String title;
   final String subtitle;
   final IconData icon;
@@ -1063,18 +1559,38 @@ class _HeroPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(color: _ink, borderRadius: BorderRadius.circular(28), boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.14), blurRadius: 22, offset: const Offset(0, 12))]),
+      decoration: BoxDecoration(
+          color: _ink,
+          borderRadius: BorderRadius.circular(28),
+          boxShadow: [
+            BoxShadow(
+                color: Colors.black.withValues(alpha: 0.14),
+                blurRadius: 22,
+                offset: const Offset(0, 12))
+          ]),
       child: Row(
         children: [
-          Container(width: 58, height: 58, decoration: BoxDecoration(color: _gold, borderRadius: BorderRadius.circular(20)), child: Icon(icon, color: _ink)),
+          Container(
+              width: 58,
+              height: 58,
+              decoration: BoxDecoration(
+                  color: _gold, borderRadius: BorderRadius.circular(20)),
+              child: Icon(icon, color: _ink)),
           const SizedBox(width: 16),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(title, style: Theme.of(context).textTheme.titleLarge?.copyWith(color: Colors.white, fontWeight: FontWeight.w900, height: 1.08)),
+                Text(title,
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w900,
+                        height: 1.08)),
                 const SizedBox(height: 8),
-                Text(subtitle, style: TextStyle(color: Colors.white.withValues(alpha: 0.72), height: 1.35)),
+                Text(subtitle,
+                    style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.72),
+                        height: 1.35)),
               ],
             ),
           ),
@@ -1092,7 +1608,16 @@ class _Panel extends StatelessWidget {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(color: _card, borderRadius: BorderRadius.circular(24), border: Border.all(color: _line), boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 18, offset: const Offset(0, 10))]),
+      decoration: BoxDecoration(
+          color: _card,
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(color: _line),
+          boxShadow: [
+            BoxShadow(
+                color: Colors.black.withValues(alpha: 0.04),
+                blurRadius: 18,
+                offset: const Offset(0, 10))
+          ]),
       child: child,
     );
   }
@@ -1106,14 +1631,21 @@ class _SaveBadge extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: EdgeInsets.symmetric(horizontal: compact ? 8 : 12, vertical: 6),
-      decoration: BoxDecoration(color: (busy ? Colors.blue : Colors.green).withValues(alpha: 0.10), borderRadius: BorderRadius.circular(999)),
+      decoration: BoxDecoration(
+          color: (busy ? Colors.blue : Colors.green).withValues(alpha: 0.10),
+          borderRadius: BorderRadius.circular(999)),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(busy ? Icons.sync_rounded : Icons.cloud_done_outlined, size: 14, color: busy ? Colors.blue : Colors.green),
+          Icon(busy ? Icons.sync_rounded : Icons.cloud_done_outlined,
+              size: 14, color: busy ? Colors.blue : Colors.green),
           if (!compact) ...[
             const SizedBox(width: 6),
-            Text(busy ? 'Saving...' : 'Saved', style: TextStyle(color: busy ? Colors.blue : Colors.green, fontWeight: FontWeight.w800, fontSize: 12)),
+            Text(busy ? 'Saving...' : 'Saved',
+                style: TextStyle(
+                    color: busy ? Colors.blue : Colors.green,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 12)),
           ],
         ],
       ),
@@ -1128,41 +1660,22 @@ class _Benefit extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Padding(
         padding: const EdgeInsets.only(bottom: 10),
-        child: Row(children: [Icon(icon, color: _gold), const SizedBox(width: 12), Expanded(child: Text(label, style: const TextStyle(fontWeight: FontWeight.w800)))]),
-      );
-}
-
-class _ServiceCard extends StatelessWidget {
-  const _ServiceCard({required this.title, required this.icon, required this.selected, required this.onTap});
-  final String title;
-  final IconData icon;
-  final bool selected;
-  final VoidCallback onTap;
-  @override
-  Widget build(BuildContext context) => InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(22),
-        child: Container(
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(color: selected ? _ink : _card, borderRadius: BorderRadius.circular(22), border: Border.all(color: selected ? _gold : _line)),
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Icon(icon, color: selected ? _gold : _muted, size: 30), const Spacer(), Text(title, maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(color: selected ? Colors.white : _ink, fontWeight: FontWeight.w900))]),
-        ),
-      );
-}
-
-class _SkillPreview extends StatelessWidget {
-  const _SkillPreview({required this.title, required this.skills});
-  final String title;
-  final List<String> skills;
-  @override
-  Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.only(bottom: 10),
-        child: _Panel(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text('$title skills', style: const TextStyle(fontWeight: FontWeight.w900)), const SizedBox(height: 8), Wrap(spacing: 8, runSpacing: 8, children: skills.map((e) => Chip(label: Text(e))).toList())])),
+        child: Row(children: [
+          Icon(icon, color: _gold),
+          const SizedBox(width: 12),
+          Expanded(
+              child: Text(label,
+                  style: const TextStyle(fontWeight: FontWeight.w800)))
+        ]),
       );
 }
 
 class _UploadTile extends StatelessWidget {
-  const _UploadTile({required this.title, required this.subtitle, required this.uploaded, required this.onTap});
+  const _UploadTile(
+      {required this.title,
+      required this.subtitle,
+      required this.uploaded,
+      required this.onTap});
   final String title;
   final String subtitle;
   final bool uploaded;
@@ -1172,8 +1685,25 @@ class _UploadTile extends StatelessWidget {
         padding: const EdgeInsets.only(bottom: 10),
         child: OutlinedButton(
           onPressed: onTap,
-          style: OutlinedButton.styleFrom(padding: const EdgeInsets.all(14), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18))),
-          child: Row(children: [Icon(uploaded ? Icons.check_circle_rounded : Icons.upload_file_rounded), const SizedBox(width: 12), Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(title, style: const TextStyle(fontWeight: FontWeight.w900)), Text(subtitle, style: Theme.of(context).textTheme.bodySmall)])), Text(uploaded ? 'Uploaded' : 'Upload')]),
+          style: OutlinedButton.styleFrom(
+              padding: const EdgeInsets.all(14),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(18))),
+          child: Row(children: [
+            Icon(uploaded
+                ? Icons.check_circle_rounded
+                : Icons.upload_file_rounded),
+            const SizedBox(width: 12),
+            Expanded(
+                child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                  Text(title,
+                      style: const TextStyle(fontWeight: FontWeight.w900)),
+                  Text(subtitle, style: Theme.of(context).textTheme.bodySmall)
+                ])),
+            Text(uploaded ? 'Uploaded' : 'Upload')
+          ]),
         ),
       );
 }
@@ -1186,13 +1716,20 @@ class _InfoBox extends StatelessWidget {
   Widget build(BuildContext context) => Container(
         width: double.infinity,
         padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(color: const Color(0xFFFFF6E5), borderRadius: BorderRadius.circular(18)),
-        child: Row(children: [Icon(icon, color: _gold), const SizedBox(width: 10), Expanded(child: Text(text))]),
+        decoration: BoxDecoration(
+            color: const Color(0xFFFFF6E5),
+            borderRadius: BorderRadius.circular(18)),
+        child: Row(children: [
+          Icon(icon, color: _gold),
+          const SizedBox(width: 10),
+          Expanded(child: Text(text))
+        ]),
       );
 }
 
 class _Summary extends StatelessWidget {
-  const _Summary({required this.title, required this.rows, required this.onEdit});
+  const _Summary(
+      {required this.title, required this.rows, required this.onEdit});
   final String title;
   final Map<String, String> rows;
   final VoidCallback onEdit;
@@ -1200,25 +1737,62 @@ class _Summary extends StatelessWidget {
   Widget build(BuildContext context) => Padding(
         padding: const EdgeInsets.only(bottom: 12),
         child: _Panel(
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Row(children: [Expanded(child: Text(title, style: const TextStyle(fontWeight: FontWeight.w900))), TextButton(onPressed: onEdit, child: const Text('Edit'))]),
-            ...rows.entries.map((entry) => Padding(padding: const EdgeInsets.only(top: 8), child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [SizedBox(width: 92, child: Text(entry.key, style: const TextStyle(color: _muted))), Expanded(child: Text(entry.value.isEmpty ? 'Not set' : entry.value, style: const TextStyle(fontWeight: FontWeight.w800)))]))),
+          child:
+              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Row(children: [
+              Expanded(
+                  child: Text(title,
+                      style: const TextStyle(fontWeight: FontWeight.w900))),
+              TextButton(onPressed: onEdit, child: const Text('Edit'))
+            ]),
+            ...rows.entries.map((entry) => Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      SizedBox(
+                          width: 92,
+                          child: Text(entry.key,
+                              style: const TextStyle(color: _muted))),
+                      Expanded(
+                          child: Text(
+                              entry.value.isEmpty ? 'Not set' : entry.value,
+                              style:
+                                  const TextStyle(fontWeight: FontWeight.w800)))
+                    ]))),
           ]),
         ),
       );
 }
 
 class _Timeline extends StatelessWidget {
-  const _Timeline({required this.label, this.done = false, this.active = false});
+  const _Timeline(
+      {required this.label, this.done = false, this.active = false});
   final String label;
   final bool done;
   final bool active;
   @override
   Widget build(BuildContext context) {
-    final color = done ? const Color(0xFF16A34A) : active ? _gold : Colors.grey;
+    final color = done
+        ? const Color(0xFF16A34A)
+        : active
+            ? _gold
+            : Colors.grey;
     return Padding(
       padding: const EdgeInsets.only(bottom: 14),
-      child: Row(children: [Icon(done ? Icons.check_circle_rounded : active ? Icons.hourglass_top_rounded : Icons.radio_button_unchecked_rounded, color: color), const SizedBox(width: 12), Expanded(child: Text(label, style: const TextStyle(fontWeight: FontWeight.w800)))]),
+      child: Row(children: [
+        Icon(
+            done
+                ? Icons.check_circle_rounded
+                : active
+                    ? Icons.hourglass_top_rounded
+                    : Icons.radio_button_unchecked_rounded,
+            color: color),
+        const SizedBox(width: 12),
+        Expanded(
+            child: Text(label,
+                style: const TextStyle(fontWeight: FontWeight.w800)))
+      ]),
     );
   }
 }
@@ -1237,19 +1811,25 @@ TextFormField _field(
     keyboardType: keyboardType,
     inputFormatters: inputFormatters,
     textCapitalization: TextCapitalization.sentences,
-    decoration: InputDecoration(labelText: requiredMark ? '$label *' : label, prefixIcon: Icon(icon)),
+    decoration: InputDecoration(
+        labelText: requiredMark ? '$label *' : label, prefixIcon: Icon(icon)),
     validator: validator,
   );
 }
 
-String? _required(String? value) => (value ?? '').trim().isEmpty ? 'Required' : null;
-String? _pincodeValidator(String? value) => RegExp(r'^[1-9]\d{5}$').hasMatch((value ?? '').trim()) ? null : 'Enter a valid 6-digit pincode';
+String? _required(String? value) =>
+    (value ?? '').trim().isEmpty ? 'Required' : null;
+String? _pincodeValidator(String? value) =>
+    RegExp(r'^[1-9]\d{5}$').hasMatch((value ?? '').trim())
+        ? null
+        : 'Enter a valid 6-digit pincode';
 String? _travelDistanceValidator(String? value) {
   final distance = int.tryParse((value ?? '').trim());
   return distance != null && distance >= 1 && distance <= 100
       ? null
       : 'Enter a distance from 1 to 100 km';
 }
+
 String? _bankHolderValidator(String? value, String profileName) {
   final holder = (value ?? '').trim();
   if (holder.length < 2) return 'Enter the account holder name';
@@ -1258,35 +1838,54 @@ String? _bankHolderValidator(String? value, String profileName) {
   }
   return null;
 }
+
 String? _bankAccountValidator(String? value) {
   return RegExp(r'^\d{9,18}$').hasMatch((value ?? '').trim())
       ? null
       : 'Enter 9 to 18 digits';
 }
-String? _ifscValidator(String? value) => RegExp(r'^[A-Z]{4}0[A-Z0-9]{6}$').hasMatch((value ?? '').trim().toUpperCase()) ? null : 'Enter a valid 11-character IFSC';
+
+String? _ifscValidator(String? value) => RegExp(r'^[A-Z]{4}0[A-Z0-9]{6}$')
+        .hasMatch((value ?? '').trim().toUpperCase())
+    ? null
+    : 'Enter a valid 11-character IFSC';
 String? _upiValidator(String? value) {
   final input = (value ?? '').trim();
   if (input.isEmpty) return null;
-  return RegExp(r'^[a-zA-Z0-9._-]{2,256}@[a-zA-Z][a-zA-Z0-9.-]{1,63}$').hasMatch(input)
+  return RegExp(r'^[a-zA-Z0-9._-]{2,256}@[a-zA-Z][a-zA-Z0-9.-]{1,63}$')
+          .hasMatch(input)
       ? null
       : 'Enter a valid UPI ID';
 }
+
 String? _aadhaarValidator(String? value) {
   return RegExp(r'^\d{12}$').hasMatch((value ?? '').trim())
       ? null
       : 'Enter exactly 12 digits';
 }
-String? _contactName(String? value) => (value ?? '').trim().length < 2 ? 'Enter at least 2 characters' : null;
+
+String? _contactName(String? value) =>
+    (value ?? '').trim().length < 2 ? 'Enter at least 2 characters' : null;
 String? _adultDate(String? value, DateTime? dob) {
   if ((value ?? '').trim().isEmpty) return 'Required';
-  if (dob == null) return 'Select a valid date of birth';
+  if (dob == null) {
+    return 'Select a valid date of birth';
+  }
   final today = DateTime.now();
   var age = today.year - dob.year;
-  if (today.month < dob.month || (today.month == dob.month && today.day < dob.day)) age--;
+  if (today.month < dob.month ||
+      (today.month == dob.month && today.day < dob.day)) {
+    age--;
+  }
   return age < 18 ? 'You must be at least 18 years old' : null;
 }
-String? _phone(String? value) => (value ?? '').length != 10 ? 'Enter a valid 10-digit phone number' : null;
-String? _optionalPhone(String? value) => (value ?? '').isEmpty || value!.length == 10 ? null : 'Enter a valid 10-digit phone number';
+
+String? _phone(String? value) =>
+    (value ?? '').length != 10 ? 'Enter a valid 10-digit phone number' : null;
+String? _optionalPhone(String? value) =>
+    (value ?? '').isEmpty || value!.length == 10
+        ? null
+        : 'Enter a valid 10-digit phone number';
 
 IconData _iconFor(CatalogCategory category) {
   final text = '${category.slug} ${category.name}'.toLowerCase();
@@ -1297,37 +1896,28 @@ IconData _iconFor(CatalogCategory category) {
   if (text.contains('clean')) return Icons.cleaning_services_rounded;
   if (text.contains('paint')) return Icons.format_paint_rounded;
   if (text.contains('carpenter')) return Icons.carpenter_rounded;
-  if (text.contains('water') || text.contains('ro')) return Icons.water_drop_rounded;
+  if (text.contains('water') || text.contains('ro')) {
+    return Icons.water_drop_rounded;
+  }
   if (text.contains('pest')) return Icons.pest_control_rounded;
   return Icons.handyman_rounded;
 }
 
 List<String> _skillsFor(CatalogCategory category) {
-  final text = '${category.slug} ${category.name}'.toLowerCase();
-  if (text.contains('electric')) return const ['Wiring', 'Fan installation', 'Light installation', 'Switch/socket installation', 'MCB repair', 'Electrical troubleshooting'];
-  if (text.contains('plumb')) return const ['Pipe repair', 'Tap installation', 'Bathroom plumbing', 'Leakage repair', 'Drain cleaning', 'Water tank work'];
-  if (text.contains('ac')) return const ['AC installation', 'AC servicing', 'Gas charging', 'AC repair', 'General maintenance'];
-  if (text.contains('clean')) return const ['Deep cleaning', 'Bathroom cleaning', 'Kitchen cleaning', 'Move-in cleaning'];
-  if (text.contains('paint')) return const ['Wall painting', 'Waterproofing', 'Putty work', 'Texture painting'];
-  if (text.contains('carpenter')) return const ['Door repair', 'Furniture assembly', 'Cabinet work', 'Lock fitting'];
-  if (text.contains('pest')) return const ['General pest control', 'Termite treatment', 'Cockroach treatment'];
-  return const ['Inspection', 'Repair', 'Installation', 'Maintenance'];
+  return category.subcategories
+      .expand((subcategory) => subcategory.services)
+      .expand((service) => service.requiredSkills)
+      .map((skill) => skill.name.trim())
+      .where((skill) => skill.isNotEmpty)
+      .toSet()
+      .toList(growable: false);
 }
 
 bool _needsCertificate(CatalogCategory category) {
   final text = '${category.slug} ${category.name}'.toLowerCase();
-  return text.contains('electric') || text.contains('ac') || text.contains('pest') || text.contains('water') || text.contains('ro');
+  return text.contains('electric') ||
+      text.contains('ac') ||
+      text.contains('pest') ||
+      text.contains('water') ||
+      text.contains('ro');
 }
-
-const _fallbackCategories = <CatalogCategory>[
-  CatalogCategory(id: 'electrician', name: 'Electrician', slug: 'electrician'),
-  CatalogCategory(id: 'plumber', name: 'Plumber', slug: 'plumber'),
-  CatalogCategory(id: 'ac-repair', name: 'AC Repair & Service', slug: 'ac-repair'),
-  CatalogCategory(id: 'appliance-repair', name: 'Appliance Repair', slug: 'appliance-repair'),
-  CatalogCategory(id: 'cleaning', name: 'Cleaning', slug: 'cleaning'),
-  CatalogCategory(id: 'painting', name: 'Painting', slug: 'painting'),
-  CatalogCategory(id: 'carpenter', name: 'Carpenter', slug: 'carpenter'),
-  CatalogCategory(id: 'ro-water-purifier', name: 'RO / Water Purifier Service', slug: 'ro-water-purifier'),
-  CatalogCategory(id: 'pest-control', name: 'Pest Control', slug: 'pest-control'),
-  CatalogCategory(id: 'other', name: 'Other', slug: 'other'),
-];

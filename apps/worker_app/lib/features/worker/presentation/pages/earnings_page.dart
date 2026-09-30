@@ -938,8 +938,14 @@ Future<void> _showTransactionDetails(BuildContext context, WorkerEarningsTransac
               ),
               const SizedBox(height: 16),
               _DetailRow(label: 'Booking', value: entry.bookingCode?.isNotEmpty == true ? entry.bookingCode! : entry.bookingId),
-              _DetailRow(label: 'Amount', value: _formatMoney(entry.amount)),
-              _DetailRow(label: 'Commission', value: _formatMoney(entry.commissionAmount)),
+              _DetailRow(
+                label: 'Net payout after commission',
+                value: _formatMoney(entry.amount),
+              ),
+              _DetailRow(
+                label: 'Platform commission',
+                value: _formatMoney(entry.commissionAmount),
+              ),
               _DetailRow(label: 'Date', value: DateFormat('d MMM y, h:mm a').format(entry.date)),
               const SizedBox(height: 12),
               Row(

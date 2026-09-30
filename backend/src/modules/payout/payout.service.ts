@@ -60,6 +60,51 @@ export function getCommissionPercent(): number {
   return env.PLATFORM_COMMISSION_PERCENT ?? 20;
 }
 
+export async function getCommissionForCity(cityId: string | null): Promise<{
+  rate: number;
+  fixedFee: number;
+}> {
+  const cityRule = cityId
+    ? await prisma.commissions.findFirst({
+        where: { cityId, isActive: true },
+        orderBy: { updatedAt: "desc" },
+        select: { rate: true, fixedFee: true }
+      })
+    : null;
+  const rule = cityRule ?? await prisma.commissions.findFirst({
+    where: { cityId: null, isActive: true },
+    orderBy: { updatedAt: "desc" },
+    select: { rate: true, fixedFee: true }
+  });
+
+  if (!rule) {
+    return { rate: getCommissionPercent(), fixedFee: 0 };
+  }
+
+  return { rate: toNumber(rule.rate), fixedFee: toNumber(rule.fixedFee) };
+}
+
+export function calculatePayoutAmounts(
+  totalAmount: number,
+  commission: { rate: number; fixedFee: number }
+) {
+  const commissionAmount = roundToTwo(
+    (totalAmount * commission.rate) / 100 + commission.fixedFee
+  );
+  return {
+    commissionAmount,
+    amount: roundToTwo(totalAmount - commissionAmount)
+  };
+}
+
+async function arePayoutsPaused(): Promise<boolean> {
+  const config = await prisma.platformConfig.findUnique({
+    where: { key: "primary" },
+    select: { payoutsPaused: true }
+  });
+  return config?.payoutsPaused ?? false;
+}
+
 function getRazorpayAuthHeader(): string {
   if (!env.RAZORPAY_KEY_ID || !env.RAZORPAY_KEY_SECRET) {
     throw new AppError(500, "Razorpay credentials are not configured");
@@ -179,10 +224,8 @@ function buildAttemptContext(payout: PayoutRecordWithBooking): PayoutAttemptCont
     throw AppError.notFound("Assigned worker not found for payout");
   }
 
-  const totalAmount = toNumber(payout.booking.totalAmount);
-  const commissionPercent = getCommissionPercent();
-  const commissionAmount = roundToTwo((totalAmount * commissionPercent) / 100);
-  const amount = roundToTwo(totalAmount - commissionAmount);
+  const commissionAmount = payout.commissionAmount;
+  const amount = payout.amount;
 
   if (amount <= 0) {
     throw AppError.badRequest("Payout amount must be greater than zero");
@@ -300,6 +343,14 @@ async function persistPayoutAttempt(
 }
 
 async function attemptPayout(payout: PayoutRecordWithBooking): Promise<void> {
+  if (await arePayoutsPaused()) {
+    await prisma.payout.updateMany({
+      where: { id: payout.id, status: "processing" },
+      data: { status: "pending" }
+    });
+    logger.info({ payoutId: payout.id, bookingId: payout.bookingId }, "Payout held by platform finance controls");
+    return;
+  }
   const context = buildAttemptContext(payout);
 
   await persistPayoutAttempt(payout.id, "processing", {
@@ -370,9 +421,12 @@ async function createPendingPayoutRecord(bookingId: string) {
   }
 
   const totalAmount = toNumber(booking.totalAmount);
-  const commissionPercent = getCommissionPercent();
-  const commissionAmount = roundToTwo((totalAmount * commissionPercent) / 100);
-  const amount = roundToTwo(totalAmount - commissionAmount);
+  const commission = await getCommissionForCity(booking.cityId);
+  const { amount, commissionAmount } = calculatePayoutAmounts(totalAmount, commission);
+
+  if (amount <= 0) {
+    throw AppError.badRequest("Commission rules leave no payout for this booking");
+  }
 
   return prisma.payout.upsert({
     where: { bookingId },
@@ -439,6 +493,9 @@ export async function releaseWorkerPayout(bookingId: string): Promise<void> {
 }
 
 export async function retryPayout(payoutId: string) {
+  if (await arePayoutsPaused()) {
+    throw AppError.badRequest("Partner payouts are paused; resume payouts before retrying");
+  }
   const payout = await getPayoutById(payoutId);
   if (!payout) {
     throw AppError.notFound("Payout not found");
@@ -550,6 +607,9 @@ export async function listPayouts(filters: PayoutFilters = {}) {
 }
 
 export async function bulkRetryFailedPayouts(): Promise<{ attempted: number; succeeded: number; failed: number }> {
+  if (await arePayoutsPaused()) {
+    throw AppError.badRequest("Partner payouts are paused; resume payouts before retrying");
+  }
   const failedPayouts = await prisma.payout.findMany({
     where: { status: "failed" },
     include: {
@@ -589,6 +649,67 @@ export async function bulkRetryFailedPayouts(): Promise<{ attempted: number; suc
   }
 
   return { attempted, succeeded, failed };
+}
+
+export async function releasePendingPayouts(): Promise<{
+  attempted: number;
+  succeeded: number;
+  failed: number;
+  paused: boolean;
+}> {
+  if (await arePayoutsPaused()) {
+    return { attempted: 0, succeeded: 0, failed: 0, paused: true };
+  }
+
+  const pending = await prisma.payout.findMany({
+    where: { status: "pending" },
+    include: {
+      booking: { include: { worker: { include: { user: true } } } }
+    },
+    orderBy: { createdAt: "asc" },
+    take: 50
+  });
+
+  let attempted = 0;
+  let succeeded = 0;
+  let failed = 0;
+  for (const item of pending) {
+    const claim = await prisma.payout.updateMany({
+      where: { id: item.id, status: "pending" },
+      data: { status: "processing", failureReason: null }
+    });
+    if (claim.count === 0) continue;
+
+    attempted++;
+    try {
+      const payout = await getPayoutById(item.id);
+      if (!payout) {
+        await prisma.payout.updateMany({
+          where: { id: item.id, status: "processing" },
+          data: { status: "failed", failureReason: "Payout record could not be loaded" }
+        });
+        failed++;
+        continue;
+      }
+
+      await attemptPayout(payout);
+      const result = await prisma.payout.findUnique({ where: { id: item.id }, select: { status: true } });
+      if (result?.status === "success") succeeded++;
+      else failed++;
+    } catch (error) {
+      const failureReason = error instanceof Error
+        ? error.message.slice(0, 500)
+        : "Payout attempt failed before completion";
+      await prisma.payout.updateMany({
+        where: { id: item.id, status: "processing" },
+        data: { status: "failed", failureReason }
+      });
+      logger.error({ payoutId: item.id, error }, "Pending payout release failed");
+      failed++;
+    }
+  }
+
+  return { attempted, succeeded, failed, paused: false };
 }
 
 export async function exportPayoutsCsv(filters: PayoutFilters = {}): Promise<string> {

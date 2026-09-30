@@ -159,9 +159,9 @@ function slugify(value: string): string {
 
 async function seedCities() {
   const cities = [
-    { name: "Chennai", state: "Tamil Nadu", slug: "chennai" },
-    { name: "Bengaluru", state: "Karnataka", slug: "bengaluru" },
-    { name: "Hyderabad", state: "Telangana", slug: "hyderabad" }
+    { name: "Chennai", state: "Tamil Nadu", district: "Chennai", slug: "chennai", isActive: true },
+    { name: "Bengaluru", state: "Karnataka", district: "Bengaluru Urban", slug: "bengaluru", isActive: false },
+    { name: "Hyderabad", state: "Telangana", district: "Hyderabad", slug: "hyderabad", isActive: false }
   ];
 
   for (const city of cities) {
@@ -170,14 +170,16 @@ async function seedCities() {
       update: {
         name: city.name,
         state: city.state,
-        country: "India",
-        isActive: true
+        district: city.district,
+        country: "India"
       },
       create: {
         name: city.name,
         state: city.state,
+        district: city.district,
         country: "India",
-        slug: city.slug
+        slug: city.slug,
+        isActive: city.isActive
       }
     });
   }

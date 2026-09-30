@@ -4,7 +4,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:marketplace_shared/marketplace_shared.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../../data/finance_api.dart';
 
@@ -225,13 +224,23 @@ class _RefundsLedgerPageState extends ConsumerState<RefundsLedgerPage> {
   }
 
   Future<void> _exportCsv() async {
-    final url = _api.refundsCsvUrl(status: _selectedStatus);
-    final uri = Uri.parse(url);
-    if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
+    setState(() => _busy = true);
+    try {
+      final saved = await _api.downloadCsv(
+        _api.refundsCsvUrl(status: _selectedStatus),
+        'veedufix-refunds.csv',
+      );
+      if (!mounted || !saved) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Refund CSV downloaded')),
+      );
+    } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Could not open CSV download link')),
+        SnackBar(content: Text('Refund export failed: $error')),
       );
+    } finally {
+      if (mounted) setState(() => _busy = false);
     }
   }
 

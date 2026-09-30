@@ -4,6 +4,7 @@ import '../../../auth/presentation/providers/auth_providers.dart';
 
 class HomeProfessional {
   const HomeProfessional({
+    this.id = '',
     required this.name,
     required this.role,
     required this.experience,
@@ -14,6 +15,7 @@ class HomeProfessional {
     required this.accent,
   });
 
+  final String id;
   final String name;
   final String role;
   final String experience;
@@ -25,11 +27,12 @@ class HomeProfessional {
 
   factory HomeProfessional.fromJson(Map<String, dynamic> json) {
     return HomeProfessional(
+      id: json['id'] as String? ?? '',
       name: json['name'] as String? ?? 'Professional',
       role: json['role'] as String? ?? 'Expert',
       experience: json['experience'] as String? ?? 'New',
-      rating: (json['rating'] as num?)?.toDouble() ?? 5.0,
-      distance: json['distance'] as String? ?? 'Nearby',
+      rating: (json['rating'] as num?)?.toDouble() ?? 0,
+      distance: json['distance'] as String? ?? 'Available',
       price: json['price'] as String? ?? 'Get quote',
       verified: json['verified'] as bool? ?? false,
       accent: Color(json['accent'] as int? ?? 0xFF10B981),

@@ -1,4 +1,5 @@
 ﻿import 'package:flutter/material.dart';
+import 'package:dio/dio.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
@@ -229,7 +230,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
         SnackBar(content: Text('External Wallet: ${response.walletName}')));
   }
 
-  Future<void> _openCheckout(String finalServiceId, double amount) async {
+  Future<void> _openCheckout(String finalServiceId) async {
     if (_isProcessing) return;
 
     final session = ref.read(authControllerProvider).valueOrNull;
@@ -282,11 +283,11 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
       };
 
       _razorpay.open(options);
-    } catch (_) {
+    } catch (error) {
       if (!mounted) return;
       setState(() => _isProcessing = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Could not start payment. Please try again.')),
+        SnackBar(content: Text(_checkoutErrorMessage(error))),
       );
     }
   }
@@ -328,9 +329,6 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
         );
       }
     }
-
-    final double gst = resolvedServicePrice * 0.18;
-    final double totalAmount = resolvedServicePrice + gst;
 
     return Scaffold(
       backgroundColor: cs.surface,
@@ -417,7 +415,6 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
                             date: _dates[_selectedDate],
                             slot: _slots[_selectedSlot],
                             basePrice: resolvedServicePrice,
-                            gst: gst,
                             couponCode: _appliedCoupon,
                             onApplyCoupon: () async {
                               final code = await context.push('/offers');
@@ -459,7 +456,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
                             _step++;
                           });
                         } else {
-                          _openCheckout(resolvedServiceId, totalAmount);
+                          _openCheckout(resolvedServiceId);
                         }
                       },
                       child: Container(
@@ -476,7 +473,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
                               ? 'Continue'
                               : _isProcessing
                                   ? 'Processing...'
-                                  : 'Confirm & Pay ₹${totalAmount.toStringAsFixed(0)}',
+                                  : 'Proceed to payment',
                           textAlign: TextAlign.center,
                           style: tt.titleMedium?.copyWith(
                             color: cs.onPrimary,
@@ -865,7 +862,6 @@ class _StepSummary extends StatelessWidget {
     required this.date,
     required this.slot,
     required this.basePrice,
-    required this.gst,
     this.couponCode,
     required this.onApplyCoupon,
   });
@@ -874,7 +870,6 @@ class _StepSummary extends StatelessWidget {
   final String date;
   final String slot;
   final double basePrice;
-  final double gst;
   final String? couponCode;
   final VoidCallback onApplyCoupon;
 
@@ -925,39 +920,38 @@ class _StepSummary extends StatelessWidget {
             padding: const EdgeInsets.all(18),
             child: Column(
               children: [
-                _BillRow(label: 'Service charge', amount: basePrice),
-                const SizedBox(height: 10),
-                _BillRow(label: 'GST (18%)', amount: gst),
+                _BillRow(label: 'Service total', amount: basePrice),
                 if (couponCode != null) ...[
                   const SizedBox(height: 10),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text('Discount ($couponCode)',
+                      Text('Coupon selected: $couponCode',
                           style: Theme.of(context)
                               .textTheme
                               .bodyMedium
                               ?.copyWith(
-                                  color: const Color(0xFF10B981),
+                                  color: Theme.of(context).colorScheme.primary,
                                   fontWeight: FontWeight.w600)),
-                      Text('-₹100',
-                          style: Theme.of(context)
-                              .textTheme
-                              .bodyMedium
-                              ?.copyWith(
-                                  color: const Color(0xFF10B981),
-                                  fontWeight: FontWeight.w800)),
                     ],
+                  ),
+                  const SizedBox(height: 6),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      'Eligible coupon savings are confirmed before payment.',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: Theme.of(context).colorScheme.onSurfaceVariant,
+                          ),
+                    ),
                   ),
                 ],
                 const SizedBox(height: 12),
                 const Divider(),
                 const SizedBox(height: 12),
                 _BillRow(
-                  label: 'Total',
-                  amount: couponCode != null
-                      ? (basePrice + gst - 100)
-                      : (basePrice + gst),
+                  label: 'Estimated total',
+                  amount: basePrice,
                   isBold: true,
                 ),
               ],
@@ -987,7 +981,7 @@ class _StepSummary extends StatelessWidget {
                 Expanded(
                   child: Text(
                     couponCode != null
-                        ? 'Coupon $couponCode applied!'
+                        ? 'Code selected · $couponCode'
                         : 'View offers and coupons',
                     style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                         color: Theme.of(context).colorScheme.primary,
@@ -998,8 +992,10 @@ class _StepSummary extends StatelessWidget {
                   Icon(Icons.arrow_forward_ios_rounded,
                       size: 16, color: Theme.of(context).colorScheme.primary),
                 if (couponCode != null)
-                  const Icon(Icons.check_circle_rounded,
-                      color: Color(0xFF10B981)),
+                  Icon(
+                    Icons.edit_outlined,
+                    color: Theme.of(context).colorScheme.primary,
+                  ),
               ],
             ),
           ),
@@ -1082,4 +1078,22 @@ class _BillRow extends StatelessWidget {
       ],
     );
   }
+}
+
+String _checkoutErrorMessage(Object error) {
+  if (error is DioException) {
+    final data = error.response?.data;
+    if (data is Map<String, dynamic>) {
+      final message = data['message'];
+      if (message is String && message.trim().isNotEmpty) {
+        return message.trim();
+      }
+    }
+    if (error.type == DioExceptionType.connectionError ||
+        error.type == DioExceptionType.connectionTimeout ||
+        error.type == DioExceptionType.receiveTimeout) {
+      return 'Connection problem. Check your internet and try again.';
+    }
+  }
+  return 'Could not start payment. Please try again.';
 }

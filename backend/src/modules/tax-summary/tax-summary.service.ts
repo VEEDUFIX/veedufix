@@ -8,6 +8,8 @@ type DateRange = {
   endDate: Date;
 };
 
+const indiaOffsetMilliseconds = 330 * 60 * 1000;
+
 type InvoiceLineItem = {
   description: string;
   sacCode: string;
@@ -23,6 +25,7 @@ type TaxSummaryInvoiceRecord = {
   id: string;
   issuedAt: Date;
   subtotalAmount: Prisma.Decimal | number | string;
+  discountAmount?: Prisma.Decimal | number | string;
   totalGstAmount: Prisma.Decimal | number | string;
   lineItems: unknown;
 };
@@ -88,36 +91,46 @@ function roundToTwo(value: number): number {
   return Math.round((value + Number.EPSILON) * 100) / 100;
 }
 
-export function startOfLocalDay(date: Date): Date {
-  const copy = new Date(date);
-  copy.setHours(0, 0, 0, 0);
-  return copy;
-}
-
-export function endOfLocalDay(date: Date): Date {
-  const copy = new Date(date);
-  copy.setHours(23, 59, 59, 999);
-  return copy;
-}
-
-function addDays(date: Date, days: number): Date {
-  const copy = new Date(date);
-  copy.setDate(copy.getDate() + days);
-  return copy;
-}
-
 export function parseDateRange(startDate?: string, endDate?: string): DateRange {
-  const start = startDate ? new Date(startDate) : new Date();
-  const end = endDate ? new Date(endDate) : new Date();
-
-  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+  const today = indiaDateString(new Date());
+  const start = parseIndiaDate(startDate ?? today);
+  const endStart = parseIndiaDate(endDate ?? today);
+  if (start.getTime() > endStart.getTime()) {
     throw AppError.badRequest("Invalid date range");
   }
-
   return {
-    startDate: startOfLocalDay(start),
-    endDate: endOfLocalDay(end)
+    startDate: start,
+    endDate: new Date(endStart.getTime() + 24 * 60 * 60 * 1000 - 1)
   };
+}
+
+function parseIndiaDate(value: string): Date {
+  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) {
+    throw AppError.badRequest("Invalid date range");
+  }
+  const [, yearText, monthText, dayText] = match;
+  const year = Number(yearText);
+  const month = Number(monthText);
+  const day = Number(dayText);
+  const utcMidnight = Date.UTC(year, month - 1, day);
+  const date = new Date(utcMidnight);
+  if (
+    date.getUTCFullYear() !== year ||
+    date.getUTCMonth() !== month - 1 ||
+    date.getUTCDate() !== day
+  ) {
+    throw AppError.badRequest("Invalid date range");
+  }
+  return new Date(utcMidnight - indiaOffsetMilliseconds);
+}
+
+function indiaDateString(date: Date): string {
+  const indiaDate = new Date(date.getTime() + indiaOffsetMilliseconds);
+  const year = indiaDate.getUTCFullYear().toString().padStart(4, "0");
+  const month = (indiaDate.getUTCMonth() + 1).toString().padStart(2, "0");
+  const day = indiaDate.getUTCDate().toString().padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
 
 export function financialYearRange(financialYear: string): DateRange {
@@ -135,19 +148,27 @@ export function financialYearRange(financialYear: string): DateRange {
     throw AppError.badRequest("Invalid financial year");
   }
 
-  const startDate = new Date(startYear, 3, 1, 0, 0, 0, 0);
-  const endDate = new Date(startYear + 1, 2, 31, 23, 59, 59, 999);
+  const startDate = new Date(Date.UTC(startYear, 3, 1) - indiaOffsetMilliseconds);
+  const endDate = new Date(
+    Date.UTC(startYear + 1, 2, 31, 23, 59, 59, 999) - indiaOffsetMilliseconds
+  );
 
   return { startDate, endDate };
 }
 
 export function currentFinancialYearRange(now = new Date()): DateRange {
-  const year = now.getMonth() >= 3 ? now.getFullYear() : now.getFullYear() - 1;
+  const indiaNow = new Date(now.getTime() + indiaOffsetMilliseconds);
+  const currentYear = indiaNow.getUTCFullYear();
+  const year = indiaNow.getUTCMonth() >= 3 ? currentYear : currentYear - 1;
   return financialYearRange(`${year}-${String(year + 1).slice(-2)}`);
 }
 
 function escapeCsvValue(value: unknown): string {
-  const str = String(value ?? "");
+  const raw = String(value ?? "");
+  const str =
+    typeof value === "string" && /^[\u0000-\u0020]*[=+\-@]/.test(raw)
+      ? `'${raw}`
+      : raw;
   if (str.includes(",") || str.includes("\"") || str.includes("\n")) {
     return `"${str.replace(/"/g, '""')}"`;
   }
@@ -192,18 +213,27 @@ function buildGstSummaryFromInvoices(invoices: TaxSummaryInvoiceRecord[]): TaxGs
   let totalGstCollected = 0;
 
   for (const invoice of invoices) {
-    totalTaxableValue += decimalToNumber(invoice.subtotalAmount);
     totalGstCollected += decimalToNumber(invoice.totalGstAmount);
 
-    for (const lineItem of normalizeLineItems(invoice.lineItems)) {
+    const lineItems = normalizeLineItems(invoice.lineItems);
+    if (lineItems.length === 0) {
+      totalTaxableValue += Math.max(
+        0,
+        decimalToNumber(invoice.subtotalAmount) - decimalToNumber(invoice.discountAmount)
+      );
+    }
+
+    for (const lineItem of lineItems) {
       const sacCode = lineItem.sacCode || "PENDING";
+      const taxableValue = roundToTwo(lineItem.basePrice);
+      totalTaxableValue += taxableValue;
       const bucket = breakdownMap.get(sacCode) ?? {
         taxableValue: 0,
         gstAmount: 0,
         invoiceIds: new Set<string>()
       };
 
-      bucket.taxableValue += roundToTwo(lineItem.basePrice);
+      bucket.taxableValue += taxableValue;
       bucket.gstAmount += roundToTwo(lineItem.gstAmount);
       bucket.invoiceIds.add(invoice.id);
       breakdownMap.set(sacCode, bucket);
@@ -266,6 +296,7 @@ export async function getGstSummary(startDate: string, endDate: string): Promise
       id: true,
       issuedAt: true,
       subtotalAmount: true,
+      discountAmount: true,
       totalGstAmount: true,
       lineItems: true
     }
@@ -315,8 +346,8 @@ export async function getRevenueSummary(startDate: string, endDate: string): Pro
 export async function getAnnualSummary(financialYear: string): Promise<TaxAnnualSummary> {
   const range = financialYearRange(financialYear);
   const [gstSummary, revenueSummary] = await Promise.all([
-    getGstSummary(range.startDate.toISOString(), range.endDate.toISOString()),
-    getRevenueSummary(range.startDate.toISOString(), range.endDate.toISOString())
+    getGstSummary(indiaDateString(range.startDate), indiaDateString(range.endDate)),
+    getRevenueSummary(indiaDateString(range.startDate), indiaDateString(range.endDate))
   ]);
 
   return {
@@ -375,14 +406,17 @@ export async function exportTaxInvoicesCsv(startDate: string, endDate: string): 
         "",
         "",
         "",
+        "",
+        "",
         decimalToNumber(invoice.subtotalAmount),
+        decimalToNumber(invoice.discountAmount),
         decimalToNumber(invoice.totalGstAmount),
         decimalToNumber(invoice.grandTotal)
       ]);
       continue;
     }
 
-    for (const lineItem of lineItems) {
+    for (const [index, lineItem] of lineItems.entries()) {
       rows.push([
         invoice.invoiceNumber,
         invoice.booking.code,
@@ -396,9 +430,10 @@ export async function exportTaxInvoicesCsv(startDate: string, endDate: string): 
         roundToTwo(lineItem.basePrice),
         roundToTwo(lineItem.gstAmount),
         roundToTwo(lineItem.total),
-        decimalToNumber(invoice.subtotalAmount),
-        decimalToNumber(invoice.totalGstAmount),
-        decimalToNumber(invoice.grandTotal)
+        index === 0 ? decimalToNumber(invoice.subtotalAmount) : "",
+        index === 0 ? decimalToNumber(invoice.discountAmount) : "",
+        index === 0 ? decimalToNumber(invoice.totalGstAmount) : "",
+        index === 0 ? decimalToNumber(invoice.grandTotal) : ""
       ]);
     }
   }
@@ -418,8 +453,73 @@ export async function exportTaxInvoicesCsv(startDate: string, endDate: string): 
       "gst_amount",
       "line_total",
       "invoice_subtotal",
+      "invoice_discount",
       "invoice_gst_total",
       "invoice_grand_total"
+    ],
+    rows
+  );
+}
+
+export async function exportFinancialReconciliationCsv(startDate: string, endDate: string): Promise<string> {
+  const range = parseDateRange(startDate, endDate);
+  const invoices = await prisma.invoice.findMany({
+    where: { issuedAt: { gte: range.startDate, lte: range.endDate } },
+    include: {
+      booking: {
+        select: {
+          code: true,
+          status: true,
+          payout: {
+            select: {
+              amount: true,
+              commissionAmount: true,
+              status: true,
+              createdAt: true,
+              razorpayPayoutId: true
+            }
+          }
+        }
+      }
+    },
+    orderBy: { issuedAt: "asc" }
+  });
+
+  const rows = invoices.map((invoice) => {
+    const discount = decimalToNumber(invoice.discountAmount);
+    const payout = invoice.booking.payout;
+    return [
+      invoice.issuedAt.toISOString(),
+      invoice.invoiceNumber,
+      invoice.booking.code,
+      invoice.booking.status,
+      roundToTwo(decimalToNumber(invoice.subtotalAmount) - discount),
+      roundToTwo(discount),
+      roundToTwo(decimalToNumber(invoice.totalGstAmount)),
+      roundToTwo(decimalToNumber(invoice.grandTotal)),
+      payout ? roundToTwo(decimalToNumber(payout.commissionAmount)) : "",
+      payout ? roundToTwo(decimalToNumber(payout.amount)) : "",
+      payout?.status ?? "not_created",
+      payout?.createdAt.toISOString() ?? "",
+      payout?.razorpayPayoutId ?? ""
+    ];
+  });
+
+  return csvFromRows(
+    [
+      "invoice_issued_at",
+      "invoice_number",
+      "booking_code",
+      "booking_status",
+      "taxable_value_after_discount",
+      "invoice_discount",
+      "gst_collected",
+      "customer_invoice_total",
+      "platform_commission",
+      "partner_net_payout",
+      "payout_status",
+      "payout_created_at",
+      "provider_payout_id"
     ],
     rows
   );

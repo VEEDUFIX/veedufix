@@ -93,12 +93,23 @@ class LocationChip extends StatelessWidget {
         if (selection == null || !context.mounted) {
           return;
         }
-        final container = ProviderScope.containerOf(context, listen: false);
-        await container.read(selectedLocationProvider.notifier).setLocation(
+        try {
+          final container = ProviderScope.containerOf(context, listen: false);
+          await container.read(selectedLocationProvider.notifier).setLocation(
               latitude: selection.latitude,
               longitude: selection.longitude,
               label: selection.label,
             );
+        } catch (_) {
+          if (!context.mounted) return;
+          ScaffoldMessenger.of(context)
+            ..hideCurrentSnackBar()
+            ..showSnackBar(
+              const SnackBar(
+                content: Text('Could not save this location. Please try again.'),
+              ),
+            );
+        }
       },
       child: Container(
         padding: EdgeInsets.zero,

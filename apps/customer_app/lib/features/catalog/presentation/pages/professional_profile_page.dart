@@ -3,6 +3,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:marketplace_shared/marketplace_shared.dart';
 
+String _initial(String value) {
+  final trimmed = value.trim();
+  return trimmed.isEmpty ? '?' : trimmed.characters.first.toUpperCase();
+}
+
 class ProfessionalProfilePage extends ConsumerWidget {
   const ProfessionalProfilePage({super.key, required this.professionalId});
 
@@ -31,22 +36,44 @@ class ProfessionalProfilePage extends ConsumerWidget {
                   decoration: BoxDecoration(
                     color: cs.surface,
                     shape: BoxShape.circle,
-                    boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.08), blurRadius: 12, offset: const Offset(0, 4))],
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.08),
+                        blurRadius: 12,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
                   ),
                   child: const Icon(Icons.arrow_back_ios_new_rounded, size: 18),
                 ),
               ),
             ),
           ),
-          body: const Center(
-            child: PremiumEmptyState(
-              icon: Icons.person_off_rounded,
-              title: 'Profile not found',
-              subtitle: 'We could not load this professional\'s profile.',
+          body: Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const PremiumEmptyState(
+                    icon: Icons.cloud_off_rounded,
+                    title: 'Unable to load profile',
+                    subtitle: 'Check your connection and try again.',
+                  ),
+                  const SizedBox(height: 16),
+                  FilledButton.icon(
+                    onPressed: () =>
+                        ref.invalidate(workerProfileProvider(professionalId)),
+                    icon: const Icon(Icons.refresh_rounded),
+                    label: const Text('Try again'),
+                  ),
+                ],
+              ),
             ),
           ),
         ),
-        data: (profile) => _ProfileBody(profile: profile, professionalId: professionalId),
+        data: (profile) =>
+            _ProfileBody(profile: profile, professionalId: professionalId),
       ),
     );
   }
@@ -60,6 +87,16 @@ class _LoadingScaffold extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: cs.surface,
+      appBar: AppBar(
+        backgroundColor: cs.surface,
+        elevation: 0,
+        leading: IconButton(
+          onPressed: () => context.pop(),
+          icon: const Icon(Icons.arrow_back_rounded),
+          tooltip: 'Back',
+        ),
+        title: const Text('Professional'),
+      ),
       body: const Center(child: CircularProgressIndicator()),
     );
   }
@@ -74,7 +111,7 @@ class _ProfileBody extends StatelessWidget {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final tt = Theme.of(context).textTheme;
-    
+
     const accent = Color(0xFFC2A15E);
 
     return Scaffold(
@@ -93,13 +130,22 @@ class _ProfileBody extends StatelessWidget {
                   decoration: BoxDecoration(
                     color: cs.surface,
                     shape: BoxShape.circle,
-                    boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.08), blurRadius: 12, offset: const Offset(0, 4))],
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.08),
+                        blurRadius: 12,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
                   ),
                   child: const Icon(Icons.arrow_back_ios_new_rounded, size: 18),
                 ),
               ),
             ),
-            title: Text('Professional', style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
+            title: Text(
+              'Professional',
+              style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+            ),
           ),
           SliverToBoxAdapter(
             child: Padding(
@@ -117,8 +163,11 @@ class _ProfileBody extends StatelessWidget {
                           radius: 42,
                           backgroundColor: accent.withValues(alpha: 0.15),
                           fallback: Text(
-                            profile.displayName.substring(0, 1).toUpperCase(),
-                            style: tt.displaySmall?.copyWith(color: accent, fontWeight: FontWeight.w900),
+                            _initial(profile.displayName),
+                            style: tt.displaySmall?.copyWith(
+                              color: accent,
+                              fontWeight: FontWeight.w900,
+                            ),
                           ),
                         ),
                       ),
@@ -132,12 +181,21 @@ class _ProfileBody extends StatelessWidget {
                                 Expanded(
                                   child: Text(
                                     profile.displayName,
-                                    style: tt.titleLarge?.copyWith(fontWeight: FontWeight.w800, letterSpacing: -0.3),
+                                    style: tt.titleLarge?.copyWith(
+                                      fontWeight: FontWeight.w800,
+                                      letterSpacing: -0.3,
+                                    ),
                                   ),
                                 ),
                                 const SizedBox(width: 6),
-                                if (profile.verificationStatus == 'APPROVED')
-                                  Icon(Icons.verified_rounded, size: 18, color: cs.secondary),
+                                if (const {'VERIFIED', 'APPROVED'}.contains(
+                                  profile.verificationStatus.toUpperCase(),
+                                ))
+                                  Icon(
+                                    Icons.verified_rounded,
+                                    size: 18,
+                                    color: cs.secondary,
+                                  ),
                               ],
                             ),
                             const SizedBox(height: 4),
@@ -146,21 +204,64 @@ class _ProfileBody extends StatelessWidget {
                                 profile.bio!,
                                 maxLines: 2,
                                 overflow: TextOverflow.ellipsis,
-                                style: tt.bodyMedium?.copyWith(color: cs.onSurfaceVariant),
+                                style: tt.bodyMedium?.copyWith(
+                                  color: cs.onSurfaceVariant,
+                                ),
                               ),
                           ],
                         ),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 28),
+                  const SizedBox(height: 20),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
+                    decoration: BoxDecoration(
+                      color: profile.isAvailable
+                          ? const Color(0xFFEAF4EA)
+                          : cs.surfaceContainerHighest,
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          profile.isAvailable
+                              ? Icons.check_circle_rounded
+                              : Icons.schedule_rounded,
+                          size: 16,
+                          color: profile.isAvailable
+                              ? const Color(0xFF38834A)
+                              : cs.onSurfaceVariant,
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          profile.isAvailable
+                              ? 'Available for bookings'
+                              : 'Not taking bookings right now',
+                          style: tt.labelMedium?.copyWith(
+                            color: profile.isAvailable
+                                ? const Color(0xFF286B39)
+                                : cs.onSurfaceVariant,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 20),
 
                   // ─── Stats row ─────────────────────────────────────────────
                   Row(
                     children: [
                       _StatBadge(
                         icon: Icons.star_rounded,
-                        value: profile.averageRating.toStringAsFixed(1),
+                        value: profile.averageRating > 0
+                            ? profile.averageRating.toStringAsFixed(1)
+                            : 'New',
                         label: 'Rating',
                         accent: const Color(0xFFF59E0B),
                       ),
@@ -184,29 +285,51 @@ class _ProfileBody extends StatelessWidget {
 
                   // ─── Skills ────────────────────────────────────────────────
                   if (profile.skills.isNotEmpty) ...[
-                    Text('Skills & Expertise', style: tt.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
+                    Text(
+                      'Skills & Expertise',
+                      style: tt.titleLarge?.copyWith(
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
                     const SizedBox(height: 14),
                     Wrap(
                       spacing: 8,
                       runSpacing: 8,
-                      children: profile.skills.map((s) => Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                        decoration: BoxDecoration(
-                          color: cs.primary.withValues(alpha: 0.08),
-                          borderRadius: BorderRadius.circular(AbzioTheme.cardRadius),
-                        ),
-                        child: Text(
-                          s.categoryName,
-                          style: tt.labelLarge?.copyWith(color: cs.primary, fontWeight: FontWeight.w600),
-                        ),
-                      )).toList(),
+                      children: profile.skills
+                          .map(
+                            (s) => Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 14,
+                                vertical: 8,
+                              ),
+                              decoration: BoxDecoration(
+                                color: cs.primary.withValues(alpha: 0.08),
+                                borderRadius: BorderRadius.circular(
+                                  AbzioTheme.cardRadius,
+                                ),
+                              ),
+                              child: Text(
+                                s.categoryName,
+                                style: tt.labelLarge?.copyWith(
+                                  color: cs.primary,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          )
+                          .toList(),
                     ),
                     const SizedBox(height: 32),
                   ],
 
                   // ─── Portfolio photos ──────────────────────────────────────
                   if (profile.portfolioPhotos.isNotEmpty) ...[
-                    Text('Portfolio', style: tt.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
+                    Text(
+                      'Portfolio',
+                      style: tt.titleLarge?.copyWith(
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
                     const SizedBox(height: 14),
                     SizedBox(
                       height: 110,
@@ -217,7 +340,9 @@ class _ProfileBody extends StatelessWidget {
                         itemBuilder: (context, i) {
                           final photo = profile.portfolioPhotos[i];
                           return ClipRRect(
-                            borderRadius: BorderRadius.circular(AbzioTheme.buttonRadius),
+                            borderRadius: BorderRadius.circular(
+                              AbzioTheme.buttonRadius,
+                            ),
                             child: MarketplaceNetworkImage(
                               imageUrl: photo.url,
                               width: 110,
@@ -237,7 +362,12 @@ class _ProfileBody extends StatelessWidget {
 
                   // ─── Reviews ──────────────────────────────────────────────
                   if (profile.reviews.isNotEmpty) ...[
-                    Text('Customer Reviews', style: tt.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
+                    Text(
+                      'Customer Reviews',
+                      style: tt.titleLarge?.copyWith(
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
                     const SizedBox(height: 16),
                     ListView.separated(
                       shrinkWrap: true,
@@ -260,7 +390,13 @@ class _ProfileBody extends StatelessWidget {
         padding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
         decoration: BoxDecoration(
           color: cs.surface,
-          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.06), blurRadius: 24, offset: const Offset(0, -10))],
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.06),
+              blurRadius: 24,
+              offset: const Offset(0, -10),
+            ),
+          ],
         ),
         child: SafeArea(
           child: Row(
@@ -272,14 +408,26 @@ class _ProfileBody extends StatelessWidget {
                     padding: const EdgeInsets.symmetric(vertical: 16),
                     decoration: BoxDecoration(
                       border: Border.all(color: cs.primary),
-                      borderRadius: BorderRadius.circular(AbzioTheme.buttonRadius),
+                      borderRadius: BorderRadius.circular(
+                        AbzioTheme.buttonRadius,
+                      ),
                     ),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(Icons.chat_bubble_outline_rounded, color: cs.primary, size: 20),
+                        Icon(
+                          Icons.chat_bubble_outline_rounded,
+                          color: cs.primary,
+                          size: 20,
+                        ),
                         const SizedBox(width: 8),
-                        Text('Message', style: tt.titleMedium?.copyWith(color: cs.primary, fontWeight: FontWeight.w700)),
+                        Text(
+                          'Message',
+                          style: tt.titleMedium?.copyWith(
+                            color: cs.primary,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
                       ],
                     ),
                   ),
@@ -288,18 +436,29 @@ class _ProfileBody extends StatelessWidget {
               const SizedBox(width: 12),
               Expanded(
                 child: TapScale(
-                  onTap: () => context.push('/checkout'),
+                  onTap: () => context.push('/search'),
                   child: Container(
                     padding: const EdgeInsets.symmetric(vertical: 16),
                     decoration: BoxDecoration(
                       color: cs.primary,
-                      borderRadius: BorderRadius.circular(AbzioTheme.buttonRadius),
-                      boxShadow: [BoxShadow(color: cs.primary.withValues(alpha: 0.4), blurRadius: 20, offset: const Offset(0, 8))],
+                      borderRadius: BorderRadius.circular(
+                        AbzioTheme.buttonRadius,
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: cs.primary.withValues(alpha: 0.4),
+                          blurRadius: 20,
+                          offset: const Offset(0, 8),
+                        ),
+                      ],
                     ),
                     child: Text(
-                      'Book This Pro',
+                      'Browse Services',
                       textAlign: TextAlign.center,
-                      style: tt.titleMedium?.copyWith(color: cs.onPrimary, fontWeight: FontWeight.w700),
+                      style: tt.titleMedium?.copyWith(
+                        color: cs.onPrimary,
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
                   ),
                 ),
@@ -325,22 +484,24 @@ class _ProfileBody extends StatelessWidget {
               children: [
                 Text(
                   'Message this professional',
-                  style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
+                  style: Theme.of(
+                    context,
+                  ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'Messaging starts after you book this professional, so the fastest next step is to open checkout.',
+                  'Choose a service first to check availability and continue with a booking.',
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      ),
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
                 ),
                 const SizedBox(height: 16),
                 FilledButton(
                   onPressed: () {
                     Navigator.of(sheetContext).pop();
-                    context.push('/checkout');
+                    context.push('/search');
                   },
-                  child: const Text('Book now'),
+                  child: const Text('Browse services'),
                 ),
                 const SizedBox(height: 8),
                 OutlinedButton(
@@ -360,7 +521,12 @@ class _ProfileBody extends StatelessWidget {
 }
 
 class _StatBadge extends StatelessWidget {
-  const _StatBadge({required this.icon, required this.value, required this.label, required this.accent});
+  const _StatBadge({
+    required this.icon,
+    required this.value,
+    required this.label,
+    required this.accent,
+  });
   final IconData icon;
   final String value;
   final String label;
@@ -370,21 +536,33 @@ class _StatBadge extends StatelessWidget {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final tt = Theme.of(context).textTheme;
-    
+
     return Expanded(
       child: Container(
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
           color: cs.surface,
           borderRadius: BorderRadius.circular(AbzioTheme.cardRadius),
-          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 16, offset: const Offset(0, 6))],
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.05),
+              blurRadius: 16,
+              offset: const Offset(0, 6),
+            ),
+          ],
         ),
         child: Column(
           children: [
             Icon(icon, color: accent, size: 22),
             const SizedBox(height: 6),
-            Text(value, style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w900)),
-            Text(label, style: tt.labelSmall?.copyWith(color: cs.onSurfaceVariant)),
+            Text(
+              value,
+              style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w900),
+            ),
+            Text(
+              label,
+              style: tt.labelSmall?.copyWith(color: cs.onSurfaceVariant),
+            ),
           ],
         ),
       ),
@@ -400,24 +578,27 @@ class _ReviewCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final tt = Theme.of(context).textTheme;
-    
+
     return Padding(
       padding: const EdgeInsets.only(bottom: 14),
       child: PremiumCard(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
                   MarketplaceNetworkAvatar(
                     imageUrl: review.customerAvatarUrl,
                     radius: 18,
                     backgroundColor: cs.primaryContainer,
                     fallback: Text(
-                      review.customerName.substring(0, 1).toUpperCase(),
-                      style: tt.labelLarge?.copyWith(color: cs.primary, fontWeight: FontWeight.w800),
+                      _initial(review.customerName),
+                      style: tt.labelLarge?.copyWith(
+                        color: cs.primary,
+                        fontWeight: FontWeight.w800,
+                      ),
                     ),
                   ),
                   const SizedBox(width: 10),
@@ -425,20 +606,32 @@ class _ReviewCard extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(review.customerName, style: tt.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
+                        Text(
+                          review.customerName,
+                          style: tt.titleSmall?.copyWith(
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
                         Text(
                           _timeAgo(review.createdAt),
-                          style: tt.labelSmall?.copyWith(color: cs.onSurfaceVariant),
+                          style: tt.labelSmall?.copyWith(
+                            color: cs.onSurfaceVariant,
+                          ),
                         ),
                       ],
                     ),
                   ),
                   Row(
-                    children: List.generate(5, (i) => Icon(
-                      i < review.rating ? Icons.star_rounded : Icons.star_outline_rounded,
-                      size: 14,
-                      color: const Color(0xFFF59E0B),
-                    )),
+                    children: List.generate(
+                      5,
+                      (i) => Icon(
+                        i < review.rating.clamp(0, 5)
+                            ? Icons.star_rounded
+                            : Icons.star_outline_rounded,
+                        size: 14,
+                        color: const Color(0xFFF59E0B),
+                      ),
+                    ),
                   ),
                 ],
               ),
@@ -446,7 +639,10 @@ class _ReviewCard extends StatelessWidget {
                 const SizedBox(height: 10),
                 Text(
                   review.comment!,
-                  style: tt.bodyMedium?.copyWith(color: cs.onSurfaceVariant, height: 1.45),
+                  style: tt.bodyMedium?.copyWith(
+                    color: cs.onSurfaceVariant,
+                    height: 1.45,
+                  ),
                 ),
               ],
             ],

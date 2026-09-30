@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:marketplace_shared/marketplace_shared.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 class CustomerSupportTicket {
   const CustomerSupportTicket({
@@ -132,6 +131,13 @@ class SupportPage extends ConsumerStatefulWidget {
 
 class _SupportPageState extends ConsumerState<SupportPage> {
   bool _openedDraft = false;
+  final _faqSearchController = TextEditingController();
+
+  @override
+  void dispose() {
+    _faqSearchController.dispose();
+    super.dispose();
+  }
 
   @override
   void initState() {
@@ -177,24 +183,33 @@ class _SupportPageState extends ConsumerState<SupportPage> {
       ),
       _Faq(
         q: 'What if the professional does not arrive?',
-        a: 'If the professional is more than 30 minutes late without notice, you can '
-            'contact support. We will review the booking and any refund eligibility; a refund is not automatic.',
+        a: 'Open the booking and send us a support request with the booking details. '
+            'We will review what happened and explain the available next steps.',
       ),
       _Faq(
         q: 'Is there a warranty on the work done?',
-        a: 'Yes. All services carry a 30-day workmanship warranty. If you face any '
-            'issues with the completed job, raise a request and we will resolve it at no charge.',
+        a: 'Coverage can depend on the service and its terms. Open a support request '
+            'with your booking details and our team can review the applicable coverage.',
       ),
       _Faq(
         q: 'How do referral rewards work?',
-        a: 'Share your unique referral code. When a friend makes their first booking '
-            'using your code, you both receive ₹100 in wallet credits.',
+        a: 'Share your unique referral code. When a friend signs up using it, '
+            'you both receive ₹100 in wallet credit.',
       ),
       _Faq(
         q: 'What payment methods are accepted?',
         a: 'We accept UPI, debit/credit cards, net banking, and wallet balance.',
       ),
     ];
+    final query = _faqSearchController.text.trim().toLowerCase();
+    final visibleFaqs = faqs
+        .where(
+          (faq) =>
+              query.isEmpty ||
+              faq.q.toLowerCase().contains(query) ||
+              faq.a.toLowerCase().contains(query),
+        )
+        .toList(growable: false);
 
     return Scaffold(
       backgroundColor: cs.surface,
@@ -226,104 +241,50 @@ class _SupportPageState extends ConsumerState<SupportPage> {
           PremiumCard(
             child: Padding(
               padding: const EdgeInsets.all(20),
-              child: Column(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: cs.primary.withValues(alpha: 0.1),
-                          borderRadius:
-                              BorderRadius.circular(AbzioTheme.buttonRadius),
-                        ),
-                        child:
-                            Icon(Icons.headset_mic_rounded, color: cs.primary),
-                      ),
-                      const SizedBox(width: 14),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              '24/7 Customer Care',
-                              style: tt.titleMedium
-                                  ?.copyWith(fontWeight: FontWeight.w800),
-                            ),
-                            Text(
-                              'We typically reply within 5 minutes.',
-                              style: tt.bodySmall
-                                  ?.copyWith(color: cs.onSurfaceVariant),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: cs.primary.withValues(alpha: 0.1),
+                      borderRadius:
+                          BorderRadius.circular(AbzioTheme.buttonRadius),
+                    ),
+                    child: Icon(Icons.support_agent_rounded, color: cs.primary),
                   ),
-                  const SizedBox(height: 16),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TapScale(
-                          onTap: () => _callSupport(context),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                            decoration: BoxDecoration(
-                              border: Border.all(color: cs.primary),
-                              borderRadius: BorderRadius.circular(14),
-                            ),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(Icons.call_rounded,
-                                    color: cs.primary, size: 18),
-                                const SizedBox(width: 8),
-                                Text(
-                                  'Call Us',
-                                  style: tt.labelLarge?.copyWith(
-                                    color: cs.primary,
-                                    fontWeight: FontWeight.w700,
-                                  ),
-                                ),
-                              ],
-                            ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'How can we help?',
+                          style: tt.titleMedium?.copyWith(
+                            fontWeight: FontWeight.w800,
                           ),
                         ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: TapScale(
-                          onTap: () => _emailSupport(
+                        const SizedBox(height: 4),
+                        Text(
+                          'Send a request and follow replies in My Requests.',
+                          style: tt.bodySmall?.copyWith(
+                            color: cs.onSurfaceVariant,
+                            height: 1.4,
+                          ),
+                        ),
+                        const SizedBox(height: 14),
+                        FilledButton.icon(
+                          onPressed: () => _createSupportTicket(
                             context,
-                            subject: 'Live chat request',
-                            body: 'Hi team, I need live support with my order.',
+                            ref: ref,
+                            category: 'general',
+                            subject: 'Support request',
                           ),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                            decoration: BoxDecoration(
-                              color: cs.primary,
-                              borderRadius: BorderRadius.circular(14),
-                              boxShadow: AbzioTheme.eliteShadow,
-                            ),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(Icons.chat_rounded,
-                                    color: cs.onPrimary, size: 18),
-                                const SizedBox(width: 8),
-                                Text(
-                                  'Live Chat',
-                                  style: tt.labelLarge?.copyWith(
-                                    color: cs.onPrimary,
-                                    fontWeight: FontWeight.w700,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
+                          icon: const Icon(Icons.add_comment_outlined),
+                          label: const Text('Create support request'),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ],
               ),
@@ -363,8 +324,35 @@ class _SupportPageState extends ConsumerState<SupportPage> {
             'Frequently Asked Questions',
             style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w800),
           ),
-          const SizedBox(height: 14),
-          ...faqs.map((f) => _FaqTile(faq: f)),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _faqSearchController,
+            onChanged: (_) => setState(() {}),
+            textInputAction: TextInputAction.search,
+            decoration: InputDecoration(
+              hintText: 'Search help topics',
+              prefixIcon: const Icon(Icons.search_rounded),
+              suffixIcon: query.isEmpty
+                  ? null
+                  : IconButton(
+                      tooltip: 'Clear search',
+                      onPressed: () {
+                        _faqSearchController.clear();
+                        setState(() {});
+                      },
+                      icon: const Icon(Icons.close_rounded),
+                    ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          if (visibleFaqs.isEmpty)
+            const PremiumEmptyState(
+              icon: Icons.search_off_rounded,
+              title: 'No matching help topics',
+              subtitle: 'Try another search or send us a support request.',
+            )
+          else
+            ...visibleFaqs.map((faq) => _FaqTile(faq: faq)),
         ],
       ),
     );
@@ -516,12 +504,12 @@ class _MyTicketsSection extends ConsumerWidget {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text(ticket.subject,
+                                Text(_ticketDisplaySubject(ticket.subject),
                                     style: tt.titleSmall?.copyWith(
                                         fontWeight: FontWeight.w800)),
                                 const SizedBox(height: 4),
                                 Text(
-                                  '${ticket.status.replaceAll('_', ' ')}  ·  ${ticket.replyCount} replies',
+                                  '${_ticketStatusLabel(ticket.status)} · ${ticket.replyCount} ${ticket.replyCount == 1 ? 'reply' : 'replies'} · ${_supportDate(ticket.createdAt)}',
                                   style: tt.bodySmall
                                       ?.copyWith(color: cs.onSurfaceVariant),
                                 ),
@@ -565,6 +553,7 @@ class _CustomerSupportThreadSheet extends ConsumerStatefulWidget {
 class _CustomerSupportThreadSheetState
     extends ConsumerState<_CustomerSupportThreadSheet> {
   final _replyController = TextEditingController();
+  bool _isSending = false;
 
   @override
   void dispose() {
@@ -574,18 +563,32 @@ class _CustomerSupportThreadSheetState
 
   Future<void> _sendReply() async {
     final message = _replyController.text.trim();
-    if (message.length < 2) {
+    if (_isSending || message.length < 2) {
       return;
     }
 
-    final api = ref.read(apiClientProvider);
-    await api.post(
-      '/support/tickets/${widget.ticketId}/replies',
-      data: {'message': message},
-    );
-    _replyController.clear();
-    ref.invalidate(customerSupportThreadProvider(widget.ticketId));
-    ref.invalidate(customerSupportTicketsProvider);
+    setState(() => _isSending = true);
+    try {
+      final api = ref.read(apiClientProvider);
+      await api.post(
+        '/support/tickets/${widget.ticketId}/replies',
+        data: {'message': message},
+      );
+      if (!mounted) return;
+      _replyController.clear();
+      ref.invalidate(customerSupportThreadProvider(widget.ticketId));
+      ref.invalidate(customerSupportTicketsProvider);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Reply sent.')),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not send your reply. Please try again.')),
+      );
+    } finally {
+      if (mounted) setState(() => _isSending = false);
+    }
   }
 
   @override
@@ -604,9 +607,24 @@ class _CustomerSupportThreadSheetState
             height: 360,
             child: Center(child: CircularProgressIndicator()),
           ),
-          error: (error, _) => SizedBox(
+          error: (error, stackTrace) => SizedBox(
             height: 360,
-            child: Center(child: Text('Could not open ticket: $error')),
+            child: Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text('Could not open this support request.'),
+                  const SizedBox(height: 12),
+                  TextButton.icon(
+                    onPressed: () => ref.invalidate(
+                      customerSupportThreadProvider(widget.ticketId),
+                    ),
+                    icon: const Icon(Icons.refresh_rounded),
+                    label: const Text('Try again'),
+                  ),
+                ],
+              ),
+            ),
           ),
           data: (thread) {
             return ConstrainedBox(
@@ -623,9 +641,19 @@ class _CustomerSupportThreadSheetState
                             ?.copyWith(fontWeight: FontWeight.w800)),
                     const SizedBox(height: 6),
                     Text(
-                      thread.ticket.status.replaceAll('_', ' '),
+                      _ticketStatusLabel(thread.ticket.status),
                       style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant),
                     ),
+                    if (thread.ticket.status == 'RESOLVED' ||
+                        thread.ticket.status == 'CLOSED') ...[
+                      const SizedBox(height: 8),
+                      Text(
+                        'Sending a reply will reopen this request.',
+                        style: tt.bodySmall?.copyWith(
+                          color: cs.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
                     const SizedBox(height: 12),
                     Text(thread.ticket.message, style: tt.bodyMedium),
                     const SizedBox(height: 16),
@@ -664,8 +692,12 @@ class _CustomerSupportThreadSheetState
                     TextField(
                       controller: _replyController,
                       maxLines: 3,
+                      maxLength: 5000,
+                      enabled: !_isSending,
+                      onChanged: (_) => setState(() {}),
                       decoration: InputDecoration(
                         hintText: 'Add a reply',
+                        helperText: 'At least 2 characters',
                         border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(14)),
                       ),
@@ -674,8 +706,10 @@ class _CustomerSupportThreadSheetState
                     Align(
                       alignment: Alignment.centerRight,
                       child: FilledButton(
-                        onPressed: _sendReply,
-                        child: const Text('Send'),
+                        onPressed: _isSending || _replyController.text.trim().length < 2
+                            ? null
+                            : _sendReply,
+                        child: Text(_isSending ? 'Sending...' : 'Send reply'),
                       ),
                     ),
                   ],
@@ -794,37 +828,6 @@ class _SupportOption extends ConsumerWidget {
 
 enum _SupportAction { bookingIssue, paymentIssue, professionalReport }
 
-Future<void> _callSupport(BuildContext context) async {
-  final uri = Uri(scheme: 'tel', path: '+918001234567');
-  if (!await launchUrl(uri, mode: LaunchMode.externalApplication) &&
-      context.mounted) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Call support at +91 80012 34567')),
-    );
-  }
-}
-
-Future<void> _emailSupport(
-  BuildContext context, {
-  required String subject,
-  required String body,
-}) async {
-  final uri = Uri(
-    scheme: 'mailto',
-    path: 'support@veedufix.com',
-    queryParameters: {
-      'subject': subject,
-      'body': body,
-    },
-  );
-  if (!await launchUrl(uri, mode: LaunchMode.externalApplication) &&
-      context.mounted) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Support email: support@veedufix.com')),
-    );
-  }
-}
-
 Future<void> _createSupportTicket(
   BuildContext context, {
   required WidgetRef ref,
@@ -842,7 +845,7 @@ Future<void> _createSupportTicket(
           content: TextField(
             controller: messageController,
             maxLines: 5,
-            maxLength: 2000,
+          maxLength: 5000,
             decoration: const InputDecoration(
               hintText: 'Describe your issue in detail',
             ),
@@ -893,12 +896,14 @@ Future<void> _createSupportTicket(
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Support request sent.')),
     );
-  } catch (error) {
+  } catch (_) {
     if (!context.mounted) {
       return;
     }
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Could not send request: $error')),
+      const SnackBar(
+        content: Text('Could not send request. Please try again.'),
+      ),
     );
   } finally {
     messageController.dispose();
@@ -909,6 +914,29 @@ class _Faq {
   const _Faq({required this.q, required this.a});
   final String q;
   final String a;
+}
+
+String _ticketStatusLabel(String status) {
+  switch (status.toUpperCase()) {
+    case 'OPEN':
+      return 'Open';
+    case 'IN_PROGRESS':
+      return 'In progress';
+    case 'RESOLVED':
+      return 'Resolved';
+    case 'CLOSED':
+      return 'Closed';
+    default:
+      return status.replaceAll('_', ' ');
+  }
+}
+
+String _ticketDisplaySubject(String subject) =>
+    subject.replaceFirst(RegExp(r'^\[[^\]]+\]\s*'), '');
+
+String _supportDate(DateTime date) {
+  final local = date.toLocal();
+  return '${local.day}/${local.month}/${local.year}';
 }
 
 class _FaqTile extends StatelessWidget {

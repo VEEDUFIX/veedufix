@@ -48,6 +48,10 @@ final routerProvider = Provider<GoRouter>((ref) {
         return isAuthRoute ? null : '/login';
       }
 
+      if (session.user.role != 'WORKER') {
+        return location == '/login' ? null : '/login';
+      }
+
       if (location == '/login' || location == '/otp' || location == '/splash') {
         return homeRoute;
       }

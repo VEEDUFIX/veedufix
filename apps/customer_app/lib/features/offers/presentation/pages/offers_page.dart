@@ -19,24 +19,61 @@ class OffersPage extends ConsumerWidget {
       backgroundColor: cs.surface,
       body: offersAsync.when(
         data: (offers) {
-          return ListView.separated(
-            padding: const EdgeInsets.all(24),
-            itemCount: offers.length + 1,
-            separatorBuilder: (context, index) => const SizedBox(height: 24),
-            itemBuilder: (context, index) {
-              if (index == 0) {
-                return const _ScratchCardPromo();
-              }
-              final offer = offers[index - 1];
-              return _CouponCard(offer: offer, index: index - 1);
-            },
+          if (offers.isEmpty) {
+            return RefreshIndicator(
+              onRefresh: () => ref.refresh(couponsProvider.future),
+              child: ListView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                children: [
+                  SizedBox(
+                    height: MediaQuery.sizeOf(context).height * 0.72,
+                    child: const Center(
+                      child: PremiumEmptyState(
+                        icon: Icons.local_offer_outlined,
+                        title: 'No offers available',
+                        subtitle: 'New offers will appear here when available.',
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }
+
+          return RefreshIndicator(
+            onRefresh: () => ref.refresh(couponsProvider.future),
+            child: ListView.separated(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
+              itemCount: offers.length + 1,
+              separatorBuilder: (context, index) =>
+                  const SizedBox(height: 12),
+              itemBuilder: (context, index) {
+                if (index == 0) {
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 4),
+                    child: Text(
+                      '${offers.length} current ${offers.length == 1 ? 'offer' : 'offers'}',
+                      style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                        color: cs.onSurfaceVariant,
+                      ),
+                    ),
+                  );
+                }
+                return _CouponCard(offer: offers[index - 1]);
+              },
+            ),
           );
         },
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, stack) => const PremiumEmptyState(
+        error: (error, stack) => PremiumRetryState(
           title: 'Something went wrong',
-          subtitle: 'Failed to load offers.',
+          subtitle: 'Check your connection and try again.',
           icon: Icons.error_outline,
+          onRetry: () => ref.invalidate(couponsProvider),
+          onRefresh: () async {
+            await ref.refresh(couponsProvider.future).then<void>((_) {});
+          },
         ),
       ),
     );
@@ -44,67 +81,104 @@ class OffersPage extends ConsumerWidget {
 }
 
 class _CouponCard extends StatelessWidget {
-  const _CouponCard({required this.offer, required this.index});
+  const _CouponCard({required this.offer});
   final CouponModel offer;
-  final int index;
-
-  static const _accents = [
-    Color(0xFFF59E0B),
-    Color(0xFF10B981),
-    Color(0xFF6366F1),
-    Color(0xFFC2A15E),
-    Color(0xFFEC4899),
-  ];
 
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final tt = Theme.of(context).textTheme;
-    final accent = _accents[index % _accents.length];
+    final accent = cs.primary;
 
-    return TapScale(
-      onTap: () {
-        // Return code to checkout
-        context.pop(offer.code);
-      },
-      child: Container(
+    return Container(
         decoration: BoxDecoration(
-          color: cs.surfaceContainerHighest.withValues(alpha: 0.3),
+          color: cs.surface,
           borderRadius: BorderRadius.circular(AbzioTheme.cardRadius),
-          border: Border.all(color: accent.withValues(alpha: 0.2)),
+          border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.55)),
+          boxShadow: AbzioTheme.shadowFor(Theme.of(context).brightness),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Padding(
-              padding: const EdgeInsets.all(20),
+              padding: const EdgeInsets.all(16),
               child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Container(
-                    height: 48,
-                    width: 48,
-                    decoration: BoxDecoration(
-                      color: accent.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(AbzioTheme.buttonRadius),
-                    ),
-                    child: Icon(Icons.local_offer_rounded, color: accent),
-                  ),
-                  const SizedBox(width: 16),
+                  Icon(Icons.local_offer_rounded, color: accent, size: 22),
+                  const SizedBox(width: 12),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
                           offer.title,
-                          style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: tt.titleMedium?.copyWith(
+                            fontWeight: FontWeight.w800,
+                          ),
                         ),
                         const SizedBox(height: 4),
                         Text(
                           offer.discountLabel,
-                          style: tt.bodyMedium?.copyWith(
-                            color: cs.onSurfaceVariant,
-                            height: 1.4,
+                          style: tt.titleSmall?.copyWith(
+                            color: accent,
+                            fontWeight: FontWeight.w700,
                           ),
+                        ),
+                        if (offer.description.trim().isNotEmpty) ...[
+                          const SizedBox(height: 6),
+                          Text(
+                            offer.description,
+                            style: tt.bodySmall?.copyWith(
+                              color: cs.onSurfaceVariant,
+                              height: 1.4,
+                            ),
+                          ),
+                        ],
+                        const SizedBox(height: 10),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: [
+                            _OfferDetail(label: offer.expiryLabel),
+                            if (offer.minOrderAmount != null &&
+                                offer.minOrderAmount! > 0)
+                              _OfferDetail(
+                                label:
+                                    'Min. order ₹${offer.minOrderAmount!.toStringAsFixed(0)}',
+                              ),
+                            if (offer.maxDiscountAmount != null &&
+                                offer.discountType.toUpperCase() == 'PERCENTAGE')
+                              _OfferDetail(
+                                label:
+                                    'Up to ₹${offer.maxDiscountAmount!.toStringAsFixed(0)} off',
+                              ),
+                          ],
+                        ),
+                        const SizedBox(height: 14),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                offer.code,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: tt.labelLarge?.copyWith(
+                                  color: cs.onSurface,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            FilledButton.tonal(
+                              onPressed: offer.code.trim().isEmpty
+                                  ? null
+                                  : () => context.pop(offer.code),
+                              child: const Text('Use code'),
+                            ),
+                          ],
                         ),
                       ],
                     ),
@@ -112,151 +186,30 @@ class _CouponCard extends StatelessWidget {
                 ],
               ),
             ),
-            // Dotted separator
-            Row(
-              children: [
-                _SemiCircle(color: cs.surface, isLeft: true),
-                Expanded(
-                  child: LayoutBuilder(
-                    builder: (context, constraints) {
-                      return Flex(
-                        direction: Axis.horizontal,
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        mainAxisSize: MainAxisSize.max,
-                        children: List.generate(
-                          (constraints.constrainWidth() / 10).floor(),
-                          (index) => SizedBox(
-                            width: 5,
-                            height: 1,
-                            child: DecoratedBox(
-                              decoration: BoxDecoration(
-                                color: cs.outlineVariant.withValues(alpha: 0.5),
-                              ),
-                            ),
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-                ),
-                _SemiCircle(color: cs.surface, isLeft: false),
-              ],
-            ),
-            Padding(
-              padding: const EdgeInsets.all(20),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    offer.expiryLabel,
-                    style: tt.bodySmall?.copyWith(
-                      color: cs.onSurfaceVariant,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                    decoration: BoxDecoration(
-                      color: accent.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: accent.withValues(alpha: 0.2)),
-                    ),
-                    child: Text(
-                      offer.code,
-                      style: tt.labelLarge?.copyWith(
-                        color: accent,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 1,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
           ],
         ),
-      ),
-    );
+      );
   }
 }
 
-class _SemiCircle extends StatelessWidget {
-  const _SemiCircle({required this.color, required this.isLeft});
-  final Color color;
-  final bool isLeft;
+class _OfferDetail extends StatelessWidget {
+  const _OfferDetail({required this.label});
+
+  final String label;
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      height: 20,
-      width: 10,
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          color: color,
-          borderRadius: isLeft
-              ? const BorderRadius.horizontal(right: Radius.circular(10))
-              : const BorderRadius.horizontal(left: Radius.circular(10)),
-        ),
-      ),
-    );
-  }
-}
-
-class _ScratchCardPromo extends StatelessWidget {
-  const _ScratchCardPromo();
-
-  @override
-  Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [cs.primary, const Color(0xFF8B5CF6)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(AbzioTheme.cardRadius),
-        boxShadow: AbzioTheme.eliteShadow,
+        color: Theme.of(context).colorScheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(8),
       ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Win up to ₹1,000!',
-                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w900,
-                      ),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  'Complete 3 bookings to unlock a mystery scratch card.',
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: Colors.white.withValues(alpha: 0.8),
-                        height: 1.4,
-                      ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 16),
-          Container(
-            height: 80,
-            width: 80,
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.15),
-              borderRadius: BorderRadius.circular(AbzioTheme.buttonRadius),
-              border: Border.all(color: Colors.white.withValues(alpha: 0.2)),
-            ),
-            child: const Center(
-              child: Icon(Icons.celebration_rounded, color: Colors.white, size: 36),
-            ),
-          ),
-        ],
+      child: Text(
+        label,
+        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+          color: Theme.of(context).colorScheme.onSurfaceVariant,
+        ),
       ),
     );
   }

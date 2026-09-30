@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:marketplace_shared/marketplace_shared.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../../../admin/presentation/widgets/admin_surface.dart';
 import '../../data/finance_api.dart';
@@ -131,19 +130,41 @@ class _TaxSummaryPageState extends ConsumerState<TaxSummaryPage> {
         startDate: _selectedRange.start,
         endDate: _selectedRange.end,
       );
-      final uri = Uri.parse(url);
-      if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
-        if (!mounted) {
-          return;
-        }
+      final saved = await _api.downloadCsv(url, 'veedufix-tax-summary.csv');
+      if (!mounted) return;
+      if (saved) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Could not open CSV download link')),
+          const SnackBar(content: Text('Tax summary CSV downloaded')),
         );
       }
     } finally {
       if (mounted) {
         setState(() => _busy = false);
       }
+    }
+  }
+
+  Future<void> _exportReconciliationCsv() async {
+    setState(() => _busy = true);
+    try {
+      final url = _api.taxReconciliationCsvUrl(
+        startDate: _selectedRange.start,
+        endDate: _selectedRange.end,
+      );
+      final saved = await _api.downloadCsv(url, 'veedufix-financial-reconciliation.csv');
+      if (!mounted) return;
+      if (saved) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Reconciliation CSV downloaded')),
+        );
+      }
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Reconciliation export failed: $error')),
+      );
+    } finally {
+      if (mounted) setState(() => _busy = false);
     }
   }
 
@@ -176,6 +197,11 @@ class _TaxSummaryPageState extends ConsumerState<TaxSummaryPage> {
               onPressed: _exportCsv,
               icon: const Icon(Icons.download_rounded, size: 18),
               label: const Text('Export CSV'),
+            ),
+            TextButton.icon(
+              onPressed: _exportReconciliationCsv,
+              icon: const Icon(Icons.account_balance_rounded, size: 18),
+              label: const Text('Reconciliation'),
             ),
           ],
           IconButton(

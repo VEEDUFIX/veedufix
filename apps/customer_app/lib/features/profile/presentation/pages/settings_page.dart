@@ -7,11 +7,60 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../../../core/notifications/customer_device_token.dart';
 
-class SettingsPage extends ConsumerWidget {
+class SettingsPage extends ConsumerStatefulWidget {
   const SettingsPage({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<SettingsPage> createState() => _SettingsPageState();
+}
+
+class _SettingsPageState extends ConsumerState<SettingsPage> {
+  bool _isSigningOut = false;
+
+  Future<void> _confirmAndSignOut() async {
+    if (_isSigningOut) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Sign out of Veedufix?'),
+        content: const Text(
+          'You can sign in again anytime using your registered mobile number.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Sign out'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _isSigningOut = true);
+    try {
+      try {
+        await unregisterCustomerDeviceToken(ref.read(apiClientProvider));
+      } catch (_) {
+        // Signing out must work even when device-token cleanup is unavailable.
+      }
+      try {
+        await FirebaseAuth.instance.signOut();
+      } catch (_) {
+        // Clear the backend session even if Firebase is unavailable.
+      }
+      await ref.read(authControllerProvider.notifier).signOut();
+    } catch (_) {
+      // Continue to the sign-in screen if remote or local cleanup reports an error.
+    }
+    if (mounted) context.go('/login');
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final tt = Theme.of(context).textTheme;
 
@@ -106,34 +155,10 @@ class SettingsPage extends ConsumerWidget {
             onTap: () =>
                 _openLegalPage(context, 'https://veedufix.com/privacy'),
           ),
-          _SettingsTile(
-            icon: Icons.info_outline_rounded,
-            title: 'App Version',
-            subtitle: 'v1.0.0 (Build 42)',
-            showChevron: false,
-            onTap: () => _showInfoDialog(
-              context,
-              title: 'App Version',
-              body: 'v1.0.0 (Build 42)',
-            ),
-          ),
           const SizedBox(height: 48),
           Center(
             child: TapScale(
-              onTap: () async {
-                await unregisterCustomerDeviceToken(
-                  ref.read(apiClientProvider),
-                );
-                try {
-                  await FirebaseAuth.instance.signOut();
-                } catch (_) {
-                  // Clear the backend session even if Firebase is unavailable.
-                }
-                await ref.read(authControllerProvider.notifier).signOut();
-                if (context.mounted) {
-                  context.go('/login');
-                }
-              },
+              onTap: _isSigningOut ? () {} : _confirmAndSignOut,
               child: Container(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 32,
@@ -143,12 +168,27 @@ class SettingsPage extends ConsumerWidget {
                   color: cs.error.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(AbzioTheme.buttonRadius),
                 ),
-                child: Text(
-                  'Log Out',
-                  style: tt.titleMedium?.copyWith(
-                    color: cs.error,
-                    fontWeight: FontWeight.w700,
-                  ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (_isSigningOut) ...[
+                      SizedBox.square(
+                        dimension: 18,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: cs.error,
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                    ],
+                    Text(
+                      _isSigningOut ? 'Signing out…' : 'Log Out',
+                      style: tt.titleMedium?.copyWith(
+                        color: cs.error,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ),
@@ -186,7 +226,6 @@ class _SettingsTile extends StatelessWidget {
     required this.title,
     this.subtitle,
     this.isDestructive = false,
-    this.showChevron = true,
     required this.onTap,
   });
 
@@ -194,7 +233,6 @@ class _SettingsTile extends StatelessWidget {
   final String title;
   final String? subtitle;
   final bool isDestructive;
-  final bool showChevron;
   final VoidCallback onTap;
 
   @override
@@ -257,39 +295,16 @@ class _SettingsTile extends StatelessWidget {
                 ],
               ),
             ),
-            if (showChevron)
-              Icon(
-                Icons.arrow_forward_ios_rounded,
-                size: 16,
-                color: cs.onSurfaceVariant,
-              ),
+            Icon(
+              Icons.arrow_forward_ios_rounded,
+              size: 16,
+              color: cs.onSurfaceVariant,
+            ),
           ],
         ),
       ),
     );
   }
-}
-
-Future<void> _showInfoDialog(
-  BuildContext context, {
-  required String title,
-  required String body,
-}) async {
-  await showDialog<void>(
-    context: context,
-    builder: (dialogContext) {
-      return AlertDialog(
-        title: Text(title),
-        content: Text(body),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(),
-            child: const Text('Close'),
-          ),
-        ],
-      );
-    },
-  );
 }
 
 Future<void> _showLanguagePicker(BuildContext context, WidgetRef ref) async {

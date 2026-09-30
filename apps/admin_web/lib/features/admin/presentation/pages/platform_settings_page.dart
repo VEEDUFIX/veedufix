@@ -13,7 +13,8 @@ class PlatformSettingsPage extends ConsumerStatefulWidget {
   const PlatformSettingsPage({super.key});
 
   @override
-  ConsumerState<PlatformSettingsPage> createState() => _PlatformSettingsPageState();
+  ConsumerState<PlatformSettingsPage> createState() =>
+      _PlatformSettingsPageState();
 }
 
 class _PlatformSettingsPageState extends ConsumerState<PlatformSettingsPage> {
@@ -23,10 +24,16 @@ class _PlatformSettingsPageState extends ConsumerState<PlatformSettingsPage> {
   final _businessNameController = TextEditingController();
   final _addressController = TextEditingController();
   final _invoiceSequenceController = TextEditingController();
+  final _minimumPayoutController = TextEditingController();
+  final _referralRewardController = TextEditingController();
+  final _referralLimitController = TextEditingController();
+  final _payoutPauseReasonController = TextEditingController();
 
   _PlatformSettingsSnapshot? _snapshot;
   bool _loading = true;
   bool _controllersInitialized = false;
+  bool _referralsEnabled = true;
+  bool _payoutsPaused = false;
 
   @override
   void initState() {
@@ -42,6 +49,10 @@ class _PlatformSettingsPageState extends ConsumerState<PlatformSettingsPage> {
     _businessNameController.dispose();
     _addressController.dispose();
     _invoiceSequenceController.dispose();
+    _minimumPayoutController.dispose();
+    _referralRewardController.dispose();
+    _referralLimitController.dispose();
+    _payoutPauseReasonController.dispose();
     super.dispose();
   }
 
@@ -76,20 +87,50 @@ class _PlatformSettingsPageState extends ConsumerState<PlatformSettingsPage> {
 
   void _applySnapshotToControllers(_PlatformSettingsSnapshot snapshot) {
     _gstinController.text = snapshot.platformConfig.gstin ?? '';
-    _businessNameController.text = snapshot.platformConfig.legalBusinessName ?? '';
+    _businessNameController.text =
+        snapshot.platformConfig.legalBusinessName ?? '';
     _addressController.text = snapshot.platformConfig.registeredAddress ?? '';
-    _invoiceSequenceController.text = snapshot.invoiceSequence.currentValue.toString();
+    _invoiceSequenceController.text =
+        snapshot.invoiceSequence.currentValue.toString();
+    _minimumPayoutController.text =
+        snapshot.platformConfig.minimumWorkerPayout.toStringAsFixed(2);
+    _referralRewardController.text =
+        snapshot.platformConfig.referralRewardAmount.toStringAsFixed(2);
+    _referralLimitController.text =
+        snapshot.platformConfig.referralMaxSuccessfulPerReferrer.toString();
+    _payoutPauseReasonController.text =
+        snapshot.platformConfig.payoutPauseReason ?? '';
+    _referralsEnabled = snapshot.platformConfig.referralsEnabled;
+    _payoutsPaused = snapshot.platformConfig.payoutsPaused;
   }
 
   Future<void> _showMessage(String message) async {
     if (!mounted) {
       return;
     }
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(message)));
   }
 
   Future<void> _savePlatformSettings() async {
-    final parsedInvoiceSequence = int.tryParse(_invoiceSequenceController.text.trim());
+    final parsedInvoiceSequence =
+        int.tryParse(_invoiceSequenceController.text.trim());
+    final minimumPayout = double.tryParse(_minimumPayoutController.text.trim());
+    final referralReward =
+        double.tryParse(_referralRewardController.text.trim());
+    final referralLimit = int.tryParse(_referralLimitController.text.trim());
+    if (minimumPayout == null || minimumPayout <= 0) {
+      await _showMessage('Minimum partner payout must be greater than ₹0');
+      return;
+    }
+    if (referralReward == null || referralReward < 0) {
+      await _showMessage('Referral reward cannot be negative');
+      return;
+    }
+    if (referralLimit == null || referralLimit < 0 || referralLimit > 100000) {
+      await _showMessage('Referral limit must be 0 or a whole number up to 100000');
+      return;
+    }
 
     try {
       final snapshot = await _api.updatePlatformSettings(
@@ -97,6 +138,12 @@ class _PlatformSettingsPageState extends ConsumerState<PlatformSettingsPage> {
         legalBusinessName: _businessNameController.text.trim(),
         registeredAddress: _addressController.text.trim(),
         invoiceSequenceCurrentValue: parsedInvoiceSequence,
+        minimumWorkerPayout: minimumPayout,
+        referralRewardAmount: referralReward,
+        referralsEnabled: _referralsEnabled,
+        referralMaxSuccessfulPerReferrer: referralLimit,
+        payoutsPaused: _payoutsPaused,
+        payoutPauseReason: _payoutPauseReasonController.text.trim(),
       );
       if (!mounted) {
         return;
@@ -136,7 +183,9 @@ class _PlatformSettingsPageState extends ConsumerState<PlatformSettingsPage> {
         await _api.updateCommission(existing.id, payload);
       }
       await _refresh();
-      await _showMessage(existing == null ? 'Commission rule created' : 'Commission rule updated');
+      await _showMessage(existing == null
+          ? 'Commission rule created'
+          : 'Commission rule updated');
     } catch (error) {
       await _showMessage('Unable to save commission rule: $error');
     }
@@ -185,9 +234,12 @@ class _PlatformSettingsPageState extends ConsumerState<PlatformSettingsPage> {
     _CommissionEntry? existing,
   }) async {
     final formKey = GlobalKey<FormState>();
-    final rateController = TextEditingController(text: existing?.rate.toStringAsFixed(2) ?? '18.00');
-    final feeController = TextEditingController(text: existing?.fixedFee.toStringAsFixed(2) ?? '0.00');
-    final cityValue = ValueNotifier<String>(existing?.cityId ?? _globalCommissionValue);
+    final rateController = TextEditingController(
+        text: existing?.rate.toStringAsFixed(2) ?? '18.00');
+    final feeController = TextEditingController(
+        text: existing?.fixedFee.toStringAsFixed(2) ?? '0.00');
+    final cityValue =
+        ValueNotifier<String>(existing?.cityId ?? _globalCommissionValue);
     final isActive = ValueNotifier<bool>(existing?.isActive ?? true);
 
     try {
@@ -196,7 +248,9 @@ class _PlatformSettingsPageState extends ConsumerState<PlatformSettingsPage> {
         barrierDismissible: false,
         builder: (dialogContext) {
           return AlertDialog(
-            title: Text(existing == null ? 'Add commission rule' : 'Edit commission rule'),
+            title: Text(existing == null
+                ? 'Add commission rule'
+                : 'Edit commission rule'),
             content: SizedBox(
               width: 560,
               child: StatefulBuilder(
@@ -234,13 +288,15 @@ class _PlatformSettingsPageState extends ConsumerState<PlatformSettingsPage> {
                           const SizedBox(height: 16),
                           TextFormField(
                             controller: rateController,
-                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                            keyboardType: const TextInputType.numberWithOptions(
+                                decimal: true),
                             decoration: const InputDecoration(
                               labelText: 'Commission rate %',
                               border: OutlineInputBorder(),
                             ),
                             validator: (value) {
-                              final parsed = double.tryParse(value?.trim() ?? '');
+                              final parsed =
+                                  double.tryParse(value?.trim() ?? '');
                               if (parsed == null || parsed < 0) {
                                 return 'Enter a valid commission rate';
                               }
@@ -250,13 +306,15 @@ class _PlatformSettingsPageState extends ConsumerState<PlatformSettingsPage> {
                           const SizedBox(height: 16),
                           TextFormField(
                             controller: feeController,
-                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                            keyboardType: const TextInputType.numberWithOptions(
+                                decimal: true),
                             decoration: const InputDecoration(
                               labelText: 'Fixed fee',
                               border: OutlineInputBorder(),
                             ),
                             validator: (value) {
-                              final parsed = double.tryParse(value?.trim() ?? '');
+                              final parsed =
+                                  double.tryParse(value?.trim() ?? '');
                               if (parsed == null || parsed < 0) {
                                 return 'Enter a valid fixed fee';
                               }
@@ -267,9 +325,11 @@ class _PlatformSettingsPageState extends ConsumerState<PlatformSettingsPage> {
                           SwitchListTile.adaptive(
                             contentPadding: EdgeInsets.zero,
                             value: isActive.value,
-                            onChanged: (value) => setState(() => isActive.value = value),
+                            onChanged: (value) =>
+                                setState(() => isActive.value = value),
                             title: const Text('Active'),
-                            subtitle: const Text('Inactive rules stay in history but are ignored.'),
+                            subtitle: const Text(
+                                'Inactive rules stay in history but are ignored.'),
                           ),
                         ],
                       ),
@@ -288,12 +348,17 @@ class _PlatformSettingsPageState extends ConsumerState<PlatformSettingsPage> {
                   final rate = double.tryParse(rateController.text.trim());
                   final fixedFee = double.tryParse(feeController.text.trim());
 
-                  if (rate == null || rate < 0 || fixedFee == null || fixedFee < 0) {
+                  if (rate == null ||
+                      rate < 0 ||
+                      fixedFee == null ||
+                      fixedFee < 0) {
                     return;
                   }
 
                   Navigator.of(dialogContext).pop({
-                    'cityId': cityValue.value == _globalCommissionValue ? null : cityValue.value,
+                    'cityId': cityValue.value == _globalCommissionValue
+                        ? null
+                        : cityValue.value,
                     'rate': rate,
                     'fixedFee': fixedFee,
                     'isActive': isActive.value,
@@ -318,8 +383,14 @@ class _PlatformSettingsPageState extends ConsumerState<PlatformSettingsPage> {
     final snapshot = _snapshot;
     final cs = Theme.of(context).colorScheme;
 
-    final globalCommission = snapshot?.commissions.where((item) => item.cityId == null).toList(growable: false) ?? const <_CommissionEntry>[];
-    final cityCommissions = snapshot?.commissions.where((item) => item.cityId != null).toList(growable: false) ?? const <_CommissionEntry>[];
+    final globalCommission = snapshot?.commissions
+            .where((item) => item.cityId == null)
+            .toList(growable: false) ??
+        const <_CommissionEntry>[];
+    final cityCommissions = snapshot?.commissions
+            .where((item) => item.cityId != null)
+            .toList(growable: false) ??
+        const <_CommissionEntry>[];
 
     return AdminPageShell(
       title: 'Platform Settings',
@@ -342,7 +413,7 @@ class _PlatformSettingsPageState extends ConsumerState<PlatformSettingsPage> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'GST, invoices, and commissions',
+                      'GST, payouts, and commissions',
                       style: TextStyle(
                         fontSize: 28,
                         fontWeight: FontWeight.w900,
@@ -352,7 +423,7 @@ class _PlatformSettingsPageState extends ConsumerState<PlatformSettingsPage> {
                     ),
                     SizedBox(height: 8),
                     Text(
-                      'Manage the business identity used on invoices and the commission rules applied to settlements.',
+                      'Manage invoice identity, referral rewards, partner withdrawal limits, and settlement commissions.',
                       style: TextStyle(
                         color: kAdminMuted,
                         height: 1.45,
@@ -364,7 +435,10 @@ class _PlatformSettingsPageState extends ConsumerState<PlatformSettingsPage> {
             ),
             const SizedBox(height: 16),
             if (_loading && snapshot == null)
-              const Center(child: Padding(padding: EdgeInsets.all(24), child: CircularProgressIndicator()))
+              const Center(
+                  child: Padding(
+                      padding: EdgeInsets.all(24),
+                      child: CircularProgressIndicator()))
             else if (snapshot != null) ...[
               Wrap(
                 spacing: 16,
@@ -399,7 +473,8 @@ class _PlatformSettingsPageState extends ConsumerState<PlatformSettingsPage> {
                     children: [
                       const AdminSectionHeader(
                         title: 'Business identity',
-                        subtitle: 'These fields are printed on customer invoices and legal documents.',
+                        subtitle:
+                            'These fields are printed on customer invoices and legal documents.',
                       ),
                       const SizedBox(height: 20),
                       LayoutBuilder(
@@ -466,10 +541,112 @@ class _PlatformSettingsPageState extends ConsumerState<PlatformSettingsPage> {
                                 keyboardType: TextInputType.number,
                                 decoration: const InputDecoration(
                                   labelText: 'Invoice sequence current value',
-                                  helperText: 'The next generated invoice number increments from this value.',
+                                  helperText:
+                                      'The next generated invoice number increments from this value.',
                                   border: OutlineInputBorder(),
                                 ),
                               ),
+                              const SizedBox(height: 24),
+                              const Divider(),
+                              const SizedBox(height: 16),
+                              const AdminSectionHeader(
+                                title: 'Money controls',
+                                subtitle:
+                                    'These values are used for new referral credits and partner payout requests.',
+                              ),
+                              const SizedBox(height: 16),
+                              LayoutBuilder(
+                                builder: (context, constraints) {
+                                  final minimumField = TextField(
+                                    controller: _minimumPayoutController,
+                                    keyboardType:
+                                        const TextInputType.numberWithOptions(
+                                            decimal: true),
+                                    inputFormatters: [
+                                      FilteringTextInputFormatter.allow(
+                                          RegExp(r'^\d*\.?\d{0,2}'))
+                                    ],
+                                    decoration: const InputDecoration(
+                                      labelText: 'Minimum partner payout (₹)',
+                                      helperText:
+                                          'Applies to new withdrawal requests.',
+                                      border: OutlineInputBorder(),
+                                    ),
+                                  );
+                                  final referralField = TextField(
+                                    controller: _referralRewardController,
+                                    keyboardType:
+                                        const TextInputType.numberWithOptions(
+                                            decimal: true),
+                                    inputFormatters: [
+                                      FilteringTextInputFormatter.allow(
+                                          RegExp(r'^\d*\.?\d{0,2}'))
+                                    ],
+                                    decoration: const InputDecoration(
+                                      labelText:
+                                          'Referral reward per person (₹)',
+                                      helperText:
+                                          'Credited to each side for future successful referrals. Set 0 to pause rewards.',
+                                      border: OutlineInputBorder(),
+                                    ),
+                                  );
+                                  return constraints.maxWidth < 700
+                                      ? Column(children: [
+                                          minimumField,
+                                          const SizedBox(height: 16),
+                                          referralField
+                                        ])
+                                      : Row(children: [
+                                          Expanded(child: minimumField),
+                                          const SizedBox(width: 16),
+                                          Expanded(child: referralField)
+                                        ]);
+                                },
+                              ),
+                              const SizedBox(height: 12),
+                              TextField(
+                                controller: _referralLimitController,
+                                keyboardType: TextInputType.number,
+                                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                                decoration: const InputDecoration(
+                                  labelText: 'Successful referrals per referrer',
+                                  helperText: '0 means unlimited. Existing completed referrals count toward this limit.',
+                                  border: OutlineInputBorder(),
+                                ),
+                              ),
+                              SwitchListTile.adaptive(
+                                contentPadding: EdgeInsets.zero,
+                                value: _referralsEnabled,
+                                onChanged: (value) => setState(() => _referralsEnabled = value),
+                                title: const Text('Referral rewards enabled'),
+                                subtitle: const Text('Turn off to stop accepting referral rewards for new signups.'),
+                              ),
+                              const Divider(),
+                              SwitchListTile.adaptive(
+                                contentPadding: EdgeInsets.zero,
+                                value: _payoutsPaused,
+                                onChanged: (value) => setState(() => _payoutsPaused = value),
+                                title: const Text('Pause partner payouts'),
+                                subtitle: const Text('Stops new withdrawal requests and holds new booking settlements.'),
+                              ),
+                              if (_payoutsPaused) ...[
+                                TextField(
+                                  controller: _payoutPauseReasonController,
+                                  maxLength: 240,
+                                  decoration: const InputDecoration(
+                                    labelText: 'Reason shown to partners',
+                                    helperText: 'Required while payouts are paused.',
+                                    border: OutlineInputBorder(),
+                                  ),
+                                ),
+                              ],
+                              if (_snapshot != null) ...[
+                                const SizedBox(height: 4),
+                                Text(
+                                  'Settings saved ${DateFormat('d MMM yyyy, h:mm a').format(_snapshot!.platformConfig.updatedAt.toLocal())}. Updates affect new activity; existing payout amounts are preserved.',
+                                  style: Theme.of(context).textTheme.bodySmall?.copyWith(color: kAdminMuted),
+                                ),
+                              ],
                               const SizedBox(height: 18),
                               Align(
                                 alignment: Alignment.centerRight,
@@ -499,7 +676,8 @@ class _PlatformSettingsPageState extends ConsumerState<PlatformSettingsPage> {
                           const Expanded(
                             child: AdminSectionHeader(
                               title: 'Commission rules',
-                              subtitle: 'Maintain a global default and city-specific overrides.',
+                              subtitle:
+                                  'Maintain a global default and city-specific overrides.',
                             ),
                           ),
                           FilledButton.icon(
@@ -514,14 +692,17 @@ class _PlatformSettingsPageState extends ConsumerState<PlatformSettingsPage> {
                         _CommissionCard(
                           entry: globalCommission.first,
                           onEdit: () => _editCommission(globalCommission.first),
-                          onDelete: () => _deleteCommission(globalCommission.first),
-                          onTap: () => context.push('/platform-settings/commissions/${globalCommission.first.id}'),
+                          onDelete: () =>
+                              _deleteCommission(globalCommission.first),
+                          onTap: () => context.push(
+                              '/platform-settings/commissions/${globalCommission.first.id}'),
                           isGlobal: true,
                         )
                       else
                         _EmptyCommissionCard(
                           title: 'No global default yet',
-                          subtitle: 'Create a fallback commission rule for the whole platform.',
+                          subtitle:
+                              'Create a fallback commission rule for the whole platform.',
                           actionLabel: 'Add global rule',
                           onAction: () => _editCommission(null),
                         ),
@@ -534,14 +715,16 @@ class _PlatformSettingsPageState extends ConsumerState<PlatformSettingsPage> {
                               entry: entry,
                               onEdit: () => _editCommission(entry),
                               onDelete: () => _deleteCommission(entry),
-                              onTap: () => context.push('/platform-settings/commissions/${entry.id}'),
+                              onTap: () => context.push(
+                                  '/platform-settings/commissions/${entry.id}'),
                             ),
                           ),
                         )
                       else
                         const _EmptyCommissionCard(
                           title: 'No city overrides yet',
-                          subtitle: 'Add a city-specific commission rule when a market needs a different fee.',
+                          subtitle:
+                              'Add a city-specific commission rule when a market needs a different fee.',
                           actionLabel: 'Add city rule',
                         ),
                     ],
@@ -558,13 +741,16 @@ class _PlatformSettingsPageState extends ConsumerState<PlatformSettingsPage> {
                   children: [
                     const AdminSectionHeader(
                       title: 'Recent changes',
-                      subtitle: 'Latest platform setting and commission edits from the audit trail.',
+                      subtitle:
+                          'Latest platform setting and commission edits from the audit trail.',
                     ),
                     const SizedBox(height: 16),
                     FutureBuilder<List<_PlatformSettingsHistoryEntry>>(
                       future: _historyFuture,
                       builder: (context, historySnapshot) {
-                        if (historySnapshot.connectionState == ConnectionState.waiting && !historySnapshot.hasData) {
+                        if (historySnapshot.connectionState ==
+                                ConnectionState.waiting &&
+                            !historySnapshot.hasData) {
                           return const Center(
                             child: Padding(
                               padding: EdgeInsets.all(24),
@@ -574,10 +760,12 @@ class _PlatformSettingsPageState extends ConsumerState<PlatformSettingsPage> {
                         }
 
                         if (historySnapshot.hasError) {
-                          return Text('Unable to load history: ${historySnapshot.error}');
+                          return Text(
+                              'Unable to load history: ${historySnapshot.error}');
                         }
 
-                        final history = historySnapshot.data ?? const <_PlatformSettingsHistoryEntry>[];
+                        final history = historySnapshot.data ??
+                            const <_PlatformSettingsHistoryEntry>[];
                         if (history.isEmpty) {
                           return const Text('No recent changes found.');
                         }
@@ -588,7 +776,8 @@ class _PlatformSettingsPageState extends ConsumerState<PlatformSettingsPage> {
                               .map(
                                 (entry) => Padding(
                                   padding: const EdgeInsets.only(bottom: 10),
-                                  child: _PlatformSettingsHistoryRow(entry: entry),
+                                  child:
+                                      _PlatformSettingsHistoryRow(entry: entry),
                                 ),
                               )
                               .toList(growable: false),
@@ -603,13 +792,14 @@ class _PlatformSettingsPageState extends ConsumerState<PlatformSettingsPage> {
             AdminSurfacePanel(
               child: Padding(
                 padding: const EdgeInsets.all(22),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const AdminSectionHeader(
-                        title: 'Market coverage',
-                        subtitle: 'Cities currently available for service-area and commission setup.',
-                      ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const AdminSectionHeader(
+                      title: 'Market coverage',
+                      subtitle:
+                          'Cities currently available for service-area and commission setup.',
+                    ),
                     const SizedBox(height: 16),
                     if (snapshot == null || snapshot.cities.isEmpty)
                       const Text('No cities found.')
@@ -620,11 +810,15 @@ class _PlatformSettingsPageState extends ConsumerState<PlatformSettingsPage> {
                         children: snapshot.cities
                             .map(
                               (city) => Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 12, vertical: 8),
                                 decoration: BoxDecoration(
-                                  color: cs.surfaceContainerHighest.withValues(alpha: 0.6),
+                                  color: cs.surfaceContainerHighest
+                                      .withValues(alpha: 0.6),
                                   borderRadius: BorderRadius.circular(999),
-                                  border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.4)),
+                                  border: Border.all(
+                                      color: cs.outlineVariant
+                                          .withValues(alpha: 0.4)),
                                 ),
                                 child: Text('${city.name} · ${city.state}'),
                               ),
@@ -648,12 +842,15 @@ class _PlatformSettingsApi {
   final Dio _dio;
 
   Future<_PlatformSettingsSnapshot> fetchSnapshot() async {
-    final response = await _dio.get<Map<String, dynamic>>('/admin/platform-settings');
-    return _PlatformSettingsSnapshot.fromJson(response.data ?? const <String, dynamic>{});
+    final response =
+        await _dio.get<Map<String, dynamic>>('/admin/platform-settings');
+    return _PlatformSettingsSnapshot.fromJson(
+        response.data ?? const <String, dynamic>{});
   }
 
   Future<List<_PlatformSettingsHistoryEntry>> fetchHistory() async {
-    final response = await _dio.get<Map<String, dynamic>>('/admin/platform-settings/history');
+    final response = await _dio
+        .get<Map<String, dynamic>>('/admin/platform-settings/history');
     return (response.data?['history'] as List? ?? const [])
         .whereType<Map<String, dynamic>>()
         .map(_PlatformSettingsHistoryEntry.fromJson)
@@ -664,6 +861,12 @@ class _PlatformSettingsApi {
     required String gstin,
     required String legalBusinessName,
     required String registeredAddress,
+    required double minimumWorkerPayout,
+    required double referralRewardAmount,
+    required bool referralsEnabled,
+    required int referralMaxSuccessfulPerReferrer,
+    required bool payoutsPaused,
+    required String payoutPauseReason,
     int? invoiceSequenceCurrentValue,
   }) async {
     final response = await _dio.put<Map<String, dynamic>>(
@@ -672,27 +875,43 @@ class _PlatformSettingsApi {
         'gstin': gstin,
         'legalBusinessName': legalBusinessName,
         'registeredAddress': registeredAddress,
-        if (invoiceSequenceCurrentValue != null) 'invoiceSequenceCurrentValue': invoiceSequenceCurrentValue,
+        'minimumWorkerPayout': minimumWorkerPayout,
+        'referralRewardAmount': referralRewardAmount,
+        'referralsEnabled': referralsEnabled,
+        'referralMaxSuccessfulPerReferrer': referralMaxSuccessfulPerReferrer,
+        'payoutsPaused': payoutsPaused,
+        'payoutPauseReason': payoutPauseReason,
+        if (invoiceSequenceCurrentValue != null)
+          'invoiceSequenceCurrentValue': invoiceSequenceCurrentValue,
       },
     );
-    return _PlatformSettingsSnapshot.fromJson(response.data ?? const <String, dynamic>{});
+    return _PlatformSettingsSnapshot.fromJson(
+        response.data ?? const <String, dynamic>{});
   }
 
   Future<_CommissionEntry> createCommission(Map<String, dynamic> data) async {
-    final response = await _dio.post<Map<String, dynamic>>('/admin/platform-settings/commissions', data: data);
-    return _CommissionEntry.fromJson((response.data?['commission'] as Map?)?.cast<String, dynamic>() ?? const {});
+    final response = await _dio.post<Map<String, dynamic>>(
+        '/admin/platform-settings/commissions',
+        data: data);
+    return _CommissionEntry.fromJson(
+        (response.data?['commission'] as Map?)?.cast<String, dynamic>() ??
+            const {});
   }
 
-  Future<_CommissionEntry> updateCommission(String commissionId, Map<String, dynamic> data) async {
+  Future<_CommissionEntry> updateCommission(
+      String commissionId, Map<String, dynamic> data) async {
     final response = await _dio.patch<Map<String, dynamic>>(
       '/admin/platform-settings/commissions/$commissionId',
       data: data,
     );
-    return _CommissionEntry.fromJson((response.data?['commission'] as Map?)?.cast<String, dynamic>() ?? const {});
+    return _CommissionEntry.fromJson(
+        (response.data?['commission'] as Map?)?.cast<String, dynamic>() ??
+            const {});
   }
 
   Future<void> deleteCommission(String commissionId) async {
-    await _dio.delete('/admin/platform-settings/commissions/$commissionId', data: const {});
+    await _dio.delete('/admin/platform-settings/commissions/$commissionId',
+        data: const {});
   }
 }
 
@@ -711,8 +930,12 @@ class _PlatformSettingsSnapshot {
 
   factory _PlatformSettingsSnapshot.fromJson(Map<String, dynamic> json) {
     return _PlatformSettingsSnapshot(
-      platformConfig: _PlatformConfig.fromJson((json['platformConfig'] as Map?)?.cast<String, dynamic>() ?? const {}),
-      invoiceSequence: _InvoiceSequence.fromJson((json['invoiceSequence'] as Map?)?.cast<String, dynamic>() ?? const {}),
+      platformConfig: _PlatformConfig.fromJson(
+          (json['platformConfig'] as Map?)?.cast<String, dynamic>() ??
+              const {}),
+      invoiceSequence: _InvoiceSequence.fromJson(
+          (json['invoiceSequence'] as Map?)?.cast<String, dynamic>() ??
+              const {}),
       commissions: (json['commissions'] as List? ?? const [])
           .whereType<Map<String, dynamic>>()
           .map(_CommissionEntry.fromJson)
@@ -730,17 +953,41 @@ class _PlatformConfig {
     required this.gstin,
     required this.legalBusinessName,
     required this.registeredAddress,
+    required this.minimumWorkerPayout,
+    required this.referralRewardAmount,
+    required this.referralsEnabled,
+    required this.referralMaxSuccessfulPerReferrer,
+    required this.payoutsPaused,
+    required this.payoutPauseReason,
+    required this.updatedAt,
   });
 
   final String? gstin;
   final String? legalBusinessName;
   final String? registeredAddress;
+  final double minimumWorkerPayout;
+  final double referralRewardAmount;
+  final bool referralsEnabled;
+  final int referralMaxSuccessfulPerReferrer;
+  final bool payoutsPaused;
+  final String? payoutPauseReason;
+  final DateTime updatedAt;
 
   factory _PlatformConfig.fromJson(Map<String, dynamic> json) {
     return _PlatformConfig(
       gstin: json['gstin'] as String?,
       legalBusinessName: json['legalBusinessName'] as String?,
       registeredAddress: json['registeredAddress'] as String?,
+      minimumWorkerPayout:
+          (json['minimumWorkerPayout'] as num?)?.toDouble() ?? 100,
+      referralRewardAmount:
+          (json['referralRewardAmount'] as num?)?.toDouble() ?? 100,
+      referralsEnabled: json['referralsEnabled'] as bool? ?? true,
+      referralMaxSuccessfulPerReferrer:
+          (json['referralMaxSuccessfulPerReferrer'] as num?)?.toInt() ?? 0,
+      payoutsPaused: json['payoutsPaused'] as bool? ?? false,
+      payoutPauseReason: json['payoutPauseReason'] as String?,
+      updatedAt: DateTime.tryParse(json['updatedAt'] as String? ?? '') ?? DateTime.now(),
     );
   }
 }
@@ -848,8 +1095,10 @@ class _PlatformSettingsHistoryEntry {
       targetType: json['targetType'] as String? ?? '',
       targetId: json['targetId'] as String? ?? '',
       note: json['note'] as String?,
-      metadata: (json['metadata'] as Map?)?.cast<String, dynamic>() ?? const <String, dynamic>{},
-      createdAt: DateTime.tryParse(json['createdAt'] as String? ?? '') ?? DateTime.now(),
+      metadata: (json['metadata'] as Map?)?.cast<String, dynamic>() ??
+          const <String, dynamic>{},
+      createdAt: DateTime.tryParse(json['createdAt'] as String? ?? '') ??
+          DateTime.now(),
     );
   }
 }
@@ -889,8 +1138,12 @@ class _MetricCard extends StatelessWidget {
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(label, style: GoogleFonts.inter(fontSize: 12, color: kAdminMuted)),
-                  Text(value, style: GoogleFonts.poppins(fontSize: 22, fontWeight: FontWeight.w700)),
+                  Text(label,
+                      style:
+                          GoogleFonts.inter(fontSize: 12, color: kAdminMuted)),
+                  Text(value,
+                      style: GoogleFonts.poppins(
+                          fontSize: 22, fontWeight: FontWeight.w700)),
                 ],
               ),
             ],
@@ -927,14 +1180,17 @@ class _PlatformSettingsHistoryRow extends StatelessWidget {
               color: const Color(0xFF0F766E).withValues(alpha: 0.12),
               borderRadius: BorderRadius.circular(12),
             ),
-            child: const Icon(Icons.history_rounded, color: Color(0xFF0F766E), size: 20),
+            child: const Icon(Icons.history_rounded,
+                color: Color(0xFF0F766E), size: 20),
           ),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(_readableAction(entry.action), style: tt.titleSmall?.copyWith(fontWeight: FontWeight.w800)),
+                Text(_readableAction(entry.action),
+                    style:
+                        tt.titleSmall?.copyWith(fontWeight: FontWeight.w800)),
                 const SizedBox(height: 4),
                 Text(
                   entry.note ?? entry.targetId,
@@ -1089,12 +1345,15 @@ class CommissionDetailPage extends ConsumerStatefulWidget {
   final String commissionId;
 
   @override
-  ConsumerState<CommissionDetailPage> createState() => _CommissionDetailPageState();
+  ConsumerState<CommissionDetailPage> createState() =>
+      _CommissionDetailPageState();
 }
 
 class _CommissionDetailPageState extends ConsumerState<CommissionDetailPage> {
   late final _PlatformSettingsApi _api;
-  late Future<({ _PlatformSettingsSnapshot snapshot, _CommissionEntry commission })?> _future;
+  late Future<
+          ({_PlatformSettingsSnapshot snapshot, _CommissionEntry commission})?>
+      _future;
   bool _busy = false;
 
   @override
@@ -1104,7 +1363,8 @@ class _CommissionDetailPageState extends ConsumerState<CommissionDetailPage> {
     _future = _load();
   }
 
-  Future<({ _PlatformSettingsSnapshot snapshot, _CommissionEntry commission })?> _load() async {
+  Future<({_PlatformSettingsSnapshot snapshot, _CommissionEntry commission})?>
+      _load() async {
     final snapshot = await _api.fetchSnapshot();
     for (final commission in snapshot.commissions) {
       if (commission.id == widget.commissionId) {
@@ -1121,7 +1381,8 @@ class _CommissionDetailPageState extends ConsumerState<CommissionDetailPage> {
     await _future;
   }
 
-  Future<void> _toggleActive(_CommissionEntry commission, _PlatformSettingsSnapshot snapshot) async {
+  Future<void> _toggleActive(
+      _CommissionEntry commission, _PlatformSettingsSnapshot snapshot) async {
     setState(() => _busy = true);
     try {
       await _api.updateCommission(
@@ -1143,8 +1404,10 @@ class _CommissionDetailPageState extends ConsumerState<CommissionDetailPage> {
 
   Future<void> _editCommission(_CommissionEntry commission) async {
     final formKey = GlobalKey<FormState>();
-    final rateController = TextEditingController(text: commission.rate.toStringAsFixed(2));
-    final feeController = TextEditingController(text: commission.fixedFee.toStringAsFixed(2));
+    final rateController =
+        TextEditingController(text: commission.rate.toStringAsFixed(2));
+    final feeController =
+        TextEditingController(text: commission.fixedFee.toStringAsFixed(2));
     final isActive = ValueNotifier<bool>(commission.isActive);
 
     try {
@@ -1165,7 +1428,8 @@ class _CommissionDetailPageState extends ConsumerState<CommissionDetailPage> {
                       children: [
                         TextFormField(
                           controller: rateController,
-                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                          keyboardType: const TextInputType.numberWithOptions(
+                              decimal: true),
                           decoration: const InputDecoration(
                             labelText: 'Commission rate %',
                             border: OutlineInputBorder(),
@@ -1181,7 +1445,8 @@ class _CommissionDetailPageState extends ConsumerState<CommissionDetailPage> {
                         const SizedBox(height: 16),
                         TextFormField(
                           controller: feeController,
-                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                          keyboardType: const TextInputType.numberWithOptions(
+                              decimal: true),
                           decoration: const InputDecoration(
                             labelText: 'Fixed fee',
                             border: OutlineInputBorder(),
@@ -1198,9 +1463,11 @@ class _CommissionDetailPageState extends ConsumerState<CommissionDetailPage> {
                         SwitchListTile.adaptive(
                           contentPadding: EdgeInsets.zero,
                           value: isActive.value,
-                          onChanged: (value) => setState(() => isActive.value = value),
+                          onChanged: (value) =>
+                              setState(() => isActive.value = value),
                           title: const Text('Active'),
-                          subtitle: const Text('Inactive rules stay in history but are ignored.'),
+                          subtitle: const Text(
+                              'Inactive rules stay in history but are ignored.'),
                         ),
                       ],
                     ),
@@ -1220,7 +1487,10 @@ class _CommissionDetailPageState extends ConsumerState<CommissionDetailPage> {
                   }
                   final rate = double.tryParse(rateController.text.trim());
                   final fixedFee = double.tryParse(feeController.text.trim());
-                  if (rate == null || rate < 0 || fixedFee == null || fixedFee < 0) {
+                  if (rate == null ||
+                      rate < 0 ||
+                      fixedFee == null ||
+                      fixedFee < 0) {
                     return;
                   }
                   Navigator.of(dialogContext).pop({
@@ -1292,14 +1562,18 @@ class _CommissionDetailPageState extends ConsumerState<CommissionDetailPage> {
           ),
         ],
       ),
-      body: FutureBuilder<({ _PlatformSettingsSnapshot snapshot, _CommissionEntry commission })?>(
+      body: FutureBuilder<
+          ({_PlatformSettingsSnapshot snapshot, _CommissionEntry commission})?>(
         future: _future,
         builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting && !snapshot.hasData) {
+          if (snapshot.connectionState == ConnectionState.waiting &&
+              !snapshot.hasData) {
             return const Center(child: CircularProgressIndicator());
           }
           if (snapshot.hasError) {
-            return Center(child: Text('Unable to load commission rule: ${snapshot.error}'));
+            return Center(
+                child:
+                    Text('Unable to load commission rule: ${snapshot.error}'));
           }
           final data = snapshot.data;
           if (data == null) {
@@ -1311,15 +1585,19 @@ class _CommissionDetailPageState extends ConsumerState<CommissionDetailPage> {
                   children: [
                     const Icon(Icons.search_off_rounded, size: 48),
                     const SizedBox(height: 12),
-                    Text('Commission rule not found', style: tt.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
+                    Text('Commission rule not found',
+                        style: tt.titleLarge
+                            ?.copyWith(fontWeight: FontWeight.w800)),
                     const SizedBox(height: 8),
                     Text(
                       'This commission rule is not present in the current platform snapshot.',
                       textAlign: TextAlign.center,
-                      style: tt.bodyMedium?.copyWith(color: cs.onSurfaceVariant),
+                      style:
+                          tt.bodyMedium?.copyWith(color: cs.onSurfaceVariant),
                     ),
                     const SizedBox(height: 16),
-                    FilledButton(onPressed: _reload, child: const Text('Reload')),
+                    FilledButton(
+                        onPressed: _reload, child: const Text('Reload')),
                   ],
                 ),
               ),
@@ -1341,7 +1619,8 @@ class _CommissionDetailPageState extends ConsumerState<CommissionDetailPage> {
                       color: const Color(0xFF0F766E).withValues(alpha: 0.12),
                       borderRadius: BorderRadius.circular(16),
                     ),
-                    child: const Icon(Icons.percent_rounded, color: Color(0xFF0F766E)),
+                    child: const Icon(Icons.percent_rounded,
+                        color: Color(0xFF0F766E)),
                   ),
                   const SizedBox(width: 14),
                   Expanded(
@@ -1349,21 +1628,24 @@ class _CommissionDetailPageState extends ConsumerState<CommissionDetailPage> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          commission.isGlobal ? 'Global default' : (commission.cityName ?? 'City rule'),
-                          style: tt.headlineSmall?.copyWith(fontWeight: FontWeight.w900),
+                          commission.isGlobal
+                              ? 'Global default'
+                              : (commission.cityName ?? 'City rule'),
+                          style: tt.headlineSmall
+                              ?.copyWith(fontWeight: FontWeight.w900),
                         ),
                         const SizedBox(height: 6),
                         Text(
                           commission.isGlobal
                               ? 'Used when no city-specific rule matches.'
                               : '${commission.cityName ?? 'City'}${commission.citySlug != null ? ' · ${commission.citySlug}' : ''}',
-                          style: tt.bodyMedium?.copyWith(color: cs.onSurfaceVariant),
+                          style: tt.bodyMedium
+                              ?.copyWith(color: cs.onSurfaceVariant),
                         ),
                       ],
                     ),
                   ),
-                  if (!commission.isActive)
-                    const _TinyBadge(label: 'Inactive'),
+                  if (!commission.isActive) const _TinyBadge(label: 'Inactive'),
                 ],
               ),
               const SizedBox(height: 18),
@@ -1371,21 +1653,37 @@ class _CommissionDetailPageState extends ConsumerState<CommissionDetailPage> {
                 spacing: 8,
                 runSpacing: 8,
                 children: [
-                  _DetailChip(label: commission.isGlobal ? 'Global' : 'City specific'),
+                  _DetailChip(
+                      label: commission.isGlobal ? 'Global' : 'City specific'),
                   _DetailChip(label: '${commission.rate.toStringAsFixed(2)}%'),
-                  _DetailChip(label: '₹${commission.fixedFee.toStringAsFixed(2)} fixed'),
-                  _DetailChip(label: commission.isActive ? 'Active' : 'Inactive'),
+                  _DetailChip(
+                      label:
+                          '₹${commission.fixedFee.toStringAsFixed(2)} fixed'),
+                  _DetailChip(
+                      label: commission.isActive ? 'Active' : 'Inactive'),
                 ],
               ),
               const SizedBox(height: 18),
               _DetailLine(label: 'Commission ID', value: commission.id),
-              _DetailLine(label: 'City ID', value: commission.cityId ?? 'Global'),
-              _DetailLine(label: 'City name', value: commission.cityName ?? 'Global default'),
-              _DetailLine(label: 'City slug', value: commission.citySlug ?? 'None'),
-              _DetailLine(label: 'Rate', value: '${commission.rate.toStringAsFixed(2)}%'),
-              _DetailLine(label: 'Fixed fee', value: '₹${commission.fixedFee.toStringAsFixed(2)}'),
-              _DetailLine(label: 'Status', value: commission.isActive ? 'Active' : 'Inactive'),
-              _DetailLine(label: 'Available cities', value: '${snapshotData.cities.length}'),
+              _DetailLine(
+                  label: 'City ID', value: commission.cityId ?? 'Global'),
+              _DetailLine(
+                  label: 'City name',
+                  value: commission.cityName ?? 'Global default'),
+              _DetailLine(
+                  label: 'City slug', value: commission.citySlug ?? 'None'),
+              _DetailLine(
+                  label: 'Rate',
+                  value: '${commission.rate.toStringAsFixed(2)}%'),
+              _DetailLine(
+                  label: 'Fixed fee',
+                  value: '₹${commission.fixedFee.toStringAsFixed(2)}'),
+              _DetailLine(
+                  label: 'Status',
+                  value: commission.isActive ? 'Active' : 'Inactive'),
+              _DetailLine(
+                  label: 'Available cities',
+                  value: '${snapshotData.cities.length}'),
               const SizedBox(height: 12),
               Wrap(
                 spacing: 8,
@@ -1402,14 +1700,16 @@ class _CommissionDetailPageState extends ConsumerState<CommissionDetailPage> {
                     label: const Text('Copy ID'),
                   ),
                   OutlinedButton.icon(
-                    onPressed: () => context.push('/audit-logs?search=${Uri.encodeComponent(commission.id)}'),
+                    onPressed: () => context.push(
+                        '/audit-logs?search=${Uri.encodeComponent(commission.id)}'),
                     icon: const Icon(Icons.manage_search_rounded, size: 16),
                     label: const Text('Audit trail'),
                   ),
                   if (commission.cityId != null)
                     OutlinedButton.icon(
                       onPressed: () {
-                        Clipboard.setData(ClipboardData(text: commission.cityId!));
+                        Clipboard.setData(
+                            ClipboardData(text: commission.cityId!));
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(content: Text('City ID copied')),
                         );
@@ -1430,11 +1730,15 @@ class _CommissionDetailPageState extends ConsumerState<CommissionDetailPage> {
                 runSpacing: 12,
                 children: [
                   FilledButton(
-                    onPressed: _busy ? null : () => _toggleActive(commission, snapshotData),
-                    child: Text(commission.isActive ? 'Disable rule' : 'Enable rule'),
+                    onPressed: _busy
+                        ? null
+                        : () => _toggleActive(commission, snapshotData),
+                    child: Text(
+                        commission.isActive ? 'Disable rule' : 'Enable rule'),
                   ),
                   OutlinedButton(
-                    onPressed: _busy ? null : () => _deleteCommission(commission),
+                    onPressed:
+                        _busy ? null : () => _deleteCommission(commission),
                     style: OutlinedButton.styleFrom(foregroundColor: cs.error),
                     child: const Text('Delete rule'),
                   ),
@@ -1471,11 +1775,13 @@ class _DetailLine extends StatelessWidget {
             width: 120,
             child: Text(
               label,
-              style: tt.bodyMedium?.copyWith(color: cs.onSurfaceVariant, fontWeight: FontWeight.w700),
+              style: tt.bodyMedium?.copyWith(
+                  color: cs.onSurfaceVariant, fontWeight: FontWeight.w700),
             ),
           ),
           Expanded(
-            child: Text(value, style: tt.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
+            child: Text(value,
+                style: tt.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
           ),
         ],
       ),
@@ -1499,7 +1805,10 @@ class _DetailChip extends StatelessWidget {
       ),
       child: Text(
         label,
-        style: Theme.of(context).textTheme.labelSmall?.copyWith(fontWeight: FontWeight.w700),
+        style: Theme.of(context)
+            .textTheme
+            .labelSmall
+            ?.copyWith(fontWeight: FontWeight.w700),
       ),
     );
   }
@@ -1561,7 +1870,8 @@ class _EmptyCommissionCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(title, style: const TextStyle(fontWeight: FontWeight.w800)),
+                Text(title,
+                    style: const TextStyle(fontWeight: FontWeight.w800)),
                 const SizedBox(height: 4),
                 Text(subtitle),
               ],

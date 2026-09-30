@@ -73,6 +73,14 @@ catalogRouter.get('/coupons', async (_request, response) => {
         { endsAt: null },
         { endsAt: { gt: now } },
       ],
+      AND: [
+        {
+          OR: [
+            { startsAt: null },
+            { startsAt: { lte: now } },
+          ],
+        },
+      ],
     },
     select: {
       code: true,
@@ -119,11 +127,12 @@ catalogRouter.get("/professionals", async (_request, response) => {
 
   response.status(200).json({
     professionals: professionals.map((p: any) => ({
+      id: p.id,
       name: p.displayName ?? p.user.name ?? "Professional",
       role: "Professional",
       experience: `${p.completedJobsCount} jobs`,
       rating: Number(p.averageRating),
-      distance: "Nearby",
+      distance: "Available",
       price: "Book for quote",
       verified: p.verificationStatus === "VERIFIED",
       accent: 0xFF10B981

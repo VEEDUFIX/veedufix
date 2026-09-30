@@ -53,6 +53,10 @@ final routerProvider = Provider<GoRouter>((ref) {
         return null;
       }
 
+      if (session != null && session.user.role != 'CUSTOMER') {
+        return location == '/login' ? null : '/login';
+      }
+
       final isAuthRoute = location == '/login' || location == '/otp';
       final homeRoute = homeRouteForMode(AppMode.customer);
 

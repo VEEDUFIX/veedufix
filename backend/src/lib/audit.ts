@@ -10,6 +10,7 @@ export type AuditAction =
   | "dispute.resolved"
   | "payout.retried"
   | "payout.bulk_retried"
+  | "payout.pending_released"
   | "refund.retried"
   | "refund.bulk_retried"
   | "support.ticket_status_updated"

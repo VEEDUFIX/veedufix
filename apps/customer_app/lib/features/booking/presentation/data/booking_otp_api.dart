@@ -36,10 +36,7 @@ abstract class BookingOtpDetails with _$BookingOtpDetails {
   const BookingOtpDetails._();
 
   factory BookingOtpDetails.fallback(String bookingId) {
-    return BookingOtpDetails(
-      bookingId: bookingId,
-      bookingCode: bookingId,
-    );
+    return BookingOtpDetails(bookingId: bookingId, bookingCode: bookingId);
   }
 
   factory BookingOtpDetails.fromJson(Map<String, dynamic> json) {
@@ -52,11 +49,14 @@ abstract class BookingOtpDetails with _$BookingOtpDetails {
       bookingCode: (booking['code'] ?? booking['bookingCode'] ?? '').toString(),
       serviceName: (booking['serviceName'] ?? 'Service booking').toString(),
       customerName: (booking['customerName'] ?? 'Customer').toString(),
-      workerName: (worker['name'] ?? worker['fullName'] ?? 'Your professional').toString(),
+      workerName: (worker['name'] ?? worker['fullName'] ?? 'Your professional')
+          .toString(),
       workerPhotoUrl: (worker['avatarUrl'] ?? worker['photoUrl'])?.toString(),
-      locationLabel: (booking['addressLabel'] ?? booking['locationLabel'])?.toString(),
+      locationLabel: (booking['addressLabel'] ?? booking['locationLabel'])
+          ?.toString(),
       statusLabel: booking['status']?.toString(),
-      afterPhotoUrls: (booking['afterPhotos'] as List<dynamic>?)
+      afterPhotoUrls:
+          (booking['afterPhotos'] as List<dynamic>?)
               ?.map((e) => e.toString())
               .toList() ??
           const [],
@@ -70,17 +70,23 @@ class BookingOtpApi {
   final Dio _dio;
 
   Future<BookingOtpDetails> fetchDetails(String bookingId) async {
-    final response = await _dio.get<Map<String, dynamic>>('/bookings/$bookingId');
+    final response = await _dio.get<Map<String, dynamic>>(
+      '/bookings/$bookingId',
+    );
     return BookingOtpDetails.fromJson(response.data!);
   }
 
   Future<BookingOtpInfo> fetchArrivalOtp(String bookingId) async {
-    final response = await _dio.get<Map<String, dynamic>>('/bookings/$bookingId/arrival-otp');
+    final response = await _dio.get<Map<String, dynamic>>(
+      '/bookings/$bookingId/arrival-otp',
+    );
     return BookingOtpInfo.fromJson(response.data!);
   }
 
   Future<BookingOtpInfo> fetchCompletionOtp(String bookingId) async {
-    final response = await _dio.get<Map<String, dynamic>>('/bookings/$bookingId/completion-otp');
+    final response = await _dio.get<Map<String, dynamic>>(
+      '/bookings/$bookingId/completion-otp',
+    );
     return BookingOtpInfo.fromJson(response.data!);
   }
 
@@ -90,10 +96,12 @@ class BookingOtpApi {
     String? comment,
   }) async {
     await _dio.post<dynamic>(
-      '/bookings/$bookingId/rating',
+      '/reviews',
       data: {
+        'bookingId': bookingId,
         'rating': rating,
-        if (comment != null && comment.trim().isNotEmpty) 'comment': comment.trim(),
+        if (comment != null && comment.trim().isNotEmpty)
+          'comment': comment.trim(),
       },
     );
   }

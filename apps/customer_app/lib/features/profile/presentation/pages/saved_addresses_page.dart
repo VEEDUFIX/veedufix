@@ -53,59 +53,67 @@ class _SavedAddressesPageState extends ConsumerState<SavedAddressesPage> {
       }
       setState(() {
         _isLoading = false;
-        _errorMessage = error is DioException ? _errorMessageFromDio(error) : error.toString();
+        _errorMessage = error is DioException
+            ? _errorMessageFromDio(error)
+            : 'Unable to load saved addresses. Please try again.';
       });
     }
   }
 
   Future<void> _saveAddress({SavedAddressItem? existing}) async {
-    final result = await showModalBottomSheet<_SavedAddressDraft>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) => _SavedAddressEditorSheet(existing: existing),
-    );
-
-    if (result == null) {
-      return;
-    }
+    if (_isSaving) return;
+    setState(() => _isSaving = true);
 
     try {
+      final cities = await _api.listServiceableCities();
+      if (!mounted) return;
+      final result = await showModalBottomSheet<_SavedAddressDraft>(
+        context: context,
+        isScrollControlled: true,
+        backgroundColor: Colors.transparent,
+        builder: (context) =>
+            _SavedAddressEditorSheet(existing: existing, cities: cities),
+      );
+
+      if (result == null || !mounted) return;
+
       final serviceable = await _api.isServiceablePincode(
         pincode: result.pincode,
         city: result.city,
       );
       if (!serviceable) {
-        if (!mounted) {
-          return;
-        }
+        if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text("We don't currently serve this area yet — we're expanding soon!"),
+            content: Text(
+              "We don't currently serve this area yet — we're expanding soon!",
+            ),
           ),
         );
         return;
       }
 
-      setState(() {
-        _isSaving = true;
-      });
-
       final savedAddress = existing == null
           ? await _api.createAddress(result.toJson())
           : await _api.updateAddress(existing.id, result.toJson());
-      await ref.read(selectedLocationProvider.notifier).setLocation(
+      await ref
+          .read(selectedLocationProvider.notifier)
+          .setLocation(
             latitude: savedAddress.lat,
             longitude: savedAddress.lng,
             label: '${savedAddress.addressLine1}, ${savedAddress.city}',
           );
       await _loadAddresses();
     } catch (error) {
-      if (!mounted) {
-        return;
-      }
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Unable to save address: $error')),
+        SnackBar(
+          content: Text(
+            error is DioException
+                ? _errorMessageFromDio(error)
+                : 'Unable to save address. Please try again.',
+          ),
+        ),
       );
     } finally {
       if (mounted) {
@@ -117,39 +125,86 @@ class _SavedAddressesPageState extends ConsumerState<SavedAddressesPage> {
   }
 
   Future<void> _deleteAddress(SavedAddressItem address) async {
+    if (_isSaving) return;
     final shouldDelete = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Delete address?'),
         content: Text('Remove ${address.label}? This cannot be undone.'),
         actions: [
-          TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('Cancel')),
-          FilledButton(onPressed: () => Navigator.of(context).pop(true), child: const Text('Delete')),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Delete'),
+          ),
         ],
       ),
     );
 
-    if (shouldDelete != true) {
+    if (shouldDelete != true || !mounted) {
       return;
     }
 
+    setState(() => _isSaving = true);
     try {
       await _api.deleteAddress(address.id);
+      final selectedLocation = ref.read(selectedLocationProvider);
+      final wasSelected =
+          selectedLocation != null &&
+          (selectedLocation.latitude - address.lat).abs() < 0.000001 &&
+          (selectedLocation.longitude - address.lng).abs() < 0.000001;
+      if (wasSelected) {
+        try {
+          final remainingAddresses = await _api.listAddresses();
+          if (!mounted) return;
+          final replacement =
+              remainingAddresses.where((item) => item.isDefault).firstOrNull ??
+              (remainingAddresses.isEmpty ? null : remainingAddresses.first);
+          if (replacement == null) {
+            await ref.read(selectedLocationProvider.notifier).clearLocation();
+          } else {
+            await ref
+                .read(selectedLocationProvider.notifier)
+                .setLocation(
+                  latitude: replacement.lat,
+                  longitude: replacement.lng,
+                  label: '${replacement.addressLine1}, ${replacement.city}',
+                );
+          }
+        } catch (_) {
+          await ref.read(selectedLocationProvider.notifier).clearLocation();
+        }
+      }
       await _loadAddresses();
     } catch (error) {
       if (!mounted) {
         return;
       }
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Unable to delete address: $error')),
+        SnackBar(
+          content: Text(
+            error is DioException
+                ? _errorMessageFromDio(error)
+                : 'Unable to delete address. Please try again.',
+          ),
+        ),
       );
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
     }
   }
 
   Future<void> _setDefaultAddress(SavedAddressItem address) async {
+    if (_isSaving) return;
+    setState(() => _isSaving = true);
     try {
       final selectedAddress = await _api.setDefaultAddress(address.id);
-      await ref.read(selectedLocationProvider.notifier).setLocation(
+      await ref
+          .read(selectedLocationProvider.notifier)
+          .setLocation(
             latitude: selectedAddress.lat,
             longitude: selectedAddress.lng,
             label: '${selectedAddress.addressLine1}, ${selectedAddress.city}',
@@ -160,8 +215,16 @@ class _SavedAddressesPageState extends ConsumerState<SavedAddressesPage> {
         return;
       }
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Unable to set default: $error')),
+        SnackBar(
+          content: Text(
+            error is DioException
+                ? _errorMessageFromDio(error)
+                : 'Unable to update the default address. Please try again.',
+          ),
+        ),
       );
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
     }
   }
 
@@ -169,28 +232,22 @@ class _SavedAddressesPageState extends ConsumerState<SavedAddressesPage> {
   Widget build(BuildContext context) {
     final defaultAddress = _addresses.firstWhere(
       (address) => address.isDefault,
-      orElse: () => _addresses.isNotEmpty ? _addresses.first : const SavedAddressItem(
-        id: '',
-        label: '',
-        addressLine1: '',
-        city: '',
-        pincode: '',
-        lat: 0,
-        lng: 0,
-        isDefault: false,
-      ),
+      orElse: () => _addresses.isNotEmpty
+          ? _addresses.first
+          : const SavedAddressItem(
+              id: '',
+              label: '',
+              addressLine1: '',
+              city: '',
+              pincode: '',
+              lat: 0,
+              lng: 0,
+              isDefault: false,
+            ),
     );
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Saved addresses'),
-        actions: [
-          IconButton(
-            onPressed: _isSaving ? null : () => _saveAddress(),
-            icon: const Icon(Icons.add_location_alt_rounded),
-          ),
-        ],
-      ),
+      appBar: AppBar(title: const Text('Saved addresses')),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _isSaving ? null : () => _saveAddress(),
         icon: const Icon(Icons.add),
@@ -209,25 +266,35 @@ class _SavedAddressesPageState extends ConsumerState<SavedAddressesPage> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Checkout address',
-                        style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+                        'Default address',
+                        style: Theme.of(context).textTheme.titleMedium
+                            ?.copyWith(fontWeight: FontWeight.w800),
                       ),
                       const SizedBox(height: 6),
                       Text(
                         defaultAddress.displayAddress,
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(height: 1.4),
+                        style: Theme.of(
+                          context,
+                        ).textTheme.bodyMedium?.copyWith(height: 1.4),
                       ),
                       const SizedBox(height: 10),
                       Row(
                         children: [
                           _StatusPill(
-                            label: defaultAddress.isDefault ? 'Default' : 'Selected',
+                            label: defaultAddress.isDefault
+                                ? 'Default'
+                                : 'Selected',
                             icon: Icons.check_circle_rounded,
                           ),
                           const Spacer(),
-                          TextButton(
-                            onPressed: () => context.push('/bookings'),
-                            child: const Text('Use in bookings'),
+                          Text(
+                            'Used for new bookings',
+                            style: Theme.of(context).textTheme.labelMedium
+                                ?.copyWith(
+                                  color: Theme.of(
+                                    context,
+                                  ).colorScheme.onSurfaceVariant,
+                                ),
                           ),
                         ],
                       ),
@@ -247,24 +314,41 @@ class _SavedAddressesPageState extends ConsumerState<SavedAddressesPage> {
               PremiumGlassCard(
                 child: Padding(
                   padding: const EdgeInsets.all(18),
-                  child: Text(_errorMessage!),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(_errorMessage!),
+                      const SizedBox(height: 8),
+                      TextButton.icon(
+                        onPressed: _loadAddresses,
+                        icon: const Icon(Icons.refresh_rounded),
+                        label: const Text('Try again'),
+                      ),
+                    ],
+                  ),
                 ),
               )
             else if (_addresses.isEmpty)
               const PremiumEmptyState(
                 icon: Icons.home_outlined,
                 title: 'No saved addresses yet',
-                subtitle: 'Add Home, Work, or any frequent service location so checkout stays quick.',
+                subtitle:
+                    'Add Home, Work, or any frequent service location so checkout stays quick.',
               )
             else
               ..._addresses.map(
                 (address) => Padding(
                   padding: const EdgeInsets.only(bottom: 12),
-                  child: _AddressCard(
-                    address: address,
-                    onEdit: () => _saveAddress(existing: address),
-                    onDelete: () => _deleteAddress(address),
-                    onMakeDefault: address.isDefault ? null : () => _setDefaultAddress(address),
+                  child: AbsorbPointer(
+                    absorbing: _isSaving,
+                    child: _AddressCard(
+                      address: address,
+                      onEdit: () => _saveAddress(existing: address),
+                      onDelete: () => _deleteAddress(address),
+                      onMakeDefault: address.isDefault
+                          ? null
+                          : () => _setDefaultAddress(address),
+                    ),
                   ),
                 ),
               ),
@@ -293,7 +377,8 @@ class _AddressCard extends StatelessWidget {
     final uri = Uri.parse(
       'https://www.google.com/maps/dir/?api=1&destination=${address.lat},${address.lng}',
     );
-    if (!await launchUrl(uri, mode: LaunchMode.externalApplication) && context.mounted) {
+    if (!await launchUrl(uri, mode: LaunchMode.externalApplication) &&
+        context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Could not open Google Maps')),
       );
@@ -313,24 +398,23 @@ class _AddressCard extends StatelessWidget {
                 Expanded(
                   child: Text(
                     address.label,
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w800,
+                    ),
                   ),
                 ),
-                if (address.isDefault) const _StatusPill(label: 'Default', icon: Icons.star_rounded),
+                if (address.isDefault)
+                  const _StatusPill(label: 'Default', icon: Icons.star_rounded),
               ],
             ),
             const SizedBox(height: 8),
             Text(
               address.displayAddress,
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(height: 1.4),
+              style: Theme.of(
+                context,
+              ).textTheme.bodyMedium?.copyWith(height: 1.4),
             ),
             const SizedBox(height: 8),
-            Text(
-              'Lat ${address.lat.toStringAsFixed(5)} • Lng ${address.lng.toStringAsFixed(5)}',
-              style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  ),
-            ),
             const SizedBox(height: 12),
             Wrap(
               spacing: 8,
@@ -366,13 +450,8 @@ class _AddressCard extends StatelessWidget {
   }
 }
 
-
-
 class _StatusPill extends StatelessWidget {
-  const _StatusPill({
-    required this.label,
-    required this.icon,
-  });
+  const _StatusPill({required this.label, required this.icon});
 
   final String label;
   final IconData icon;
@@ -382,7 +461,9 @@ class _StatusPill extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.7),
+        color: Theme.of(
+          context,
+        ).colorScheme.primaryContainer.withValues(alpha: 0.7),
         borderRadius: BorderRadius.circular(999),
       ),
       child: Row(
@@ -393,9 +474,9 @@ class _StatusPill extends StatelessWidget {
           Text(
             label,
             style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                  fontWeight: FontWeight.w800,
-                  color: Theme.of(context).colorScheme.primary,
-                ),
+              fontWeight: FontWeight.w800,
+              color: Theme.of(context).colorScheme.primary,
+            ),
           ),
         ],
       ),
@@ -442,12 +523,14 @@ class _SavedAddressDraft {
 }
 
 class _SavedAddressEditorSheet extends StatefulWidget {
-  const _SavedAddressEditorSheet({this.existing});
+  const _SavedAddressEditorSheet({this.existing, required this.cities});
 
   final SavedAddressItem? existing;
+  final List<ServiceableCity> cities;
 
   @override
-  State<_SavedAddressEditorSheet> createState() => _SavedAddressEditorSheetState();
+  State<_SavedAddressEditorSheet> createState() =>
+      _SavedAddressEditorSheetState();
 }
 
 class _SavedAddressEditorSheetState extends State<_SavedAddressEditorSheet> {
@@ -456,7 +539,7 @@ class _SavedAddressEditorSheetState extends State<_SavedAddressEditorSheet> {
   late final TextEditingController _addressLine1Controller;
   late final TextEditingController _addressLine2Controller;
   late final TextEditingController _landmarkController;
-  late final TextEditingController _cityController;
+  ServiceableCity? _selectedCity;
   late final TextEditingController _pincodeController;
   late final TextEditingController _latController;
   late final TextEditingController _lngController;
@@ -467,13 +550,27 @@ class _SavedAddressEditorSheetState extends State<_SavedAddressEditorSheet> {
     super.initState();
     final existing = widget.existing;
     _labelController = TextEditingController(text: existing?.label ?? 'Home');
-    _addressLine1Controller = TextEditingController(text: existing?.addressLine1 ?? '');
-    _addressLine2Controller = TextEditingController(text: existing?.addressLine2 ?? '');
+    _addressLine1Controller = TextEditingController(
+      text: existing?.addressLine1 ?? '',
+    );
+    _addressLine2Controller = TextEditingController(
+      text: existing?.addressLine2 ?? '',
+    );
     _landmarkController = TextEditingController(text: existing?.landmark ?? '');
-    _cityController = TextEditingController(text: existing?.city ?? 'Chennai');
+    for (final city in widget.cities) {
+      if (city.name.toLowerCase() == existing?.city.toLowerCase()) {
+        _selectedCity = city;
+        break;
+      }
+    }
+    _selectedCity ??= widget.cities.isNotEmpty ? widget.cities.first : null;
     _pincodeController = TextEditingController(text: existing?.pincode ?? '');
-    _latController = TextEditingController(text: existing?.lat.toString() ?? '');
-    _lngController = TextEditingController(text: existing?.lng.toString() ?? '');
+    _latController = TextEditingController(
+      text: existing?.lat.toString() ?? '',
+    );
+    _lngController = TextEditingController(
+      text: existing?.lng.toString() ?? '',
+    );
     _isDefault = existing?.isDefault ?? false;
   }
 
@@ -483,7 +580,6 @@ class _SavedAddressEditorSheetState extends State<_SavedAddressEditorSheet> {
     _addressLine1Controller.dispose();
     _addressLine2Controller.dispose();
     _landmarkController.dispose();
-    _cityController.dispose();
     _pincodeController.dispose();
     _latController.dispose();
     _lngController.dispose();
@@ -496,7 +592,11 @@ class _SavedAddressEditorSheetState extends State<_SavedAddressEditorSheet> {
       if (!serviceEnabled) {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Turn on location services to use your current position.')),
+          const SnackBar(
+            content: Text(
+              'Turn on location services to use your current position.',
+            ),
+          ),
         );
         return;
       }
@@ -506,16 +606,23 @@ class _SavedAddressEditorSheetState extends State<_SavedAddressEditorSheet> {
         permission = await Geolocator.requestPermission();
       }
 
-      if (permission == LocationPermission.denied || permission == LocationPermission.deniedForever) {
+      if (permission == LocationPermission.denied ||
+          permission == LocationPermission.deniedForever) {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Location permission is required to use your current position.')),
+          const SnackBar(
+            content: Text(
+              'Location permission is required to use your current position.',
+            ),
+          ),
         );
         return;
       }
 
       final pos = await Geolocator.getCurrentPosition(
-        locationSettings: const LocationSettings(accuracy: LocationAccuracy.high),
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.high,
+        ),
       );
       if (!mounted) return;
 
@@ -527,14 +634,19 @@ class _SavedAddressEditorSheetState extends State<_SavedAddressEditorSheet> {
       setState(() {
         _latController.text = picked.latitude.toStringAsFixed(6);
         _lngController.text = picked.longitude.toStringAsFixed(6);
-        if ((picked.label ?? '').trim().isNotEmpty && _addressLine1Controller.text.trim().isEmpty) {
+        if ((picked.label ?? '').trim().isNotEmpty &&
+            _addressLine1Controller.text.trim().isEmpty) {
           _addressLine1Controller.text = picked.label!.trim();
         }
       });
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Unable to use current location: $error')),
+        const SnackBar(
+          content: Text(
+            'Unable to get your current location. You can choose it on the map instead.',
+          ),
+        ),
       );
     }
   }
@@ -545,7 +657,7 @@ class _SavedAddressEditorSheetState extends State<_SavedAddressEditorSheet> {
       final lng = double.tryParse(_lngController.text.trim());
       final initial = (lat != null && lng != null)
           ? LatLng(lat, lng)
-          : const LatLng(10.0261, 76.3125);
+          : const LatLng(13.0827, 80.2707);
 
       final picked = await context.push<MapLocationSelection>(
         '/map-picker?lat=${initial.latitude}&lng=${initial.longitude}',
@@ -555,14 +667,17 @@ class _SavedAddressEditorSheetState extends State<_SavedAddressEditorSheet> {
       setState(() {
         _latController.text = picked.latitude.toStringAsFixed(6);
         _lngController.text = picked.longitude.toStringAsFixed(6);
-        if ((picked.label ?? '').trim().isNotEmpty && _addressLine1Controller.text.trim().isEmpty) {
+        if ((picked.label ?? '').trim().isNotEmpty &&
+            _addressLine1Controller.text.trim().isEmpty) {
           _addressLine1Controller.text = picked.label!.trim();
         }
       });
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Unable to open map picker: $error')),
+        const SnackBar(
+          content: Text('Unable to open the map. Please try again.'),
+        ),
       );
     }
   }
@@ -598,38 +713,62 @@ class _SavedAddressEditorSheetState extends State<_SavedAddressEditorSheet> {
                 ),
                 const SizedBox(height: 16),
                 Text(
-                  widget.existing == null ? 'Add saved address' : 'Edit saved address',
-                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w900),
+                  widget.existing == null
+                      ? 'Add saved address'
+                      : 'Edit saved address',
+                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                    fontWeight: FontWeight.w900,
+                  ),
                 ),
                 const SizedBox(height: 16),
-                _InputField(controller: _labelController, label: 'Label', validator: _requiredValidator),
-                _InputField(controller: _addressLine1Controller, label: 'Address line 1', validator: _requiredValidator),
-                _InputField(controller: _addressLine2Controller, label: 'Address line 2', optional: true),
-                _InputField(controller: _landmarkController, label: 'Landmark', optional: true),
+                _InputField(
+                  controller: _labelController,
+                  label: 'Label',
+                  validator: _requiredValidator,
+                ),
+                _InputField(
+                  controller: _addressLine1Controller,
+                  label: 'Address line 1',
+                  validator: _requiredValidator,
+                ),
+                _InputField(
+                  controller: _addressLine2Controller,
+                  label: 'Address line 2',
+                  optional: true,
+                ),
+                _InputField(
+                  controller: _landmarkController,
+                  label: 'Landmark',
+                  optional: true,
+                ),
                 Padding(
                   padding: const EdgeInsets.only(bottom: 8),
-                  child: Row(
-                    children: [
-                      Icon(Icons.location_city_rounded,
-                          size: 14,
-                          color: Theme.of(context).colorScheme.primary),
-                      const SizedBox(width: 6),
-                      Expanded(
-                        child: Text(
-                          'VeeduFix currently serves Chennai only',
-                          style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                                color: Theme.of(context).colorScheme.primary,
-                                fontWeight: FontWeight.w700,
-                              ),
-                        ),
-                      ),
-                    ],
+                  child: Text(
+                    'Choose an enabled city and set the exact service location on the map. We check availability before saving.',
+                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
                   ),
                 ),
                 Row(
                   children: [
                     Expanded(
-                      child: _InputField(controller: _cityController, label: 'City', validator: _requiredValidator),
+                      child: DropdownButtonFormField<ServiceableCity>(
+                        initialValue: _selectedCity,
+                        decoration: const InputDecoration(labelText: 'City *'),
+                        items: widget.cities
+                            .map(
+                              (city) => DropdownMenuItem(
+                                value: city,
+                                child: Text('${city.name} · ${city.state}'),
+                              ),
+                            )
+                            .toList(growable: false),
+                        onChanged: (city) =>
+                            setState(() => _selectedCity = city),
+                        validator: (city) =>
+                            city == null ? 'Choose an enabled city' : null,
+                      ),
                     ),
                     Expanded(
                       child: _InputField(
@@ -646,28 +785,11 @@ class _SavedAddressEditorSheetState extends State<_SavedAddressEditorSheet> {
                     ),
                   ],
                 ),
-                Row(
-                  children: [
-                    Expanded(
-                      child: _InputField(
-                        controller: _latController,
-                        label: 'Latitude',
-                        validator: _coordinateValidator(-90, 90),
-                        keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: _InputField(
-                        controller: _lngController,
-                        label: 'Longitude',
-                        validator: _coordinateValidator(-180, 180),
-                        keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true),
-                      ),
-                    ),
-                  ],
+                _LocationPinStatus(
+                  isSet: _hasValidCoordinates,
+                  onPick: _pickOnMap,
                 ),
-                const SizedBox(height: 4),
+                const SizedBox(height: 8),
                 Wrap(
                   spacing: 12,
                   runSpacing: 12,
@@ -690,7 +812,9 @@ class _SavedAddressEditorSheetState extends State<_SavedAddressEditorSheet> {
                   value: _isDefault,
                   onChanged: (value) => setState(() => _isDefault = value),
                   title: const Text('Set as default'),
-                  subtitle: const Text('Only one address can be the default at a time.'),
+                  subtitle: const Text(
+                    'Only one address can be the default at a time.',
+                  ),
                 ),
                 const SizedBox(height: 12),
                 FilledButton.icon(
@@ -710,13 +834,21 @@ class _SavedAddressEditorSheetState extends State<_SavedAddressEditorSheet> {
     if (!_formKey.currentState!.validate()) {
       return;
     }
+    if (!_hasValidCoordinates) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Choose the service location on the map.'),
+        ),
+      );
+      return;
+    }
 
     final draft = _SavedAddressDraft(
       label: _labelController.text.trim(),
       addressLine1: _addressLine1Controller.text.trim(),
       addressLine2: _trimmedOrNull(_addressLine2Controller.text),
       landmark: _trimmedOrNull(_landmarkController.text),
-      city: _cityController.text.trim(),
+      city: _selectedCity?.name ?? '',
       pincode: _pincodeController.text.trim(),
       lat: double.parse(_latController.text.trim()),
       lng: double.parse(_lngController.text.trim()),
@@ -724,6 +856,60 @@ class _SavedAddressEditorSheetState extends State<_SavedAddressEditorSheet> {
     );
 
     Navigator.of(context).pop(draft);
+  }
+
+  bool get _hasValidCoordinates {
+    final lat = double.tryParse(_latController.text.trim());
+    final lng = double.tryParse(_lngController.text.trim());
+    return lat != null &&
+        lng != null &&
+        lat >= -90 &&
+        lat <= 90 &&
+        lng >= -180 &&
+        lng <= 180;
+  }
+}
+
+class _LocationPinStatus extends StatelessWidget {
+  const _LocationPinStatus({required this.isSet, required this.onPick});
+
+  final bool isSet;
+  final VoidCallback onPick;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: colors.surfaceContainerHighest.withValues(alpha: 0.45),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            isSet
+                ? Icons.location_on_rounded
+                : Icons.location_searching_rounded,
+            color: isSet ? colors.primary : colors.onSurfaceVariant,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              isSet ? 'Service location selected' : 'Set service location',
+              style: Theme.of(
+                context,
+              ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w700),
+            ),
+          ),
+          TextButton(
+            onPressed: onPick,
+            child: Text(isSet ? 'Change' : 'Select'),
+          ),
+        ],
+      ),
+    );
   }
 }
 
@@ -777,23 +963,7 @@ String? _pincodeValidator(String? value) {
   if (!RegExp(r'^[1-9][0-9]{5}$').hasMatch(trimmed)) {
     return 'A valid 6-digit pincode is required';
   }
-  if (!trimmed.startsWith('600')) {
-    return 'VeeduFix currently serves Chennai only (pincodes starting with 600)';
-  }
   return null;
-}
-
-String? Function(String?) _coordinateValidator(num min, num max) {
-  return (value) {
-    final parsed = double.tryParse(value?.trim() ?? '');
-    if (parsed == null) {
-      return 'Enter a valid number';
-    }
-    if (parsed < min || parsed > max) {
-      return 'Value must be between $min and $max';
-    }
-    return null;
-  };
 }
 
 String? _trimmedOrNull(String value) {

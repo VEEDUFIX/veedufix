@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:marketplace_shared/marketplace_shared.dart';
 
 import '../../../../core/widgets/liquid_refresh.dart';
@@ -29,19 +28,24 @@ class HomePage extends ConsumerWidget {
     final categories = catalogAsync.valueOrNull?.categories ?? const [];
     final featured = catalogAsync.valueOrNull?.featured ?? const [];
     final trending = catalogAsync.valueOrNull?.trending ?? const [];
+    final moreServices = trending.skip(8).take(8).toList(growable: false);
     final professionals = professionalsAsync.valueOrNull ?? const [];
     final isLoading = catalogAsync.isLoading;
 
     return Scaffold(
-      backgroundColor: const Color(0xFFFAFAF7),
+      backgroundColor: AbzioTheme.lightBackground,
       body: LiquidRefresh(
         onRefresh: () async {
           ref.invalidate(homeCatalogProvider);
           ref.invalidate(homeProfessionalsProvider);
-          await Future.wait([
-            ref.read(homeCatalogProvider.future),
-            ref.read(homeProfessionalsProvider.future),
-          ]);
+          try {
+            await Future.wait([
+              ref.read(homeCatalogProvider.future),
+              ref.read(homeProfessionalsProvider.future),
+            ]);
+          } catch (_) {
+            // Each section renders its own retry state from the provider error.
+          }
         },
         child: ListView(
           padding: EdgeInsets.only(
@@ -49,15 +53,8 @@ class HomePage extends ConsumerWidget {
             bottom: 20,
           ),
           children: [
-            Container(
-              padding: const EdgeInsets.fromLTRB(20, 14, 20, 24),
-              decoration: const BoxDecoration(
-                color: Color(0xFF1597E8),
-                borderRadius: BorderRadius.only(
-                  bottomLeft: Radius.circular(28),
-                  bottomRight: Radius.circular(28),
-                ),
-              ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
               child: Column(
                 children: [
                   HomeHeader(
@@ -66,9 +63,8 @@ class HomePage extends ConsumerWidget {
                       session,
                       selectedLocation,
                     ),
-                    bright: true,
                   ),
-                  const SizedBox(height: 18),
+                  const SizedBox(height: 16),
                   HomeSearchBar(
                     hint: appText(
                       context,
@@ -77,15 +73,33 @@ class HomePage extends ConsumerWidget {
                     ),
                     onVoiceTap: () => showAiAssistantSheet(context),
                   ),
-                  const SizedBox(height: 18),
+                  const SizedBox(height: 20),
                   HomeHeroBanner(
-                    onTap: () => context.push('/search'),
+                    onTap: (service) {
+                      if (service == null) {
+                        context.push('/search');
+                        return;
+                      }
+                      context.push(
+                        Uri(
+                          path: '/service',
+                          queryParameters: {'id': service.id},
+                        ).toString(),
+                      );
+                    },
                     services: featured,
                   ),
                 ],
               ),
             ),
-            const SizedBox(height: 22),
+            const SizedBox(height: 24),
+            if (catalogAsync.hasError && categories.isEmpty && trending.isEmpty)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+                child: _CatalogErrorState(
+                  onRetry: () => ref.invalidate(homeCatalogProvider),
+                ),
+              ),
             if (isLoading || categories.isNotEmpty) ...[
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -107,11 +121,6 @@ class HomePage extends ConsumerWidget {
               ),
               const SizedBox(height: 28),
             ],
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: _BigOfferCard(onTap: () => context.push('/search')),
-            ),
-            const SizedBox(height: 28),
             if (isLoading || trending.isNotEmpty) ...[
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -146,19 +155,19 @@ class HomePage extends ConsumerWidget {
                 ),
               const SizedBox(height: 28),
             ],
-            if (!isLoading && trending.length > 2) ...[
+            if (!isLoading && moreServices.isNotEmpty) ...[
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
                 child: HomeSectionLabel(
                   title: appText(
                     context,
-                    'Cleaning essentials',
-                    'வீட்டு சுத்தம்',
+                    'More to explore',
+                    'மேலும் சேவைகள்',
                   ),
                   subtitle: appText(
                     context,
-                    'Monthly care for busy homes',
-                    'உங்கள் வீட்டிற்கான மாதாந்திர பராமரிப்பு',
+                    'Find the right help for your home',
+                    'உங்கள் வீட்டிற்கான சரியான சேவையைக் கண்டறியுங்கள்',
                   ),
                   onSeeAll: () => context.push('/search'),
                 ),
@@ -169,13 +178,11 @@ class HomePage extends ConsumerWidget {
                 child: ListView.separated(
                   scrollDirection: Axis.horizontal,
                   padding: const EdgeInsets.symmetric(horizontal: 20),
-                  itemCount: trending.skip(2).take(8).length,
+                  itemCount: moreServices.length,
                   separatorBuilder: (_, __) => const SizedBox(width: 14),
                   itemBuilder: (context, i) => SizedBox(
                     width: 168,
-                    child: HomeServiceCard(
-                      service: trending.skip(2).toList()[i],
-                    ),
+                    child: HomeServiceCard(service: moreServices[i]),
                   ),
                 ),
               ),
@@ -187,7 +194,7 @@ class HomePage extends ConsumerWidget {
                 child: HomeSectionLabel(
                   title: appText(
                     context,
-                    'Nearby professionals',
+                    'Available professionals',
                     'அருகிலுள்ள நிபுணர்கள்',
                   ),
                 ),
@@ -214,44 +221,60 @@ class HomePage extends ConsumerWidget {
   }
 
   Widget _buildCategoryShimmerGrid() {
-    return GridView.builder(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      itemCount: 8,
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 4,
-        crossAxisSpacing: 14,
-        mainAxisSpacing: 18,
-        childAspectRatio: 0.76,
-      ),
-      itemBuilder: (context, _) => const Column(
-        children: [
-          ShimmerPlaceholder(
-            width: double.infinity,
-            height: 70,
-            borderRadius: 18,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final metrics = _categoryGridMetrics(constraints.maxWidth);
+        return GridView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          itemCount: 8,
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: metrics.columns,
+            crossAxisSpacing: 14,
+            mainAxisSpacing: 18,
+            mainAxisExtent: metrics.itemHeight,
           ),
-          SizedBox(height: 9),
-          ShimmerPlaceholder(width: 58, height: 12, borderRadius: 6),
-        ],
-      ),
+          itemBuilder: (context, _) => const Column(
+            children: [
+              ShimmerPlaceholder(
+                width: double.infinity,
+                height: 70,
+                borderRadius: 18,
+              ),
+              SizedBox(height: 9),
+              ShimmerPlaceholder(width: 58, height: 12, borderRadius: 6),
+            ],
+          ),
+        );
+      },
     );
   }
 
   Widget _buildCategoryGrid(List<CatalogCategory> categories) {
     final visible = categories.take(8).toList(growable: false);
-    return GridView.builder(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      itemCount: visible.length,
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 4,
-        crossAxisSpacing: 14,
-        mainAxisSpacing: 18,
-        childAspectRatio: 0.76,
-      ),
-      itemBuilder: (context, i) => HomeCategoryTile(category: visible[i]),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final metrics = _categoryGridMetrics(constraints.maxWidth);
+        return GridView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          itemCount: visible.length,
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: metrics.columns,
+            crossAxisSpacing: 14,
+            mainAxisSpacing: 18,
+            mainAxisExtent: metrics.itemHeight,
+          ),
+          itemBuilder: (context, i) => HomeCategoryTile(category: visible[i]),
+        );
+      },
     );
+  }
+
+  ({int columns, double itemHeight}) _categoryGridMetrics(double width) {
+    final columns = width < 350 ? 3 : 4;
+    final tileWidth = (width - 14 * (columns - 1)) / columns;
+    return (columns: columns, itemHeight: tileWidth + 40);
   }
 
   Widget _buildServiceShimmerRail() {
@@ -285,103 +308,59 @@ class HomePage extends ConsumerWidget {
       return selectedLocation.title;
     }
     final cityId = session?.user.cityId?.trim() ?? '';
-    return cityId.isNotEmpty
-        ? cityId.replaceAll('_', ' ')
-        : appText(
-            context,
-            'Set your location',
-            'உங்கள் இருப்பிடத்தை அமைக்கவும்',
-          );
+    if (cityId.isEmpty || RegExp(r'^[a-z0-9]{16,}$').hasMatch(cityId)) {
+      return appText(
+        context,
+        'Set your location',
+        'உங்கள் இருப்பிடத்தை அமைக்கவும்',
+      );
+    }
+    return cityId
+        .replaceAll(RegExp(r'[_-]+'), ' ')
+        .split(' ')
+        .where((part) => part.isNotEmpty)
+        .map((part) => '${part[0].toUpperCase()}${part.substring(1)}')
+        .join(' ');
   }
 }
 
-class _BigOfferCard extends StatelessWidget {
-  const _BigOfferCard({required this.onTap});
+class _CatalogErrorState extends StatelessWidget {
+  const _CatalogErrorState({required this.onRetry});
 
-  final VoidCallback onTap;
+  final VoidCallback onRetry;
 
   @override
   Widget build(BuildContext context) {
-    return TapScale(
-      onTap: onTap,
-      child: Container(
-        height: 222,
-        clipBehavior: Clip.antiAlias,
-        decoration: BoxDecoration(
-          color: const Color(0xFFD59B61),
-          borderRadius: BorderRadius.circular(18),
-        ),
-        child: Stack(
-          children: [
-            Positioned(
-              right: -28,
-              bottom: -34,
-              child: Container(
-                width: 190,
-                height: 190,
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.18),
-                  shape: BoxShape.circle,
-                ),
+    final colors = Theme.of(context).colorScheme;
+    final text = Theme.of(context).textTheme;
+
+    return Container(
+      padding: const EdgeInsets.fromLTRB(14, 12, 8, 12),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: colors.outlineVariant),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.cloud_off_outlined, color: colors.onSurfaceVariant),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              appText(
+                context,
+                'Services could not load. Check your connection and try again.',
+                'சேவைகளை ஏற்ற முடியவில்லை. இணைப்பைச் சரிபார்த்து மீண்டும் முயற்சிக்கவும்.',
               ),
+              style: text.bodySmall?.copyWith(color: colors.onSurface),
             ),
-            Positioned(
-              right: 28,
-              bottom: 24,
-              child: Icon(
-                Icons.chair_rounded,
-                size: 92,
-                color: Colors.white.withValues(alpha: 0.62),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Transform your space',
-                    style: GoogleFonts.poppins(
-                      fontSize: 28,
-                      height: 1.12,
-                      fontWeight: FontWeight.w800,
-                      color: const Color(0xFF101010),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Deep cleaning, repairs and painting by verified pros.',
-                    style: GoogleFonts.inter(
-                      fontSize: 14,
-                      height: 1.35,
-                      fontWeight: FontWeight.w600,
-                      color: const Color(0xFF352211),
-                    ),
-                  ),
-                  const Spacer(),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 14,
-                      vertical: 10,
-                    ),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF111111),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Text(
-                      'Explore services',
-                      style: GoogleFonts.inter(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w800,
-                        color: Colors.white,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
+          ),
+          IconButton(
+            tooltip: 'Try again',
+            onPressed: onRetry,
+            icon: const Icon(Icons.refresh_rounded),
+          ),
+        ],
       ),
     );
   }

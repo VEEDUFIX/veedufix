@@ -1,11 +1,23 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:marketplace_shared/features/notifications/presentation/providers/notifications_providers.dart';
-import 'package:marketplace_shared/features/worker_jobs/presentation/providers/worker_jobs_providers.dart';
 import 'package:marketplace_shared/core/storage/app_locale_provider.dart';
 
-class AppShellPage extends ConsumerWidget {
+const _workerShellDestinations = [
+  '/worker',
+  '/schedule',
+  '/jobs',
+  '/earnings',
+  '/profile',
+];
+
+int workerShellDestinationIndexForLocation(String location) {
+  final index = _workerShellDestinations.indexWhere(
+    (path) => location == path || location.startsWith('$path/'),
+  );
+  return index < 0 ? 0 : index;
+}
+
+class AppShellPage extends StatelessWidget {
   const AppShellPage({
     super.key,
     required this.child,
@@ -14,22 +26,10 @@ class AppShellPage extends ConsumerWidget {
   final Widget child;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final location = GoRouterState.of(context).matchedLocation;
-    final statsAsync = ref.watch(workerDashboardStatsProvider);
-    final unreadNotifications =
-        ref.watch(notificationsUnreadCountProvider).valueOrNull ?? 0;
-    final todayJobsCount = statsAsync.valueOrNull?.todayJobs.length ?? 0;
-    final destinations = const [
-      '/worker',
-      '/schedule',
-      '/jobs',
-      '/earnings',
-      '/profile'
-    ];
-
-    final matchedIndex = destinations.indexWhere((path) => path == location);
-    final index = matchedIndex < 0 ? 0 : matchedIndex;
+    const destinations = _workerShellDestinations;
+    final index = workerShellDestinationIndexForLocation(location);
 
     return Scaffold(
       body: child,
@@ -92,14 +92,8 @@ class AppShellPage extends ConsumerWidget {
               },
               destinations: [
                 NavigationDestination(
-                  icon: _BadgeIcon(
-                    icon: Icons.work_outline_rounded,
-                    count: unreadNotifications,
-                  ),
-                  selectedIcon: _BadgeIcon(
-                    icon: Icons.work_rounded,
-                    count: unreadNotifications,
-                  ),
+                  icon: const Icon(Icons.work_outline_rounded),
+                  selectedIcon: const Icon(Icons.work_rounded),
                   label: appText(context, 'Dashboard', 'முகப்பு'),
                 ),
                 NavigationDestination(
@@ -108,14 +102,8 @@ class AppShellPage extends ConsumerWidget {
                   label: appText(context, 'Schedule', 'அட்டவணை'),
                 ),
                 NavigationDestination(
-                  icon: _BadgeIcon(
-                    icon: Icons.assignment_outlined,
-                    count: todayJobsCount,
-                  ),
-                  selectedIcon: _BadgeIcon(
-                    icon: Icons.assignment_rounded,
-                    count: todayJobsCount,
-                  ),
+                  icon: const Icon(Icons.assignment_outlined),
+                  selectedIcon: const Icon(Icons.assignment_rounded),
                   label: appText(context, 'Jobs', 'வேலைகள்'),
                 ),
                 NavigationDestination(
@@ -133,25 +121,6 @@ class AppShellPage extends ConsumerWidget {
           ),
         ),
       ),
-    );
-  }
-}
-
-class _BadgeIcon extends StatelessWidget {
-  const _BadgeIcon({
-    required this.icon,
-    required this.count,
-  });
-
-  final IconData icon;
-  final int count;
-
-  @override
-  Widget build(BuildContext context) {
-    return Badge(
-      isLabelVisible: count > 0,
-      label: count > 0 ? Text(count > 99 ? '99+' : '$count') : null,
-      child: Icon(icon),
     );
   }
 }

@@ -10,7 +10,7 @@ import 'package:marketplace_shared/marketplace_shared.dart';
 class MapLocationPickerPage extends StatefulWidget {
   const MapLocationPickerPage({super.key, this.initialPosition});
 
-  /// If provided, the map starts here. Otherwise defaults to Kochi.
+  /// If provided, the map starts here. Otherwise defaults to Chennai.
   final LatLng? initialPosition;
 
   @override
@@ -19,12 +19,13 @@ class MapLocationPickerPage extends StatefulWidget {
 
 class _MapLocationPickerPageState extends State<MapLocationPickerPage>
     with SingleTickerProviderStateMixin {
-  static const _defaultCenter = LatLng(10.0261, 76.3125); // Kochi, Kerala
+  static const _defaultCenter = LatLng(13.0827, 80.2707); // Chennai
   final AppEnvironment _environment = AppEnvironment.fromDartDefines();
 
   late LatLng _currentCenter;
   bool _isDragging = false;
   bool _isSearching = false;
+  bool _isGettingLocation = false;
   bool _isLoadingSuggestions = false;
   bool _hasLocationPermission = false;
   String? _locationLabel;
@@ -37,6 +38,7 @@ class _MapLocationPickerPageState extends State<MapLocationPickerPage>
   late Animation<double> _pinOffset;
   Timer? _labelDebounce;
   Timer? _suggestionDebounce;
+  int _suggestionRequestId = 0;
   List<_LocationSuggestion> _suggestions = <_LocationSuggestion>[];
 
   @override
@@ -47,9 +49,10 @@ class _MapLocationPickerPageState extends State<MapLocationPickerPage>
       vsync: this,
       duration: const Duration(milliseconds: 200),
     );
-    _pinOffset = Tween<double>(begin: 0, end: -12).animate(
-      CurvedAnimation(parent: _pinBounce, curve: Curves.easeOut),
-    );
+    _pinOffset = Tween<double>(
+      begin: 0,
+      end: -12,
+    ).animate(CurvedAnimation(parent: _pinBounce, curve: Curves.easeOut));
     _refreshLocationLabel(debounced: false);
   }
 
@@ -108,12 +111,18 @@ class _MapLocationPickerPageState extends State<MapLocationPickerPage>
   }
 
   String _newAutocompleteSessionToken() {
-    const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
+    const alphabet =
+        'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
     final random = Random.secure();
-    return List.generate(20, (_) => alphabet[random.nextInt(alphabet.length)]).join();
+    return List.generate(
+      20,
+      (_) => alphabet[random.nextInt(alphabet.length)],
+    ).join();
   }
 
-  Future<List<_LocationSuggestion>> _fetchAutocompleteSuggestions(String query) async {
+  Future<List<_LocationSuggestion>> _fetchAutocompleteSuggestions(
+    String query,
+  ) async {
     if (_environment.googleMapsApiKey.isEmpty) {
       return const <_LocationSuggestion>[];
     }
@@ -156,8 +165,12 @@ class _MapLocationPickerPageState extends State<MapLocationPickerPage>
             final placeId = placePrediction['placeId']?.toString().trim();
             final text = placePrediction['text'];
             final structured = placePrediction['structuredFormat'];
-            final label = _predictionText(text) ?? _predictionText(structured) ?? placeId;
-            if (placeId == null || placeId.isEmpty || label == null || label.isEmpty) {
+            final label =
+                _predictionText(text) ?? _predictionText(structured) ?? placeId;
+            if (placeId == null ||
+                placeId.isEmpty ||
+                label == null ||
+                label.isEmpty) {
               return null;
             }
             final secondary = _predictionSecondary(structured);
@@ -169,24 +182,23 @@ class _MapLocationPickerPageState extends State<MapLocationPickerPage>
           })
           .whereType<_LocationSuggestion>()
           .toList(growable: false);
-    } catch (error) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Autocomplete failed: $error')),
-        );
-      }
+    } catch (_) {
       return const <_LocationSuggestion>[];
     }
   }
 
   Future<void> _applySuggestion(_LocationSuggestion suggestion) async {
     _suggestionDebounce?.cancel();
+    _suggestionRequestId++;
     _autocompleteSessionToken = null;
     _searchController.text = suggestion.label;
-    _searchController.selection = TextSelection.collapsed(offset: suggestion.label.length);
+    _searchController.selection = TextSelection.collapsed(
+      offset: suggestion.label.length,
+    );
     if (mounted) {
       setState(() {
         _suggestions = const <_LocationSuggestion>[];
+        _isLoadingSuggestions = false;
       });
     }
 
@@ -205,14 +217,11 @@ class _MapLocationPickerPageState extends State<MapLocationPickerPage>
       );
       final payload = response.data ?? <String, dynamic>{};
       if (payload['status']?.toString() != 'OK') {
-        final message = payload['error_message']?.toString();
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
+          const SnackBar(
             content: Text(
-              message?.isNotEmpty == true
-                  ? 'Search failed: $message'
-                  : 'Could not resolve this place.',
+              'Could not find that place. Try another search or pick it on the map.',
             ),
           ),
         );
@@ -228,8 +237,12 @@ class _MapLocationPickerPageState extends State<MapLocationPickerPage>
       if (first is! Map) return;
       final geometry = first['geometry'];
       final location = geometry is Map ? geometry['location'] : null;
-      final lat = double.tryParse(location is Map ? location['lat']?.toString() ?? '' : '');
-      final lon = double.tryParse(location is Map ? location['lng']?.toString() ?? '' : '');
+      final lat = double.tryParse(
+        location is Map ? location['lat']?.toString() ?? '' : '',
+      );
+      final lon = double.tryParse(
+        location is Map ? location['lng']?.toString() ?? '' : '',
+      );
       if (lat == null || lon == null) {
         return;
       }
@@ -239,10 +252,12 @@ class _MapLocationPickerPageState extends State<MapLocationPickerPage>
       if (formattedAddress != null && formattedAddress.isNotEmpty && mounted) {
         setState(() => _locationLabel = formattedAddress);
       }
-    } catch (error) {
+    } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Search failed: $error')),
+        const SnackBar(
+          content: Text('Location search is temporarily unavailable.'),
+        ),
       );
     } finally {
       if (mounted) {
@@ -281,7 +296,9 @@ class _MapLocationPickerPageState extends State<MapLocationPickerPage>
       final candidates = [
         map['text'],
         map['mainText'] is Map ? (map['mainText'] as Map)['text'] : null,
-        map['secondaryText'] is Map ? (map['secondaryText'] as Map)['text'] : null,
+        map['secondaryText'] is Map
+            ? (map['secondaryText'] as Map)['text']
+            : null,
       ];
       for (final candidate in candidates) {
         final text = _predictionText(candidate);
@@ -303,12 +320,18 @@ class _MapLocationPickerPageState extends State<MapLocationPickerPage>
   }
 
   Future<void> _centerOnCurrentLocation() async {
+    if (_isGettingLocation) return;
+    setState(() => _isGettingLocation = true);
     try {
       final serviceEnabled = await Geolocator.isLocationServiceEnabled();
       if (!serviceEnabled) {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Turn on location services to use your current position.')),
+          const SnackBar(
+            content: Text(
+              'Turn on location services to use your current position.',
+            ),
+          ),
         );
         return;
       }
@@ -318,10 +341,15 @@ class _MapLocationPickerPageState extends State<MapLocationPickerPage>
         permission = await Geolocator.requestPermission();
       }
 
-      if (permission == LocationPermission.denied || permission == LocationPermission.deniedForever) {
+      if (permission == LocationPermission.denied ||
+          permission == LocationPermission.deniedForever) {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Location permission is required to use your current position.')),
+          const SnackBar(
+            content: Text(
+              'Location permission is required to use your current position.',
+            ),
+          ),
         );
         return;
       }
@@ -330,13 +358,26 @@ class _MapLocationPickerPageState extends State<MapLocationPickerPage>
         setState(() => _hasLocationPermission = true);
       }
 
-      final pos = await Geolocator.getCurrentPosition(locationSettings: const LocationSettings(accuracy: LocationAccuracy.high));
+      final pos = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.high,
+        ),
+      );
+      if (!mounted) return;
       await _animateTo(LatLng(pos.latitude, pos.longitude));
-    } catch (error) {
+    } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Unable to get current location: $error')),
+        const SnackBar(
+          content: Text(
+            'Unable to get your location. You can choose it on the map instead.',
+          ),
+        ),
       );
+    } finally {
+      if (mounted) {
+        setState(() => _isGettingLocation = false);
+      }
     }
   }
 
@@ -348,14 +389,22 @@ class _MapLocationPickerPageState extends State<MapLocationPickerPage>
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Set GOOGLE_MAPS_API_KEY to enable location search.'),
+          content: Text(
+            'Location search is unavailable. You can choose a spot on the map.',
+          ),
         ),
       );
       return;
     }
 
+    _suggestionRequestId++;
+    _suggestionDebounce?.cancel();
     _autocompleteSessionToken = null;
-    setState(() => _isSearching = true);
+    setState(() {
+      _isSearching = true;
+      _isLoadingSuggestions = false;
+      _suggestions = const <_LocationSuggestion>[];
+    });
     try {
       final response = await Dio().get<Map<String, dynamic>>(
         'https://maps.googleapis.com/maps/api/geocode/json',
@@ -368,15 +417,12 @@ class _MapLocationPickerPageState extends State<MapLocationPickerPage>
       final status = payload['status']?.toString() ?? 'UNKNOWN_ERROR';
       if (status != 'OK') {
         if (!mounted) return;
-        final message = payload['error_message']?.toString();
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              message?.isNotEmpty == true
-                  ? 'Search failed: $message'
-                  : status == 'ZERO_RESULTS'
-                      ? 'No matching location found.'
-                      : 'Search failed: $status',
+              status == 'ZERO_RESULTS'
+                  ? 'No matching location found.'
+                  : 'Location search is temporarily unavailable. Try picking a spot on the map.',
             ),
           ),
         );
@@ -396,8 +442,12 @@ class _MapLocationPickerPageState extends State<MapLocationPickerPage>
       if (first is! Map) return;
       final geometry = first['geometry'];
       final location = geometry is Map ? geometry['location'] : null;
-      final lat = double.tryParse(location is Map ? location['lat']?.toString() ?? '' : '');
-      final lon = double.tryParse(location is Map ? location['lng']?.toString() ?? '' : '');
+      final lat = double.tryParse(
+        location is Map ? location['lat']?.toString() ?? '' : '',
+      );
+      final lon = double.tryParse(
+        location is Map ? location['lng']?.toString() ?? '' : '',
+      );
       if (lat == null || lon == null) {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
@@ -407,10 +457,12 @@ class _MapLocationPickerPageState extends State<MapLocationPickerPage>
       }
 
       await _animateTo(LatLng(lat, lon));
-    } catch (error) {
+    } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Search failed: $error')),
+        const SnackBar(
+          content: Text('Location search is temporarily unavailable.'),
+        ),
       );
     } finally {
       if (mounted) {
@@ -421,6 +473,7 @@ class _MapLocationPickerPageState extends State<MapLocationPickerPage>
 
   void _onSearchChanged(String value) {
     _suggestionDebounce?.cancel();
+    final requestId = ++_suggestionRequestId;
     final query = value.trim();
 
     if (query.isEmpty) {
@@ -445,7 +498,9 @@ class _MapLocationPickerPageState extends State<MapLocationPickerPage>
 
       setState(() => _isLoadingSuggestions = true);
       final suggestions = await _fetchAutocompleteSuggestions(query);
-      if (!mounted) {
+      if (!mounted ||
+          requestId != _suggestionRequestId ||
+          query != _searchController.text.trim()) {
         return;
       }
       setState(() {
@@ -495,7 +550,9 @@ class _MapLocationPickerPageState extends State<MapLocationPickerPage>
           // ── Fixed center pin ────────────────────────────────────────
           Center(
             child: Padding(
-              padding: const EdgeInsets.only(bottom: 36), // offset so pin base is at center
+              padding: const EdgeInsets.only(
+                bottom: 36,
+              ), // offset so pin base is at center
               child: AnimatedBuilder(
                 animation: _pinOffset,
                 builder: (context, child) {
@@ -525,7 +582,9 @@ class _MapLocationPickerPageState extends State<MapLocationPickerPage>
                       width: _isDragging ? 8 : 4,
                       height: _isDragging ? 8 : 4,
                       decoration: BoxDecoration(
-                        color: Colors.black.withValues(alpha: _isDragging ? 0.2 : 0.35),
+                        color: Colors.black.withValues(
+                          alpha: _isDragging ? 0.2 : 0.35,
+                        ),
                         shape: BoxShape.circle,
                       ),
                     ),
@@ -563,9 +622,13 @@ class _MapLocationPickerPageState extends State<MapLocationPickerPage>
                       onSubmitted: (_) => _searchLocation(),
                       decoration: InputDecoration(
                         hintText: 'Search for a location...',
-                        hintStyle: tt.bodyLarge?.copyWith(color: cs.onSurfaceVariant),
+                        hintStyle: tt.bodyLarge?.copyWith(
+                          color: cs.onSurfaceVariant,
+                        ),
                         border: InputBorder.none,
-                        contentPadding: const EdgeInsets.symmetric(vertical: 16),
+                        contentPadding: const EdgeInsets.symmetric(
+                          vertical: 16,
+                        ),
                       ),
                     ),
                   ),
@@ -580,7 +643,10 @@ class _MapLocationPickerPageState extends State<MapLocationPickerPage>
                               color: cs.primary,
                             ),
                           )
-                        : Icon(Icons.search_rounded, color: cs.onSurfaceVariant),
+                        : Icon(
+                            Icons.search_rounded,
+                            color: cs.onSurfaceVariant,
+                          ),
                   ),
                 ],
               ),
@@ -607,12 +673,18 @@ class _MapLocationPickerPageState extends State<MapLocationPickerPage>
                           shrinkWrap: true,
                           padding: const EdgeInsets.symmetric(vertical: 8),
                           itemCount: _suggestions.length,
-                          separatorBuilder: (_, __) => Divider(height: 1, color: cs.outlineVariant.withValues(alpha: 0.35)),
+                          separatorBuilder: (_, __) => Divider(
+                            height: 1,
+                            color: cs.outlineVariant.withValues(alpha: 0.35),
+                          ),
                           itemBuilder: (context, index) {
                             final suggestion = _suggestions[index];
                             return ListTile(
                               dense: true,
-                              leading: Icon(Icons.place_rounded, color: cs.primary),
+                              leading: Icon(
+                                Icons.place_rounded,
+                                color: cs.primary,
+                              ),
                               title: Text(suggestion.label),
                               subtitle: suggestion.secondaryLabel == null
                                   ? null
@@ -660,7 +732,9 @@ class _MapLocationPickerPageState extends State<MapLocationPickerPage>
               ),
               decoration: BoxDecoration(
                 color: cs.surface,
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(28),
+                ),
                 boxShadow: AbzioTheme.eliteShadow,
               ),
               child: Column(
@@ -674,7 +748,9 @@ class _MapLocationPickerPageState extends State<MapLocationPickerPage>
                       Expanded(
                         child: Text(
                           'Selected Location',
-                          style: tt.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+                          style: tt.titleMedium?.copyWith(
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                       ),
                     ],
@@ -686,7 +762,9 @@ class _MapLocationPickerPageState extends State<MapLocationPickerPage>
                       _locationLabel?.isNotEmpty == true
                           ? _locationLabel!
                           : '${_currentCenter.latitude.toStringAsFixed(6)}, ${_currentCenter.longitude.toStringAsFixed(6)}',
-                      key: ValueKey('${_currentCenter.latitude}_${_currentCenter.longitude}'),
+                      key: ValueKey(
+                        '${_currentCenter.latitude}_${_currentCenter.longitude}',
+                      ),
                       style: tt.bodyMedium?.copyWith(
                         color: cs.onSurfaceVariant,
                         fontFeatures: [const FontFeature.tabularFigures()],
@@ -711,7 +789,9 @@ class _MapLocationPickerPageState extends State<MapLocationPickerPage>
                       height: 56,
                       decoration: BoxDecoration(
                         color: cs.primary,
-                        borderRadius: BorderRadius.circular(AbzioTheme.buttonRadius),
+                        borderRadius: BorderRadius.circular(
+                          AbzioTheme.buttonRadius,
+                        ),
                         boxShadow: AbzioTheme.eliteShadow,
                       ),
                       child: Center(
@@ -748,10 +828,7 @@ class _LocationSuggestion {
 }
 
 class MapLocationSelection {
-  const MapLocationSelection({
-    required this.location,
-    this.label,
-  });
+  const MapLocationSelection({required this.location, this.label});
 
   final LatLng location;
   final String? label;

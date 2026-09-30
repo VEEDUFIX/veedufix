@@ -9,15 +9,18 @@ class WorkerAvailabilityPage extends ConsumerStatefulWidget {
   const WorkerAvailabilityPage({super.key});
 
   @override
-  ConsumerState<WorkerAvailabilityPage> createState() => _WorkerAvailabilityPageState();
+  ConsumerState<WorkerAvailabilityPage> createState() =>
+      _WorkerAvailabilityPageState();
 }
 
-class _WorkerAvailabilityPageState extends ConsumerState<WorkerAvailabilityPage> {
+class _WorkerAvailabilityPageState
+    extends ConsumerState<WorkerAvailabilityPage> {
   late final WorkerAvailabilityApi _api;
   bool _isLoading = true;
   bool _isSaving = false;
   String? _errorMessage;
-  final Map<int, List<_AvailabilitySlotDraft>> _slotsByDay = <int, List<_AvailabilitySlotDraft>>{};
+  final Map<int, List<_AvailabilitySlotDraft>> _slotsByDay =
+      <int, List<_AvailabilitySlotDraft>>{};
 
   @override
   void initState() {
@@ -55,12 +58,40 @@ class _WorkerAvailabilityPageState extends ConsumerState<WorkerAvailabilityPage>
       }
       setState(() {
         _isLoading = false;
-        _errorMessage = error is DioException ? _errorMessageFromDio(error) : error.toString();
+        _errorMessage = error is DioException
+            ? _errorMessageFromDio(error)
+            : error.toString();
       });
     }
   }
 
   Future<void> _saveAvailability() async {
+    if (_isSaving || _isLoading) return;
+
+    for (final entry in _slotsByDay.entries) {
+      final completeSlots = <({int start, int end})>[];
+      for (final slot in entry.value) {
+        if (slot.startTime == null || slot.endTime == null) {
+          _showSaveError('Complete or remove every time slot before saving.');
+          return;
+        }
+        final start = slot.startTime!.hour * 60 + slot.startTime!.minute;
+        final end = slot.endTime!.hour * 60 + slot.endTime!.minute;
+        if (end <= start) {
+          _showSaveError('Each end time must be later than its start time.');
+          return;
+        }
+        completeSlots.add((start: start, end: end));
+      }
+      completeSlots.sort((a, b) => a.start.compareTo(b.start));
+      for (var i = 1; i < completeSlots.length; i++) {
+        if (completeSlots[i].start < completeSlots[i - 1].end) {
+          _showSaveError('Time slots on the same day cannot overlap.');
+          return;
+        }
+      }
+    }
+
     setState(() {
       _isSaving = true;
     });
@@ -68,10 +99,8 @@ class _WorkerAvailabilityPageState extends ConsumerState<WorkerAvailabilityPage>
     try {
       final slots = <WeeklyAvailabilitySlot>[];
       for (final day in _slotsByDay.keys.toList()..sort()) {
-        for (final slot in _slotsByDay[day] ?? const <_AvailabilitySlotDraft>[]) {
-          if (slot.startTime == null || slot.endTime == null) {
-            continue;
-          }
+        for (final slot
+            in _slotsByDay[day] ?? const <_AvailabilitySlotDraft>[]) {
           slots.add(WeeklyAvailabilitySlot(
             dayOfWeek: day,
             startTime: _formatTime(slot.startTime!),
@@ -103,6 +132,11 @@ class _WorkerAvailabilityPageState extends ConsumerState<WorkerAvailabilityPage>
     }
   }
 
+  void _showSaveError(String message) {
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(message)));
+  }
+
   @override
   Widget build(BuildContext context) {
     final days = List.generate(7, (index) => index);
@@ -119,7 +153,7 @@ class _WorkerAvailabilityPageState extends ConsumerState<WorkerAvailabilityPage>
         ],
       ),
       body: RefreshIndicator(
-        onRefresh: _loadAvailability,
+        onRefresh: _isSaving ? () async {} : _loadAvailability,
         child: ListView(
           padding: const EdgeInsets.fromLTRB(20, 8, 20, 28),
           children: [
@@ -131,12 +165,18 @@ class _WorkerAvailabilityPageState extends ConsumerState<WorkerAvailabilityPage>
                   children: [
                     Text(
                       'Set your weekly schedule',
-                      style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900),
+                      style: Theme.of(context)
+                          .textTheme
+                          .titleLarge
+                          ?.copyWith(fontWeight: FontWeight.w900),
                     ),
                     const SizedBox(height: 6),
                     Text(
                       'Customers will only see you during the windows you publish here.',
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(height: 1.4),
+                      style: Theme.of(context)
+                          .textTheme
+                          .bodyMedium
+                          ?.copyWith(height: 1.4),
                     ),
                   ],
                 ),
@@ -144,7 +184,10 @@ class _WorkerAvailabilityPageState extends ConsumerState<WorkerAvailabilityPage>
             ),
             const SizedBox(height: 16),
             if (_isLoading)
-              const Center(child: Padding(padding: EdgeInsets.all(28), child: CircularProgressIndicator()))
+              const Center(
+                  child: Padding(
+                      padding: EdgeInsets.all(28),
+                      child: CircularProgressIndicator()))
             else if (_errorMessage != null)
               PremiumGlassCard(
                 child: Padding(
@@ -156,18 +199,22 @@ class _WorkerAvailabilityPageState extends ConsumerState<WorkerAvailabilityPage>
               ...days.map(
                 (day) => Padding(
                   padding: const EdgeInsets.only(bottom: 12),
-                  child: _DayScheduleCard(
-                    dayOfWeek: day,
-                    slots: _slotsByDay[day] ?? const <_AvailabilitySlotDraft>[],
-                    onAddSlot: () => setState(() {
-                      _slotsByDay[day]!.add(const _AvailabilitySlotDraft());
-                    }),
-                    onRemoveSlot: (index) => setState(() {
-                      _slotsByDay[day]!.removeAt(index);
-                    }),
-                    onUpdateSlot: (index, next) => setState(() {
-                      _slotsByDay[day]![index] = next;
-                    }),
+                  child: AbsorbPointer(
+                    absorbing: _isSaving,
+                    child: _DayScheduleCard(
+                      dayOfWeek: day,
+                      slots:
+                          _slotsByDay[day] ?? const <_AvailabilitySlotDraft>[],
+                      onAddSlot: () => setState(() {
+                        _slotsByDay[day]!.add(const _AvailabilitySlotDraft());
+                      }),
+                      onRemoveSlot: (index) => setState(() {
+                        _slotsByDay[day]!.removeAt(index);
+                      }),
+                      onUpdateSlot: (index, next) => setState(() {
+                        _slotsByDay[day]![index] = next;
+                      }),
+                    ),
                   ),
                 ),
               ),
@@ -206,7 +253,10 @@ class _DayScheduleCard extends StatelessWidget {
                 Expanded(
                   child: Text(
                     _dayLabel(dayOfWeek),
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+                    style: Theme.of(context)
+                        .textTheme
+                        .titleMedium
+                        ?.copyWith(fontWeight: FontWeight.w800),
                   ),
                 ),
                 TextButton.icon(
@@ -228,16 +278,16 @@ class _DayScheduleCard extends StatelessWidget {
               )
             else
               ...slots.asMap().entries.map(
-                (entry) => Padding(
-                  padding: const EdgeInsets.only(top: 10),
-                  child: _TimeSlotEditor(
-                    label: 'Slot ${entry.key + 1}',
-                    slot: entry.value,
-                    onChanged: (next) => onUpdateSlot(entry.key, next),
-                    onDelete: () => onRemoveSlot(entry.key),
+                    (entry) => Padding(
+                      padding: const EdgeInsets.only(top: 10),
+                      child: _TimeSlotEditor(
+                        label: 'Slot ${entry.key + 1}',
+                        slot: entry.value,
+                        onChanged: (next) => onUpdateSlot(entry.key, next),
+                        onDelete: () => onRemoveSlot(entry.key),
+                      ),
+                    ),
                   ),
-                ),
-              ),
           ],
         ),
       ),
@@ -272,7 +322,8 @@ class _TimeSlotEditor extends StatelessWidget {
           Row(
             children: [
               Expanded(
-                child: Text(label, style: const TextStyle(fontWeight: FontWeight.w800)),
+                child: Text(label,
+                    style: const TextStyle(fontWeight: FontWeight.w800)),
               ),
               IconButton(
                 onPressed: onDelete,
@@ -285,11 +336,14 @@ class _TimeSlotEditor extends StatelessWidget {
               Expanded(
                 child: _TimeButton(
                   label: 'Start',
-                  value: slot.startTime == null ? 'Select' : _formatTime(slot.startTime!),
+                  value: slot.startTime == null
+                      ? 'Select'
+                      : _formatTime(slot.startTime!),
                   onPressed: () async {
                     final selected = await showTimePicker(
                       context: context,
-                      initialTime: slot.startTime ?? const TimeOfDay(hour: 9, minute: 0),
+                      initialTime:
+                          slot.startTime ?? const TimeOfDay(hour: 9, minute: 0),
                     );
                     if (selected != null) {
                       onChanged(slot.copyWith(startTime: selected));
@@ -301,11 +355,14 @@ class _TimeSlotEditor extends StatelessWidget {
               Expanded(
                 child: _TimeButton(
                   label: 'End',
-                  value: slot.endTime == null ? 'Select' : _formatTime(slot.endTime!),
+                  value: slot.endTime == null
+                      ? 'Select'
+                      : _formatTime(slot.endTime!),
                   onPressed: () async {
                     final selected = await showTimePicker(
                       context: context,
-                      initialTime: slot.endTime ?? const TimeOfDay(hour: 18, minute: 0),
+                      initialTime:
+                          slot.endTime ?? const TimeOfDay(hour: 18, minute: 0),
                     );
                     if (selected != null) {
                       onChanged(slot.copyWith(endTime: selected));

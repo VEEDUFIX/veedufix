@@ -19,6 +19,30 @@ const slugSchema = z
   .max(120)
   .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "Slug must be lowercase kebab-case");
 
+export const createMarketSchema = z.object({
+  body: z.object({
+    name: z.string().trim().min(2).max(100),
+    state: z.string().trim().min(2).max(100),
+    district: z.string().trim().min(2).max(100),
+    slug: slugSchema.optional(),
+    isActive: z.boolean().default(false)
+  }).strict(),
+  query: z.object({}).strict(),
+  params: z.object({}).strict()
+});
+
+export const updateMarketSchema = z.object({
+  body: z.object({
+    name: z.string().trim().min(2).max(100).optional(),
+    state: z.string().trim().min(2).max(100).optional(),
+    district: z.string().trim().min(2).max(100).optional(),
+    slug: slugSchema.optional(),
+    isActive: z.boolean().optional()
+  }).strict().refine((body) => Object.keys(body).length > 0, "At least one field is required"),
+  query: z.object({}).strict(),
+  params: z.object({ id: z.string().trim().min(1) })
+});
+
 function validateCoverage(
   value: {
     pincode?: string | null;

@@ -74,7 +74,9 @@ class SavedAddressesApi {
   final Dio _dio;
 
   Future<List<SavedAddressItem>> listAddresses() async {
-    final response = await _dio.get<Map<String, dynamic>>('/customer/addresses');
+    final response = await _dio.get<Map<String, dynamic>>(
+      '/customer/addresses',
+    );
     final data = response.data ?? <String, dynamic>{};
     final addresses = data['addresses'];
     if (addresses is! List) {
@@ -96,7 +98,10 @@ class SavedAddressesApi {
     );
   }
 
-  Future<SavedAddressItem> updateAddress(String addressId, Map<String, dynamic> payload) async {
+  Future<SavedAddressItem> updateAddress(
+    String addressId,
+    Map<String, dynamic> payload,
+  ) async {
     final response = await _dio.put<Map<String, dynamic>>(
       '/customer/addresses/$addressId',
       data: payload,
@@ -132,4 +137,38 @@ class SavedAddressesApi {
     );
     return response.data?['serviceable'] == true;
   }
+
+  Future<List<ServiceableCity>> listServiceableCities() async {
+    final response = await _dio.get<Map<String, dynamic>>(
+      '/service-areas/cities',
+    );
+    final cities = response.data?['cities'];
+    if (cities is! List) return const <ServiceableCity>[];
+    return cities
+        .whereType<Map>()
+        .map((item) => ServiceableCity.fromJson(item.cast<String, dynamic>()))
+        .toList(growable: false);
+  }
+}
+
+class ServiceableCity {
+  const ServiceableCity({
+    required this.id,
+    required this.name,
+    required this.state,
+    required this.district,
+  });
+
+  final String id;
+  final String name;
+  final String state;
+  final String district;
+
+  factory ServiceableCity.fromJson(Map<String, dynamic> json) =>
+      ServiceableCity(
+        id: json['id']?.toString() ?? '',
+        name: json['name']?.toString() ?? '',
+        state: json['state']?.toString() ?? '',
+        district: json['district']?.toString() ?? '',
+      );
 }
