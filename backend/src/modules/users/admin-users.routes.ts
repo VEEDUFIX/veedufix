@@ -3,6 +3,8 @@ import { BookingStatus, PaymentStatus, Prisma } from "@prisma/client";
 import { requireAuth, requireRole, type AuthenticatedRequest } from "../../middleware/auth.js";
 import { prisma } from "../../lib/prisma.js";
 import { getBookingTimelineEvents } from "../../lib/booking-timeline.js";
+import { writeAuditLog } from "../../lib/audit.js";
+import { createUserDataExport } from "./data-export.service.js";
 
 export const adminCustomersRouter = Router();
 
@@ -90,6 +92,32 @@ adminCustomersRouter.get("/", async (request: AuthenticatedRequest, response) =>
   );
 
   response.status(200).json({ customers: serialized });
+});
+
+adminCustomersRouter.get("/:customerId/data-export", async (request: AuthenticatedRequest, response) => {
+  const { customerId } = request.params as { customerId: string };
+  const customer = await prisma.user.findFirst({
+    where: { id: customerId, role: "CUSTOMER" },
+    select: { id: true }
+  });
+  if (!customer) {
+    response.status(404).json({ message: "Customer not found" });
+    return;
+  }
+  const exported = await createUserDataExport(customer.id);
+  if (!exported) {
+    response.status(404).json({ message: "Customer not found" });
+    return;
+  }
+  void writeAuditLog({
+    adminId: request.auth!.userId,
+    action: "privacy.data_exported",
+    targetType: "user",
+    targetId: customer.id
+  });
+  response.setHeader("Cache-Control", "private, no-store");
+  response.setHeader("Content-Disposition", `attachment; filename="veedufix-customer-${customer.id}-data.json"`);
+  response.status(200).json(exported);
 });
 
 adminCustomersRouter.get("/:customerId", async (request: AuthenticatedRequest, response) => {

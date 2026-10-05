@@ -8,7 +8,14 @@ import GoogleMaps
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
   ) -> Bool {
-    GMSServices.provideAPIKey("AIzaSyDK_xow06vBmF7X46BA4n13Ao_SO84_l_Y")
+    if let apiKey = Bundle.main.object(forInfoDictionaryKey: "GOOGLE_MAPS_API_KEY") as? String,
+       !apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+       !apiKey.hasPrefix("REPLACE_WITH_"),
+       !apiKey.hasPrefix("$(") {
+      GMSServices.provideAPIKey(apiKey)
+    } else {
+      NSLog("GOOGLE_MAPS_API_KEY is missing from the app configuration")
+    }
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
   }
 

@@ -50,9 +50,9 @@ class _ReviewBottomSheetState extends ConsumerState<ReviewBottomSheet> {
 
   Future<void> _submitReview() async {
     if (_rating == 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select a rating')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Please select a rating')));
       return;
     }
 
@@ -65,7 +65,8 @@ class _ReviewBottomSheetState extends ConsumerState<ReviewBottomSheet> {
         data: {
           'bookingId': widget.bookingId,
           'rating': _rating,
-          if (_commentController.text.trim().isNotEmpty) 'comment': _commentController.text.trim(),
+          if (_commentController.text.trim().isNotEmpty)
+            'comment': _commentController.text.trim(),
         },
       );
 
@@ -102,80 +103,132 @@ class _ReviewBottomSheetState extends ConsumerState<ReviewBottomSheet> {
         color: cs.surface,
         borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
       ),
-      padding: EdgeInsets.only(
-        top: 24,
-        left: 24,
-        right: 24,
-        bottom: MediaQuery.of(context).viewInsets.bottom + 24,
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 48,
-            height: 4,
-            decoration: BoxDecoration(
-              color: cs.onSurface.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(2),
-            ),
+      child: SafeArea(
+        top: false,
+        child: SingleChildScrollView(
+          padding: EdgeInsets.fromLTRB(
+            24,
+            16,
+            24,
+            MediaQuery.of(context).viewInsets.bottom + 24,
           ),
-          const SizedBox(height: 24),
-          Text(
-            'Rate your experience',
-            style: tt.headlineSmall?.copyWith(fontWeight: FontWeight.w800),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'How was the service provided by ${widget.workerName}?',
-            style: tt.bodyMedium?.copyWith(color: cs.onSurfaceVariant),
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 32),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: List.generate(5, (index) {
-              final starValue = index + 1;
-              final isSelected = starValue <= _rating;
-              return GestureDetector(
-                onTap: () => setState(() => _rating = starValue),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 8),
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 200),
-                    curve: Curves.easeOutBack,
-                    transform: Matrix4.diagonal3Values(
-                      isSelected ? 1.1 : 1.0,
-                      isSelected ? 1.1 : 1.0,
-                      1.0,
-                    ),
-                    child: Icon(
-                      isSelected ? Icons.star_rounded : Icons.star_border_rounded,
-                      size: 40,
-                      color: isSelected ? const Color(0xFFF59E0B) : cs.onSurface.withValues(alpha: 0.2),
-                    ),
-                  ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 48,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: cs.onSurface.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(2),
                 ),
-              );
-            }),
+              ),
+              const SizedBox(height: 24),
+              Text(
+                'Rate your experience',
+                style: tt.headlineSmall?.copyWith(fontWeight: FontWeight.w800),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'How was the service provided by ${widget.workerName}?',
+                style: tt.bodyMedium?.copyWith(color: cs.onSurfaceVariant),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 20),
+              CircleAvatar(
+                radius: 28,
+                backgroundColor: cs.surfaceContainerHighest,
+                backgroundImage:
+                    widget.workerImageUrl?.trim().isNotEmpty == true
+                    ? NetworkImage(widget.workerImageUrl!)
+                    : null,
+                child: widget.workerImageUrl?.trim().isNotEmpty == true
+                    ? null
+                    : Text(
+                        widget.workerName.trim().isEmpty
+                            ? '?'
+                            : widget.workerName.trim()[0].toUpperCase(),
+                        style: tt.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+              ),
+              const SizedBox(height: 24),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: List.generate(5, (index) {
+                  final starValue = index + 1;
+                  final isSelected = starValue <= _rating;
+                  return Semantics(
+                    button: true,
+                    selected: _rating == starValue,
+                    label: '$starValue ${starValue == 1 ? 'star' : 'stars'}',
+                    child: IconButton(
+                      tooltip:
+                          '$starValue ${starValue == 1 ? 'star' : 'stars'}',
+                      onPressed: _isSubmitting
+                          ? null
+                          : () => setState(() => _rating = starValue),
+                      icon: AnimatedContainer(
+                        duration: const Duration(milliseconds: 200),
+                        curve: Curves.easeOutBack,
+                        transform: Matrix4.diagonal3Values(
+                          isSelected ? 1.1 : 1.0,
+                          isSelected ? 1.1 : 1.0,
+                          1.0,
+                        ),
+                        child: Icon(
+                          isSelected
+                              ? Icons.star_rounded
+                              : Icons.star_border_rounded,
+                          size: 38,
+                          color: isSelected
+                              ? const Color(0xFFF59E0B)
+                              : cs.onSurface.withValues(alpha: 0.2),
+                        ),
+                      ),
+                    ),
+                  );
+                }),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                _rating == 0
+                    ? 'Tap a star to rate your experience'
+                    : switch (_rating) {
+                        1 => 'We’re sorry it fell short',
+                        2 => 'There’s room to improve',
+                        3 => 'It met expectations',
+                        4 => 'You had a good experience',
+                        _ => 'Excellent service',
+                      },
+                textAlign: TextAlign.center,
+                style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+              ),
+              const SizedBox(height: 24),
+              TextField(
+                controller: _commentController,
+                maxLines: 3,
+                maxLength: 500,
+                textCapitalization: TextCapitalization.sentences,
+                decoration: const InputDecoration(
+                  labelText: 'Leave a comment (optional)',
+                  alignLabelWithHint: true,
+                ),
+              ),
+              const SizedBox(height: 24),
+              SizedBox(
+                width: double.infinity,
+                child: PrimaryActionButton(
+                  label: _isSubmitting ? 'Submitting…' : 'Submit review',
+                  onPressed: _isSubmitting || _rating == 0
+                      ? null
+                      : _submitReview,
+                ),
+              ),
+            ],
           ),
-          const SizedBox(height: 32),
-          TextField(
-            controller: _commentController,
-            maxLines: 3,
-            decoration: const InputDecoration(
-              labelText: 'Leave a comment (optional)',
-              alignLabelWithHint: true,
-            ),
-          ),
-          const SizedBox(height: 24),
-          SizedBox(
-            width: double.infinity,
-            child: PrimaryActionButton(
-              label: _isSubmitting ? 'Submitting...' : 'Submit Review',
-              onPressed: _isSubmitting ? null : _submitReview,
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }

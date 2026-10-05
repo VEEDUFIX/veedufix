@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   paymentFindMany: vi.fn(),
   paymentUpdate: vi.fn(),
   refundFindFirst: vi.fn(),
+  refundFindUnique: vi.fn(),
   refundUpdate: vi.fn(),
   refundAggregate: vi.fn(),
   bookingUpdate: vi.fn(),
@@ -20,13 +21,19 @@ const mocks = vi.hoisted(() => ({
   recordTimeline: vi.fn(),
   dispatchBooking: vi.fn(),
   raiseOpsAlert: vi.fn(),
+  settleRefund: vi.fn(),
 }));
 
 vi.mock('../lib/prisma.js', () => ({
   prisma: {
     payment: { findUnique: mocks.paymentFindUnique, update: mocks.paymentUpdate, findMany: mocks.paymentFindMany },
     booking: { update: mocks.bookingUpdate, updateMany: mocks.bookingUpdateMany, findUnique: mocks.bookingFindUnique },
-    refund: { findFirst: mocks.refundFindFirst, update: mocks.refundUpdate, aggregate: mocks.refundAggregate },
+    refund: {
+      findFirst: mocks.refundFindFirst,
+      findUnique: mocks.refundFindUnique,
+      update: mocks.refundUpdate,
+      aggregate: mocks.refundAggregate
+    },
     notification: { create: mocks.notificationCreate },
   },
 }));
@@ -40,6 +47,7 @@ vi.mock('../lib/realtime.js', () => ({
 vi.mock('../lib/booking-timeline.js', () => ({ recordBookingTimelineEvent: mocks.recordTimeline }));
 vi.mock('../modules/matching/matching.service.js', () => ({ dispatchBookingAfterPayment: mocks.dispatchBooking }));
 vi.mock('../modules/ops/ops.service.js', () => ({ raiseOpsAlert: mocks.raiseOpsAlert }));
+vi.mock('../modules/refund/refund.service.js', () => ({ settleRefundFromProvider: mocks.settleRefund }));
 
 import { handleRazorpayWebhook, updatePaymentForWebhook } from '../modules/webhooks/webhooks.service.js';
 
@@ -52,6 +60,7 @@ describe('Razorpay webhook handling', () => {
     mocks.publishTracking.mockResolvedValue(undefined);
     mocks.notificationCreate.mockResolvedValue(undefined);
     mocks.raiseOpsAlert.mockResolvedValue(undefined);
+    mocks.settleRefund.mockResolvedValue(undefined);
     mocks.dispatchBooking.mockResolvedValue(undefined);
     mocks.refundAggregate.mockResolvedValue({ _sum: { amount: 0 } });
   });
@@ -222,10 +231,12 @@ describe('Razorpay webhook handling', () => {
     const signature = createHmac('sha256', 'test-webhook-secret').update(rawBody).digest('hex');
     await handleRazorpayWebhook(rawBody, signature, body);
 
-    expect(mocks.refundUpdate).toHaveBeenCalledWith({
-      where: { id: 'refund-2' },
-      data: { status: 'failed', failureReason: 'failed' },
-    });
+    expect(mocks.settleRefund).toHaveBeenCalledWith(
+      'refund-2',
+      false,
+      'failed',
+      { providerRefundId: 'rfnd-2', providerAttemptId: null }
+    );
     expect(mocks.paymentUpdate).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.not.objectContaining({ status: PaymentStatus.FAILED }),
     }));
@@ -249,7 +260,13 @@ describe('Razorpay webhook handling', () => {
       },
     };
     mocks.paymentFindMany.mockResolvedValue([payment]);
-    mocks.refundFindFirst.mockResolvedValue({ id: 'refund-3', status: 'pending' });
+    mocks.refundFindFirst.mockResolvedValue(null);
+    mocks.refundFindUnique.mockResolvedValue({
+      id: 'refund-3',
+      status: 'pending',
+      razorpayRefundId: null,
+      providerAttemptId: 'attempt-current',
+    });
     mocks.refundAggregate.mockResolvedValue({ _sum: { amount: 40 } });
     mocks.paymentUpdate.mockImplementation(async ({ data }: { data: { status?: PaymentStatus; notes: unknown } }) => ({
       ...payment,
@@ -264,16 +281,19 @@ describe('Razorpay webhook handling', () => {
         payment_id: 'rzp-payment-3',
         status: 'processed',
         amount: 4000,
+        notes: { refundRecordId: 'refund-3', refundAttemptId: 'attempt-current' },
       } } },
     };
     const rawBody = JSON.stringify(body);
     const signature = createHmac('sha256', 'test-webhook-secret').update(rawBody).digest('hex');
     await handleRazorpayWebhook(rawBody, signature, body);
 
-    expect(mocks.refundUpdate).toHaveBeenCalledWith({
-      where: { id: 'refund-3' },
-      data: { status: 'processed', failureReason: null },
-    });
+    expect(mocks.settleRefund).toHaveBeenCalledWith(
+      'refund-3',
+      true,
+      'processed',
+      { providerRefundId: 'rfnd-3', providerAttemptId: 'attempt-current' }
+    );
     expect(mocks.paymentUpdate).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.not.objectContaining({ status: PaymentStatus.REFUNDED }),
     }));
@@ -281,5 +301,55 @@ describe('Razorpay webhook handling', () => {
     expect(mocks.publishTracking).toHaveBeenCalledWith(expect.objectContaining({
       status: 'PAYMENT_PARTIALLY_REFUNDED',
     }));
+  });
+
+  it('ignores an internal refund record with a different provider refund ID', async () => {
+    const payment = {
+      id: 'payment-row-4',
+      bookingId: 'booking-4',
+      providerRef: 'order-4',
+      status: PaymentStatus.CAPTURED,
+      amount: new Prisma.Decimal(100),
+      notes: { paymentId: 'rzp-payment-4' },
+      booking: {
+        id: 'booking-4',
+        code: 'VF-1004',
+        customerId: 'customer-4',
+        status: BookingStatus.CANCELLED_MANUAL,
+        totalAmount: new Prisma.Decimal(100),
+      },
+    };
+    mocks.paymentFindMany.mockResolvedValue([payment]);
+    mocks.refundFindFirst.mockResolvedValue(null);
+    mocks.refundFindUnique.mockResolvedValue({
+      id: 'refund-4',
+      status: 'pending',
+      razorpayRefundId: 'rfnd-other',
+      providerAttemptId: 'attempt-current',
+    });
+    mocks.refundAggregate.mockResolvedValue({ _sum: { amount: 0 } });
+    mocks.paymentUpdate.mockImplementation(async ({ data }: { data: { status?: PaymentStatus; notes: unknown } }) => ({
+      ...payment,
+      ...data,
+      status: data.status ?? payment.status,
+    }));
+
+    const body = {
+      event: 'refund.processed',
+      payload: { refund: { entity: {
+        id: 'rfnd-4',
+        payment_id: 'rzp-payment-4',
+        status: 'processed',
+        amount: 4000,
+        notes: { refundRecordId: 'refund-4', refundAttemptId: 'attempt-old' },
+      } } },
+    };
+    const rawBody = JSON.stringify(body);
+    const signature = createHmac('sha256', 'test-webhook-secret').update(rawBody).digest('hex');
+    await handleRazorpayWebhook(rawBody, signature, body);
+
+    expect(mocks.settleRefund).not.toHaveBeenCalled();
+    expect(mocks.bookingUpdate).not.toHaveBeenCalled();
+    expect(mocks.paymentUpdate).not.toHaveBeenCalled();
   });
 });

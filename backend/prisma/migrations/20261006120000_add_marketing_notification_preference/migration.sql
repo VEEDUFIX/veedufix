@@ -1,0 +1,2 @@
+ALTER TABLE "User"
+ADD COLUMN "marketingNotificationsEnabled" BOOLEAN NOT NULL DEFAULT FALSE;

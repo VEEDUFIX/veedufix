@@ -7,7 +7,6 @@ const bookingIdParamsSchema = z.object({
 export const cancelBookingSchema = z.object({
   params: bookingIdParamsSchema,
   body: z.object({
-    reason: z.string().trim().min(3).max(2000)
+    reason: z.string().trim().min(3).max(200)
   })
 });
-

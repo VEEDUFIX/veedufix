@@ -40,11 +40,15 @@ class _LiveTrackingPageState extends ConsumerState<LiveTrackingPage> {
     final cs = Theme.of(context).colorScheme;
     final tt = Theme.of(context).textTheme;
 
-    final workerLocationAsync = ref.watch(
-      workerLocationProvider(widget.bookingId),
-    );
     final bookingAsync = ref.watch(bookingDetailProvider(widget.bookingId));
     final booking = bookingAsync.valueOrNull;
+    final trackingEnded = const {
+      'COMPLETED',
+      'CANCELLED',
+    }.contains(booking?.status.toUpperCase());
+    final AsyncValue<WorkerLocation?> workerLocationAsync = trackingEnded
+        ? const AsyncData<WorkerLocation?>(null)
+        : ref.watch(workerLocationProvider(widget.bookingId));
     final destinationLatitude = booking?.destinationLatitude;
     final destinationLongitude = booking?.destinationLongitude;
     final hasValidDestination =
@@ -59,7 +63,9 @@ class _LiveTrackingPageState extends ConsumerState<LiveTrackingPage> {
     final customerLocation = hasValidDestination
         ? LatLng(destinationLatitude, destinationLongitude)
         : null;
-    final workerLocation = workerLocationAsync.valueOrNull;
+    final workerLocation = trackingEnded
+        ? null
+        : workerLocationAsync.valueOrNull;
     final liveWorkerLocation = workerLocation == null
         ? null
         : LatLng(workerLocation.latitude, workerLocation.longitude);
@@ -72,21 +78,37 @@ class _LiveTrackingPageState extends ConsumerState<LiveTrackingPage> {
         locationAge != null &&
         !locationAge.isNegative &&
         locationAge > const Duration(minutes: 2);
+    final trackingStatusColor = trackingEnded
+        ? cs.onSurfaceVariant
+        : workerLocationAsync.hasError
+        ? AbzioTheme.dangerColor
+        : locationIsStale
+        ? AbzioTheme.warningColor
+        : liveWorkerLocation != null
+        ? AbzioTheme.successColor
+        : cs.primary;
     final workerName = booking?.worker?.name ?? 'Professional';
     final workerRating = booking?.worker?.rating ?? 0.0;
     final workerInitial = workerName.trim().isNotEmpty
         ? workerName.trim()[0].toUpperCase()
         : 'P';
 
-    ref.listen(workerLocationProvider(widget.bookingId), (prev, next) {
-      final loc = next.valueOrNull;
-      if (loc != null && _mapController != null) {
-        _mapController!.animateCamera(
-          CameraUpdate.newLatLng(LatLng(loc.latitude, loc.longitude)),
-        );
-      }
-    });
+    if (!trackingEnded) {
+      ref.listen(workerLocationProvider(widget.bookingId), (prev, next) {
+        final loc = next.valueOrNull;
+        if (loc != null && _mapController != null) {
+          _mapController!.animateCamera(
+            CameraUpdate.newLatLng(LatLng(loc.latitude, loc.longitude)),
+          );
+        }
+      });
+    }
     ref.listen(bookingDetailProvider(widget.bookingId), (previous, next) {
+      if (trackingEnded) return;
+      if (ref.read(workerLocationProvider(widget.bookingId)).valueOrNull !=
+          null) {
+        return;
+      }
       final address = next.valueOrNull;
       final latitude = address?.destinationLatitude;
       final longitude = address?.destinationLongitude;
@@ -254,7 +276,7 @@ class _LiveTrackingPageState extends ConsumerState<LiveTrackingPage> {
                             vertical: 10,
                           ),
                           decoration: BoxDecoration(
-                            color: cs.primary.withValues(alpha: 0.12),
+                            color: trackingStatusColor.withValues(alpha: 0.12),
                             borderRadius: BorderRadius.circular(
                               AbzioTheme.cardRadius,
                             ),
@@ -266,7 +288,7 @@ class _LiveTrackingPageState extends ConsumerState<LiveTrackingPage> {
                                 width: 8,
                                 height: 8,
                                 decoration: BoxDecoration(
-                                  color: cs.primary,
+                                  color: trackingStatusColor,
                                   shape: BoxShape.circle,
                                 ),
                               ),
@@ -281,13 +303,24 @@ class _LiveTrackingPageState extends ConsumerState<LiveTrackingPage> {
                                   ),
                                   maxLines: 2,
                                   overflow: TextOverflow.ellipsis,
-                                  textAlign: TextAlign.center,
+                                  textAlign: workerLocationAsync.hasError
+                                      ? TextAlign.start
+                                      : TextAlign.center,
                                   style: tt.labelLarge?.copyWith(
-                                    color: cs.primary,
+                                    color: trackingStatusColor,
                                     fontWeight: FontWeight.w700,
                                   ),
                                 ),
                               ),
+                              if (workerLocationAsync.hasError)
+                                IconButton(
+                                  tooltip: 'Retry live location',
+                                  visualDensity: VisualDensity.compact,
+                                  onPressed: () => ref.invalidate(
+                                    workerLocationProvider(widget.bookingId),
+                                  ),
+                                  icon: const Icon(Icons.refresh_rounded),
+                                ),
                             ],
                           ),
                         ),
@@ -423,12 +456,13 @@ String _trackingStatus(
   String? bookingStatus,
   bool hasLocationError,
 ) {
-  if (bookingStatus == 'COMPLETED' || bookingStatus == 'CANCELLED') {
+  final normalizedStatus = bookingStatus?.toUpperCase();
+  if (normalizedStatus == 'COMPLETED' || normalizedStatus == 'CANCELLED') {
     return 'Live tracking ended';
   }
   if (hasLocationError) return 'Live location unavailable';
   if (workerLatLng == null) {
-    return bookingStatus == 'PENDING'
+    return normalizedStatus == 'PENDING'
         ? 'Waiting for professional assignment'
         : 'Waiting for first location update';
   }

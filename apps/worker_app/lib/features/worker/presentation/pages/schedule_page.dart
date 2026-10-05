@@ -19,10 +19,15 @@ class _SchedulePageState extends ConsumerState<SchedulePage> {
   void initState() {
     super.initState();
     final now = DateTime.now();
-    // 1 = Monday, 7 = Sunday
     final weekday = now.weekday;
-    _currentWeekStart = now.subtract(Duration(days: weekday - 1));
+    _currentWeekStart = DateTime(now.year, now.month, now.day - weekday + 1);
     _selectedDayIndex = weekday - 1;
+  }
+
+  void _changeWeek(int offset) {
+    setState(() {
+      _currentWeekStart = _currentWeekStart.add(Duration(days: offset * 7));
+    });
   }
 
   Future<void> _onRefresh() async {
@@ -42,8 +47,6 @@ class _SchedulePageState extends ConsumerState<SchedulePage> {
 
     final acceptedJobsAsync = ref.watch(workerJobsProvider('accepted'));
     final activeJobsAsync = ref.watch(workerJobsProvider('active'));
-
-    final daysList = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
 
     return Scaffold(
       backgroundColor: cs.surface,
@@ -74,66 +77,111 @@ class _SchedulePageState extends ConsumerState<SchedulePage> {
                 color: cs.surface,
                 boxShadow: AbzioTheme.eliteShadow,
               ),
-              child: Row(
-                children: List.generate(7, (index) {
-                  final isSelected = _selectedDayIndex == index;
-                  final date = _currentWeekStart.add(Duration(days: index));
-
-                  return Expanded(
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 2),
-                      child: TapScale(
-                        onTap: () => setState(() => _selectedDayIndex = index),
-                        child: AnimatedContainer(
-                          duration: const Duration(milliseconds: 200),
-                          height: 64,
-                          decoration: BoxDecoration(
-                            color: isSelected ? cs.primary : Colors.transparent,
-                            borderRadius:
-                                BorderRadius.circular(AbzioTheme.cardRadius),
-                            border: Border.all(
-                              color: isSelected
-                                  ? Colors.transparent
-                                  : cs.outlineVariant.withValues(alpha: 0.5),
-                            ),
-                            boxShadow: isSelected
-                                ? [
-                                    BoxShadow(
-                                      color: cs.primary.withValues(alpha: 0.3),
-                                      blurRadius: 12,
-                                      offset: const Offset(0, 4),
-                                    ),
-                                  ]
-                                : [],
-                          ),
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Text(
-                                daysList[index],
-                                style: tt.labelSmall?.copyWith(
-                                  color: isSelected
-                                      ? cs.onPrimary.withValues(alpha: 0.8)
-                                      : cs.onSurfaceVariant,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                date.day.toString(),
-                                style: tt.titleMedium?.copyWith(
-                                  color:
-                                      isSelected ? cs.onPrimary : cs.onSurface,
-                                  fontWeight: FontWeight.w800,
-                                ),
-                              ),
-                            ],
+              child: Column(
+                children: [
+                  Row(
+                    children: [
+                      IconButton(
+                        tooltip: 'Previous week',
+                        onPressed: () => _changeWeek(-1),
+                        icon: const Icon(Icons.chevron_left_rounded),
+                      ),
+                      Expanded(
+                        child: Text(
+                          '${DateFormat('d MMM').format(_currentWeekStart)} - ${DateFormat('d MMM yyyy').format(_currentWeekStart.add(const Duration(days: 6)))}',
+                          textAlign: TextAlign.center,
+                          style: tt.titleSmall?.copyWith(
+                            fontWeight: FontWeight.w800,
                           ),
                         ),
                       ),
-                    ),
-                  );
-                }),
+                      IconButton(
+                        tooltip: 'Next week',
+                        onPressed: () => _changeWeek(1),
+                        icon: const Icon(Icons.chevron_right_rounded),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: List.generate(7, (index) {
+                      final isSelected = _selectedDayIndex == index;
+                      final date =
+                          _currentWeekStart.add(Duration(days: index));
+
+                      return Expanded(
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 2),
+                          child: Semantics(
+                            button: true,
+                            selected: isSelected,
+                            label: DateFormat('EEEE, d MMMM').format(date),
+                            child: TapScale(
+                              onTap: () =>
+                                  setState(() => _selectedDayIndex = index),
+                              child: AnimatedContainer(
+                                duration: const Duration(milliseconds: 200),
+                                height: 64,
+                                decoration: BoxDecoration(
+                                  color: isSelected
+                                      ? cs.primary
+                                      : Colors.transparent,
+                                  borderRadius: BorderRadius.circular(
+                                    AbzioTheme.cardRadius,
+                                  ),
+                                  border: Border.all(
+                                    color: isSelected
+                                        ? Colors.transparent
+                                        : cs.outlineVariant.withValues(
+                                            alpha: 0.5,
+                                          ),
+                                  ),
+                                  boxShadow: isSelected
+                                      ? [
+                                          BoxShadow(
+                                            color: cs.primary.withValues(
+                                              alpha: 0.3,
+                                            ),
+                                            blurRadius: 12,
+                                            offset: const Offset(0, 4),
+                                          ),
+                                        ]
+                                      : [],
+                                ),
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Text(
+                                      DateFormat('EEE').format(date),
+                                      style: tt.labelSmall?.copyWith(
+                                        color: isSelected
+                                            ? cs.onPrimary.withValues(
+                                                alpha: 0.8,
+                                              )
+                                            : cs.onSurfaceVariant,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      date.day.toString(),
+                                      style: tt.titleMedium?.copyWith(
+                                        color: isSelected
+                                            ? cs.onPrimary
+                                            : cs.onSurface,
+                                        fontWeight: FontWeight.w800,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      );
+                    }),
+                  ),
+                ],
               ),
             ),
             const SizedBox(height: 16),
@@ -187,12 +235,16 @@ class _SchedulePageState extends ConsumerState<SchedulePage> {
 
                   if (filteredJobs.isEmpty) {
                     return ListView(
+                      physics: const AlwaysScrollableScrollPhysics(),
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 24, vertical: 48),
-                      children: const [
+                        horizontal: 24,
+                        vertical: 48,
+                      ),
+                      children: [
                         PremiumEmptyState(
                           icon: Icons.event_available_rounded,
-                          title: 'No jobs today',
+                          title:
+                              'No jobs on ${DateFormat('EEE, d MMM').format(selectedDate)}',
                           subtitle:
                               'Jobs scheduled on this day will appear here.',
                         ),
@@ -201,6 +253,7 @@ class _SchedulePageState extends ConsumerState<SchedulePage> {
                   }
 
                   return ListView.builder(
+                    physics: const AlwaysScrollableScrollPhysics(),
                     padding: const EdgeInsets.symmetric(
                         horizontal: 24, vertical: 16),
                     itemCount: filteredJobs.length,
@@ -211,8 +264,9 @@ class _SchedulePageState extends ConsumerState<SchedulePage> {
                       final accent =
                           isActive ? const Color(0xFF10B981) : cs.primary;
 
-                      final timeStr =
-                          DateFormat('hh:mm a').format(job.scheduledAt);
+                      final timeStr = DateFormat(
+                        'h:mm a',
+                      ).format(job.scheduledAt);
 
                       return IntrinsicHeight(
                         child: Row(
@@ -221,7 +275,7 @@ class _SchedulePageState extends ConsumerState<SchedulePage> {
                             SizedBox(
                               width: 64,
                               child: Text(
-                                timeStr.replaceAll(' ', '\n'),
+                                timeStr,
                                 textAlign: TextAlign.right,
                                 style: tt.bodySmall?.copyWith(
                                   color: cs.onSurfaceVariant,
@@ -278,27 +332,11 @@ class _SchedulePageState extends ConsumerState<SchedulePage> {
                                           Expanded(
                                             child: Text(
                                               job.serviceName,
+                                              maxLines: 2,
+                                              overflow: TextOverflow.ellipsis,
                                               style: tt.titleMedium?.copyWith(
                                                 color: cs.onSurface,
                                                 fontWeight: FontWeight.w800,
-                                              ),
-                                            ),
-                                          ),
-                                          Container(
-                                            padding: const EdgeInsets.symmetric(
-                                                horizontal: 8, vertical: 4),
-                                            decoration: BoxDecoration(
-                                              color:
-                                                  accent.withValues(alpha: 0.1),
-                                              borderRadius:
-                                                  BorderRadius.circular(8),
-                                            ),
-                                            child: Text(
-                                              // Assuming 1h duration as default or derived if available
-                                              '?',
-                                              style: tt.labelSmall?.copyWith(
-                                                color: accent,
-                                                fontWeight: FontWeight.w700,
                                               ),
                                             ),
                                           ),

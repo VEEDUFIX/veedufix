@@ -30,20 +30,33 @@ class _AvailabilityNotifier extends StateNotifier<AsyncValue<bool>> {
   }
 
   Future<void> refresh() async {
-    state = const AsyncValue.loading();
+    final previous = state.valueOrNull;
+    if (previous == null) {
+      state = const AsyncValue.loading();
+    } else {
+      state = const AsyncLoading<bool>().copyWithPrevious(
+        AsyncData<bool>(previous),
+      );
+    }
     await _loadFromStats();
   }
 
   Future<void> toggle(bool value) async {
-    final previous = state.valueOrNull ?? true;
-    state = AsyncValue.data(value);
+    if (state.isLoading) return;
+    final previous = state.valueOrNull ?? false;
+    state = const AsyncLoading<bool>().copyWithPrevious(
+      AsyncData<bool>(value),
+    );
     try {
       final apiClient = _ref.read(apiClientProvider);
       await apiClient.patch(
         '/worker/availability',
         data: {'isAvailable': value},
       );
-      _ref.invalidate(workerDashboardStatsProvider);
+      if (mounted) {
+        state = AsyncValue.data(value);
+        _ref.invalidate(workerDashboardStatsProvider);
+      }
     } catch (e) {
       if (mounted) state = AsyncValue.data(previous);
       rethrow;

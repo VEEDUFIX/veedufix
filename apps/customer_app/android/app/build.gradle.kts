@@ -1,4 +1,5 @@
 import java.io.FileInputStream
+import java.util.Base64
 import java.util.Properties
 
 plugins {
@@ -9,12 +10,63 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
+val keystorePropertiesFile = rootProject.file("key.properties")
 val keystoreProperties = Properties().apply {
-    val keystorePropertiesFile = rootProject.file("key.properties")
-    if (!keystorePropertiesFile.exists()) {
-        error("Missing customer_app/android/key.properties")
+    if (keystorePropertiesFile.exists()) {
+        FileInputStream(keystorePropertiesFile).use { load(it) }
     }
-    FileInputStream(keystorePropertiesFile).use { load(it) }
+}
+val requiredSigningProperties = listOf("storeFile", "storePassword", "keyAlias", "keyPassword")
+val hasReleaseSigning = keystorePropertiesFile.exists() &&
+    requiredSigningProperties.all { !keystoreProperties.getProperty(it).isNullOrBlank() }
+val releaseArtifactTask = Regex("^(assemble|bundle|install)(.*)Release$", RegexOption.IGNORE_CASE)
+val mapsValidationArtifactTask = Regex(
+    "^(assemble|bundle|install)(.*)(Release|Profile)$",
+    RegexOption.IGNORE_CASE
+)
+val requestedTasks = gradle.startParameter.taskNames.map { it.substringAfterLast(':') }
+val releaseTaskRequested = requestedTasks.any { taskName ->
+    releaseArtifactTask.matches(taskName)
+}
+val mapsValidationTaskRequested = requestedTasks.any { taskName ->
+    mapsValidationArtifactTask.matches(taskName)
+}
+if (releaseTaskRequested && !hasReleaseSigning) {
+    error("A complete android/key.properties is required to build a signed customer release.")
+}
+val dartDefines = (findProperty("dart-defines") as? String)
+    ?.split(',')
+    ?.mapNotNull { encodedDefine ->
+        runCatching { String(Base64.getDecoder().decode(encodedDefine), Charsets.UTF_8) }.getOrNull()
+    }
+    ?.mapNotNull { define ->
+        val separator = define.indexOf('=')
+        if (separator < 0) null else define.substring(0, separator) to define.substring(separator + 1)
+    }
+    ?.toMap()
+    .orEmpty()
+val googleMapsApiKey = dartDefines["GOOGLE_MAPS_API_KEY"]
+    ?.takeIf { it.isNotBlank() }
+    ?: providers.environmentVariable("GOOGLE_MAPS_API_KEY").orElse("").get()
+val hasValidGoogleMapsApiKey = googleMapsApiKey.isNotBlank() &&
+    !googleMapsApiKey.startsWith("REPLACE_WITH_") &&
+    googleMapsApiKey != "\$(GOOGLE_MAPS_API_KEY)"
+if (mapsValidationTaskRequested && !hasValidGoogleMapsApiKey) {
+    error("GOOGLE_MAPS_API_KEY is required to build a customer profile or release artifact.")
+}
+gradle.taskGraph.whenReady {
+    val releaseArtifactInGraph = allTasks.any { task ->
+        releaseArtifactTask.matches(task.name.substringAfterLast(':'))
+    }
+    val mapsValidationArtifactInGraph = allTasks.any { task ->
+        mapsValidationArtifactTask.matches(task.name.substringAfterLast(':'))
+    }
+    if (releaseArtifactInGraph && !hasReleaseSigning) {
+        error("A complete android/key.properties is required to build a signed customer release.")
+    }
+    if (mapsValidationArtifactInGraph && !hasValidGoogleMapsApiKey) {
+        error("GOOGLE_MAPS_API_KEY is required to build a customer profile or release artifact.")
+    }
 }
 
 android {
@@ -33,12 +85,14 @@ android {
     }
 
     signingConfigs {
-        create("release") {
-            storeFile = file(keystoreProperties.getProperty("storeFile"))
-            storePassword = keystoreProperties.getProperty("storePassword")
-            keyAlias = keystoreProperties.getProperty("keyAlias")
-            keyPassword = keystoreProperties.getProperty("keyPassword")
-            storeType = keystoreProperties.getProperty("storeType", "JKS")
+        if (hasReleaseSigning) {
+            create("release") {
+                storeFile = file(keystoreProperties.getProperty("storeFile"))
+                storePassword = keystoreProperties.getProperty("storePassword")
+                keyAlias = keystoreProperties.getProperty("keyAlias")
+                keyPassword = keystoreProperties.getProperty("keyPassword")
+                storeType = keystoreProperties.getProperty("storeType", "JKS")
+            }
         }
     }
 
@@ -51,11 +105,14 @@ android {
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        manifestPlaceholders["GOOGLE_MAPS_API_KEY"] = googleMapsApiKey
     }
 
     buildTypes {
         release {
-            signingConfig = signingConfigs.getByName("release")
+            if (hasReleaseSigning) {
+                signingConfig = signingConfigs.getByName("release")
+            }
         }
     }
 }

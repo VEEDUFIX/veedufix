@@ -44,3 +44,7 @@ services:
         sync: false
       - key: RAZORPAY_WEBHOOK_SECRET
         sync: false
+      - key: RAZORPAY_WEBHOOK_URL
+        sync: false
+      - key: RAZORPAY_ACCOUNT_NUMBER
+        sync: false

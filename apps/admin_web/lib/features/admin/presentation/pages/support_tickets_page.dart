@@ -12,6 +12,7 @@ class AdminSupportTicket {
     required this.message,
     required this.status,
     required this.createdAt,
+    required this.updatedAt,
     required this.replyCount,
     this.userName,
     this.userPhone,
@@ -23,10 +24,20 @@ class AdminSupportTicket {
   final String message;
   final String status;
   final DateTime createdAt;
+  final DateTime updatedAt;
   final int replyCount;
   final String? userName;
   final String? userPhone;
   final String? assignedToName;
+
+  Duration get idleFor {
+    final elapsed = DateTime.now().difference(updatedAt);
+    return elapsed.isNegative ? Duration.zero : elapsed;
+  }
+
+  bool get needsAttention =>
+      (status == 'OPEN' || status == 'IN_PROGRESS') &&
+      idleFor >= const Duration(hours: 24);
 
   factory AdminSupportTicket.fromJson(Map<String, dynamic> json) {
     final user = json['user'] as Map<String, dynamic>?;
@@ -37,6 +48,9 @@ class AdminSupportTicket {
       message: json['message'] as String? ?? '',
       status: json['status'] as String? ?? 'OPEN',
       createdAt: DateTime.tryParse(json['createdAt'] as String? ?? '') ?? DateTime.now(),
+      updatedAt: DateTime.tryParse(json['updatedAt'] as String? ?? '') ??
+          DateTime.tryParse(json['createdAt'] as String? ?? '') ??
+          DateTime.now(),
       replyCount: (json['replyCount'] as num?)?.toInt() ?? 0,
       userName: user?['name'] as String?,
       userPhone: user?['phone'] as String?,
@@ -46,13 +60,14 @@ class AdminSupportTicket {
 }
 
 final adminSupportTicketsProvider = FutureProvider.autoDispose
-    .family<List<AdminSupportTicket>, ({String search, String status})>((ref, filter) async {
+    .family<List<AdminSupportTicket>, ({String search, String status, bool needsAttention})>((ref, filter) async {
   final api = ref.watch(apiClientProvider);
   final data = await api.get(
     '/admin/support/tickets',
     queryParameters: {
       if (filter.search.isNotEmpty) 'search': filter.search,
       if (filter.status.isNotEmpty) 'status': filter.status,
+      if (filter.needsAttention) 'needsAttention': 'true',
     },
   );
   return (data['tickets'] as List<dynamic>? ?? const [])
@@ -130,6 +145,7 @@ class _SupportTicketsPageState extends ConsumerState<SupportTicketsPage> {
   final _searchController = TextEditingController();
   String _status = '';
   String _search = '';
+  bool _onlyNeedsAttention = false;
 
   @override
   void initState() {
@@ -149,7 +165,7 @@ class _SupportTicketsPageState extends ConsumerState<SupportTicketsPage> {
   Future<void> _setStatus(String ticketId, String status) async {
     final api = ref.read(apiClientProvider);
     await api.patch('/admin/support/tickets/$ticketId/status', data: {'status': status});
-    ref.invalidate(adminSupportTicketsProvider((search: _search, status: _status)));
+    ref.invalidate(adminSupportTicketsProvider((search: _search, status: _status, needsAttention: _onlyNeedsAttention)));
   }
 
   Future<void> _escalate(AdminSupportTicket ticket) async {
@@ -200,7 +216,7 @@ class _SupportTicketsPageState extends ConsumerState<SupportTicketsPage> {
         },
       );
       await api.patch('/admin/support/tickets/${ticket.id}/status', data: {'status': 'IN_PROGRESS'});
-      ref.invalidate(adminSupportTicketsProvider((search: _search, status: _status)));
+      ref.invalidate(adminSupportTicketsProvider((search: _search, status: _status, needsAttention: _onlyNeedsAttention)));
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Ticket escalated')),
@@ -214,7 +230,7 @@ class _SupportTicketsPageState extends ConsumerState<SupportTicketsPage> {
   Future<void> _openTicketDetails(AdminSupportTicket ticket) async {
     await context.push('/support-tickets/${ticket.id}');
     if (mounted) {
-      ref.invalidate(adminSupportTicketsProvider((search: _search, status: _status)));
+      ref.invalidate(adminSupportTicketsProvider((search: _search, status: _status, needsAttention: _onlyNeedsAttention)));
     }
   }
 
@@ -222,7 +238,7 @@ class _SupportTicketsPageState extends ConsumerState<SupportTicketsPage> {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final tt = Theme.of(context).textTheme;
-    final ticketsAsync = ref.watch(adminSupportTicketsProvider((search: _search, status: _status)));
+    final ticketsAsync = ref.watch(adminSupportTicketsProvider((search: _search, status: _status, needsAttention: _onlyNeedsAttention)));
 
     return Scaffold(
       backgroundColor: cs.surface,
@@ -234,7 +250,7 @@ class _SupportTicketsPageState extends ConsumerState<SupportTicketsPage> {
         ),
       ),
       body: RefreshIndicator(
-        onRefresh: () => ref.refresh(adminSupportTicketsProvider((search: _search, status: _status)).future),
+        onRefresh: () => ref.refresh(adminSupportTicketsProvider((search: _search, status: _status, needsAttention: _onlyNeedsAttention)).future),
         child: ListView(
           physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
@@ -353,6 +369,17 @@ class _SupportTicketsPageState extends ConsumerState<SupportTicketsPage> {
               ],
               onChanged: (value) => setState(() => _status = value ?? ''),
             ),
+            const SizedBox(height: 8),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: FilterChip(
+                avatar: const Icon(Icons.hourglass_bottom_rounded, size: 18),
+                label: const Text('Needs attention · idle over 24 hours'),
+                selected: _onlyNeedsAttention,
+                onSelected: (selected) =>
+                    setState(() => _onlyNeedsAttention = selected),
+              ),
+            ),
             const SizedBox(height: 16),
             ticketsAsync.when(
               loading: () => const Padding(
@@ -411,7 +438,7 @@ class _SupportTicketsPageState extends ConsumerState<SupportTicketsPage> {
                         ),
                         const SizedBox(height: 14),
                         FilledButton.icon(
-                          onPressed: () => ref.refresh(adminSupportTicketsProvider((search: _search, status: _status)).future),
+                          onPressed: () => ref.refresh(adminSupportTicketsProvider((search: _search, status: _status, needsAttention: _onlyNeedsAttention)).future),
                           icon: const Icon(Icons.refresh_rounded, size: 18),
                           label: const Text('Retry'),
                         ),
@@ -421,7 +448,8 @@ class _SupportTicketsPageState extends ConsumerState<SupportTicketsPage> {
                 ),
               ),
               data: (tickets) {
-                if (tickets.isEmpty) {
+                final visibleTickets = tickets;
+                if (visibleTickets.isEmpty) {
                   return Padding(
                     padding: const EdgeInsets.only(top: 8),
                     child: PremiumGlassCard(
@@ -474,6 +502,7 @@ class _SupportTicketsPageState extends ConsumerState<SupportTicketsPage> {
                                     _searchController.clear();
                                     _search = '';
                                     _status = '';
+                                    _onlyNeedsAttention = false;
                                   }),
                                   icon: const Icon(Icons.filter_alt_off_rounded, size: 18),
                                   label: const Text('Clear filters'),
@@ -492,13 +521,13 @@ class _SupportTicketsPageState extends ConsumerState<SupportTicketsPage> {
                   );
                 }
 
-                final openCount = tickets.where((ticket) => ticket.status == 'OPEN').length;
-                final inProgressCount = tickets.where((ticket) => ticket.status == 'IN_PROGRESS').length;
-                final resolvedCount = tickets.where((ticket) => ticket.status == 'RESOLVED').length;
+                final openCount = visibleTickets.where((ticket) => ticket.status == 'OPEN').length;
+                final inProgressCount = visibleTickets.where((ticket) => ticket.status == 'IN_PROGRESS').length;
+                final resolvedCount = visibleTickets.where((ticket) => ticket.status == 'RESOLVED').length;
 
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
-                  children: tickets.map((ticket) {
+                  children: visibleTickets.map((ticket) {
                     final statusColor = switch (ticket.status) {
                       'RESOLVED' => const Color(0xFF10B981),
                       'IN_PROGRESS' => const Color(0xFFF59E0B),
@@ -553,6 +582,8 @@ class _SupportTicketsPageState extends ConsumerState<SupportTicketsPage> {
                                 _MetaPill(label: ticket.assignedToName == null ? 'Unassigned' : ticket.assignedToName!),
                                 _MetaPill(label: '${ticket.replyCount} replies'),
                                 _MetaPill(label: DateFormat('d MMM, h:mm a').format(ticket.createdAt)),
+                                if (ticket.needsAttention)
+                                  _IdleTicketPill(idleFor: ticket.idleFor),
                               ],
                             ),
                             const SizedBox(height: 12),
@@ -1064,6 +1095,37 @@ class _MetaPill extends StatelessWidget {
         borderRadius: BorderRadius.circular(999),
       ),
       child: Text(label, style: Theme.of(context).textTheme.labelSmall),
+    );
+  }
+}
+
+class _IdleTicketPill extends StatelessWidget {
+  const _IdleTicketPill({required this.idleFor});
+
+  final Duration idleFor;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = idleFor >= const Duration(hours: 72)
+        ? const Color(0xFFB91C1C)
+        : const Color(0xFFB45309);
+    final durationLabel = idleFor.inDays > 0
+        ? '${idleFor.inDays}d ${idleFor.inHours % 24}h'
+        : '${idleFor.inHours}h';
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: color.withValues(alpha: 0.22)),
+      ),
+      child: Text(
+        'Idle $durationLabel',
+        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+              color: color,
+              fontWeight: FontWeight.w800,
+            ),
+      ),
     );
   }
 }

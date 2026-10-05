@@ -7,7 +7,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:marketplace_shared/marketplace_shared.dart';
 import 'router.dart';
 import '../features/onboarding/presentation/providers/onboarding_provider.dart';
+import '../features/worker/presentation/providers/earnings_provider.dart';
+import '../features/worker/presentation/providers/worker_wallet_providers.dart';
 import '../core/notifications/worker_device_token.dart';
+import 'worker_notification_routes.dart';
 
 class AppBootstrap extends ConsumerStatefulWidget {
   const AppBootstrap({super.key});
@@ -53,6 +56,17 @@ class _AppBootstrapState extends ConsumerState<AppBootstrap>
     if (state == AppLifecycleState.resumed) {
       ref.invalidate(workerOnboardingStatusProvider);
       if (ref.read(authControllerProvider).valueOrNull != null) {
+        for (final tab in const [
+          'incoming',
+          'accepted',
+          'active',
+          'completed',
+        ]) {
+          ref.invalidate(workerJobsProvider(tab));
+        }
+        ref.invalidate(workerDashboardStatsProvider);
+        ref.invalidate(workerWalletProvider);
+        ref.invalidate(workerEarningsPageProvider);
         unawaited(_registerDeviceToken());
       }
     }
@@ -83,12 +97,22 @@ class _AppBootstrapState extends ConsumerState<AppBootstrap>
       final title = payload['title'] as String? ?? 'Update';
       final body =
           payload['body'] as String? ?? 'You have a new notification.';
-      final notificationType = payload['type'] as String? ?? '';
+      final notificationType = payload['type'] is String
+          ? payload['type'] as String
+          : '';
       if (notificationType.startsWith('WORKER_ONBOARDING_')) {
         ref.invalidate(workerOnboardingStatusProvider);
       }
-      _messengerKey.currentState
-          ?.showSnackBar(SnackBar(content: Text('$title: $body')));
+      final route = workerNotificationRoute(payload);
+      _messengerKey.currentState?.showSnackBar(
+        SnackBar(
+          content: Text('$title: $body'),
+          action: SnackBarAction(
+            label: 'Open',
+            onPressed: () => ref.read(routerProvider).push(route),
+          ),
+        ),
+      );
     });
 
     unawaited(_registerDeviceToken());
@@ -124,7 +148,13 @@ class _AppBootstrapState extends ConsumerState<AppBootstrap>
       scaffoldMessengerKey: _messengerKey,
       builder: (context, child) => AppBackdrop(
         variant: AppBackdropVariant.worker,
-        child: child ?? const SizedBox.shrink(),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const NetworkStatusBanner(),
+            Expanded(child: child ?? const SizedBox.shrink()),
+          ],
+        ),
       ),
       routerConfig: router,
     );

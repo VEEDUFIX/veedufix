@@ -7,7 +7,14 @@ final supportRepositoryProvider = Provider<SupportRepository>((ref) {
   return SupportRepository(ref.watch(apiClientProvider));
 });
 
-final workerSupportTicketsProvider = FutureProvider.autoDispose<List<WorkerSupportTicket>>((ref) async {
+final workerSupportTicketsProvider =
+    FutureProvider.autoDispose<List<WorkerSupportTicket>>((ref) async {
   final repo = ref.watch(supportRepositoryProvider);
   return await repo.fetchMyTickets();
+});
+
+final workerSupportThreadProvider = FutureProvider.autoDispose
+    .family<WorkerSupportThread, String>((ref, ticketId) async {
+  final repo = ref.watch(supportRepositoryProvider);
+  return repo.fetchTicketThread(ticketId);
 });

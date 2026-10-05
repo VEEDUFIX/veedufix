@@ -62,15 +62,16 @@ void main() {
       );
     });
 
-    test('acceptJob throws generic Exception when API throws non-DioException',
+    test(
+        'acceptJob returns a safe action error when API throws non-DioException',
         () async {
       when(() => mockApi.acceptJob(bookingId))
           .thenThrow(Exception('Unknown error'));
 
       await expectLater(
         repository.acceptJob(bookingId),
-        throwsA(isA<Exception>()
-            .having((e) => e.toString(), 'message', contains('Unknown error'))),
+        throwsA(isA<WorkerJobActionError>().having((error) => error.message,
+            'message', contains('Could not accept this job'))),
       );
     });
 

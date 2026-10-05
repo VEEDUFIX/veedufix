@@ -2,7 +2,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "../../lib/prisma.js";
 import { logger } from "../../lib/logger.js";
 import { publishNotificationEvent } from "../../lib/realtime.js";
-import { processRefund } from "../refund/refund.service.js";
+import { processRefund, RefundProcessingError } from "../refund/refund.service.js";
 
 export class BookingNotFoundError extends Error {
   constructor(message = "Booking not found") {
@@ -91,6 +91,7 @@ type DisputeEvidence = {
 
 type OpenDisputeFilters = {
   city?: string;
+  status?: "all" | "open" | "under_review" | "refund_pending" | "resolved_refund" | "resolved_rejected";
   page?: number;
   pageSize?: number;
 };
@@ -278,6 +279,34 @@ export async function raiseDispute(
   return dispute;
 }
 
+export async function getCustomerDispute(bookingId: string, customerId: string) {
+  const booking = await prisma.booking.findUnique({
+    where: { id: bookingId },
+    select: { customerId: true }
+  });
+  if (!booking) {
+    throw new BookingNotFoundError();
+  }
+  if (booking.customerId !== customerId) {
+    throw new DisputeAccessError();
+  }
+
+  return prisma.dispute.findFirst({
+    where: { bookingId },
+    orderBy: { createdAt: "desc" },
+    select: {
+      id: true,
+      bookingId: true,
+      reason: true,
+      status: true,
+      resolutionNote: true,
+      createdAt: true,
+      resolvedAt: true,
+      refundId: true
+    }
+  });
+}
+
 export async function getDisputeEvidence(disputeId: string): Promise<DisputeEvidence> {
   const dispute = await prisma.dispute.findUnique({
     where: { id: disputeId },
@@ -343,10 +372,13 @@ export async function listOpenDisputes(filters: OpenDisputeFilters = {}): Promis
   const page = filters.page ?? 1;
   const pageSize = filters.pageSize ?? 20;
   const city = filters.city?.trim();
+  const activeStatuses = ["open", "under_review"];
   const where = {
-    status: {
-      in: ["open", "under_review"]
-    },
+    ...(filters.status === "all"
+      ? {}
+      : filters.status
+        ? { status: filters.status }
+        : { status: { in: activeStatuses } }),
     ...(city
       ? {
           booking: {
@@ -438,35 +470,77 @@ export async function resolveDispute(
   }
 
   if (resolution === "refund") {
-    const refund = await processRefund(dispute.bookingId, dispute.booking.totalAmount, note);
-    await prisma.refund.update({
-      where: { id: refund.id },
+    const claim = await prisma.dispute.updateMany({
+      where: { id: disputeId, status: { in: ["open", "under_review"] } },
       data: {
-        disputeId: dispute.id
+        status: "refund_pending",
+        resolutionNote: note,
+        resolvedBy: adminId
+      }
+    });
+    if (claim.count !== 1) {
+      throw new DisputeConflictError("This dispute is already being resolved");
+    }
+
+    let refund: Awaited<ReturnType<typeof processRefund>>;
+    try {
+      refund = await processRefund(dispute.bookingId, dispute.booking.totalAmount, note, dispute.id);
+    } catch (error) {
+      if (error instanceof RefundProcessingError && error.providerRequestStarted) {
+        await prisma.dispute.updateMany({
+          where: { id: disputeId, status: "refund_pending" },
+          data: { refundId: error.refundId, resolvedAt: null }
+        });
+      } else {
+        await prisma.dispute.updateMany({
+          where: { id: disputeId, status: "refund_pending" },
+          data: { status: "under_review", resolvedAt: null }
+        });
+      }
+      throw error;
+    }
+
+    await prisma.dispute.updateMany({
+      where: {
+        id: dispute.id,
+        OR: [{ refundId: null }, { refundId: refund.id }]
+      },
+      data: { refundId: refund.id }
+    });
+    await prisma.dispute.updateMany({
+      where: { id: dispute.id, status: "refund_pending" },
+      data: {
+        status: refund.status === "failed"
+          ? "under_review"
+          : refund.status === "processed"
+            ? "resolved_refund"
+            : "refund_pending",
+        resolvedAt: refund.status === "processed" ? new Date() : null
       }
     });
 
-    await prisma.dispute.update({
-      where: { id: dispute.id },
-      data: {
-        refundId: refund.id
-      }
-    });
+    return getDisputeForResolution(disputeId);
   }
 
-  return prisma.dispute.update({
-    where: { id: disputeId },
+  const rejected = await prisma.dispute.updateMany({
+    where: { id: disputeId, status: { in: ["open", "under_review"] } },
     data: {
-      status: resolution === "refund" ? "resolved_refund" : "resolved_rejected",
+      status: "resolved_rejected",
       resolutionNote: note,
       resolvedBy: adminId,
       resolvedAt: new Date()
     }
   });
+  if (rejected.count !== 1) {
+    throw new DisputeConflictError("This dispute is already being resolved");
+  }
+
+  return getDisputeForResolution(disputeId);
 }
 
 export const disputeService = {
   raiseDispute,
+  getCustomerDispute,
   getDisputeEvidence,
   listOpenDisputes,
   resolveDispute

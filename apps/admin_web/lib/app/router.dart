@@ -22,13 +22,16 @@ import '../features/ops/presentation/pages/dispute_detail_page.dart';
 import '../features/ops/presentation/pages/disputes_queue_page.dart';
 import '../features/ops/presentation/pages/ops_live_jobs_page.dart';
 import '../features/ops/presentation/pages/ops_overview_page.dart';
+import '../features/ops/presentation/pages/system_health_page.dart';
 import '../features/ops/presentation/pages/god_mode_map_page.dart';
+import '../features/ops/presentation/pages/review_moderation_page.dart';
 import '../features/worker_directory/presentation/pages/worker_directory_detail_page.dart';
 import '../features/worker_directory/presentation/pages/worker_directory_page.dart';
 import '../features/worker_directory/data/worker_directory_api.dart';
 import '../features/worker_review/data/worker_review_api.dart';
 import '../features/worker_review/presentation/pages/worker_review_detail_page.dart';
 import '../features/worker_review/presentation/pages/worker_review_queue_page.dart';
+import '../features/worker_review/presentation/pages/payout_change_queue_page.dart';
 import '../features/profile/presentation/pages/profile_page.dart';
 import '../features/admin/presentation/pages/customer_management_page.dart';
 import '../features/admin/presentation/pages/customer_detail_page.dart';
@@ -213,12 +216,20 @@ final routerProvider = Provider<GoRouter>((ref) {
             builder: (context, state) => const WorkerReviewQueuePage(),
           ),
           GoRoute(
+            path: '/worker-payout-changes',
+            builder: (context, state) => const PayoutChangeQueuePage(),
+          ),
+          GoRoute(
             path: '/workers',
             builder: (context, state) => const WorkerDirectoryPage(),
           ),
           GoRoute(
             path: '/ops/overview',
             builder: (context, state) => const OpsOverviewPage(),
+          ),
+          GoRoute(
+            path: '/ops/system-health',
+            builder: (context, state) => const SystemHealthPage(),
           ),
           GoRoute(
             path: '/ops/live-jobs',
@@ -257,6 +268,10 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/ops/disputes',
             builder: (context, state) => const DisputesQueuePage(),
+          ),
+          GoRoute(
+            path: '/review-moderation',
+            builder: (context, state) => const ReviewModerationPage(),
           ),
           GoRoute(
             path: '/ops/disputes/:disputeId',

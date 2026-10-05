@@ -19,7 +19,8 @@ const listSupportTicketsSchema = z.object({
   query: z
     .object({
       status: z.string().optional(),
-      search: z.string().optional()
+      search: z.string().optional(),
+      needsAttention: z.enum(["true", "false"]).optional()
     })
     .optional()
 });
@@ -322,10 +323,20 @@ supportRouter.get(
   async (request, response) => {
     const status = typeof request.query.status === "string" ? request.query.status : undefined;
     const search = typeof request.query.search === "string" ? request.query.search.trim() : "";
+    const needsAttention = request.query.needsAttention === "true";
+    const staleBefore = new Date(Date.now() - 24 * 60 * 60 * 1000);
 
     const tickets = await prisma.supportTicket.findMany({
       where: {
-        ...(status ? { status } : {}),
+        AND: [
+          ...(status ? [{ status }] : []),
+          ...(needsAttention
+            ? [
+                { status: { in: ["OPEN", "IN_PROGRESS"] } },
+                { updatedAt: { lte: staleBefore } }
+              ]
+            : [])
+        ],
         ...(search
           ? {
               OR: [
@@ -360,7 +371,7 @@ supportRouter.get(
           select: { replies: true }
         }
       },
-      orderBy: { createdAt: "desc" },
+      orderBy: needsAttention ? { updatedAt: "asc" } : { createdAt: "desc" },
       take: 100
     });
 

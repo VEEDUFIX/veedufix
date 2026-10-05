@@ -254,8 +254,7 @@ class DisputesApi {
     final response = await _dio.get<Map<String, dynamic>>(
       '/admin/disputes',
       queryParameters: {
-        if (status != null && status.isNotEmpty && status != 'all')
-          'status': status,
+        if (status != null && status.isNotEmpty && status != 'all') 'status': status,
         'page': page,
         'pageSize': pageSize,
       },

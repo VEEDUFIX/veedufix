@@ -39,7 +39,7 @@ class _BookingsPageState extends ConsumerState<BookingsPage>
     final completedBookings =
         completedState.valueOrNull ?? const <CustomerBooking>[];
     return Scaffold(
-      backgroundColor: const Color(0xFFFAFAF7),
+      backgroundColor: AbzioTheme.lightBackground,
       body: SafeArea(
         child: Column(
           children: [
@@ -121,6 +121,9 @@ class _BookingsPageState extends ConsumerState<BookingsPage>
                     ),
                     child: TabBar(
                       controller: _tabController,
+                      isScrollable: true,
+                      tabAlignment: TabAlignment.start,
+                      labelPadding: const EdgeInsets.symmetric(horizontal: 16),
                       dividerColor: Colors.transparent,
                       indicatorSize: TabBarIndicatorSize.tab,
                       indicator: BoxDecoration(
@@ -142,10 +145,20 @@ class _BookingsPageState extends ConsumerState<BookingsPage>
                           .textTheme
                           .labelLarge
                           ?.copyWith(fontWeight: FontWeight.w700),
-                      tabs: const [
-                        Tab(text: 'Upcoming'),
-                        Tab(text: 'Completed'),
-                        Tab(text: 'Cancelled'),
+                      tabs: [
+                        Tab(
+                          child: _BookingTabLabel(
+                            label: 'Upcoming',
+                            count: upcomingState.valueOrNull?.length,
+                          ),
+                        ),
+                        Tab(
+                          child: _BookingTabLabel(
+                            label: 'Completed',
+                            count: completedState.valueOrNull?.length,
+                          ),
+                        ),
+                        const Tab(text: 'Cancelled'),
                       ],
                     ),
                   ),
@@ -169,6 +182,33 @@ class _BookingsPageState extends ConsumerState<BookingsPage>
   }
 }
 
+class _BookingTabLabel extends StatelessWidget {
+  const _BookingTabLabel({required this.label, required this.count});
+
+  final String label;
+  final int? count;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(label),
+        if (count != null) ...[
+          const SizedBox(width: 5),
+          Text(
+            '$count',
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+              fontWeight: FontWeight.w800,
+              color: Theme.of(context).colorScheme.primary,
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
 class _BookingsOverviewCard extends StatelessWidget {
   const _BookingsOverviewCard({
     required this.upcomingCount,
@@ -182,6 +222,29 @@ class _BookingsOverviewCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final summaryPills = Row(
+      children: [
+        Expanded(
+          child: _BookingSummaryPill(
+            label: 'Upcoming',
+            value: upcomingCount?.toString() ?? '—',
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: _BookingSummaryPill(
+            label: 'Completed',
+            value: completedCount?.toString() ?? '—',
+          ),
+        ),
+      ],
+    );
+    final bookButton = FilledButton.icon(
+      onPressed: onBookNow,
+      icon: const Icon(Icons.add_rounded, size: 18),
+      label: const Text('Book'),
+    );
+
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
@@ -193,34 +256,26 @@ class _BookingsOverviewCard extends StatelessWidget {
           ).colorScheme.outlineVariant.withValues(alpha: 0.55),
         ),
       ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Row(
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          if (constraints.maxWidth < 340) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Expanded(
-                  child: _BookingSummaryPill(
-                    label: 'Upcoming',
-                    value: upcomingCount?.toString() ?? '—',
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: _BookingSummaryPill(
-                    label: 'Completed',
-                    value: completedCount?.toString() ?? '—',
-                  ),
-                ),
+                summaryPills,
+                const SizedBox(height: 10),
+                bookButton,
               ],
-            ),
-          ),
-          const SizedBox(width: 10),
-          FilledButton.icon(
-            onPressed: onBookNow,
-            icon: const Icon(Icons.add_rounded, size: 18),
-            label: const Text('Book'),
-          ),
-        ],
+            );
+          }
+          return Row(
+            children: [
+              Expanded(child: summaryPills),
+              const SizedBox(width: 10),
+              bookButton,
+            ],
+          );
+        },
       ),
     );
   }
@@ -631,19 +686,21 @@ class _BookingCard extends ConsumerWidget {
   Color _getStatusColor(String status) {
     switch (status.toUpperCase()) {
       case 'COMPLETED':
-        return const Color(0xFF2D7A57);
+        return AbzioTheme.successColor;
       case 'ASSIGNED':
       case 'ACCEPTED':
       case 'WORKER_ASSIGNED':
       case 'EN_ROUTE':
       case 'ARRIVED':
       case 'IN_PROGRESS':
-        return const Color(0xFF397AA5);
+        return AbzioTheme.infoColor;
       case 'CANCELLED':
-        return const Color(0xFFB34B43);
+      case 'CANCELLED_MANUAL':
+      case 'CANCELLED_NO_SHOW':
+        return AbzioTheme.dangerColor;
       case 'PENDING':
       default:
-        return const Color(0xFFAA7C2F);
+        return AbzioTheme.warningColor;
     }
   }
 
@@ -651,8 +708,18 @@ class _BookingCard extends ConsumerWidget {
     switch (status.toUpperCase()) {
       case 'IN_PROGRESS':
         return 'In progress';
+      case 'WORKER_ASSIGNED':
+        return 'Worker assigned';
+      case 'EN_ROUTE':
+        return 'On the way';
+      case 'ARRIVED':
+        return 'Arrived';
       case 'DISPATCH_FAILED':
         return 'No match yet';
+      case 'CANCELLED_MANUAL':
+        return 'Cancelled';
+      case 'CANCELLED_NO_SHOW':
+        return 'No-show cancellation';
       case 'ASSIGNED':
         return 'Assigned';
       default:

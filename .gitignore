@@ -3,7 +3,6 @@ build/
 .flutter-plugins
 .flutter-plugins-dependencies
 .packages
-pubspec.lock
 node_modules/
 dist/
 .env
@@ -20,10 +19,11 @@ backend/load-tests/results/
 apps/**/.dart_tool/
 apps/**/build/
 apps/**/.packages
-apps/**/pubspec.lock
 apps/**/android/key.properties
 apps/**/android/*.jks
 apps/**/android/*.keystore
+packages/marketplace_shared/pubspec.lock
+flutter_template_check/pubspec.lock
 
 .pnpm-store/
 *.hprof

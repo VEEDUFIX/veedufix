@@ -9,25 +9,27 @@ void main() {
   Widget createWidgetUnderTest(ProviderContainer container) {
     return UncontrolledProviderScope(
       container: container,
-      child: const MaterialApp(
-        home: CartPage(),
-      ),
+      child: const MaterialApp(home: CartPage()),
     );
   }
 
-  testWidgets('CartPage displays empty state when cart is empty', (WidgetTester tester) async {
+  testWidgets('CartPage displays empty state when cart is empty', (
+    WidgetTester tester,
+  ) async {
     final container = ProviderContainer(); // Uses default empty CartNotifier
 
     await tester.pumpWidget(createWidgetUnderTest(container));
 
     expect(find.text('Your cart is empty'), findsOneWidget);
-    expect(find.text('Add services to get started'), findsOneWidget);
-    expect(find.text('Proceed to Checkout'), findsNothing);
+    expect(find.text('Choose a service to get started.'), findsOneWidget);
+    expect(find.textContaining('Continue'), findsNothing);
   });
 
-  testWidgets('CartPage displays items and calculates totals correctly', (WidgetTester tester) async {
+  testWidgets('CartPage displays items and calculates totals correctly', (
+    WidgetTester tester,
+  ) async {
     final container = ProviderContainer();
-    
+
     // Add mock items to the cart
     final mockService1 = const CatalogService(
       id: 's1',
@@ -39,7 +41,7 @@ void main() {
       startingPrice: 1000.0,
       estimatedDurationMins: 60,
     );
-    
+
     final mockService2 = const CatalogService(
       id: 's2',
       categoryId: 'c1',
@@ -62,26 +64,26 @@ void main() {
     // Verify items are displayed
     expect(find.text('AC Repair'), findsOneWidget);
     expect(find.text('AC Gas Refill'), findsOneWidget);
-    
+
     // Verify quantities (1x Gas, 2x Repair)
     // The UI shows "2" for AC Repair and "1" for AC Gas Refill
-    expect(find.text('2'), findsOneWidget); 
-    expect(find.text('1'), findsOneWidget); 
+    expect(find.text('2'), findsOneWidget);
+    expect(find.text('1'), findsOneWidget);
 
     // Verify totals
-    // Item Total = (1000 * 2) + (2000 * 1) = 4000
-    // Tax (18%) = 720
-    // Total = 4720
-    expect(find.text('₹4000'), findsOneWidget);
-    expect(find.text('₹720.00'), findsOneWidget);
-    expect(find.text('₹4720.00'), findsOneWidget);
-    
-    expect(find.text('Proceed to Checkout'), findsOneWidget);
+    // The cart shows an estimate; taxes and fees are confirmed before payment.
+    expect(find.text('₹4000.00'), findsOneWidget);
+    expect(
+      find.text('Any applicable taxes or fees are confirmed before payment.'),
+      findsOneWidget,
+    );
+
+    expect(find.textContaining('Continue · ₹4000.00'), findsOneWidget);
   });
 
   testWidgets('CartPage allows removing items', (WidgetTester tester) async {
     final container = ProviderContainer();
-    
+
     final mockService = const CatalogService(
       id: 's1',
       categoryId: 'c1',

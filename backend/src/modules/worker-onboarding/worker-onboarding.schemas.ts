@@ -32,6 +32,37 @@ export const updateProfileSchema = z.object({
   params: z.object({}).optional()
 });
 
+export const payoutChangeRequestSchema = z.object({
+  body: z.object({
+    bankAccountNumber: z.string().trim().regex(/^\d{9,18}$/).optional(),
+    bankIfsc: z.string().trim().toUpperCase().regex(/^[A-Z]{4}0[A-Z0-9]{6}$/).optional(),
+    upiId: z.string().trim().regex(/^[A-Za-z0-9._-]{2,100}@[A-Za-z][A-Za-z0-9.-]{1,50}$/).optional()
+  }).superRefine((value, ctx) => {
+    const hasAccount = Boolean(value.bankAccountNumber);
+    const hasIfsc = Boolean(value.bankIfsc);
+    if (hasAccount !== hasIfsc) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: [hasAccount ? "bankIfsc" : "bankAccountNumber"], message: "Provide both bank account number and IFSC" });
+    }
+    if (!hasAccount && !value.upiId) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["upiId"], message: "Provide a bank account or UPI ID" });
+    }
+  }),
+  query: z.object({}).optional(),
+  params: z.object({}).optional()
+});
+
+export const payoutChangeRequestParamsSchema = z.object({
+  params: z.object({ requestId: z.string().trim().min(1).max(128) }),
+  query: z.object({}).optional(),
+  body: z.object({}).optional()
+});
+
+export const rejectPayoutChangeRequestSchema = z.object({
+  params: z.object({ requestId: z.string().trim().min(1).max(128) }),
+  body: z.object({ reason: z.string().trim().min(3).max(500) }),
+  query: z.object({}).optional()
+});
+
 export const uploadDocumentSchema = z.object({
   body: z
     .object({

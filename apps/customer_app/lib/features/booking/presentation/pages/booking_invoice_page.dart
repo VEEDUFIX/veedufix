@@ -157,12 +157,12 @@ String _bookingStatusLabel(String status) => switch (status.toUpperCase()) {
 
 Color _bookingStatusColor(BuildContext context, String status) =>
     switch (status.toUpperCase()) {
-      'COMPLETED' => const Color(0xFF2D7A57),
+      'COMPLETED' => AbzioTheme.successColor,
       'CANCELLED' ||
       'CANCELLED_MANUAL' ||
       'CANCELLED_NO_SHOW' ||
-      'REFUNDED' => Theme.of(context).colorScheme.error,
-      _ => const Color(0xFFAA7C2F),
+      'REFUNDED' => AbzioTheme.dangerColor,
+      _ => AbzioTheme.warningColor,
     };
 
 class _InvoiceBody extends StatelessWidget {

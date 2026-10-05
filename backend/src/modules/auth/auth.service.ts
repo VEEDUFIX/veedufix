@@ -32,6 +32,12 @@ type AuthResult = {
   refreshToken: string;
 };
 
+function ensureActiveUser(isActive: boolean): void {
+  if (!isActive) {
+    throw AppError.forbidden("This account is inactive. Contact support for assistance.");
+  }
+}
+
 function normalizeIdentifier(identifier: string, channel: LoginChannel): string {
   const trimmed = identifier.trim();
   if (channel === "PHONE") {
@@ -194,6 +200,7 @@ export async function verifyOtp(input: {
       ...(input.channel === "EMAIL" ? { emailVerifiedAt: new Date() } : { phoneVerifiedAt: new Date() })
     }
   });
+  ensureActiveUser(user.isActive);
 
   // Auto-apply referral code for brand-new accounts (created within the last 5 seconds).
   const isNewUser = Date.now() - user.createdAt.getTime() < 5000;
@@ -275,6 +282,7 @@ export async function refreshSession(refreshToken: string): Promise<AuthResult> 
   if (!stored || stored.revokedAt) {
     throw AppError.unauthorized("Refresh token revoked");
   }
+  ensureActiveUser(stored.user.isActive);
 
   const sessionId = payload.sessionId;
   const accessToken = signAccessToken({ sub: stored.userId, role: stored.user.role, sessionId });
@@ -335,6 +343,7 @@ export async function signInWithGoogle(input: {
       emailVerifiedAt: new Date()
     }
   });
+  ensureActiveUser(user.isActive);
 
   const accessToken = signAccessToken({ sub: user.id, role: user.role, sessionId });
   const refreshToken = signRefreshToken({ sub: user.id, role: user.role, sessionId });
@@ -388,6 +397,7 @@ export async function signInWithFirebasePhone(input: {
     10000,
     "User session lookup timed out"
   );
+  ensureActiveUser(user.isActive);
 
   const isNewUser = Date.now() - user.createdAt.getTime() < 5000;
   if (isNewUser && input.referralCode) {

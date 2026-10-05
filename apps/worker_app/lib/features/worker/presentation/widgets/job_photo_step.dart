@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:marketplace_shared/marketplace_shared.dart';
 import '../../../../core/offline/connectivity_service.dart';
 import '../providers/job_execution_provider.dart';
@@ -121,9 +122,37 @@ class JobPhotoStep extends ConsumerWidget {
           onPressed: (!canUpload || state.isLoading(step))
               ? null
               : () async {
-                  await notifier.pickAndUploadPhotos(type);
+                  final source = await showModalBottomSheet<ImageSource>(
+                    context: context,
+                    builder: (sheetContext) => SafeArea(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          ListTile(
+                            leading: const Icon(Icons.camera_alt_rounded),
+                            title: const Text('Take a photo'),
+                            onTap: () => Navigator.pop(
+                              sheetContext,
+                              ImageSource.camera,
+                            ),
+                          ),
+                          ListTile(
+                            leading: const Icon(Icons.photo_library_rounded),
+                            title: const Text('Choose from gallery'),
+                            onTap: () => Navigator.pop(
+                              sheetContext,
+                              ImageSource.gallery,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                  if (source != null) {
+                    await notifier.pickAndUploadPhotos(type, source: source);
+                  }
                 },
-          icon: Icon(isBefore ? Icons.camera_alt_rounded : Icons.photo_library_rounded),
+          icon: const Icon(Icons.add_a_photo_rounded),
           label: Text(isBefore ? 'Add before photos' : 'Add after photos'),
         ),
         const SizedBox(height: 12),

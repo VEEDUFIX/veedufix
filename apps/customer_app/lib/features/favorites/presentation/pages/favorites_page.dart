@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -93,42 +95,51 @@ class FavoritesPage extends ConsumerWidget {
                   ),
                 ),
               )
-            : ListView.builder(
-                padding: const EdgeInsets.fromLTRB(20, 12, 20, 100),
-                itemCount: favorites.length + 1,
-                itemBuilder: (context, index) {
-                  if (index == 0) {
-                    return Padding(
-                      padding: const EdgeInsets.only(bottom: 16),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              'Saved services',
-                              style: tt.titleMedium?.copyWith(
-                                fontWeight: FontWeight.w800,
+            : RefreshIndicator(
+                onRefresh: () async {
+                  await ref
+                      .refresh(favoritesProvider.future)
+                      .then<void>((_) {});
+                },
+                child: ListView.builder(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  padding: const EdgeInsets.fromLTRB(20, 12, 20, 100),
+                  itemCount: favorites.length + 1,
+                  itemBuilder: (context, index) {
+                    if (index == 0) {
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 16),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                'Saved services',
+                                style: tt.titleMedium?.copyWith(
+                                  fontWeight: FontWeight.w800,
+                                ),
                               ),
                             ),
-                          ),
-                          Text(
-                            '${favorites.length} ${favorites.length == 1 ? 'service' : 'services'}',
-                            style: tt.labelLarge?.copyWith(
-                              color: cs.onSurfaceVariant,
+                            Text(
+                              '${favorites.length} ${favorites.length == 1 ? 'service' : 'services'}',
+                              style: tt.labelLarge?.copyWith(
+                                color: cs.onSurfaceVariant,
+                              ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
+                      );
+                    }
+                    final serviceKey = favorites.elementAt(index - 1);
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: _FavoriteServiceCard(
+                        serviceKey: serviceKey,
+                        onRemove: () =>
+                            _toggleFavorite(context, ref, serviceKey),
                       ),
                     );
-                  }
-                  final serviceKey = favorites.elementAt(index - 1);
-                  return Padding(
-                    padding: const EdgeInsets.only(bottom: 12),
-                    child: _FavoriteServiceCard(
-                      serviceKey: serviceKey,
-                      onRemove: () => _toggleFavorite(context, ref, serviceKey),
-                    ),
-                  );
-                },
+                  },
+                ),
               ),
       ),
     );
@@ -149,28 +160,31 @@ class _FavoriteServiceCard extends ConsumerWidget {
     final cs = Theme.of(context).colorScheme;
     final tt = Theme.of(context).textTheme;
     final serviceAsync = ref.watch(serviceDetailProvider(serviceKey));
+    final favoritesController = ref.read(favoritesProvider.notifier);
+    final messenger = ScaffoldMessenger.of(context);
 
     return Dismissible(
       key: ValueKey(serviceKey),
       direction: DismissDirection.endToStart,
-      onDismissed: (_) async {
+      confirmDismiss: (_) async {
         final removed = await onRemove();
-        if (!context.mounted) return;
+        if (!context.mounted) return false;
         if (!removed) {
           ref.invalidate(favoritesProvider);
-          return;
+          return false;
         }
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: const Text('Removed from favorites'),
             action: SnackBarAction(
               label: 'UNDO',
-              onPressed: () {
-                _toggleFavorite(context, ref, serviceKey);
-              },
+              onPressed: () => unawaited(
+                _restoreFavorite(favoritesController, messenger, serviceKey),
+              ),
             ),
           ),
         );
+        return true;
       },
       background: Container(
         alignment: Alignment.centerRight,
@@ -360,9 +374,13 @@ class _FavoriteServiceCard extends ConsumerWidget {
                           content: const Text('Removed from favorites'),
                           action: SnackBarAction(
                             label: 'UNDO',
-                            onPressed: () {
-                              _toggleFavorite(context, ref, serviceKey);
-                            },
+                            onPressed: () => unawaited(
+                              _restoreFavorite(
+                                favoritesController,
+                                messenger,
+                                serviceKey,
+                              ),
+                            ),
                           ),
                         ),
                       );
@@ -380,6 +398,22 @@ class _FavoriteServiceCard extends ConsumerWidget {
         ),
       ),
     );
+  }
+}
+
+Future<void> _restoreFavorite(
+  FavoritesNotifier favoritesController,
+  ScaffoldMessengerState messenger,
+  String serviceKey,
+) async {
+  try {
+    await favoritesController.toggleFavorite(serviceKey);
+  } catch (_) {
+    if (messenger.mounted) {
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Could not restore favorite. Try again.')),
+      );
+    }
   }
 }
 

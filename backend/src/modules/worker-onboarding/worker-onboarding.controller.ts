@@ -9,9 +9,11 @@ import {
   WorkerStatusConflictError,
   addSkill,
   addService,
+  approvePayoutChangeRequest,
   approveWorker,
   getAadhaarSignedUrl,
   getOnboardingStatus,
+  getMyPayoutChangeRequest,
   getOwnAadhaarSignedUrl,
   getOwnSkillCertSignedUrl,
   getWorkerReviewProfile,
@@ -19,9 +21,12 @@ import {
   getWorkerDirectory,
   getWorkerHistory,
   listPendingReview,
+  listPayoutChangeRequests,
   rejectWorker,
+  rejectPayoutChangeRequest,
   reinstateWorker,
   submitForReview,
+  submitPayoutChangeRequest,
   suspendWorker,
   updatePersonalDetails,
   uploadDocument
@@ -62,6 +67,63 @@ export async function updateProfileHandler(
   try {
     const profile = await updatePersonalDetails(request.auth!.userId, request.body);
     response.status(200).json({ profile });
+  } catch (error) {
+    sendError(response, error);
+  }
+}
+
+export async function getMyPayoutChangeRequestHandler(request: AuthenticatedRequest, response: Response) {
+  try {
+    response.status(200).json(await getMyPayoutChangeRequest(request.auth!.userId));
+  } catch (error) {
+    sendError(response, error);
+  }
+}
+
+export async function submitPayoutChangeRequestHandler(request: AuthenticatedRequest, response: Response) {
+  try {
+    response.status(201).json(await submitPayoutChangeRequest(request.auth!.userId, request.body));
+  } catch (error) {
+    sendError(response, error);
+  }
+}
+
+export async function pendingPayoutChangeRequestsHandler(_request: AuthenticatedRequest, response: Response) {
+  try {
+    response.status(200).json(await listPayoutChangeRequests());
+  } catch (error) {
+    sendError(response, error);
+  }
+}
+
+export async function approvePayoutChangeRequestHandler(request: AuthenticatedRequest, response: Response) {
+  try {
+    const requestId = String(request.params.requestId);
+    const adminId = request.auth!.userId;
+    const result = await approvePayoutChangeRequest(requestId, adminId);
+    void writeAuditLog({ adminId, action: "worker.payout_change_approved", targetType: "worker_payout_change_request", targetId: requestId });
+    const target = await prisma.workerProfile.findUnique({ where: { id: result.workerProfileId }, select: { userId: true } });
+    if (target) void publishNotificationEvent({
+      userId: target.userId,
+      title: "Payout account updated",
+      body: "Your new payout details have been approved.",
+      type: "WORKER_PAYOUT_CHANGE_APPROVED",
+      data: { route: "/profile/payment-details", payoutChangeRequestId: requestId }
+    });
+    response.status(200).json({ request: { id: requestId, status: "approved" } });
+  } catch (error) {
+    sendError(response, error);
+  }
+}
+
+export async function rejectPayoutChangeRequestHandler(request: AuthenticatedRequest, response: Response) {
+  try {
+    const requestId = String(request.params.requestId);
+    const adminId = request.auth!.userId;
+    const reason = (request.body as { reason: string }).reason;
+    await rejectPayoutChangeRequest(requestId, adminId, reason);
+    void writeAuditLog({ adminId, action: "worker.payout_change_rejected", targetType: "worker_payout_change_request", targetId: requestId, note: reason });
+    response.status(200).json({ request: { id: requestId, status: "rejected", rejectionReason: reason } });
   } catch (error) {
     sendError(response, error);
   }

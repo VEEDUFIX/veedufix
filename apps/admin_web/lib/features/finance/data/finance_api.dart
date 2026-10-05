@@ -107,6 +107,9 @@ class FinanceRefundItem {
     required this.bookingCode,
     required this.customerName,
     required this.amount,
+    required this.gatewayAmount,
+    required this.walletAmount,
+    required this.walletCreditedAt,
     required this.reason,
     required this.status,
     required this.razorpayRefundId,
@@ -119,6 +122,9 @@ class FinanceRefundItem {
   final String bookingCode;
   final String? customerName;
   final double amount;
+  final double gatewayAmount;
+  final double walletAmount;
+  final DateTime? walletCreditedAt;
   final String reason;
   final String status;
   final String? razorpayRefundId;
@@ -128,12 +134,18 @@ class FinanceRefundItem {
   factory FinanceRefundItem.fromJson(Map<String, dynamic> json) {
     final booking = (json['booking'] as Map?)?.cast<String, dynamic>() ?? const <String, dynamic>{};
     final customer = (booking['customer'] as Map?)?.cast<String, dynamic>() ?? const <String, dynamic>{};
+    final amount = (json['amount'] as num?)?.toDouble() ?? 0;
+    final walletAmount = (json['walletAmount'] as num?)?.toDouble() ?? 0;
     return FinanceRefundItem(
       id: json['id'] as String? ?? '',
       bookingId: json['bookingId'] as String? ?? booking['id'] as String? ?? '',
       bookingCode: booking['code'] as String? ?? '',
       customerName: customer['name'] as String?,
-      amount: (json['amount'] as num?)?.toDouble() ?? 0,
+      amount: amount,
+      gatewayAmount: (json['gatewayAmount'] as num?)?.toDouble() ??
+          (amount - walletAmount).clamp(0, amount).toDouble(),
+      walletAmount: walletAmount,
+      walletCreditedAt: _parseDateTime(json['walletCreditedAt']),
       reason: json['reason'] as String? ?? '',
       status: json['status'] as String? ?? 'pending',
       razorpayRefundId: json['razorpayRefundId'] as String?,

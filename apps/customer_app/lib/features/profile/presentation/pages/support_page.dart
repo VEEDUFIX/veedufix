@@ -28,7 +28,8 @@ class CustomerSupportTicket {
       subject: json['subject'] as String? ?? 'Support ticket',
       message: json['message'] as String? ?? '',
       status: json['status'] as String? ?? 'OPEN',
-      createdAt: DateTime.tryParse(json['createdAt'] as String? ?? '') ??
+      createdAt:
+          DateTime.tryParse(json['createdAt'] as String? ?? '') ??
           DateTime.now(),
       replyCount: (json['replyCount'] as num?)?.toInt() ?? 0,
     );
@@ -57,7 +58,8 @@ class CustomerSupportReply {
     return CustomerSupportReply(
       id: json['id'] as String? ?? '',
       message: json['message'] as String? ?? '',
-      createdAt: DateTime.tryParse(json['createdAt'] as String? ?? '') ??
+      createdAt:
+          DateTime.tryParse(json['createdAt'] as String? ?? '') ??
           DateTime.now(),
       isInternal: json['isInternal'] as bool? ?? false,
       authorName: author?['name'] as String?,
@@ -67,10 +69,7 @@ class CustomerSupportReply {
 }
 
 class CustomerSupportThread {
-  const CustomerSupportThread({
-    required this.ticket,
-    required this.replies,
-  });
+  const CustomerSupportThread({required this.ticket, required this.replies});
 
   final CustomerSupportTicket ticket;
   final List<CustomerSupportReply> replies;
@@ -89,21 +88,22 @@ class CustomerSupportThread {
 
 final customerSupportTicketsProvider =
     FutureProvider.autoDispose<List<CustomerSupportTicket>>((ref) async {
-  final api = ref.watch(apiClientProvider);
-  final response = await api.get('/support/tickets/me');
-  return (response['tickets'] as List<dynamic>? ?? const [])
-      .whereType<Map<String, dynamic>>()
-      .map(CustomerSupportTicket.fromJson)
-      .toList(growable: false);
-});
+      final api = ref.watch(apiClientProvider);
+      final response = await api.get('/support/tickets/me');
+      return (response['tickets'] as List<dynamic>? ?? const [])
+          .whereType<Map<String, dynamic>>()
+          .map(CustomerSupportTicket.fromJson)
+          .toList(growable: false);
+    });
 
 final customerSupportThreadProvider = FutureProvider.autoDispose
     .family<CustomerSupportThread, String>((ref, ticketId) async {
-  final api = ref.watch(apiClientProvider);
-  final response = await api.get('/support/tickets/$ticketId');
-  return CustomerSupportThread.fromJson(
-      response['ticket'] as Map<String, dynamic>);
-});
+      final api = ref.watch(apiClientProvider);
+      final response = await api.get('/support/tickets/$ticketId');
+      return CustomerSupportThread.fromJson(
+        response['ticket'] as Map<String, dynamic>,
+      );
+    });
 
 class SupportPage extends ConsumerStatefulWidget {
   const SupportPage({
@@ -162,9 +162,13 @@ class _SupportPageState extends ConsumerState<SupportPage> {
       _createSupportTicket(
         context,
         ref: ref,
-        category: widget.initialCategory?.trim().isNotEmpty == true ? widget.initialCategory!.trim() : 'other',
+        category: widget.initialCategory?.trim().isNotEmpty == true
+            ? widget.initialCategory!.trim()
+            : 'other',
         subject: subject,
-        initialMessage: widget.initialMessage?.trim().isNotEmpty == true ? widget.initialMessage!.trim() : null,
+        initialMessage: widget.initialMessage?.trim().isNotEmpty == true
+            ? widget.initialMessage!.trim()
+            : null,
       ),
     );
   }
@@ -173,32 +177,40 @@ class _SupportPageState extends ConsumerState<SupportPage> {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final tt = Theme.of(context).textTheme;
-    final bookingIdLabel = widget.bookingId?.trim().isNotEmpty == true ? widget.bookingId!.trim() : null;
+    final bookingIdLabel = widget.bookingId?.trim().isNotEmpty == true
+        ? widget.bookingId!.trim()
+        : null;
 
     final faqs = const [
       _Faq(
         q: 'How do I cancel a booking?',
-        a: 'Open My Bookings, select the booking, and choose Cancel. '
+        a:
+            'Open My Bookings, select the booking, and choose Cancel. '
             'If a payment was captured, refund eligibility is reviewed separately; cancellation does not issue a refund automatically.',
       ),
       _Faq(
         q: 'What if the professional does not arrive?',
-        a: 'Open the booking and send us a support request with the booking details. '
+        a:
+            'Open the booking and send us a support request with the booking details. '
             'We will review what happened and explain the available next steps.',
       ),
       _Faq(
         q: 'Is there a warranty on the work done?',
-        a: 'Coverage can depend on the service and its terms. Open a support request '
+        a:
+            'Coverage can depend on the service and its terms. Open a support request '
             'with your booking details and our team can review the applicable coverage.',
       ),
       _Faq(
         q: 'How do referral rewards work?',
-        a: 'Share your unique referral code. When a friend signs up using it, '
-            'you both receive ₹100 in wallet credit.',
+        a:
+            'Current reward amounts and eligibility are shown in the Referral section before you share your code. '
+            'Offers may vary, so check the terms displayed in your account.',
       ),
       _Faq(
         q: 'What payment methods are accepted?',
-        a: 'We accept UPI, debit/credit cards, net banking, and wallet balance.',
+        a:
+            'The payment methods currently available for your booking are shown at checkout. '
+            'If a payment is pending, check its status before trying again to avoid paying twice.',
       ),
     ];
     final query = _faqSearchController.text.trim().toLowerCase();
@@ -248,8 +260,9 @@ class _SupportPageState extends ConsumerState<SupportPage> {
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
                       color: cs.primary.withValues(alpha: 0.1),
-                      borderRadius:
-                          BorderRadius.circular(AbzioTheme.buttonRadius),
+                      borderRadius: BorderRadius.circular(
+                        AbzioTheme.buttonRadius,
+                      ),
                     ),
                     child: Icon(Icons.support_agent_rounded, color: cs.primary),
                   ),
@@ -371,8 +384,10 @@ class _MyTicketsSection extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('My Requests',
-            style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
+        Text(
+          'My Requests',
+          style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+        ),
         const SizedBox(height: 12),
         ticketsAsync.when(
           loading: () => const Padding(
@@ -395,7 +410,10 @@ class _MyTicketsSection extends ConsumerWidget {
                           color: cs.error.withValues(alpha: 0.12),
                           borderRadius: BorderRadius.circular(16),
                         ),
-                        child: Icon(Icons.support_agent_rounded, color: cs.error),
+                        child: Icon(
+                          Icons.support_agent_rounded,
+                          color: cs.error,
+                        ),
                       ),
                       const SizedBox(width: 14),
                       Expanded(
@@ -404,7 +422,9 @@ class _MyTicketsSection extends ConsumerWidget {
                           children: [
                             Text(
                               'Could not load your tickets',
-                              style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+                              style: tt.titleMedium?.copyWith(
+                                fontWeight: FontWeight.w800,
+                              ),
                             ),
                             const SizedBox(height: 4),
                             Text(
@@ -421,7 +441,8 @@ class _MyTicketsSection extends ConsumerWidget {
                   ),
                   const SizedBox(height: 14),
                   FilledButton.icon(
-                    onPressed: () => ref.refresh(customerSupportTicketsProvider.future),
+                    onPressed: () =>
+                        ref.refresh(customerSupportTicketsProvider.future),
                     icon: const Icon(Icons.refresh_rounded, size: 18),
                     label: const Text('Retry'),
                   ),
@@ -453,7 +474,9 @@ class _MyTicketsSection extends ConsumerWidget {
                           children: [
                             Text(
                               'No support requests yet',
-                              style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+                              style: tt.titleMedium?.copyWith(
+                                fontWeight: FontWeight.w800,
+                              ),
                             ),
                             const SizedBox(height: 4),
                             Text(
@@ -473,56 +496,94 @@ class _MyTicketsSection extends ConsumerWidget {
             }
 
             return Column(
-              children: tickets.map((ticket) {
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 10),
-                  child: TapScale(
-                    onTap: () => _openThread(context, ticket.id),
-                    child: Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color:
-                            cs.surfaceContainerHighest.withValues(alpha: 0.3),
-                        borderRadius: BorderRadius.circular(18),
-                        border: Border.all(
-                            color: cs.outlineVariant.withValues(alpha: 0.35)),
-                      ),
-                      child: Row(
-                        children: [
-                          Container(
-                            width: 44,
-                            height: 44,
-                            decoration: BoxDecoration(
-                              color: cs.primaryContainer,
-                              borderRadius: BorderRadius.circular(14),
+              children: tickets
+                  .map((ticket) {
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 10),
+                      child: TapScale(
+                        onTap: () => _openThread(context, ticket.id),
+                        child: Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: cs.surfaceContainerHighest.withValues(
+                              alpha: 0.3,
                             ),
-                            child: Icon(Icons.support_agent_rounded,
-                                color: cs.primary),
+                            borderRadius: BorderRadius.circular(18),
+                            border: Border.all(
+                              color: cs.outlineVariant.withValues(alpha: 0.35),
+                            ),
                           ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(_ticketDisplaySubject(ticket.subject),
-                                    style: tt.titleSmall?.copyWith(
-                                        fontWeight: FontWeight.w800)),
-                                const SizedBox(height: 4),
-                                Text(
-                                  '${_ticketStatusLabel(ticket.status)} · ${ticket.replyCount} ${ticket.replyCount == 1 ? 'reply' : 'replies'} · ${_supportDate(ticket.createdAt)}',
-                                  style: tt.bodySmall
-                                      ?.copyWith(color: cs.onSurfaceVariant),
+                          child: Row(
+                            children: [
+                              Container(
+                                width: 44,
+                                height: 44,
+                                decoration: BoxDecoration(
+                                  color: cs.primaryContainer,
+                                  borderRadius: BorderRadius.circular(14),
                                 ),
-                              ],
-                            ),
+                                child: Icon(
+                                  Icons.support_agent_rounded,
+                                  color: cs.primary,
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      _ticketDisplaySubject(ticket.subject),
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: tt.titleSmall?.copyWith(
+                                        fontWeight: FontWeight.w800,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Wrap(
+                                      spacing: 8,
+                                      runSpacing: 6,
+                                      crossAxisAlignment:
+                                          WrapCrossAlignment.center,
+                                      children: [
+                                        _TicketStatusPill(status: ticket.status),
+                                        Text(
+                                          '${ticket.replyCount} ${ticket.replyCount == 1 ? 'reply' : 'replies'}',
+                                          style: tt.labelSmall?.copyWith(
+                                            color: cs.onSurfaceVariant,
+                                          ),
+                                        ),
+                                        Text(
+                                          _supportDate(ticket.createdAt),
+                                          style: tt.labelSmall?.copyWith(
+                                            color: cs.onSurfaceVariant,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    if (ticket.message.trim().isNotEmpty) ...[
+                                      const SizedBox(height: 5),
+                                      Text(
+                                        ticket.message.trim(),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: tt.bodySmall?.copyWith(
+                                          color: cs.onSurfaceVariant,
+                                        ),
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                              ),
+                              const Icon(Icons.chevron_right_rounded),
+                            ],
                           ),
-                          const Icon(Icons.chevron_right_rounded),
-                        ],
+                        ),
                       ),
-                    ),
-                  ),
-                );
-              }).toList(growable: false),
+                    );
+                  })
+                  .toList(growable: false),
             );
           },
         ),
@@ -536,6 +597,34 @@ class _MyTicketsSection extends ConsumerWidget {
       isScrollControlled: true,
       showDragHandle: true,
       builder: (_) => _CustomerSupportThreadSheet(ticketId: ticketId),
+    );
+  }
+}
+
+class _TicketStatusPill extends StatelessWidget {
+  const _TicketStatusPill({required this.status});
+
+  final String status;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final normalized = status.toUpperCase();
+    final isComplete = normalized == 'RESOLVED' || normalized == 'CLOSED';
+    final color = isComplete ? cs.tertiary : cs.primary;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        _ticketStatusLabel(status),
+        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+          color: color,
+          fontWeight: FontWeight.w800,
+        ),
+      ),
     );
   }
 }
@@ -578,13 +667,15 @@ class _CustomerSupportThreadSheetState
       _replyController.clear();
       ref.invalidate(customerSupportThreadProvider(widget.ticketId));
       ref.invalidate(customerSupportTicketsProvider);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Reply sent.')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Reply sent.')));
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Could not send your reply. Please try again.')),
+        const SnackBar(
+          content: Text('Could not send your reply. Please try again.'),
+        ),
       );
     } finally {
       if (mounted) setState(() => _isSending = false);
@@ -595,13 +686,15 @@ class _CustomerSupportThreadSheetState
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final tt = Theme.of(context).textTheme;
-    final threadAsync =
-        ref.watch(customerSupportThreadProvider(widget.ticketId));
+    final threadAsync = ref.watch(
+      customerSupportThreadProvider(widget.ticketId),
+    );
 
     return SafeArea(
       child: Padding(
-        padding:
-            EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+        padding: EdgeInsets.only(
+          bottom: MediaQuery.of(context).viewInsets.bottom,
+        ),
         child: threadAsync.when(
           loading: () => const SizedBox(
             height: 360,
@@ -629,16 +722,20 @@ class _CustomerSupportThreadSheetState
           data: (thread) {
             return ConstrainedBox(
               constraints: BoxConstraints(
-                  maxHeight: MediaQuery.of(context).size.height * 0.85),
+                maxHeight: MediaQuery.of(context).size.height * 0.85,
+              ),
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text(thread.ticket.subject,
-                        style: tt.titleLarge
-                            ?.copyWith(fontWeight: FontWeight.w800)),
+                    Text(
+                      thread.ticket.subject,
+                      style: tt.titleLarge?.copyWith(
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
                     const SizedBox(height: 6),
                     Text(
                       _ticketStatusLabel(thread.ticket.status),
@@ -668,8 +765,9 @@ class _CustomerSupportThreadSheetState
                             decoration: BoxDecoration(
                               color: reply.authorRole == 'ADMIN'
                                   ? cs.primaryContainer
-                                  : cs.surfaceContainerHighest
-                                      .withValues(alpha: 0.35),
+                                  : cs.surfaceContainerHighest.withValues(
+                                      alpha: 0.35,
+                                    ),
                               borderRadius: BorderRadius.circular(16),
                             ),
                             child: Column(
@@ -677,8 +775,9 @@ class _CustomerSupportThreadSheetState
                               children: [
                                 Text(
                                   reply.authorName ?? 'Support',
-                                  style: tt.labelLarge
-                                      ?.copyWith(fontWeight: FontWeight.w800),
+                                  style: tt.labelLarge?.copyWith(
+                                    fontWeight: FontWeight.w800,
+                                  ),
                                 ),
                                 const SizedBox(height: 4),
                                 Text(reply.message),
@@ -699,14 +798,17 @@ class _CustomerSupportThreadSheetState
                         hintText: 'Add a reply',
                         helperText: 'At least 2 characters',
                         border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(14)),
+                          borderRadius: BorderRadius.circular(14),
+                        ),
                       ),
                     ),
                     const SizedBox(height: 10),
                     Align(
                       alignment: Alignment.centerRight,
                       child: FilledButton(
-                        onPressed: _isSending || _replyController.text.trim().length < 2
+                        onPressed:
+                            _isSending ||
+                                _replyController.text.trim().length < 2
                             ? null
                             : _sendReply,
                         child: Text(_isSending ? 'Sending...' : 'Send reply'),
@@ -762,8 +864,8 @@ class _SupportOption extends ConsumerWidget {
           final bookingLabel = bookingCodeValue != null
               ? 'booking $bookingCodeValue'
               : bookingIdValue != null
-                  ? 'booking ID $bookingIdValue'
-                  : null;
+              ? 'booking ID $bookingIdValue'
+              : null;
           switch (onTap) {
             case _SupportAction.bookingIssue:
               _createSupportTicket(
@@ -845,7 +947,7 @@ Future<void> _createSupportTicket(
           content: TextField(
             controller: messageController,
             maxLines: 5,
-          maxLength: 5000,
+            maxLength: 5000,
             decoration: const InputDecoration(
               hintText: 'Describe your issue in detail',
             ),
@@ -875,7 +977,8 @@ Future<void> _createSupportTicket(
       }
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-            content: Text('Please add a bit more detail before sending.')),
+          content: Text('Please add a bit more detail before sending.'),
+        ),
       );
       return;
     }
@@ -883,19 +986,15 @@ Future<void> _createSupportTicket(
     final api = ref.read(apiClientProvider);
     await api.post(
       '/support/tickets',
-      data: {
-        'subject': subject,
-        'message': message,
-        'category': category,
-      },
+      data: {'subject': subject, 'message': message, 'category': category},
     );
     if (!context.mounted) {
       return;
     }
     ref.invalidate(customerSupportTicketsProvider);
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Support request sent.')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Support request sent.')));
   } catch (_) {
     if (!context.mounted) {
       return;
@@ -951,11 +1050,15 @@ class _FaqTile extends StatelessWidget {
         data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
         child: PremiumCard(
           child: ExpansionTile(
-            tilePadding:
-                const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+            tilePadding: const EdgeInsets.symmetric(
+              horizontal: 16,
+              vertical: 4,
+            ),
             childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
-            title: Text(faq.q,
-                style: const TextStyle(fontWeight: FontWeight.w700)),
+            title: Text(
+              faq.q,
+              style: const TextStyle(fontWeight: FontWeight.w700),
+            ),
             children: [
               Text(faq.a, style: Theme.of(context).textTheme.bodyMedium),
             ],

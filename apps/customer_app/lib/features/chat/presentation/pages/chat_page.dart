@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -20,16 +22,127 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   final ImagePicker _picker = ImagePicker();
   final List<ChatAttachment> _draftAttachments = [];
   final Set<String> _markedReadMessageIds = <String>{};
+  Timer? _draftSaveTimer;
+  Future<void> _draftPersistence = Future<void>.value();
+  String? _draftOwnerId;
   bool _isTyping = false;
   bool _isSending = false;
   bool _isUploadingAttachment = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      unawaited(_restoreDraft());
+    });
+  }
+
+  Future<void> _restoreDraft() async {
+    final userId = ref.read(authControllerProvider).valueOrNull?.user.id;
+    if (userId == null) return;
+    _draftOwnerId = userId;
+    final message = await ChatDraftStore.read(
+      mode: AppMode.customer,
+      userId: userId,
+      bookingId: widget.bookingId,
+    );
+    if (!mounted ||
+        message == null ||
+        _controller.text.isNotEmpty ||
+        _draftAttachments.isNotEmpty ||
+        ref.read(authControllerProvider).valueOrNull?.user.id != userId) {
+      return;
+    }
+    setState(() {
+      _controller.value = TextEditingValue(
+        text: message,
+        selection: TextSelection.collapsed(offset: message.length),
+      );
+      _isTyping = message.trim().isNotEmpty;
+    });
+  }
+
+  void _scheduleDraftSave(String message) {
+    final userId = ref.read(authControllerProvider).valueOrNull?.user.id;
+    if (userId == null) return;
+    _draftOwnerId = userId;
+    _draftSaveTimer?.cancel();
+    _draftSaveTimer = Timer(const Duration(milliseconds: 400), () {
+      _draftSaveTimer = null;
+      _queueDraftPersistence(
+        () => ChatDraftStore.write(
+          mode: AppMode.customer,
+          userId: userId,
+          bookingId: widget.bookingId,
+          message: message,
+        ),
+      );
+    });
+  }
+
+  void _queueDraftPersistence(Future<void> Function() operation) {
+    _draftPersistence = _draftPersistence.then((_) => operation());
+  }
+
+  Future<void> _clearSavedDraft(String userId) {
+    _draftSaveTimer?.cancel();
+    _draftSaveTimer = null;
+    _queueDraftPersistence(
+      () => ChatDraftStore.clear(
+        mode: AppMode.customer,
+        userId: userId,
+        bookingId: widget.bookingId,
+      ),
+    );
+    return _draftPersistence;
+  }
+
+  void _saveDraftBeforeExit() {
+    _draftSaveTimer?.cancel();
+    final userId = _draftOwnerId;
+    if (userId == null) return;
+    final message = _controller.text;
+    if (message.trim().isEmpty) {
+      unawaited(_clearSavedDraft(userId));
+      return;
+    }
+    _queueDraftPersistence(
+      () => ChatDraftStore.write(
+        mode: AppMode.customer,
+        userId: userId,
+        bookingId: widget.bookingId,
+        message: message,
+      ),
+    );
+  }
 
   Future<void> _pickAttachment() async {
     if (_isUploadingAttachment || _isSending) return;
     setState(() => _isUploadingAttachment = true);
     try {
+      final source = await showModalBottomSheet<ImageSource>(
+        context: context,
+        builder: (sheetContext) => SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.camera_alt_outlined),
+                title: const Text('Take a photo'),
+                onTap: () => Navigator.pop(sheetContext, ImageSource.camera),
+              ),
+              ListTile(
+                leading: const Icon(Icons.photo_library_outlined),
+                title: const Text('Choose from gallery'),
+                onTap: () => Navigator.pop(sheetContext, ImageSource.gallery),
+              ),
+            ],
+          ),
+        ),
+      );
+      if (source == null || !mounted) return;
       final picked = await _picker.pickImage(
-        source: ImageSource.gallery,
+        source: source,
         imageQuality: 80,
         maxWidth: 1600,
         maxHeight: 1600,
@@ -51,7 +164,9 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Could not attach the selected image.')),
+        const SnackBar(
+          content: Text('Could not attach the photo. Check camera or photo access and try again.'),
+        ),
       );
     } finally {
       if (mounted) setState(() => _isUploadingAttachment = false);
@@ -66,6 +181,8 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     final auth = ref.read(authControllerProvider).valueOrNull;
     if (auth == null) return;
 
+    _draftSaveTimer?.cancel();
+    _draftSaveTimer = null;
     setState(() => _isSending = true);
     try {
       await ref
@@ -77,16 +194,20 @@ class _ChatPageState extends ConsumerState<ChatPage> {
             attachments: [..._draftAttachments],
           );
 
+      if (mounted) {
+        setState(() {
+          _controller.clear();
+          _draftAttachments.clear();
+          _isTyping = false;
+        });
+      }
+      await _clearSavedDraft(auth.user.id);
       if (!mounted) return;
-      setState(() {
-        _controller.clear();
-        _draftAttachments.clear();
-        _isTyping = false;
-      });
 
       Future.delayed(const Duration(milliseconds: 100), _scrollToBottom);
     } catch (_) {
       if (!mounted) return;
+      _scheduleDraftSave(_controller.text);
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
@@ -110,6 +231,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   }
 
   void _setQuickReply(String text) {
+    _scheduleDraftSave(text);
     setState(() {
       _controller.text = text;
       _controller.selection = TextSelection.collapsed(offset: text.length);
@@ -126,6 +248,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
 
   @override
   void dispose() {
+    _saveDraftBeforeExit();
     _controller.dispose();
     _scrollController.dispose();
     super.dispose();
@@ -135,6 +258,19 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final tt = Theme.of(context).textTheme;
+
+    if (widget.bookingId.trim().isEmpty) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Booking chat')),
+        body: const Center(
+          child: PremiumEmptyState(
+            icon: Icons.chat_bubble_outline_rounded,
+            title: 'Chat unavailable',
+            subtitle: 'We could not find the booking for this conversation.',
+          ),
+        ),
+      );
+    }
 
     final bookingAsync = ref.watch(bookingDetailProvider(widget.bookingId));
     final workerName = bookingAsync.valueOrNull?.worker?.name ?? 'Professional';
@@ -176,18 +312,22 @@ class _ChatPageState extends ConsumerState<ChatPage> {
               ),
             ),
             const SizedBox(width: 10),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  workerName,
-                  style: tt.titleSmall?.copyWith(fontWeight: FontWeight.w800),
-                ),
-                Text(
-                  'Booking professional',
-                  style: tt.labelSmall?.copyWith(color: cs.onSurfaceVariant),
-                ),
-              ],
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    workerName,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: tt.titleSmall?.copyWith(fontWeight: FontWeight.w800),
+                  ),
+                  Text(
+                    'Booking professional',
+                    style: tt.labelSmall?.copyWith(color: cs.onSurfaceVariant),
+                  ),
+                ],
+              ),
             ),
           ],
         ),
@@ -322,7 +462,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
               children: [
                 _QuickReply(
                   label: 'I’m at the address',
-                  onTap: _isSending
+                  onTap: _isSending || _isUploadingAttachment
                       ? null
                       : () {
                           _setQuickReply('I’m at the service address.');
@@ -331,7 +471,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                 ),
                 _QuickReply(
                   label: 'Please call me',
-                  onTap: _isSending
+                  onTap: _isSending || _isUploadingAttachment
                       ? null
                       : () {
                           _setQuickReply('Please call me when you can.');
@@ -340,7 +480,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                 ),
                 _QuickReply(
                   label: 'Running late',
-                  onTap: _isSending
+                  onTap: _isSending || _isUploadingAttachment
                       ? null
                       : () {
                           _setQuickReply('I’m running about 5 minutes late.');
@@ -360,11 +500,15 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                 runSpacing: 8,
                 children: _draftAttachments
                     .map((attachment) {
-                      return Chip(
-                        avatar: const Icon(Icons.image_rounded, size: 18),
-                        label: Text(attachment.name ?? 'Attachment'),
-                        onDeleted: () {
-                          setState(() => _draftAttachments.remove(attachment));
+                      return PendingChatAttachmentTile(
+                        imageUrl: attachment.url,
+                        name: attachment.name,
+                        onRemove: () {
+                          setState(() {
+                            _draftAttachments.remove(attachment);
+                            _isTyping = _controller.text.trim().isNotEmpty ||
+                                _draftAttachments.isNotEmpty;
+                          });
                         },
                       );
                     })
@@ -412,11 +556,14 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                       ),
                       child: TextField(
                         controller: _controller,
-                        onChanged: (v) => setState(
-                          () => _isTyping =
-                              v.trim().isNotEmpty ||
-                              _draftAttachments.isNotEmpty,
-                        ),
+                        onChanged: (v) {
+                          _scheduleDraftSave(v);
+                          setState(
+                            () => _isTyping =
+                                v.trim().isNotEmpty ||
+                                _draftAttachments.isNotEmpty,
+                          );
+                        },
                         readOnly: _isSending,
                         textCapitalization: TextCapitalization.sentences,
                         decoration: InputDecoration(
@@ -532,31 +679,33 @@ class _BubbleTile extends StatelessWidget {
                   ? CrossAxisAlignment.end
                   : CrossAxisAlignment.start,
               children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 12,
-                  ),
-                  decoration: BoxDecoration(
-                    color: isMe ? cs.primary : cs.surfaceContainerHighest,
-                    borderRadius: BorderRadius.only(
-                      topLeft: const Radius.circular(18),
-                      topRight: const Radius.circular(18),
-                      bottomLeft: Radius.circular(isMe ? 18 : 4),
-                      bottomRight: Radius.circular(isMe ? 4 : 18),
+                if (message.text.trim().isNotEmpty)
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 12,
                     ),
-                    boxShadow: AbzioTheme.eliteShadow,
-                  ),
-                  child: Text(
-                    message.text,
-                    style: tt.bodyMedium?.copyWith(
-                      color: isMe ? cs.onPrimary : cs.onSurface,
-                      height: 1.4,
+                    decoration: BoxDecoration(
+                      color: isMe ? cs.primary : cs.surfaceContainerHighest,
+                      borderRadius: BorderRadius.only(
+                        topLeft: const Radius.circular(18),
+                        topRight: const Radius.circular(18),
+                        bottomLeft: Radius.circular(isMe ? 18 : 4),
+                        bottomRight: Radius.circular(isMe ? 4 : 18),
+                      ),
+                      boxShadow: AbzioTheme.eliteShadow,
+                    ),
+                    child: Text(
+                      message.text,
+                      style: tt.bodyMedium?.copyWith(
+                        color: isMe ? cs.onPrimary : cs.onSurface,
+                        height: 1.4,
+                      ),
                     ),
                   ),
-                ),
                 if (message.attachments.isNotEmpty) ...[
-                  const SizedBox(height: 8),
+                  if (message.text.trim().isNotEmpty)
+                    const SizedBox(height: 8),
                   ...message.attachments.map(
                     (attachment) =>
                         _AttachmentPreview(attachment: attachment, isMe: isMe),

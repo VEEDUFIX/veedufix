@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:marketplace_shared/marketplace_shared.dart';
 
 import '../data/booking_otp_api.dart';
+import '../widgets/otp_security_notice.dart';
 
 class ArrivalOtpPage extends ConsumerStatefulWidget {
   const ArrivalOtpPage({
@@ -87,8 +88,13 @@ class _ArrivalOtpPageState extends ConsumerState<ArrivalOtpPage> {
             children: [
               const PremiumSectionHeader(
                 title: 'Arrival code',
-                subtitle:
-                    'Share this code with your professional to start the job - never share it with anyone else.',
+                subtitle: 'Verify your professional’s arrival and start the job.',
+              ),
+              const SizedBox(height: 12),
+              const OtpSecurityNotice(
+                title: 'Keep this code private',
+                message:
+                    'Share it only with the assigned professional when they arrive. Never share it over a call or chat.',
               ),
               const SizedBox(height: 16),
               PremiumGlassCard(
@@ -181,7 +187,7 @@ class _ArrivalOtpPageState extends ConsumerState<ArrivalOtpPage> {
                               label: 'Expires',
                               value: _expiryLabel(expiry),
                               icon: Icons.schedule_rounded,
-                              accentColor: const Color(0xFF0F766E),
+                              accentColor: AbzioTheme.warningColor,
                             ),
                           ),
                         ],

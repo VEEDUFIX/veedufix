@@ -43,6 +43,8 @@ class WorkerPublicProfileReview {
     required this.id,
     required this.rating,
     this.comment,
+    this.workerResponse,
+    this.workerResponseAt,
     required this.customerName,
     this.customerAvatarUrl,
     required this.createdAt,
@@ -51,6 +53,8 @@ class WorkerPublicProfileReview {
   final String id;
   final int rating;
   final String? comment;
+  final String? workerResponse;
+  final DateTime? workerResponseAt;
   final String customerName;
   final String? customerAvatarUrl;
   final DateTime createdAt;
@@ -60,6 +64,10 @@ class WorkerPublicProfileReview {
       id: json['id'] as String? ?? '',
       rating: (json['rating'] as num?)?.toInt() ?? 0,
       comment: json['comment'] as String?,
+      workerResponse: json['workerResponse'] as String?,
+      workerResponseAt: json['workerResponseAt'] is String
+          ? DateTime.tryParse(json['workerResponseAt'] as String)
+          : null,
       customerName: json['customerName'] as String? ?? 'Customer',
       customerAvatarUrl: json['customerAvatarUrl'] as String?,
       createdAt: DateTime.tryParse(json['createdAt'] as String? ?? '') ?? DateTime.now(),

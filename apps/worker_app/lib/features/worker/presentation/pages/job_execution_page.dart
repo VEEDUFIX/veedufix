@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:marketplace_shared/marketplace_shared.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -44,6 +45,10 @@ class _JobExecutionPageState extends ConsumerState<JobExecutionPage> {
   }
 
   Future<void> _resolveBooking() async {
+    if (widget.bookingId.trim().isEmpty) {
+      if (mounted) setState(() => _loadingBooking = false);
+      return;
+    }
     if (mounted) {
       setState(() {
         _loadingBooking = true;
@@ -219,6 +224,26 @@ class _JobExecutionPageState extends ConsumerState<JobExecutionPage> {
               accentColor: booking.accentColor,
             ),
             const SizedBox(height: 16),
+            OutlinedButton.icon(
+              onPressed: () {
+                final supportUri = Uri(
+                  path: '/support',
+                  queryParameters: {
+                    'category': 'other',
+                    'autoFocusForm': 'true',
+                    'subject': 'Help with job ${booking.bookingCode}',
+                    'message':
+                        'I need help with job #${booking.bookingCode} for '
+                        '${booking.serviceName} (step ${state.currentStep} of 7). '
+                        'Please help me with: ',
+                  },
+                );
+                context.push(supportUri.toString());
+              },
+              icon: const Icon(Icons.support_agent_rounded),
+              label: const Text('Get help with this job'),
+            ),
+            const SizedBox(height: 12),
             JobStepCard(
               stepNumber: 1,
               title: 'Mark arrived',

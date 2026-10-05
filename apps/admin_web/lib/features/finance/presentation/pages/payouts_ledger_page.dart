@@ -5,6 +5,8 @@ import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:marketplace_shared/marketplace_shared.dart';
 
+import '../../../admin/presentation/widgets/confirm_admin_action_dialog.dart';
+
 import '../../data/finance_api.dart';
 
 class PayoutsLedgerPage extends ConsumerStatefulWidget {
@@ -175,26 +177,16 @@ class _PayoutsLedgerPageState extends ConsumerState<PayoutsLedgerPage> {
     final failedCount = _items.where((item) => item.status == 'failed').length;
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (dialogContext) {
-        return AlertDialog(
-          title: const Text('Retry failed payouts?'),
-          content: Text(
-            failedCount == 0
-                ? 'There are no failed payouts in the current list.'
-                : 'This will retry $failedCount failed payout attempts from the current queue.',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(dialogContext).pop(false),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: failedCount == 0 ? null : () => Navigator.of(dialogContext).pop(true),
-              child: const Text('Retry failed'),
-            ),
-          ],
-        );
-      },
+      barrierDismissible: false,
+      builder: (dialogContext) => ConfirmAdminActionDialog(
+        title: 'Retry failed payouts?',
+        description:
+            'This is a global action. It retries every failed payout in the '
+            'platform, regardless of the current filters or rows loaded here. '
+            'Failed payouts shown in this view: $failedCount.',
+        confirmationPhrase: 'RETRY ALL',
+        confirmButtonLabel: 'Retry all failed',
+      ),
     );
 
     if (confirmed != true) {
@@ -226,21 +218,15 @@ class _PayoutsLedgerPageState extends ConsumerState<PayoutsLedgerPage> {
   Future<void> _releasePending() async {
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Release pending payouts?'),
-        content: const Text(
-          'This will attempt settlement for eligible pending payouts. Failed attempts remain in the ledger for review.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text('Release pending'),
-          ),
-        ],
+      barrierDismissible: false,
+      builder: (dialogContext) => const ConfirmAdminActionDialog(
+        title: 'Release pending payouts?',
+        description:
+            'This can initiate external transfers for up to 50 of the oldest '
+            'pending payouts across the platform, regardless of current '
+            'filters. Failed attempts remain in the ledger for review.',
+        confirmationPhrase: 'RELEASE PAYOUTS',
+        confirmButtonLabel: 'Release payouts',
       ),
     );
     if (confirmed != true) return;

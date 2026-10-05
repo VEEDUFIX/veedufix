@@ -145,7 +145,46 @@ class ReferralPage extends ConsumerWidget {
                             fontWeight: FontWeight.w800,
                           ),
                         ),
-                        const SizedBox(height: 8),
+                        const SizedBox(height: 10),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 6,
+                          ),
+                          decoration: BoxDecoration(
+                            color: wallet.referralsEnabled
+                                ? cs.primaryContainer.withValues(alpha: 0.65)
+                                : cs.surfaceContainerHighest,
+                            borderRadius: BorderRadius.circular(999),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                wallet.referralsEnabled
+                                    ? Icons.check_circle_rounded
+                                    : Icons.pause_circle_outline_rounded,
+                                size: 15,
+                                color: wallet.referralsEnabled
+                                    ? cs.onPrimaryContainer
+                                    : cs.onSurfaceVariant,
+                              ),
+                              const SizedBox(width: 6),
+                              Text(
+                                wallet.referralsEnabled
+                                    ? 'Rewards available'
+                                    : 'Rewards paused',
+                                style: tt.labelSmall?.copyWith(
+                                  color: wallet.referralsEnabled
+                                      ? cs.onPrimaryContainer
+                                      : cs.onSurfaceVariant,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 10),
                         Text(
                           !wallet.referralsEnabled
                               ? 'Referral rewards are temporarily unavailable.'
@@ -164,7 +203,7 @@ class ReferralPage extends ConsumerWidget {
                             vertical: 16,
                           ),
                           decoration: BoxDecoration(
-                            color: cs.surface,
+                            color: cs.primaryContainer.withValues(alpha: 0.22),
                             borderRadius: BorderRadius.circular(
                               AbzioTheme.buttonRadius,
                             ),
@@ -186,6 +225,7 @@ class ReferralPage extends ConsumerWidget {
                                   style: tt.headlineSmall?.copyWith(
                                     fontWeight: FontWeight.w900,
                                     color: cs.primary,
+                                    letterSpacing: 1.2,
                                   ),
                                 ),
                               ),
@@ -317,9 +357,9 @@ class ReferralPage extends ConsumerWidget {
                                 height: 44,
                                 decoration: BoxDecoration(
                                   color: tx.amount >= 0
-                                      ? const Color(
-                                          0xFF10B981,
-                                        ).withValues(alpha: 0.1)
+                                      ? AbzioTheme.successColor.withValues(
+                                          alpha: 0.1,
+                                        )
                                       : cs.errorContainer.withValues(
                                           alpha: 0.3,
                                         ),
@@ -330,7 +370,7 @@ class ReferralPage extends ConsumerWidget {
                                       ? Icons.arrow_downward_rounded
                                       : Icons.arrow_upward_rounded,
                                   color: tx.amount >= 0
-                                      ? const Color(0xFF10B981)
+                                      ? AbzioTheme.successColor
                                       : cs.error,
                                   size: 20,
                                 ),
@@ -369,7 +409,7 @@ class ReferralPage extends ConsumerWidget {
                                 style: tt.titleMedium?.copyWith(
                                   fontWeight: FontWeight.w800,
                                   color: tx.amount >= 0
-                                      ? const Color(0xFF10B981)
+                                      ? AbzioTheme.successColor
                                       : cs.error,
                                 ),
                               ),

@@ -122,6 +122,7 @@ Set<String> allowedRoutesForMode(AppMode mode) {
         '/analytics',
         '/profile',
         '/catalog',
+        '/review-moderation',
         '/service-areas',
         '/finance',
         '/finance/payouts',

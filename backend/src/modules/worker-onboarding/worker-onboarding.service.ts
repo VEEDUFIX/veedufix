@@ -432,6 +432,138 @@ export async function updatePersonalDetails(userId: string, details: ProfileDeta
   return normalizeProfile(await getWorkerProfileOrThrow(userId));
 }
 
+function payoutRequestStatus(request: {
+  id: string;
+  status: string;
+  rejectionReason: string | null;
+  reviewedAt: Date | null;
+  createdAt: Date;
+}) {
+  return {
+    id: request.id,
+    status: request.status,
+    rejectionReason: request.rejectionReason,
+    reviewedAt: request.reviewedAt,
+    createdAt: request.createdAt
+  };
+}
+
+export async function getMyPayoutChangeRequest(userId: string) {
+  const profile = await prisma.workerProfile.findUnique({
+    where: { userId },
+    select: { id: true }
+  });
+  if (!profile) throw new WorkerProfileNotFoundError();
+
+  const request = await prisma.workerPayoutChangeRequest.findFirst({
+    where: { workerProfileId: profile.id },
+    orderBy: { createdAt: "desc" },
+    select: { id: true, status: true, rejectionReason: true, reviewedAt: true, createdAt: true }
+  });
+  return { request: request ? payoutRequestStatus(request) : null };
+}
+
+export async function submitPayoutChangeRequest(
+  userId: string,
+  details: { bankAccountNumber?: string; bankIfsc?: string; upiId?: string }
+) {
+  const profile = await prisma.workerProfile.findUnique({
+    where: { userId },
+    select: { id: true, onboardingStatus: true }
+  });
+  if (!profile) throw new WorkerProfileNotFoundError();
+  if (profile.onboardingStatus !== "approved") {
+    throw new WorkerStatusConflictError("Only approved workers can request payout account changes");
+  }
+
+  try {
+    const request = await prisma.workerPayoutChangeRequest.create({
+      data: {
+        workerProfileId: profile.id,
+        pendingKey: profile.id,
+        bankAccountNumber: details.bankAccountNumber,
+        bankIfsc: details.bankIfsc?.toUpperCase(),
+        upiId: details.upiId
+      },
+      select: { id: true, status: true, rejectionReason: true, reviewedAt: true, createdAt: true }
+    });
+    return { request: payoutRequestStatus(request) };
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+      throw new WorkerStatusConflictError("A payout account change is already awaiting review");
+    }
+    throw error;
+  }
+}
+
+export async function listPayoutChangeRequests() {
+  const items = await prisma.workerPayoutChangeRequest.findMany({
+    where: { status: "pending" },
+    include: {
+      workerProfile: {
+        select: {
+          id: true,
+          fullName: true,
+          city: true,
+          user: { select: { phone: true, email: true } }
+        }
+      }
+    },
+    orderBy: { createdAt: "asc" },
+    take: 100
+  });
+  return {
+    items: items.map(({ pendingKey: _pendingKey, ...request }) => request),
+    total: items.length
+  };
+}
+
+export async function approvePayoutChangeRequest(requestId: string, adminId: string) {
+  return prisma.$transaction(async (tx) => {
+    const request = await tx.workerPayoutChangeRequest.findUnique({ where: { id: requestId } });
+    if (!request || request.status !== "pending") {
+      throw new WorkerStatusConflictError("This payout account request is no longer pending");
+    }
+    await tx.workerProfile.update({
+      where: { id: request.workerProfileId },
+      data: {
+        ...(request.bankAccountNumber && request.bankIfsc
+          ? {
+              bankAccountNumber: request.bankAccountNumber,
+              bankIfsc: request.bankIfsc
+            }
+          : {}),
+        ...(request.upiId ? { upiId: request.upiId } : {})
+      }
+    });
+    const claimed = await tx.workerPayoutChangeRequest.updateMany({
+      where: { id: requestId, status: "pending" },
+      data: { status: "approved", pendingKey: null, reviewedBy: adminId, reviewedAt: new Date() }
+    });
+    if (claimed.count !== 1) {
+      throw new WorkerStatusConflictError("This payout account request is no longer pending");
+    }
+    return { id: requestId, workerProfileId: request.workerProfileId };
+  });
+}
+
+export async function rejectPayoutChangeRequest(requestId: string, adminId: string, reason: string) {
+  const result = await prisma.workerPayoutChangeRequest.updateMany({
+    where: { id: requestId, status: "pending" },
+    data: {
+      status: "rejected",
+      pendingKey: null,
+      rejectionReason: reason.trim(),
+      reviewedBy: adminId,
+      reviewedAt: new Date()
+    }
+  });
+  if (result.count !== 1) {
+    throw new WorkerStatusConflictError("This payout account request is no longer pending");
+  }
+  return { id: requestId };
+}
+
 export async function uploadDocument(
   userId: string,
   docType: "aadhaar" | "skill_certification",
@@ -814,7 +946,7 @@ export async function getWorkerDirectory(filters: WorkerDirectoryFilters = {}) {
   const [ratings, completedJobs] = await Promise.all([
     workerIds.length
       ? prisma.review.findMany({
-          where: { workerId: { in: workerIds } },
+          where: { workerId: { in: workerIds }, moderationStatus: "published" },
           select: {
             workerId: true,
             rating: true
@@ -883,7 +1015,7 @@ export async function getWorkerHistory(workerProfileId: string) {
 
   const [ratings] = await Promise.all([
     prisma.review.findMany({
-      where: { workerId: workerProfileId },
+      where: { workerId: workerProfileId, moderationStatus: "published" },
       include: {
         booking: {
           select: {

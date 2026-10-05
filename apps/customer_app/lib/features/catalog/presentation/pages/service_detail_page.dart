@@ -98,6 +98,7 @@ class _ServiceDetailView extends ConsumerWidget {
           )
         : null;
     final price = service.startingPrice;
+    final isFavorite = ref.watch(isFavoriteProvider(service.id));
     final description = service.description?.trim().isNotEmpty == true
         ? service.description!.trim()
         : service.shortDescription?.trim().isNotEmpty == true
@@ -133,22 +134,28 @@ class _ServiceDetailView extends ConsumerWidget {
                   onTap: () => ref
                       .read(favoritesProvider.notifier)
                       .toggleFavorite(service.id),
-                  child: Container(
-                    width: 40,
-                    height: 40,
-                    decoration: BoxDecoration(
-                      color: colorScheme.surface,
-                      shape: BoxShape.circle,
-                      boxShadow: AbzioTheme.eliteShadow,
-                    ),
-                    child: Icon(
-                      ref.watch(isFavoriteProvider(service.id))
-                          ? Icons.favorite_rounded
-                          : Icons.favorite_border_rounded,
-                      color: ref.watch(isFavoriteProvider(service.id))
-                          ? Colors.redAccent
-                          : colorScheme.onSurfaceVariant,
-                      size: 20,
+                  child: Semantics(
+                    button: true,
+                    label: isFavorite
+                        ? 'Remove from favorites'
+                        : 'Save to favorites',
+                    child: Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        color: colorScheme.surface,
+                        shape: BoxShape.circle,
+                        boxShadow: AbzioTheme.eliteShadow,
+                      ),
+                      child: Icon(
+                        isFavorite
+                            ? Icons.favorite_rounded
+                            : Icons.favorite_border_rounded,
+                        color: isFavorite
+                            ? Colors.redAccent
+                            : colorScheme.onSurfaceVariant,
+                        size: 20,
+                      ),
                     ),
                   ),
                 ),
@@ -224,25 +231,31 @@ class _ServiceDetailView extends ConsumerWidget {
                   ),
                 ),
                 const SizedBox(height: 10),
-                Row(
+                Wrap(
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 5,
                   children: [
-                    const Icon(
-                      Icons.star_rounded,
+                    Icon(
+                      service.reviewCount > 0
+                          ? Icons.star_rounded
+                          : Icons.auto_awesome_rounded,
                       size: 18,
-                      color: Color(0xFFF59E0B),
+                      color: service.reviewCount > 0
+                          ? const Color(0xFFF59E0B)
+                          : colorScheme.primary,
                     ),
-                    const SizedBox(width: 4),
                     Text(
-                      service.rating > 0
+                      service.reviewCount > 0 && service.rating > 0
                           ? service.rating.toStringAsFixed(1)
                           : 'New',
                       style: textTheme.bodyMedium?.copyWith(
                         fontWeight: FontWeight.w700,
                       ),
                     ),
-                    const SizedBox(width: 8),
                     Text(
-                      '(${service.reviewCount} reviews)',
+                      service.reviewCount > 0
+                          ? '(${service.reviewCount} ${service.reviewCount == 1 ? 'review' : 'reviews'})'
+                          : 'No reviews yet',
                       style: textTheme.bodyMedium?.copyWith(
                         color: colorScheme.onSurfaceVariant,
                       ),

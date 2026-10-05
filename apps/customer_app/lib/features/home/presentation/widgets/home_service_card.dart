@@ -24,153 +24,166 @@ class HomeServiceCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final imageUrl = _imageUrl;
+    final priceLabel = service.startingPrice > 0
+        ? 'starts at ₹${service.startingPrice.toInt()}'
+        : 'price on request';
 
     return TapScale(
       onTap: () => context.push('/service?id=${service.slug}'),
-      child: Container(
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: const Color(0xFFEDEDED), width: 1),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.06),
-              blurRadius: 16,
-              offset: const Offset(0, 6),
-            ),
-          ],
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            SizedBox(
-              height: 118,
-              width: double.infinity,
-              child: imageUrl != null
-                  ? Image.network(
-                      imageUrl,
-                      fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) =>
-                          _PlaceholderImage(service: service),
-                    )
-                  : _PlaceholderImage(service: service),
-            ),
+      child: Semantics(
+        button: true,
+        label: '${service.name}, $priceLabel',
+        child: Container(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: AbzioTheme.lightBorder, width: 1),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.06),
+                blurRadius: 16,
+                offset: const Offset(0, 6),
+              ),
+            ],
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SizedBox(
+                height: 118,
+                width: double.infinity,
+                child: imageUrl != null
+                    ? Image.network(
+                        imageUrl,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) =>
+                            _PlaceholderImage(service: service),
+                      )
+                    : _PlaceholderImage(service: service),
+              ),
 
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    if (_category.isNotEmpty) ...[
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (_category.isNotEmpty) ...[
+                        Text(
+                          _category.toUpperCase(),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: GoogleFonts.outfit(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 0.8,
+                            color: AbzioTheme.lightTextSecondary,
+                          ),
+                        ),
+                        const SizedBox(height: 3),
+                      ],
                       Text(
-                        _category.toUpperCase(),
-                        maxLines: 1,
+                        service.name,
+                        maxLines: 2,
                         overflow: TextOverflow.ellipsis,
-                        style: GoogleFonts.inter(
-                          fontSize: 9,
+                        style: GoogleFonts.outfit(
+                          fontSize: 14,
                           fontWeight: FontWeight.w700,
-                          letterSpacing: 0.8,
-                          color: const Color(0xFF7A7A7A),
+                          color: AbzioTheme.lightTextPrimary,
+                          height: 1.2,
                         ),
                       ),
-                      const SizedBox(height: 3),
-                    ],
-                    Text(
-                      service.name,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: GoogleFonts.inter(
-                        fontSize: 13.5,
-                        fontWeight: FontWeight.w700,
-                        color: const Color(0xFF111111),
-                        height: 1.2,
-                      ),
-                    ),
-                    if (service.rating > 0) ...[
-                      const SizedBox(height: 7),
+                      if (service.rating > 0) ...[
+                        const SizedBox(height: 7),
+                        Row(
+                          children: [
+                            const Icon(
+                              Icons.star_rounded,
+                              size: 14,
+                              color: AbzioTheme.accentColor,
+                            ),
+                            const SizedBox(width: 3),
+                            Text(
+                              service.rating.toStringAsFixed(1),
+                              style: GoogleFonts.outfit(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: AbzioTheme.lightTextPrimary,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                      const Spacer(),
                       Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        crossAxisAlignment: CrossAxisAlignment.end,
                         children: [
-                          const Icon(
-                            Icons.star_rounded,
-                            size: 14,
-                            color: Color(0xFF111111),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                if (service.startingPrice > 0) ...[
+                                  Text(
+                                    'Starts at',
+                                    style: GoogleFonts.outfit(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w500,
+                                      color: AbzioTheme.lightTextSecondary,
+                                    ),
+                                  ),
+                                  Text(
+                                    '₹${service.startingPrice.toInt()}',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: GoogleFonts.outfit(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w800,
+                                      color: AbzioTheme.lightTextPrimary,
+                                    ),
+                                  ),
+                                ] else
+                                  Text(
+                                    'Get a quote',
+                                    style: GoogleFonts.outfit(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w700,
+                                      color: AbzioTheme.lightTextPrimary,
+                                    ),
+                                  ),
+                              ],
+                            ),
                           ),
-                          const SizedBox(width: 3),
-                          Text(
-                            service.rating.toStringAsFixed(2),
-                            style: GoogleFonts.inter(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                              color: const Color(0xFF444444),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 7,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(
+                                color: const Color(0xFFE1E1E1),
+                              ),
+                            ),
+                            child: Text(
+                              'View',
+                              style: GoogleFonts.outfit(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w800,
+                                color: AbzioTheme.accentColor,
+                              ),
                             ),
                           ),
                         ],
                       ),
                     ],
-                    const Spacer(),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            if (service.startingPrice > 0) ...[
-                              Text(
-                                'Starts at',
-                                style: GoogleFonts.inter(
-                                  fontSize: 10.5,
-                                  fontWeight: FontWeight.w500,
-                                  color: const Color(0xFF777777),
-                                ),
-                              ),
-                              Text(
-                                '₹${service.startingPrice.toInt()}',
-                                style: GoogleFonts.inter(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w800,
-                                  color: const Color(0xFF111111),
-                                ),
-                              ),
-                            ] else
-                              Text(
-                                'Get a quote',
-                                style: GoogleFonts.inter(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w700,
-                                  color: const Color(0xFF111111),
-                                ),
-                              ),
-                          ],
-                        ),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 14,
-                            vertical: 7,
-                          ),
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(10),
-                            border: Border.all(color: const Color(0xFFE1E1E1)),
-                          ),
-                          child: Text(
-                            'View',
-                            style: GoogleFonts.inter(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w800,
-                              color: const Color(0xFFC6A769),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
+                  ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -196,9 +209,9 @@ class _PlaceholderImage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      color: const Color(0xFFF3F0E9),
+      color: AbzioTheme.lightMuted,
       child: Center(
-        child: Icon(_icon(), size: 38, color: const Color(0xFFC6A769)),
+        child: Icon(_icon(), size: 38, color: AbzioTheme.accentColor),
       ),
     );
   }

@@ -2,6 +2,7 @@ import { Router } from "express";
 import { requireAuth, requireRole } from "../../middleware/auth.js";
 import { validate } from "../../middleware/validate.js";
 import {
+  customerDisputeParamsSchema,
   disputeIdParamsOnlySchema,
   listDisputesQuerySchema,
   raiseDisputeSchema,
@@ -9,6 +10,7 @@ import {
 } from "./dispute.schemas.js";
 import {
   getDisputeEvidenceHandler,
+  getCustomerDisputeHandler,
   listDisputesHandler,
   raiseDisputeHandler,
   resolveDisputeHandler
@@ -24,6 +26,13 @@ disputeRouter.post(
   ...customerOnly,
   validate(raiseDisputeSchema),
   raiseDisputeHandler
+);
+
+disputeRouter.get(
+  "/bookings/:bookingId/dispute",
+  ...customerOnly,
+  validate(customerDisputeParamsSchema),
+  getCustomerDisputeHandler
 );
 
 disputeRouter.get(

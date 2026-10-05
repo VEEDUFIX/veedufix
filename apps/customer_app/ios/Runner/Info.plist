@@ -8,6 +8,8 @@
 		<string>$(DEVELOPMENT_LANGUAGE)</string>
 		<key>CFBundleDisplayName</key>
 		<string>VeeduFix</string>
+		<key>NSCameraUsageDescription</key>
+		<string>Take a photo to share a service issue in your booking conversation.</string>
 		<key>CFBundleExecutable</key>
 		<string>$(EXECUTABLE_NAME)</string>
 		<key>CFBundleIdentifier</key>
@@ -84,5 +86,7 @@
 		</array>
 		<key>UIStatusBarHidden</key>
 		<false/>
+		<key>GOOGLE_MAPS_API_KEY</key>
+		<string>$(GOOGLE_MAPS_API_KEY)</string>
 	</dict>
 </plist>

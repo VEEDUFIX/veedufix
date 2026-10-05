@@ -11,13 +11,17 @@ class WalletPage extends ConsumerWidget {
     final walletState = ref.watch(walletProvider);
 
     return Scaffold(
+      backgroundColor: AbzioTheme.lightBackground,
       appBar: AppBar(
-        title: const Text(
+        title: Text(
           'My Wallet',
-          style: TextStyle(fontWeight: FontWeight.bold),
+          style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                fontWeight: FontWeight.w800,
+              ),
         ),
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
+          tooltip: 'Back',
+          icon: const Icon(Icons.arrow_back_rounded),
           onPressed: () => context.pop(),
         ),
       ),
@@ -26,7 +30,7 @@ class WalletPage extends ConsumerWidget {
           return RefreshIndicator(
             onRefresh: () => ref.refresh(walletProvider.future),
             child: ListView(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
               children: [
                 _BalanceHeroCard(balance: wallet.balance),
                 const SizedBox(height: 16),
@@ -51,10 +55,10 @@ class WalletPage extends ConsumerWidget {
                     ),
                   ],
                 ),
-                const SizedBox(height: 24),
-                const Text(
-                  'Transaction History',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                const SizedBox(height: 28),
+                const PremiumSectionHeader(
+                  title: 'Transaction history',
+                  subtitle: 'Wallet credits and charges from your bookings.',
                 ),
                 const SizedBox(height: 12),
                 if (wallet.transactions.isEmpty)
@@ -93,42 +97,59 @@ class _BalanceHeroCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final textTheme = Theme.of(context).textTheme;
+    final colorScheme = Theme.of(context).colorScheme;
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.all(22),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(AbzioTheme.cardRadius),
-        color: AbzioTheme.lightCard,
-        border: Border.all(color: AbzioTheme.lightBorder),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            colorScheme.surface,
+            AbzioTheme.lightMuted,
+          ],
+        ),
+        border: Border.all(color: AbzioTheme.lightBorder.withValues(alpha: 0.8)),
         boxShadow: AbzioTheme.eliteShadow,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Available Balance',
-            style: TextStyle(
-              color: AbzioTheme.lightTextSecondary,
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
-            ),
+          Row(
+            children: [
+              Icon(
+                Icons.account_balance_wallet_outlined,
+                size: 18,
+                color: colorScheme.primary,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                'AVAILABLE BALANCE',
+                style: textTheme.labelMedium?.copyWith(
+                  color: colorScheme.onSurfaceVariant,
+                  letterSpacing: 0.8,
+                ),
+              ),
+            ],
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 10),
           Text(
             '₹${balance.toStringAsFixed(2)}',
-            style: const TextStyle(
-              color: AbzioTheme.lightTextPrimary,
+            style: textTheme.headlineLarge?.copyWith(
+              fontFamily: 'Outfit',
               fontSize: 32,
               fontWeight: FontWeight.w800,
+              letterSpacing: -0.5,
             ),
           ),
-          const SizedBox(height: 14),
-          Container(
-            width: 40,
-            height: 3,
-            decoration: BoxDecoration(
-              color: AbzioTheme.accentColor,
-              borderRadius: BorderRadius.circular(2),
+          const SizedBox(height: 6),
+          Text(
+            'Your current Veedufix wallet balance',
+            style: textTheme.bodySmall?.copyWith(
+              color: colorScheme.onSurfaceVariant,
             ),
           ),
         ],
@@ -177,31 +198,64 @@ class _TransactionCard extends StatelessWidget {
     final isDebit = type.contains('DEBIT') || type == 'PAYOUT_PENDING';
     final isCredit = !isDebit && transaction.amount >= 0;
     final amount = transaction.amount.abs();
+    final amountColor = isCredit
+        ? AbzioTheme.successColor
+        : AbzioTheme.dangerColor;
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: PremiumGlassCard(
-        child: ListTile(
-          leading: CircleAvatar(
-            backgroundColor: isCredit
-                ? Colors.green.withValues(alpha: 0.2)
-                : Colors.red.withValues(alpha: 0.2),
-            child: Icon(
-              isCredit ? Icons.arrow_upward : Icons.arrow_downward,
-              color: isCredit ? Colors.green : Colors.red,
-            ),
-          ),
-          title: Text(
-            _formatReference(transaction.referenceType),
-            style: const TextStyle(fontWeight: FontWeight.bold),
-          ),
-          subtitle: Text(_formatDate(transaction.createdAt)),
-          trailing: Text(
-            '${isCredit ? '+' : '-'}₹${amount.toStringAsFixed(2)}',
-            style: TextStyle(
-              color: isCredit ? Colors.green : Colors.red,
-              fontWeight: FontWeight.bold,
-              fontSize: 16,
-            ),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: amountColor.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Icon(
+                  isCredit
+                      ? Icons.south_west_rounded
+                      : Icons.north_east_rounded,
+                  color: amountColor,
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      _formatReference(transaction.referenceType),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                            fontWeight: FontWeight.w700,
+                          ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      _formatDate(transaction.createdAt),
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: Theme.of(context).colorScheme.onSurfaceVariant,
+                          ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 12),
+              Text(
+                '${isCredit ? '+' : '-'}₹${amount.toStringAsFixed(2)}',
+                textAlign: TextAlign.end,
+                style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                      color: amountColor,
+                      fontWeight: FontWeight.w800,
+                    ),
+              ),
+            ],
           ),
         ),
       ),

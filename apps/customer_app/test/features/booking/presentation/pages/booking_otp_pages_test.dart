@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -7,6 +9,7 @@ import 'package:dio/dio.dart';
 import 'package:mocktail/mocktail.dart';
 
 class MockApiClient extends Mock implements ApiClient {}
+
 class MockDio extends Mock implements Dio {}
 
 void main() {
@@ -21,32 +24,38 @@ void main() {
 
   Widget buildApp(Widget child) {
     return ProviderScope(
-      overrides: [
-        apiClientProvider.overrideWithValue(mockApiClient),
-      ],
-      child: MaterialApp(
-        home: child,
-      ),
+      overrides: [apiClientProvider.overrideWithValue(mockApiClient)],
+      child: MaterialApp(home: child),
     );
   }
 
   group('ArrivalOtpPage', () {
     testWidgets('shows loading state initially', (tester) async {
-      when(() => mockDio.get<Map<String, dynamic>>(any())).thenAnswer((_) async {
-        await Future.delayed(const Duration(seconds: 1));
-        return Response(
-          requestOptions: RequestOptions(path: ''),
-          data: {},
-        );
-      });
+      final response = Completer<Response<Map<String, dynamic>>>();
+      when(
+        () => mockDio.get<Map<String, dynamic>>(any()),
+      ).thenAnswer((_) => response.future);
 
       await tester.pumpWidget(buildApp(const ArrivalOtpPage(bookingId: '123')));
+
       expect(find.byType(CircularProgressIndicator), findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      response.complete(
+        Response<Map<String, dynamic>>(
+          requestOptions: RequestOptions(path: ''),
+          data: {},
+        ),
+      );
+      await tester.pump();
     });
 
     testWidgets('shows error state when API fails', (tester) async {
       when(() => mockDio.get<Map<String, dynamic>>(any())).thenThrow(
-        DioException(requestOptions: RequestOptions(path: ''), error: 'Network error'),
+        DioException(
+          requestOptions: RequestOptions(path: ''),
+          error: 'Network error',
+        ),
       );
 
       await tester.pumpWidget(buildApp(const ArrivalOtpPage(bookingId: '123')));
@@ -65,20 +74,22 @@ void main() {
             'code': 'BK-123',
             'serviceName': 'Plumbing',
             'customerName': 'John Doe',
-            'worker': {
-              'name': 'Jane Smith'
-            }
+            'worker': {'name': 'Jane Smith'},
           },
         ),
       );
 
-      when(() => mockDio.get<Map<String, dynamic>>('/bookings/123/arrival-otp')).thenAnswer(
+      when(
+        () => mockDio.get<Map<String, dynamic>>('/bookings/123/arrival-otp'),
+      ).thenAnswer(
         (_) async => Response(
           requestOptions: RequestOptions(path: ''),
           data: {
             'bookingId': '123',
             'otp': '123456',
-            'otpExpiresAt': DateTime.now().add(const Duration(minutes: 10)).toIso8601String(),
+            'otpExpiresAt': DateTime.now()
+                .add(const Duration(minutes: 10))
+                .toIso8601String(),
           },
         ),
       );

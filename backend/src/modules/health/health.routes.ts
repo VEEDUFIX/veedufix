@@ -2,10 +2,18 @@ import { Router } from "express";
 import { prisma } from "../../lib/prisma.js";
 import { redis } from "../../lib/redis.js";
 import { logger } from "../../lib/logger.js";
+import { requireAuth, requireRole } from "../../middleware/auth.js";
 
 export const healthRouter = Router();
+export const adminHealthRouter = Router();
 
-healthRouter.get("/", async (_request, response) => {
+// Public liveness response intentionally omits dependency-level details.
+healthRouter.get("/", (_request, response) => {
+  response.status(200).json({ ok: true });
+});
+
+adminHealthRouter.use(requireAuth, requireRole("ADMIN"));
+adminHealthRouter.get("/", async (_request, response) => {
   const status: any = {
     service: "local-services-marketplace-backend",
     timestamp: new Date().toISOString(),

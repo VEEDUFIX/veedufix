@@ -22,13 +22,19 @@ export async function authenticateAccessToken(token: string): Promise<TokenPaylo
       user: {
         select: {
           id: true,
-          role: true
+          role: true,
+          isActive: true
         }
       }
     }
   });
 
-  if (!session || session.user.id !== payload.sub || session.user.role !== payload.role) {
+  if (
+    !session ||
+    session.user.id !== payload.sub ||
+    session.user.role !== payload.role ||
+    !session.user.isActive
+  ) {
     throw AppError.unauthorized("Session expired or revoked");
   }
 

@@ -42,6 +42,13 @@ class DashboardQuickNav extends StatelessWidget {
               onTap: () => context.go('/ops/overview'),
             ),
             ActionCard(
+              title: 'System Status',
+              subtitle: 'Check API, database, and cache health',
+              icon: Icons.cloud_done_rounded,
+              color: const Color(0xFF0F766E),
+              onTap: () => context.go('/ops/system-health'),
+            ),
+            ActionCard(
               title: 'Live Jobs',
               subtitle: 'Inspect active job execution states',
               icon: Icons.work_history_rounded,

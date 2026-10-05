@@ -24,10 +24,7 @@ enum JobExecutionStep {
   completionOtp,
 }
 
-enum JobExecutionPhotoType {
-  before,
-  after,
-}
+enum JobExecutionPhotoType { before, after }
 
 enum JobExecutionErrorKind {
   unknown,
@@ -70,17 +67,23 @@ class JobExecutionBooking {
   final Color accentColor;
 }
 
-final jobExecutionBookingProvider =
-    FutureProvider.autoDispose.family<JobExecutionBooking?, String>((ref, bookingId) async {
+final jobExecutionBookingProvider = FutureProvider.autoDispose
+    .family<JobExecutionBooking?, String>((ref, bookingId) async {
   BookingSummary? bookingSummary;
   try {
-    bookingSummary = await ref.watch(bookingDetailProvider(bookingId).future);
+    bookingSummary = await ref.watch(
+      bookingDetailProvider(bookingId).future,
+    );
   } catch (_) {
     bookingSummary = null;
   }
-  final acceptedJobs = await ref.watch(workerJobsProvider('accepted').future);
+  final acceptedJobs = await ref.watch(
+    workerJobsProvider('accepted').future,
+  );
   final activeJobs = await ref.watch(workerJobsProvider('active').future);
-  final dashboardStats = await ref.watch(workerDashboardStatsProvider.future);
+  final dashboardStats = await ref.watch(
+    workerDashboardStatsProvider.future,
+  );
 
   final allJobs = <WorkerJob>[
     ...acceptedJobs,
@@ -104,10 +107,16 @@ final jobExecutionBookingProvider =
       serviceId: serviceId,
       serviceName: job.serviceName,
       customerName: job.customerName ?? 'Customer',
-      locationLabel: job.addressLabel ?? bookingSummary?.addressLabel ?? job.cityName ?? bookingSummary?.cityName ?? 'Assigned location',
+      locationLabel: job.addressLabel ??
+          bookingSummary?.addressLabel ??
+          job.cityName ??
+          bookingSummary?.cityName ??
+          'Assigned location',
       destinationQuery: _destinationQueryFor(job, bookingSummary),
-      destinationLatitude: job.destinationLatitude ?? bookingSummary?.destinationLatitude,
-      destinationLongitude: job.destinationLongitude ?? bookingSummary?.destinationLongitude,
+      destinationLatitude:
+          job.destinationLatitude ?? bookingSummary?.destinationLatitude,
+      destinationLongitude:
+          job.destinationLongitude ?? bookingSummary?.destinationLongitude,
       earningsLabel: '₹${job.totalAmount.toStringAsFixed(0)}',
       summary: '${job.serviceName} for ${job.customerName ?? 'the customer'}',
       accentColor: _accentForJob(job.status),
@@ -138,7 +147,9 @@ String _destinationQueryFor(WorkerJob job, BookingSummary? bookingSummary) {
   if (parts.isNotEmpty) {
     return parts.first;
   }
-  return job.customerName?.trim().isNotEmpty == true ? job.customerName!.trim() : 'Customer location';
+  return job.customerName?.trim().isNotEmpty == true
+      ? job.customerName!.trim()
+      : 'Customer location';
 }
 
 class JobExecutionChecklistItem {
@@ -203,6 +214,7 @@ class JobExecutionPhotoDraft {
   final String? remoteUrl;
   final bool uploading;
   final String? errorMessage;
+
   /// True when the upload failed due to no connectivity and has been
   /// persisted to the offline queue — it will retry automatically.
   final bool isQueued;
@@ -225,7 +237,8 @@ class JobExecutionPhotoDraft {
       file: file ?? this.file,
       remoteUrl: clearRemoteUrl ? null : remoteUrl ?? this.remoteUrl,
       uploading: uploading ?? this.uploading,
-      errorMessage: clearErrorMessage ? null : errorMessage ?? this.errorMessage,
+      errorMessage:
+          clearErrorMessage ? null : errorMessage ?? this.errorMessage,
       isQueued: isQueued ?? this.isQueued,
     );
   }
@@ -289,16 +302,20 @@ class JobExecutionState {
   bool get hasBooking => booking != null;
 
   bool get beforePhotosComplete =>
-      beforePhotos.isNotEmpty && beforePhotos.every((draft) => draft.isUploaded);
+      beforePhotos.isNotEmpty &&
+      beforePhotos.every((draft) => draft.isUploaded);
 
   bool get afterPhotosComplete =>
       afterPhotos.isNotEmpty && afterPhotos.every((draft) => draft.isUploaded);
 
-  bool get allRequiredChecklistComplete =>
-      checklistItems.where((item) => item.required).every((item) => item.completed);
+  bool get allRequiredChecklistComplete => checklistItems
+      .where((item) => item.required)
+      .every((item) => item.completed);
 
   bool get canRequestCompletionOtp =>
-      beforePhotosComplete && afterPhotosComplete && allRequiredChecklistComplete;
+      beforePhotosComplete &&
+      afterPhotosComplete &&
+      allRequiredChecklistComplete;
 
   bool isLoading(JobExecutionStep step) => loadingSteps.contains(step);
 
@@ -318,7 +335,9 @@ class JobExecutionState {
     Object? summary = _unset,
   }) {
     return JobExecutionState(
-      booking: identical(booking, _unset) ? this.booking : booking as JobExecutionBooking?,
+      booking: identical(booking, _unset)
+          ? this.booking
+          : booking as JobExecutionBooking?,
       currentStep: currentStep ?? this.currentStep,
       loadingSteps: loadingSteps ?? this.loadingSteps,
       stepErrors: stepErrors ?? this.stepErrors,
@@ -332,7 +351,9 @@ class JobExecutionState {
       completionBlocker: identical(completionBlocker, _unset)
           ? this.completionBlocker
           : completionBlocker as JobExecutionStepError?,
-      summary: identical(summary, _unset) ? this.summary : summary as JobExecutionSummary?,
+      summary: identical(summary, _unset)
+          ? this.summary
+          : summary as JobExecutionSummary?,
     );
   }
 }
@@ -353,19 +374,17 @@ class JobExecutionNotifier extends StateNotifier<JobExecutionState> {
   StreamSubscription<List<ConnectivityResult>>? _connectivitySub;
 
   void _listenForConnectivity() {
-    _connectivitySub = Connectivity().onConnectivityChanged.listen(
-      (results) {
-        final isOnline = results.any(
-          (r) =>
-              r == ConnectivityResult.mobile ||
-              r == ConnectivityResult.wifi ||
-              r == ConnectivityResult.ethernet,
-        );
-        if (isOnline) {
-          _drainQueue();
-        }
-      },
-    );
+    _connectivitySub = Connectivity().onConnectivityChanged.listen((results) {
+      final isOnline = results.any(
+        (r) =>
+            r == ConnectivityResult.mobile ||
+            r == ConnectivityResult.wifi ||
+            r == ConnectivityResult.ethernet,
+      );
+      if (isOnline) {
+        _drainQueue();
+      }
+    });
   }
 
   void _dispose() {
@@ -377,24 +396,35 @@ class JobExecutionNotifier extends StateNotifier<JobExecutionState> {
   Future<void> _drainQueue() async {
     final booking = state.booking;
     if (booking == null) return;
+    final bookingId = booking.bookingId;
 
     final queue = OfflineUploadQueueService.instance;
     final pending = await queue.pendingItems();
-    final relevant = pending.where((item) => item.bookingId == booking.bookingId).toList();
+    if (!_isCurrentBooking(bookingId)) return;
+    final relevant =
+        pending.where((item) => item.bookingId == bookingId).toList();
     if (relevant.isEmpty) return;
 
     for (final item in relevant) {
+      if (!_isCurrentBooking(bookingId)) return;
       final type = item.photoType == 'before'
           ? JobExecutionPhotoType.before
           : JobExecutionPhotoType.after;
 
       // Mark as uploading in state (no longer queued)
-      final currentPhotos =
-          type == JobExecutionPhotoType.before ? state.beforePhotos : state.afterPhotos;
+      final currentPhotos = type == JobExecutionPhotoType.before
+          ? state.beforePhotos
+          : state.afterPhotos;
       final updated = currentPhotos
-          .map((d) => d.id == item.draftId
-              ? d.copyWith(uploading: true, isQueued: false, clearErrorMessage: true)
-              : d)
+          .map(
+            (d) => d.id == item.draftId
+                ? d.copyWith(
+                    uploading: true,
+                    isQueued: false,
+                    clearErrorMessage: true,
+                  )
+                : d,
+          )
           .toList(growable: false);
       state = _replaceDrafts(type, updated);
 
@@ -405,6 +435,8 @@ class JobExecutionNotifier extends StateNotifier<JobExecutionState> {
 
   final Ref ref;
   StreamSubscription<Position>? _positionStream;
+  String? _trackingBookingId;
+  int _trackingGeneration = 0;
 
   final ImagePicker _imagePicker = ImagePicker();
   final Dio _uploadDio = Dio(
@@ -425,7 +457,18 @@ class JobExecutionNotifier extends StateNotifier<JobExecutionState> {
     return booking;
   }
 
+  bool _isCurrentBooking(String bookingId) =>
+      mounted && state.booking?.bookingId == bookingId;
+
   void start(JobExecutionBooking booking) {
+    if (state.booking?.bookingId == booking.bookingId) {
+      state = state.copyWith(booking: booking);
+      if (state.currentStep == 1 && _trackingBookingId != booking.bookingId) {
+        _startLiveTracking(booking.bookingId);
+      }
+      return;
+    }
+
     state = JobExecutionState(booking: booking);
     _startLiveTracking(booking.bookingId);
   }
@@ -433,27 +476,55 @@ class JobExecutionNotifier extends StateNotifier<JobExecutionState> {
   Future<void> _startLiveTracking(String bookingId) async {
     // Stop existing streams if any
     _cancelTracking();
+    final generation = _trackingGeneration;
+    _trackingBookingId = bookingId;
 
-    final hasPermission = await _ensureLocationPermission();
-    if (!hasPermission) return;
-
-    final realtime = ref.read(realtimeServiceProvider);
-    await realtime.connectTracking(bookingId);
-
-    _positionStream = Geolocator.getPositionStream(
-      locationSettings: const LocationSettings(
-        accuracy: LocationAccuracy.bestForNavigation,
-        distanceFilter: 5,
-      ),
-    ).listen((position) {
-      if (state.currentStep == 1) {
-        state = state.copyWith(currentPosition: position);
-        realtime.sendLocationUpdate(position.latitude, position.longitude);
+    try {
+      final hasPermission = await _ensureLocationPermission();
+      if (!mounted ||
+          generation != _trackingGeneration ||
+          state.booking?.bookingId != bookingId ||
+          !hasPermission) {
+        if (generation == _trackingGeneration) _trackingBookingId = null;
+        return;
       }
-    });
+
+      final realtime = ref.read(realtimeServiceProvider);
+      await realtime.connectTracking(bookingId);
+      if (!mounted ||
+          generation != _trackingGeneration ||
+          state.booking?.bookingId != bookingId ||
+          state.currentStep != 1) {
+        if (generation == _trackingGeneration) _trackingBookingId = null;
+        return;
+      }
+
+      _positionStream = Geolocator.getPositionStream(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.bestForNavigation,
+          distanceFilter: 5,
+        ),
+      ).listen((position) {
+        if (mounted &&
+            generation == _trackingGeneration &&
+            state.booking?.bookingId == bookingId &&
+            state.currentStep == 1) {
+          state = state.copyWith(currentPosition: position);
+          realtime.sendLocationUpdate(
+            position.latitude,
+            position.longitude,
+          );
+        }
+      });
+    } catch (_) {
+      if (generation == _trackingGeneration) _trackingBookingId = null;
+      // Live location is best-effort; job execution can continue without it.
+    }
   }
 
   void _cancelTracking() {
+    _trackingGeneration++;
+    _trackingBookingId = null;
     _positionStream?.cancel();
     _positionStream = null;
     ref.read(realtimeServiceProvider).disconnectTracking();
@@ -467,14 +538,17 @@ class JobExecutionNotifier extends StateNotifier<JobExecutionState> {
     if (permission == LocationPermission.denied) {
       permission = await Geolocator.requestPermission();
     }
-    return permission == LocationPermission.whileInUse || permission == LocationPermission.always;
+    return permission == LocationPermission.whileInUse ||
+        permission == LocationPermission.always;
   }
 
   void clearStepError(JobExecutionStep step) {
     if (!state.stepErrors.containsKey(step)) {
       return;
     }
-    final nextErrors = Map<JobExecutionStep, JobExecutionStepError>.from(state.stepErrors)..remove(step);
+    final nextErrors = Map<JobExecutionStep, JobExecutionStepError>.from(
+      state.stepErrors,
+    )..remove(step);
     state = state.copyWith(stepErrors: nextErrors);
   }
 
@@ -482,9 +556,15 @@ class JobExecutionNotifier extends StateNotifier<JobExecutionState> {
     clearStepError(step);
   }
 
-  Future<void> pickAndUploadPhotos(JobExecutionPhotoType type) async {
+  Future<void> pickAndUploadPhotos(
+    JobExecutionPhotoType type, {
+    ImageSource source = ImageSource.gallery,
+  }) async {
     final booking = _booking;
-    final currentPhotos = type == JobExecutionPhotoType.before ? state.beforePhotos : state.afterPhotos;
+    final bookingId = booking.bookingId;
+    final currentPhotos = type == JobExecutionPhotoType.before
+        ? state.beforePhotos
+        : state.afterPhotos;
     final remainingSlots = max(0, 5 - currentPhotos.length);
     if (remainingSlots == 0) {
       _setStepError(
@@ -497,8 +577,14 @@ class JobExecutionNotifier extends StateNotifier<JobExecutionState> {
       return;
     }
 
-    final picked = await _imagePicker.pickMultiImage();
-    if (picked.isEmpty) {
+    final List<XFile> picked;
+    if (source == ImageSource.camera) {
+      final photo = await _imagePicker.pickImage(source: source);
+      picked = photo == null ? const [] : [photo];
+    } else {
+      picked = await _imagePicker.pickMultiImage();
+    }
+    if (picked.isEmpty || !_isCurrentBooking(bookingId)) {
       return;
     }
 
@@ -525,17 +611,19 @@ class JobExecutionNotifier extends StateNotifier<JobExecutionState> {
       final compressedDrafts = <JobExecutionPhotoDraft>[];
       for (final draft in newDrafts) {
         final compressedFile = await _compressPhotoForUpload(draft.file);
+        if (!_isCurrentBooking(bookingId)) return;
         compressedDrafts.add(
-          draft.copyWith(file: compressedFile, uploading: true, clearErrorMessage: true),
+          draft.copyWith(
+            file: compressedFile,
+            uploading: true,
+            clearErrorMessage: true,
+          ),
         );
-        state = _replaceDrafts(
-          type,
-          [
-            ...currentPhotos,
-            ...compressedDrafts,
-            ...newDrafts.skip(compressedDrafts.length),
-          ],
-        );
+        state = _replaceDrafts(type, [
+          ...currentPhotos,
+          ...compressedDrafts,
+          ...newDrafts.skip(compressedDrafts.length),
+        ]);
       }
 
       await _uploadPhotos(
@@ -545,7 +633,9 @@ class JobExecutionNotifier extends StateNotifier<JobExecutionState> {
         manageLoading: false,
       );
     } finally {
-      _setLoading(_photoStepFor(type), false);
+      if (_isCurrentBooking(bookingId)) {
+        _setLoading(_photoStepFor(type), false);
+      }
     }
   }
 
@@ -555,8 +645,10 @@ class JobExecutionNotifier extends StateNotifier<JobExecutionState> {
   }
 
   Future<void> markArrived() async {
-    final booking = _booking;
     const step = JobExecutionStep.arrival;
+    if (state.isLoading(step)) return;
+    final booking = _booking;
+    final bookingId = booking.bookingId;
     _setLoading(step, true);
     _clearStepError(step);
 
@@ -564,34 +656,33 @@ class JobExecutionNotifier extends StateNotifier<JobExecutionState> {
       final position = await _resolvePosition();
       await _dio.post<Map<String, dynamic>>(
         '/bookings/${booking.bookingId}/arrive',
-        data: {
-          'workerLat': position.latitude,
-          'workerLng': position.longitude,
-        },
+        data: {'workerLat': position.latitude, 'workerLng': position.longitude},
       );
-      state = state.copyWith(
-        currentPosition: position,
-        currentStep: 2,
-      );
+      if (!_isCurrentBooking(bookingId)) return;
+      state = state.copyWith(currentPosition: position, currentStep: 2);
       _cancelTracking(); // Stop live location once arrived
     } on JobExecutionStepError catch (error) {
-      _setStepError(step, error);
+      if (_isCurrentBooking(bookingId)) _setStepError(step, error);
     } catch (error) {
-      _setStepError(
-        step,
-        JobExecutionStepError(
-          kind: JobExecutionErrorKind.network,
-          message: _readErrorMessage(error),
-        ),
-      );
+      if (_isCurrentBooking(bookingId)) {
+        _setStepError(
+          step,
+          JobExecutionStepError(
+            kind: JobExecutionErrorKind.network,
+            message: _readErrorMessage(error),
+          ),
+        );
+      }
     } finally {
-      _setLoading(step, false);
+      if (_isCurrentBooking(bookingId)) _setLoading(step, false);
     }
   }
 
   Future<void> verifyArrivalOtp(String otpInput) async {
-    final booking = _booking;
     const step = JobExecutionStep.arrivalOtp;
+    if (state.isLoading(step)) return;
+    final booking = _booking;
+    final bookingId = booking.bookingId;
     _setLoading(step, true);
     _clearStepError(step);
 
@@ -600,25 +691,30 @@ class JobExecutionNotifier extends StateNotifier<JobExecutionState> {
         '/bookings/${booking.bookingId}/verify-arrival-otp',
         data: {'otpInput': otpInput},
       );
+      if (!_isCurrentBooking(bookingId)) return;
       state = state.copyWith(currentStep: 3);
     } on JobExecutionStepError catch (error) {
-      _setStepError(step, error);
+      if (_isCurrentBooking(bookingId)) _setStepError(step, error);
     } catch (error) {
-      _setStepError(
-        step,
-        JobExecutionStepError(
-          kind: JobExecutionErrorKind.network,
-          message: _readErrorMessage(error),
-        ),
-      );
+      if (_isCurrentBooking(bookingId)) {
+        _setStepError(
+          step,
+          JobExecutionStepError(
+            kind: JobExecutionErrorKind.network,
+            message: _readErrorMessage(error),
+          ),
+        );
+      }
     } finally {
-      _setLoading(step, false);
+      if (_isCurrentBooking(bookingId)) _setLoading(step, false);
     }
   }
 
   Future<void> loadChecklistTemplate() async {
-    final booking = _booking;
     const step = JobExecutionStep.checklist;
+    if (state.isLoading(step)) return;
+    final booking = _booking;
+    final bookingId = booking.bookingId;
     if (state.checklistLoaded) {
       state = state.copyWith(currentStep: max(state.currentStep, 4));
       return;
@@ -628,37 +724,50 @@ class JobExecutionNotifier extends StateNotifier<JobExecutionState> {
     _clearStepError(step);
 
     try {
-      final response = await _dio.get<dynamic>('/services/${booking.serviceId}/checklist-template');
+      final response = await _dio.get<dynamic>(
+        '/services/${booking.serviceId}/checklist-template',
+      );
       final items = _parseChecklistItems(response.data);
+      if (!_isCurrentBooking(bookingId)) return;
       state = state.copyWith(
         currentStep: max(state.currentStep, 4),
         checklistLoaded: true,
         checklistItems: items,
       );
     } on JobExecutionStepError catch (error) {
-      _setStepError(step, error);
+      if (_isCurrentBooking(bookingId)) _setStepError(step, error);
     } catch (error) {
-      _setStepError(
-        step,
-        JobExecutionStepError(
-          kind: JobExecutionErrorKind.network,
-          message: _readErrorMessage(error),
-        ),
-      );
+      if (_isCurrentBooking(bookingId)) {
+        _setStepError(
+          step,
+          JobExecutionStepError(
+            kind: JobExecutionErrorKind.network,
+            message: _readErrorMessage(error),
+          ),
+        );
+      }
     } finally {
-      _setLoading(step, false);
+      if (_isCurrentBooking(bookingId)) _setLoading(step, false);
     }
   }
 
   Future<void> toggleChecklistItem(String itemId, bool completed) async {
-    final booking = _booking;
     const step = JobExecutionStep.checklist;
+    if (state.isLoading(step)) return;
+    final booking = _booking;
+    final bookingId = booking.bookingId;
     final previousItems = state.checklistItems;
     final nextItems = state.checklistItems
-        .map((item) => item.id == itemId ? item.copyWith(completed: completed) : item)
+        .map(
+          (item) =>
+              item.id == itemId ? item.copyWith(completed: completed) : item,
+        )
         .toList(growable: false);
 
-    state = state.copyWith(checklistItems: nextItems, currentStep: max(state.currentStep, 4));
+    state = state.copyWith(
+      checklistItems: nextItems,
+      currentStep: max(state.currentStep, 4),
+    );
     _setLoading(step, true);
     _clearStepError(step);
 
@@ -666,32 +775,40 @@ class JobExecutionNotifier extends StateNotifier<JobExecutionState> {
       await _dio.patch<Map<String, dynamic>>(
         '/bookings/${booking.bookingId}/checklist',
         data: {
-          'items': nextItems.map((item) => item.toPayload()).toList(growable: false),
+          'items':
+              nextItems.map((item) => item.toPayload()).toList(growable: false),
         },
       );
+      if (!_isCurrentBooking(bookingId)) return;
       if (state.allRequiredChecklistComplete) {
         state = state.copyWith(currentStep: max(state.currentStep, 5));
       }
     } on JobExecutionStepError catch (error) {
-      state = state.copyWith(checklistItems: previousItems);
-      _setStepError(step, error);
+      if (_isCurrentBooking(bookingId)) {
+        state = state.copyWith(checklistItems: previousItems);
+        _setStepError(step, error);
+      }
     } catch (error) {
-      state = state.copyWith(checklistItems: previousItems);
-      _setStepError(
-        step,
-        JobExecutionStepError(
-          kind: JobExecutionErrorKind.network,
-          message: _readErrorMessage(error),
-        ),
-      );
+      if (_isCurrentBooking(bookingId)) {
+        state = state.copyWith(checklistItems: previousItems);
+        _setStepError(
+          step,
+          JobExecutionStepError(
+            kind: JobExecutionErrorKind.network,
+            message: _readErrorMessage(error),
+          ),
+        );
+      }
     } finally {
-      _setLoading(step, false);
+      if (_isCurrentBooking(bookingId)) _setLoading(step, false);
     }
   }
 
   Future<void> requestCompletionOtp() async {
-    final booking = _booking;
     const step = JobExecutionStep.completionRequest;
+    if (state.isLoading(step)) return;
+    final booking = _booking;
+    final bookingId = booking.bookingId;
     _setLoading(step, true);
     _clearStepError(step);
     state = state.copyWith(completionBlocker: null);
@@ -701,29 +818,35 @@ class JobExecutionNotifier extends StateNotifier<JobExecutionState> {
         '/bookings/${booking.bookingId}/request-completion-otp',
         data: const <String, dynamic>{},
       );
+      if (!_isCurrentBooking(bookingId)) return;
       state = state.copyWith(currentStep: 7);
     } on DioException catch (error) {
+      if (!_isCurrentBooking(bookingId)) return;
       final parsed = _parseStepError(error);
       if (parsed.kind == JobExecutionErrorKind.incompleteJob) {
         state = state.copyWith(completionBlocker: parsed);
       }
       _setStepError(step, parsed);
     } catch (error) {
-      _setStepError(
-        step,
-        JobExecutionStepError(
-          kind: JobExecutionErrorKind.network,
-          message: _readErrorMessage(error),
-        ),
-      );
+      if (_isCurrentBooking(bookingId)) {
+        _setStepError(
+          step,
+          JobExecutionStepError(
+            kind: JobExecutionErrorKind.network,
+            message: _readErrorMessage(error),
+          ),
+        );
+      }
     } finally {
-      _setLoading(step, false);
+      if (_isCurrentBooking(bookingId)) _setLoading(step, false);
     }
   }
 
   Future<void> verifyCompletionOtp(String otpInput) async {
-    final booking = _booking;
     const step = JobExecutionStep.completionOtp;
+    if (state.isLoading(step)) return;
+    final booking = _booking;
+    final bookingId = booking.bookingId;
     _setLoading(step, true);
     _clearStepError(step);
 
@@ -732,44 +855,54 @@ class JobExecutionNotifier extends StateNotifier<JobExecutionState> {
         '/bookings/${booking.bookingId}/verify-completion-otp',
         data: {'otpInput': otpInput},
       );
+      if (!_isCurrentBooking(bookingId)) return;
       state = state.copyWith(
         currentStep: 7,
         summary: JobExecutionSummary(
           title: 'Job completed successfully',
-          subtitle: '${booking.serviceName} for ${booking.customerName} is complete.',
+          subtitle:
+              '${booking.serviceName} for ${booking.customerName} is complete.',
           earningsLabel: booking.earningsLabel,
           completedAtLabel: 'Completed just now',
         ),
       );
     } on JobExecutionStepError catch (error) {
-      _setStepError(step, error);
+      if (_isCurrentBooking(bookingId)) _setStepError(step, error);
     } catch (error) {
-      _setStepError(
-        step,
-        JobExecutionStepError(
-          kind: JobExecutionErrorKind.network,
-          message: _readErrorMessage(error),
-        ),
-      );
+      if (_isCurrentBooking(bookingId)) {
+        _setStepError(
+          step,
+          JobExecutionStepError(
+            kind: JobExecutionErrorKind.network,
+            message: _readErrorMessage(error),
+          ),
+        );
+      }
     } finally {
-      _setLoading(step, false);
+      if (_isCurrentBooking(bookingId)) _setLoading(step, false);
     }
   }
 
   Future<void> _uploadPhotos(
     JobExecutionPhotoType type,
     Set<String> draftIds,
-    JobExecutionBooking booking,
-    {bool manageLoading = true}
-  ) async {
+    JobExecutionBooking booking, {
+    bool manageLoading = true,
+  }) async {
     final step = _photoStepFor(type);
+    final bookingId = booking.bookingId;
+    if (!_isCurrentBooking(bookingId)) return;
     if (manageLoading) {
       _setLoading(step, true);
       _clearStepError(step);
     }
 
-    final currentPhotos = type == JobExecutionPhotoType.before ? state.beforePhotos : state.afterPhotos;
-    final selectedDrafts = currentPhotos.where((draft) => draftIds.contains(draft.id)).toList(growable: false);
+    final currentPhotos = type == JobExecutionPhotoType.before
+        ? state.beforePhotos
+        : state.afterPhotos;
+    final selectedDrafts = currentPhotos
+        .where((draft) => draftIds.contains(draft.id))
+        .toList(growable: false);
     if (selectedDrafts.isEmpty) {
       if (manageLoading) {
         _setLoading(step, false);
@@ -781,10 +914,7 @@ class JobExecutionNotifier extends StateNotifier<JobExecutionState> {
     try {
       final signature = await _dio.post<Map<String, dynamic>>(
         '/uploads/signature',
-        data: {
-          'bookingId': booking.bookingId,
-          'type': type.name,
-        },
+        data: {'bookingId': booking.bookingId, 'type': type.name},
       );
       final payload = signature.data ?? <String, dynamic>{};
       final uploadUrl = payload['uploadUrl'] as String? ?? '';
@@ -819,7 +949,9 @@ class JobExecutionNotifier extends StateNotifier<JobExecutionState> {
                     : item,
               )
               .toList(growable: false);
-          state = _replaceDrafts(type, nextPhotos);
+          if (_isCurrentBooking(bookingId)) {
+            state = _replaceDrafts(type, nextPhotos);
+          }
         } catch (error) {
           final isNetworkError = error is DioException &&
               (error.type == DioExceptionType.connectionError ||
@@ -849,27 +981,28 @@ class JobExecutionNotifier extends StateNotifier<JobExecutionState> {
                       : item,
                 )
                 .toList(growable: false);
-            state = _replaceDrafts(type, nextPhotos);
+            if (_isCurrentBooking(bookingId)) {
+              state = _replaceDrafts(type, nextPhotos);
+            }
           } else {
             final message = _readErrorMessage(error);
             nextPhotos = nextPhotos
                 .map(
                   (item) => item.id == draft.id
-                      ? item.copyWith(
-                          uploading: false,
-                          errorMessage: message,
-                        )
+                      ? item.copyWith(uploading: false, errorMessage: message)
                       : item,
                 )
                 .toList(growable: false);
-            state = _replaceDrafts(type, nextPhotos);
-            _setStepError(
-              step,
-              JobExecutionStepError(
-                kind: JobExecutionErrorKind.network,
-                message: message,
-              ),
-            );
+            if (_isCurrentBooking(bookingId)) {
+              state = _replaceDrafts(type, nextPhotos);
+              _setStepError(
+                step,
+                JobExecutionStepError(
+                  kind: JobExecutionErrorKind.network,
+                  message: message,
+                ),
+              );
+            }
           }
         }
       }
@@ -877,10 +1010,7 @@ class JobExecutionNotifier extends StateNotifier<JobExecutionState> {
       if (successfulUrls.isNotEmpty) {
         await _dio.post<Map<String, dynamic>>(
           '/bookings/${booking.bookingId}/photos',
-          data: {
-            'photoUrls': successfulUrls,
-            'type': type.name,
-          },
+          data: {'photoUrls': successfulUrls, 'type': type.name},
         );
       }
 
@@ -891,25 +1021,50 @@ class JobExecutionNotifier extends StateNotifier<JobExecutionState> {
                 : item,
           )
           .toList(growable: false);
-      state = _replaceDrafts(type, nextPhotos);
+      if (_isCurrentBooking(bookingId)) {
+        state = _replaceDrafts(type, nextPhotos);
+      }
 
-      if (type == JobExecutionPhotoType.before && nextPhotos.every((draft) => draft.isUploaded)) {
+      if (_isCurrentBooking(bookingId) &&
+          type == JobExecutionPhotoType.before &&
+          nextPhotos.every((draft) => draft.isUploaded)) {
         await loadChecklistTemplate();
-        state = state.copyWith(currentStep: max(state.currentStep, 4));
-      } else if (type == JobExecutionPhotoType.after && nextPhotos.every((draft) => draft.isUploaded)) {
+        if (_isCurrentBooking(bookingId) && state.checklistLoaded) {
+          state = state.copyWith(currentStep: max(state.currentStep, 4));
+        }
+      } else if (_isCurrentBooking(bookingId) &&
+          type == JobExecutionPhotoType.after &&
+          nextPhotos.every((draft) => draft.isUploaded)) {
         state = state.copyWith(currentStep: max(state.currentStep, 6));
       }
     } catch (error) {
       final message = _readErrorMessage(error);
-      _setStepError(
-        step,
-        JobExecutionStepError(
-          kind: JobExecutionErrorKind.network,
-          message: message,
-        ),
-      );
+      if (_isCurrentBooking(bookingId)) {
+        final currentPhotos = type == JobExecutionPhotoType.before
+            ? state.beforePhotos
+            : state.afterPhotos;
+        final failedPhotos = currentPhotos
+            .map(
+              (draft) => draftIds.contains(draft.id)
+                  ? draft.copyWith(
+                      uploading: false,
+                      errorMessage: message,
+                      isQueued: false,
+                    )
+                  : draft,
+            )
+            .toList(growable: false);
+        state = _replaceDrafts(type, failedPhotos);
+        _setStepError(
+          step,
+          JobExecutionStepError(
+            kind: JobExecutionErrorKind.network,
+            message: message,
+          ),
+        );
+      }
     } finally {
-      if (manageLoading) {
+      if (manageLoading && _isCurrentBooking(bookingId)) {
         _setLoading(step, false);
       }
     }
@@ -939,14 +1094,13 @@ class JobExecutionNotifier extends StateNotifier<JobExecutionState> {
     if (permission == LocationPermission.deniedForever) {
       throw const JobExecutionStepError(
         kind: JobExecutionErrorKind.location,
-        message: 'Location permission is permanently denied. Open settings to continue.',
+        message:
+            'Location permission is permanently denied. Open settings to continue.',
       );
     }
 
     return Geolocator.getCurrentPosition(
-      locationSettings: const LocationSettings(
-        accuracy: LocationAccuracy.high,
-      ),
+      locationSettings: const LocationSettings(accuracy: LocationAccuracy.high),
     );
   }
 
@@ -1037,7 +1191,11 @@ class JobExecutionNotifier extends StateNotifier<JobExecutionState> {
       if (items is List) {
         rawItems.addAll(items);
       } else if (items is Map<String, dynamic>) {
-        rawItems.addAll(items.entries.map((entry) => {'label': entry.key, 'completed': entry.value}));
+        rawItems.addAll(
+          items.entries.map(
+            (entry) => {'label': entry.key, 'completed': entry.value},
+          ),
+        );
       }
     }
 
@@ -1049,8 +1207,11 @@ class JobExecutionNotifier extends StateNotifier<JobExecutionState> {
             _stringValue(item['name']) ??
             _stringValue(item['title']) ??
             'Item ${index + 1}';
-        final order = _intValue(item['order']) ?? _intValue(item['sortOrder']) ?? index;
-        final requiresPhoto = _boolValue(item['requiresPhoto']) ?? _boolValue(item['photoRequired']) ?? false;
+        final order =
+            _intValue(item['order']) ?? _intValue(item['sortOrder']) ?? index;
+        final requiresPhoto = _boolValue(item['requiresPhoto']) ??
+            _boolValue(item['photoRequired']) ??
+            false;
         final required = _boolValue(item['required']) ?? true;
         final completed = _boolValue(item['completed']) ??
             _boolValue(item['checked']) ??
@@ -1178,16 +1339,22 @@ class JobExecutionNotifier extends StateNotifier<JobExecutionState> {
   }
 
   void _setStepError(JobExecutionStep step, JobExecutionStepError error) {
-    final nextErrors = Map<JobExecutionStep, JobExecutionStepError>.from(state.stepErrors)
-      ..[step] = error;
+    final nextErrors = Map<JobExecutionStep, JobExecutionStepError>.from(
+      state.stepErrors,
+    )..[step] = error;
     state = state.copyWith(stepErrors: nextErrors);
   }
 
   JobExecutionStep _photoStepFor(JobExecutionPhotoType type) {
-    return type == JobExecutionPhotoType.before ? JobExecutionStep.beforePhotos : JobExecutionStep.afterPhotos;
+    return type == JobExecutionPhotoType.before
+        ? JobExecutionStep.beforePhotos
+        : JobExecutionStep.afterPhotos;
   }
 
-  JobExecutionState _replaceDrafts(JobExecutionPhotoType type, List<JobExecutionPhotoDraft> drafts) {
+  JobExecutionState _replaceDrafts(
+    JobExecutionPhotoType type,
+    List<JobExecutionPhotoDraft> drafts,
+  ) {
     return type == JobExecutionPhotoType.before
         ? state.copyWith(beforePhotos: drafts)
         : state.copyWith(afterPhotos: drafts);

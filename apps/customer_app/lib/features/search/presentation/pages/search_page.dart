@@ -193,27 +193,6 @@ class _SearchPageState extends ConsumerState<SearchPage> {
   bool get _hasBrowseSelection =>
       _selectedCategorySlug != null || _selectedSubcategorySlug != null;
 
-  String _browseLabel(List<CatalogCategory> categories) {
-    if (_selectedSubcategorySlug != null) {
-      final subcategory = categories
-          .expand((category) => category.subcategories)
-          .where((item) => item.slug == _selectedSubcategorySlug)
-          .firstOrNull;
-      if (subcategory != null) {
-        return subcategory.name;
-      }
-    }
-    if (_selectedCategorySlug != null) {
-      final category = categories
-          .where((item) => item.slug == _selectedCategorySlug)
-          .firstOrNull;
-      if (category != null) {
-        return category.name;
-      }
-    }
-    return 'Browse';
-  }
-
   @override
   void dispose() {
     _searchDebounce?.cancel();
@@ -240,10 +219,19 @@ class _SearchPageState extends ConsumerState<SearchPage> {
     final categorySlugById = <String, String>{
       for (final category in catalogCategories) category.id: category.slug,
     };
+    final activeFilterLabels = <String>[
+      if (_selectedCategorySlug != null)
+        ...catalogCategories
+            .where((category) => category.slug == _selectedCategorySlug)
+            .map((category) => category.name),
+      if (_selectedSubcategorySlug != null)
+        ...catalogSubcategories
+            .where((subcategory) =>
+                subcategory.slug == _selectedSubcategorySlug)
+            .map((subcategory) => subcategory.name),
+    ];
     final showResults = _inputQuery.trim().isNotEmpty || _hasBrowseSelection;
     final isDebouncing = _inputQuery.trim() != _query.trim();
-    final browseLabel = _browseLabel(catalogCategories);
-
     final trendingItems = [
       ...catalogCategories.take(6).toList().asMap().entries.map((e) {
         final cat = e.value;
@@ -359,9 +347,9 @@ class _SearchPageState extends ConsumerState<SearchPage> {
                 subtitle: 'Check your connection and try browsing again.',
                 onRetry: () => ref.invalidate(homeCatalogProvider),
                 onRefresh: () async {
-                  await ref.refresh(homeCatalogProvider.future).then<void>(
-                    (_) {},
-                  );
+                  await ref
+                      .refresh(homeCatalogProvider.future)
+                      .then<void>((_) {});
                 },
               ),
             )
@@ -370,7 +358,8 @@ class _SearchPageState extends ConsumerState<SearchPage> {
           : searchAsync.when(
               data: (results) => _SearchResults(
                 results: results,
-                query: _query.isNotEmpty ? _query : browseLabel,
+                query: _query,
+                activeFilters: activeFilterLabels,
                 onResultTap: _addToRecent,
                 onClearSearch: _clearSearch,
               ),
@@ -650,11 +639,13 @@ class _SearchResults extends StatelessWidget {
   const _SearchResults({
     required this.results,
     required this.query,
+    required this.activeFilters,
     this.onResultTap,
     required this.onClearSearch,
   });
   final List<CatalogService> results;
   final String query;
+  final List<String> activeFilters;
   final ValueChanged<String>? onResultTap;
   final VoidCallback onClearSearch;
 
@@ -686,7 +677,9 @@ class _SearchResults extends StatelessWidget {
                   ),
                   const SizedBox(height: 14),
                   Text(
-                    'No results for "$query"',
+                    query.trim().isNotEmpty
+                        ? 'No results for "$query"'
+                        : 'No services in these filters',
                     textAlign: TextAlign.center,
                     style: Theme.of(context).textTheme.titleMedium?.copyWith(
                       fontWeight: FontWeight.w800,
@@ -715,11 +708,91 @@ class _SearchResults extends StatelessWidget {
       );
     }
     return ListView.separated(
-      padding: const EdgeInsets.all(24),
-      itemCount: results.length,
+      padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+      itemCount: results.length + 1,
       separatorBuilder: (_, __) => const SizedBox(height: 12),
       itemBuilder: (context, i) {
-        final item = results[i];
+        if (i == 0) {
+          final countLabel = results.length == 1 ? 'service' : 'services';
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 2),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        '${results.length} $countLabel found',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                if (query.trim().isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Container(
+                      constraints: const BoxConstraints(maxWidth: 180),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 6,
+                      ),
+                      decoration: BoxDecoration(
+                        color: cs.primary.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                      child: Text(
+                        query,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                          color: cs.primary,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+                if (activeFilters.isNotEmpty) ...[
+                  const SizedBox(height: 10),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 6,
+                    children: activeFilters
+                        .map(
+                          (filter) => Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 9,
+                              vertical: 5,
+                            ),
+                            decoration: BoxDecoration(
+                              color: cs.surfaceContainerHighest,
+                              borderRadius: BorderRadius.circular(999),
+                            ),
+                            child: Text(
+                              filter,
+                              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                                color: cs.onSurfaceVariant,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                        )
+                        .toList(growable: false),
+                  ),
+                ],
+              ],
+            ),
+          );
+        }
+
+        final item = results[i - 1];
         const accent = AbzioTheme.accentColor;
         final imageUrl = item.images.isEmpty ? null : item.images.first.url;
 
@@ -767,6 +840,8 @@ class _SearchResults extends StatelessWidget {
                       children: [
                         Text(
                           item.name,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
                           style: Theme.of(context).textTheme.titleMedium
                               ?.copyWith(fontWeight: FontWeight.w700),
                         ),
@@ -774,19 +849,54 @@ class _SearchResults extends StatelessWidget {
                           const SizedBox(height: 4),
                           Text(
                             item.hierarchyLabel,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                             style: Theme.of(context).textTheme.bodySmall
                                 ?.copyWith(color: cs.onSurfaceVariant),
                           ),
                         ],
-                        if (item.startingPrice > 0)
-                          Text(
-                            'From ₹${item.startingPrice.toInt()}',
-                            style: Theme.of(context).textTheme.bodySmall
-                                ?.copyWith(
-                                  color: cs.primary,
-                                  fontWeight: FontWeight.w600,
+                        if (item.startingPrice > 0 || item.rating > 0) ...[
+                          const SizedBox(height: 6),
+                          Row(
+                            children: [
+                              if (item.startingPrice > 0)
+                                Expanded(
+                                  child: Text(
+                                    'From ₹${item.startingPrice.toInt()}',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .bodySmall
+                                        ?.copyWith(
+                                          color: cs.primary,
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                  ),
                                 ),
+                              if (item.rating > 0) ...[
+                                if (item.startingPrice > 0)
+                                  const SizedBox(width: 10),
+                                const Icon(
+                                  Icons.star_rounded,
+                                  size: 15,
+                                  color: Color(0xFFF59E0B),
+                                ),
+                                const SizedBox(width: 3),
+                                Text(
+                                  item.rating.toStringAsFixed(1),
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .bodySmall
+                                      ?.copyWith(
+                                        color: cs.onSurfaceVariant,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                ),
+                              ],
+                            ],
                           ),
+                        ],
                       ],
                     ),
                   ),

@@ -54,7 +54,7 @@ class HomeFeaturedBanner extends StatelessWidget {
                   const SizedBox(height: 8),
                   Text(
                     title,
-                    style: GoogleFonts.poppins(
+                    style: GoogleFonts.outfit(
                       fontSize: 16,
                       fontWeight: FontWeight.w700,
                       color: AbzioTheme.lightTextPrimary,
@@ -65,7 +65,7 @@ class HomeFeaturedBanner extends StatelessWidget {
                   const SizedBox(height: 6),
                   Text(
                     subtitle,
-                    style: GoogleFonts.inter(
+                    style: GoogleFonts.outfit(
                       fontSize: 12.5,
                       color: AbzioTheme.lightTextSecondary,
                       height: 1.4,
@@ -81,7 +81,7 @@ class HomeFeaturedBanner extends StatelessWidget {
                     ),
                     child: Text(
                       actionLabel,
-                      style: GoogleFonts.poppins(
+                      style: GoogleFonts.outfit(
                         fontSize: 13,
                         fontWeight: FontWeight.w600,
                         color: Colors.black,

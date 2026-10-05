@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { prisma as db } from "../../lib/prisma.js";
 import { AppError } from "../../lib/app-error.js";
 import { env } from "../../config/env.js";
@@ -158,7 +159,8 @@ export async function requestWorkerPayout(input: {
         referenceType: "PAYOUT_REQUEST",
         metadata: {
           requestedAt: new Date().toISOString(),
-          payoutDestination: "verified_upi"
+          payoutDestination: "verified_upi",
+          providerAttemptId: randomUUID()
         }
       }
     });
@@ -294,6 +296,113 @@ function getRazorpayAccountNumber(): string {
   return env.RAZORPAY_ACCOUNT_NUMBER.trim();
 }
 
+type WalletPayoutProviderStatus = "processed" | "failed" | "reversed";
+
+export async function settleWalletPayoutFromProvider(input: {
+  transactionId: string;
+  providerPayoutId: string;
+  providerAttemptId?: string;
+  status: WalletPayoutProviderStatus;
+  failureReason?: string;
+}): Promise<boolean> {
+  if (input.status === "processed") {
+    return db.$transaction(async (tx) => {
+      const payout = await tx.walletTransaction.findUnique({ where: { id: input.transactionId } });
+      if (!payout) return false;
+      const metadata = typeof payout.metadata === "object" && payout.metadata !== null
+        ? payout.metadata as Record<string, unknown>
+        : {};
+      if (payout.type !== "PAYOUT_PENDING") return payout.type === "PAYOUT_SUCCESS";
+      if (input.providerAttemptId && metadata.providerAttemptId &&
+          metadata.providerAttemptId !== input.providerAttemptId) return false;
+      if (typeof metadata.razorpayPayoutId === "string" &&
+          metadata.razorpayPayoutId !== input.providerPayoutId) return false;
+
+      const result = await tx.walletTransaction.updateMany({
+        where: { id: payout.id, type: "PAYOUT_PENDING" },
+        data: {
+          type: "PAYOUT_SUCCESS",
+          metadata: {
+            ...metadata,
+            ...(input.providerAttemptId ? { providerAttemptId: input.providerAttemptId } : {}),
+            razorpayPayoutId: input.providerPayoutId,
+            providerStatus: "processed",
+            processedAt: new Date().toISOString()
+          }
+        }
+      });
+      return result.count > 0;
+    });
+  }
+
+  return settleWalletPayout(
+    input.transactionId,
+    input.providerPayoutId,
+    input.providerAttemptId,
+    input.status,
+    input.failureReason ?? `Razorpay payout ${input.status}`
+  );
+}
+
+async function settleWalletPayout(
+  transactionId: string,
+  providerPayoutId: string,
+  providerAttemptId: string | undefined,
+  status: "failed" | "reversed",
+  failureReason: string
+): Promise<boolean> {
+  return db.$transaction(async (tx) => {
+    const payout = await tx.walletTransaction.findUnique({ where: { id: transactionId } });
+    if (!payout) return false;
+    const metadata = typeof payout.metadata === "object" && payout.metadata !== null
+      ? payout.metadata as Record<string, unknown>
+      : {};
+    const allowedTypes = status === "reversed"
+      ? ["PAYOUT_PENDING", "PAYOUT_SUCCESS"]
+      : ["PAYOUT_PENDING"];
+    if (!allowedTypes.includes(payout.type)) return false;
+    if (providerAttemptId && metadata.providerAttemptId &&
+        metadata.providerAttemptId !== providerAttemptId) return false;
+    if (typeof metadata.razorpayPayoutId === "string" &&
+        metadata.razorpayPayoutId !== providerPayoutId) return false;
+
+    const claimed = await tx.walletTransaction.updateMany({
+      where: { id: payout.id, type: { in: allowedTypes } },
+      data: {
+        type: "PAYOUT_FAILED",
+        metadata: {
+          ...metadata,
+          ...(providerAttemptId ? { providerAttemptId } : {}),
+          razorpayPayoutId: providerPayoutId,
+          providerStatus: status,
+          failureReason,
+          processedAt: new Date().toISOString()
+        }
+      }
+    });
+    if (claimed.count === 0) return false;
+
+    const refundAmount = Math.abs(Number(payout.amount));
+    const updatedUser = await tx.user.update({
+      where: { id: payout.userId },
+      data: { walletBalance: { increment: refundAmount } }
+    });
+    await tx.walletTransaction.create({
+      data: {
+        userId: payout.userId,
+        workerId: payout.workerId,
+        type: "PAYOUT_REFUND",
+        amount: refundAmount,
+        referenceType: status === "reversed" ? "PAYOUT_REVERSED" : "PAYOUT_FAILED",
+        referenceId: payout.id,
+        balanceAfter: updatedUser.walletBalance,
+        metadata: { note: "Refund for payout not delivered", providerPayoutId, failureReason }
+      }
+    });
+    return true;
+  });
+}
+
 export async function processPendingWalletPayouts(): Promise<void> {
   const pendingTransactions = await db.walletTransaction.findMany({
     where: {
@@ -314,7 +423,10 @@ export async function processPendingWalletPayouts(): Promise<void> {
   logger.info({ count: pendingTransactions.length }, "Wallet payout processor: found pending requests");
 
   for (const tx of pendingTransactions) {
-    if ((tx.metadata as { reconciliationRequired?: boolean } | null)?.reconciliationRequired) {
+    const currentMetadata = typeof tx.metadata === "object" && tx.metadata !== null
+      ? tx.metadata as Record<string, unknown>
+      : {};
+    if (currentMetadata.reconciliationRequired || currentMetadata.razorpayPayoutId) {
       continue;
     }
 
@@ -329,6 +441,9 @@ export async function processPendingWalletPayouts(): Promise<void> {
       
       const workerName = tx.worker?.fullName ?? tx.worker?.displayName ?? tx.user.name;
       const workerPhone = tx.user.phone?.replace(/\D/g, "") ?? "0000000000";
+      const providerAttemptId = typeof currentMetadata.providerAttemptId === "string"
+        ? currentMetadata.providerAttemptId
+        : tx.id;
 
       const fundAccount = {
         account_type: "vpa",
@@ -349,7 +464,7 @@ export async function processPendingWalletPayouts(): Promise<void> {
         headers: {
           Authorization: getRazorpayAuthHeader(),
           "Content-Type": "application/json",
-          "X-Payout-Idempotency": tx.id
+          "X-Payout-Idempotency": providerAttemptId
         },
         body: JSON.stringify({
           account_number: getRazorpayAccountNumber(),
@@ -363,6 +478,7 @@ export async function processPendingWalletPayouts(): Promise<void> {
           fund_account: fundAccount,
           notes: {
             walletTransactionId: tx.id,
+            payoutAttemptId: providerAttemptId,
             workerId: tx.workerId ?? tx.userId
           }
         })
@@ -407,20 +523,36 @@ export async function processPendingWalletPayouts(): Promise<void> {
         continue;
       }
 
-      // Success! Update transaction
-      await db.walletTransaction.update({
-        where: { id: tx.id },
-        data: {
-          type: "PAYOUT_SUCCESS",
-          metadata: {
-            ...(typeof tx.metadata === 'object' && tx.metadata !== null ? tx.metadata : {}),
-            razorpayPayoutId,
-            processedAt: new Date().toISOString(),
-          }
-        }
-      });
-      
-      logger.info({ txId: tx.id, razorpayPayoutId }, "Wallet payout processor: request successful");
+      const providerStatus = typeof payload.status === "string" ? payload.status.toLowerCase() : "";
+      const metadata = {
+        ...currentMetadata,
+        providerAttemptId,
+        razorpayPayoutId,
+        providerStatus,
+        lastAttemptAt: new Date().toISOString()
+      };
+      if (providerStatus === "processed") {
+        await settleWalletPayoutFromProvider({
+          transactionId: tx.id,
+          providerPayoutId: razorpayPayoutId,
+          providerAttemptId,
+          status: "processed"
+        });
+      } else if (providerStatus === "failed" || providerStatus === "reversed") {
+        await settleWalletPayoutFromProvider({
+          transactionId: tx.id,
+          providerPayoutId: razorpayPayoutId,
+          providerAttemptId,
+          status: providerStatus
+        });
+      } else {
+        await db.walletTransaction.updateMany({
+          where: { id: tx.id, type: "PAYOUT_PENDING" },
+          data: { metadata }
+        });
+      }
+
+      logger.info({ txId: tx.id, razorpayPayoutId, providerStatus }, "Wallet payout provider response recorded");
 
     } catch (error) {
       const reason = error instanceof Error ? error.name : "UnknownError";
@@ -445,46 +577,16 @@ export async function processPendingWalletPayouts(): Promise<void> {
         continue;
       }
       
-      // Update transaction to failed and refund the wallet
-      await db.$transaction(async (prismaTx) => {
-        const claimed = await prismaTx.walletTransaction.updateMany({
-          where: { id: tx.id, type: "PAYOUT_PENDING" },
-          data: {
-            type: "PAYOUT_FAILED",
-            metadata: {
-              ...(typeof tx.metadata === 'object' && tx.metadata !== null ? tx.metadata : {}),
-              failureCode: reason,
-              processedAt: new Date().toISOString(),
-            }
-          }
-        });
-
-        if (claimed.count === 0) return;
-
-        // Refund user wallet
-        const refundAmount = Math.abs(Number(tx.amount));
-        const updatedUser = await prismaTx.user.update({
-          where: { id: tx.userId },
-          data: {
-            walletBalance: { increment: refundAmount }
-          }
-        });
-
-        // Add refund transaction
-        await prismaTx.walletTransaction.create({
-          data: {
-            userId: tx.userId,
-            workerId: tx.workerId,
-            type: "PAYOUT_REFUND",
-            amount: refundAmount,
-            referenceType: "PAYOUT_FAILED",
-            referenceId: tx.id,
-            balanceAfter: updatedUser.walletBalance,
-            metadata: {
-              note: "Refund for failed payout"
-            }
-          }
-        });
+      await settleWalletPayoutFromProvider({
+        transactionId: tx.id,
+        providerPayoutId: typeof currentMetadata.razorpayPayoutId === "string"
+          ? currentMetadata.razorpayPayoutId
+          : "provider-rejected",
+        providerAttemptId: typeof currentMetadata.providerAttemptId === "string"
+          ? currentMetadata.providerAttemptId
+          : undefined,
+        status: "failed",
+        failureReason: reason
       });
     }
   }

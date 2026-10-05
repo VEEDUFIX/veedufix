@@ -136,6 +136,10 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (context, state) => const SettingsPage(),
       ),
       GoRoute(
+        path: '/connection-diagnostics',
+        builder: (context, state) => const ConnectionDiagnosticsPage(),
+      ),
+      GoRoute(
         path: '/notifications',
         builder: (context, state) => const NotificationsPage(),
       ),

@@ -8,7 +8,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 vi.mock('../lib/prisma.js', () => ({
   prisma: {
     booking: { findUnique: vi.fn(), findMany: vi.fn() },
-    dispute: { create: vi.fn(), findFirst: vi.fn(), findUnique: vi.fn(), findMany: vi.fn(), count: vi.fn(), update: vi.fn() },
+    dispute: { create: vi.fn(), findFirst: vi.fn(), findUnique: vi.fn(), findMany: vi.fn(), count: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
     refund: { update: vi.fn() },
     user: { findMany: vi.fn() }
   },
@@ -149,16 +149,24 @@ describe('dispute.service', () => {
       };
 
       vi.mocked(prisma.dispute.findUnique).mockResolvedValue(mockDispute as never);
-      vi.mocked(processRefund).mockResolvedValue({ id: 'ref-1' } as never);
-      vi.mocked(prisma.refund.update).mockResolvedValue({} as never);
+      vi.mocked(processRefund).mockResolvedValue({ id: 'ref-1', status: 'pending' } as never);
+      vi.mocked(prisma.dispute.updateMany).mockResolvedValue({ count: 1 } as never);
       vi.mocked(prisma.dispute.update).mockResolvedValue({ status: 'resolved_refund' } as never);
 
       await resolveDispute(MOCK_DISPUTE_ID, 'admin-1', 'refund', 'Customer is right');
 
-      expect(processRefund).toHaveBeenCalledWith(MOCK_BOOKING_ID, 1500, 'Customer is right');
-      expect(prisma.dispute.update).toHaveBeenCalledWith({
-        where: { id: MOCK_DISPUTE_ID },
-        data: expect.objectContaining({ status: 'resolved_refund', resolutionNote: 'Customer is right', resolvedBy: 'admin-1' })
+      expect(processRefund).toHaveBeenCalledWith(MOCK_BOOKING_ID, 1500, 'Customer is right', MOCK_DISPUTE_ID);
+      expect(prisma.dispute.updateMany).toHaveBeenCalledWith(expect.objectContaining({
+        where: { id: MOCK_DISPUTE_ID, status: { in: ['open', 'under_review'] } },
+        data: expect.objectContaining({ status: 'refund_pending' })
+      }));
+      expect(prisma.dispute.updateMany).toHaveBeenCalledWith({
+        where: { id: MOCK_DISPUTE_ID, OR: [{ refundId: null }, { refundId: 'ref-1' }] },
+        data: { refundId: 'ref-1' }
+      });
+      expect(prisma.dispute.updateMany).toHaveBeenCalledWith({
+        where: { id: MOCK_DISPUTE_ID, status: 'refund_pending' },
+        data: expect.objectContaining({ status: 'refund_pending' })
       });
     });
 
@@ -166,15 +174,24 @@ describe('dispute.service', () => {
       const mockDispute = { id: MOCK_DISPUTE_ID, status: 'open', bookingId: MOCK_BOOKING_ID, booking: { totalAmount: 1500 } };
 
       vi.mocked(prisma.dispute.findUnique).mockResolvedValue(mockDispute as never);
-      vi.mocked(prisma.dispute.update).mockResolvedValue({ status: 'resolved_rejected' } as never);
+      vi.mocked(prisma.dispute.updateMany).mockResolvedValue({ count: 1 } as never);
 
       await resolveDispute(MOCK_DISPUTE_ID, 'admin-1', 'reject', 'Insufficient evidence');
 
       expect(processRefund).not.toHaveBeenCalled();
-      expect(prisma.dispute.update).toHaveBeenCalledWith({
-        where: { id: MOCK_DISPUTE_ID },
+      expect(prisma.dispute.updateMany).toHaveBeenCalledWith({
+        where: { id: MOCK_DISPUTE_ID, status: { in: ['open', 'under_review'] } },
         data: expect.objectContaining({ status: 'resolved_rejected', resolutionNote: 'Insufficient evidence', resolvedBy: 'admin-1' })
       });
+    });
+
+    it('rejects the dispute if another admin resolved it after the initial read', async () => {
+      const mockDispute = { id: MOCK_DISPUTE_ID, status: 'open', bookingId: MOCK_BOOKING_ID, booking: { totalAmount: 1500 } };
+      vi.mocked(prisma.dispute.findUnique).mockResolvedValue(mockDispute as never);
+      vi.mocked(prisma.dispute.updateMany).mockResolvedValue({ count: 0 } as never);
+
+      await expect(resolveDispute(MOCK_DISPUTE_ID, 'admin-1', 'reject', 'Insufficient evidence'))
+        .rejects.toThrow(DisputeConflictError);
     });
   });
 });

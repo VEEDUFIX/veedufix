@@ -247,6 +247,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
     final tt = Theme.of(context).textTheme;
     final checkoutState = ref.watch(checkoutProvider);
     final isLoading = checkoutState.isLoading;
+    final orderLocked = _activeOrder != null || isLoading;
     final addressesState = ref.watch(cartCheckoutAddressesProvider);
     final addresses = addressesState.valueOrNull ?? const <SavedAddressItem>[];
     final selectedAddress = _resolveSelectedAddress(addresses);
@@ -280,6 +281,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
         : (slotsForDay.isEmpty
               ? null
               : slotsForDay.first.scheduledFor.toUtc().toIso8601String());
+    final needsNewOrder = _activeOrder == null;
 
     return Scaffold(
       backgroundColor: cs.surface,
@@ -466,7 +468,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
                               Align(
                                 alignment: Alignment.centerRight,
                                 child: TextButton.icon(
-                                  onPressed: _openAddresses,
+                                  onPressed: orderLocked ? null : _openAddresses,
                                   icon: const Icon(
                                     Icons.add_location_alt_outlined,
                                   ),
@@ -481,6 +483,11 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
                               DropdownButtonFormField<String>(
                                 key: ValueKey(selectedAddress?.id),
                                 initialValue: selectedAddress?.id,
+                                onChanged: orderLocked
+                                    ? null
+                                    : (value) => setState(
+                                        () => _selectedAddressId = value,
+                                      ),
                                 isExpanded: true,
                                 decoration: const InputDecoration(
                                   labelText:
@@ -499,8 +506,6 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
                                       ),
                                     )
                                     .toList(growable: false),
-                                onChanged: (value) =>
-                                    setState(() => _selectedAddressId = value),
                               ),
                               if (selectedAddress != null) ...[
                                 const SizedBox(height: 8),
@@ -514,7 +519,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
                               Align(
                                 alignment: Alignment.centerRight,
                                 child: TextButton.icon(
-                                  onPressed: _openAddresses,
+                                  onPressed: orderLocked ? null : _openAddresses,
                                   icon: const Icon(
                                     Icons.edit_location_alt_outlined,
                                   ),
@@ -535,10 +540,12 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
                     ButtonSegment(value: true, label: Text('Schedule')),
                   ],
                   selected: {_scheduleForLater},
-                  onSelectionChanged: (selection) => setState(() {
-                    _scheduleForLater = selection.first;
-                    _selectedScheduleSlot = null;
-                  }),
+                  onSelectionChanged: orderLocked
+                      ? null
+                      : (selection) => setState(() {
+                          _scheduleForLater = selection.first;
+                          _selectedScheduleSlot = null;
+                        }),
                 ),
                 if (_scheduleForLater) ...[
                   const SizedBox(height: 14),
@@ -561,10 +568,12 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
                               Text('${date.day}/${date.month}'),
                             ],
                           ),
-                          onSelected: (_) => setState(() {
-                            _selectedScheduleDate = date;
-                            _selectedScheduleSlot = null;
-                          }),
+                          onSelected: orderLocked
+                              ? null
+                              : (_) => setState(() {
+                                  _selectedScheduleDate = date;
+                                  _selectedScheduleSlot = null;
+                                }),
                         );
                       },
                     ),
@@ -615,9 +624,11 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
                             return ChoiceChip(
                               selected: selected,
                               label: Text(time),
-                              onSelected: (_) => setState(
-                                () => _selectedScheduleSlot = slotIso,
-                              ),
+                              onSelected: orderLocked
+                                  ? null
+                                  : (_) => setState(
+                                      () => _selectedScheduleSlot = slotIso,
+                                    ),
                             );
                           })
                           .toList(growable: false),
@@ -649,12 +660,14 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
                             alpha: 0.5,
                           ),
                         ),
-                        enabled: !_couponApplied,
+                        enabled: !_couponApplied && !orderLocked,
                       ),
                     ),
                     const SizedBox(width: 10),
                     TapScale(
-                      onTap: _couponApplied
+                      onTap: orderLocked
+                          ? null
+                          : _couponApplied
                           ? () => setState(() {
                               _couponApplied = false;
                               _couponController.clear();
@@ -710,17 +723,10 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
                 Container(
                   padding: const EdgeInsets.all(20),
                   decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [
-                        cs.primary.withValues(alpha: 0.1),
-                        cs.secondary.withValues(alpha: 0.05),
-                      ],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
+                    color: cs.surfaceContainerHighest.withValues(alpha: 0.42),
                     borderRadius: BorderRadius.circular(AbzioTheme.cardRadius),
                     border: Border.all(
-                      color: cs.primary.withValues(alpha: 0.2),
+                      color: cs.outlineVariant.withValues(alpha: 0.55),
                     ),
                   ),
                   child: Row(
@@ -740,7 +746,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
                             '₹${_subtotal.toStringAsFixed(2)}',
                             style: tt.headlineSmall?.copyWith(
                               fontWeight: FontWeight.w900,
-                              color: cs.primary,
+                              color: cs.onSurface,
                             ),
                           ),
                           const SizedBox(height: 3),
@@ -829,7 +835,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
                 if (_paymentAttemptFailed && _activeOrder != null) ...[
                   const SizedBox(height: 12),
                   Text(
-                    'Payment was not completed. Your booking ${_activeOrder!.bookingCode} is saved; retrying will not create another booking.',
+                    'Payment was not completed. Booking ${_activeOrder!.bookingCode} is saved. Retry uses this booking and its original details; it will not create another booking.',
                     style: tt.bodySmall?.copyWith(
                       color: cs.error,
                       fontWeight: FontWeight.w600,
@@ -852,15 +858,16 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
                         isLoading ||
                             _isLaunchingPayment ||
                             _paymentVerificationFailed ||
-                            addressesState.isLoading ||
-                            selectedAddress == null ||
-                            (_scheduleForLater &&
-                                ((slotsState?.isLoading ?? true) ||
-                                    selectedSlotIso == null))
+                            (needsNewOrder &&
+                                (addressesState.isLoading ||
+                                    selectedAddress == null ||
+                                    (_scheduleForLater &&
+                                        ((slotsState?.isLoading ?? true) ||
+                                            selectedSlotIso == null))))
                         ? null
                         : () => _pay(
-                            selectedAddress.id,
-                            scheduledFor: _scheduleForLater
+                            selectedAddress?.id ?? '',
+                            scheduledFor: needsNewOrder && _scheduleForLater
                                 ? DateTime.parse(selectedSlotIso!).toUtc()
                                 : null,
                           ),
@@ -1095,12 +1102,14 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
       _isVerifyingPayment = true;
       _paymentAttemptFailed = false;
     });
-    final success = await ref.read(checkoutProvider.notifier).verifyPayment(
-      bookingId: order.bookingId,
-      orderId: orderId,
-      paymentId: paymentId,
-      signature: signature,
-    );
+    final success = await ref
+        .read(checkoutProvider.notifier)
+        .verifyPayment(
+          bookingId: order.bookingId,
+          orderId: orderId,
+          paymentId: paymentId,
+          signature: signature,
+        );
 
     if (!mounted) return;
 

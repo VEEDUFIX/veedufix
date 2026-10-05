@@ -36,7 +36,8 @@ class _AppShellPageState extends ConsumerState<AppShellPage> {
     final overviewAsync = ref.watch(adminShellOverviewProvider);
     final session = ref.watch(authControllerProvider).valueOrNull;
     final adminName = session?.user.name ?? 'Admin';
-    final adminInitial = adminName.isNotEmpty ? adminName[0].toUpperCase() : 'A';
+    final adminInitial =
+        adminName.isNotEmpty ? adminName[0].toUpperCase() : 'A';
     final summary = overviewAsync.valueOrNull?.summary;
     final alertsCount = overviewAsync.valueOrNull?.alerts.length ?? 0;
     final actionInboxCount = summary == null
@@ -60,394 +61,424 @@ class _AppShellPageState extends ConsumerState<AppShellPage> {
 
     return CallbackShortcuts(
       bindings: <ShortcutActivator, VoidCallback>{
-        const SingleActivator(LogicalKeyboardKey.keyK, control: true): () => _openQuickLauncher(context),
+        const SingleActivator(LogicalKeyboardKey.keyK, control: true): () =>
+            _openQuickLauncher(context),
       },
       child: Scaffold(
-      backgroundColor: Colors.transparent,
-      body: Row(
-        children: [
-          AnimatedContainer(
-            duration: const Duration(milliseconds: 220),
-            curve: Curves.easeInOut,
-            width: sidebarWidth,
-            decoration: BoxDecoration(
-              color: panelColor,
-              border: Border(right: BorderSide(color: borderColor)),
-              boxShadow: AbzioTheme.shadowFor(Theme.of(context).brightness),
-            ),
-            child: ClipRRect(
-              child: BackdropFilter(
-                filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Padding(
-                      padding: EdgeInsets.fromLTRB(
-                        showExpanded ? 24 : 12,
-                        32,
-                        showExpanded ? 24 : 12,
-                        28,
-                      ),
-                      child: Row(
-                        mainAxisAlignment: showExpanded
-                            ? MainAxisAlignment.spaceBetween
-                            : MainAxisAlignment.center,
-                        children: [
-                          if (showExpanded)
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const AdminLogo(
-                                    height: 28, color: Color(0xFF0F766E)),
-                                const SizedBox(height: 4),
-                                Text(
-                                  'ADMIN PANEL',
-                                  style: GoogleFonts.inter(
-                                    color: textMuted,
-                                    fontWeight: FontWeight.w700,
-                                    letterSpacing: 1.5,
-                                    fontSize: 10,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          IconButton(
-                            icon: Icon(
-                              showExpanded
-                                  ? Icons.menu_open_rounded
-                                  : Icons.menu_rounded,
-                              size: showExpanded ? 20 : 24,
-                              color: textMuted,
-                            ),
-                            onPressed: () => setState(
-                                () => _isSidebarExpanded = !showExpanded),
-                          ),
-                        ],
-                      ),
-                    ),
-                    Expanded(
-                      child: ListView(
-                        padding: const EdgeInsets.symmetric(horizontal: 12),
-                        children: [
-                          _buildCategoryHeader(
-                              'Overview', showExpanded, textMuted),
-                          _buildNavItem(
-                            '/admin',
-                            Icons.space_dashboard_outlined,
-                            Icons.space_dashboard_rounded,
-                            'Dashboard',
-                            location,
-                            showExpanded,
-                          ),
-                          _buildNavItem(
-                            '/analytics',
-                            Icons.insights_outlined,
-                            Icons.insights_rounded,
-                            'Analytics',
-                            location,
-                            showExpanded,
-                          ),
-                          _buildCategoryHeader(
-                              'Operations', showExpanded, textMuted),
-                          _buildNavItem(
-                            '/ops/overview',
-                            Icons.monitor_heart_outlined,
-                            Icons.monitor_heart_rounded,
-                            'Health',
-                            location,
-                            showExpanded,
-                          ),
-                          _buildNavItem(
-                            '/ops/live-jobs',
-                            Icons.map_outlined,
-                            Icons.map_rounded,
-                            'Live Jobs',
-                            location,
-                            showExpanded,
-                          ),
-                          _buildNavItem(
-                            '/ops/alerts',
-                            Icons.warning_amber_outlined,
-                            Icons.warning_rounded,
-                            'Alerts',
-                            location,
-                            showExpanded,
-                            badge: _badgeLabel(alertsCount),
-                          ),
-                          _buildNavItem(
-                            '/admin/action-inbox',
-                            Icons.inbox_outlined,
-                            Icons.inbox_rounded,
-                            'Action Inbox',
-                            location,
-                            showExpanded,
-                            badge: _badgeLabel(actionInboxCount),
-                          ),
-                          _buildNavItem(
-                            '/ops/disputes',
-                            Icons.gavel_outlined,
-                            Icons.gavel_rounded,
-                            'Disputes',
-                            location,
-                            showExpanded,
-                          ),
-                          _buildCategoryHeader(
-                              'Workforce', showExpanded, textMuted),
-                          _buildNavItem(
-                            '/workers',
-                            Icons.people_outline_rounded,
-                            Icons.people_rounded,
-                            'Directory',
-                            location,
-                            showExpanded,
-                          ),
-                          _buildNavItem(
-                            '/worker-review',
-                            Icons.how_to_reg_outlined,
-                            Icons.how_to_reg_rounded,
-                            'Review Queue',
-                            location,
-                            showExpanded,
-                            badge: _badgeLabel(workerReviewsCount),
-                          ),
-                          _buildNavItem(
-                            '/support-tickets',
-                            Icons.support_agent_outlined,
-                            Icons.support_agent_rounded,
-                            'Support Tickets',
-                            location,
-                            showExpanded,
-                            badge: _badgeLabel(supportTicketsCount),
-                          ),
-                          _buildCategoryHeader(
-                              'Marketplace', showExpanded, textMuted),
-                          _buildNavItem(
-                            '/catalog',
-                            Icons.category_outlined,
-                            Icons.category_rounded,
-                            'Catalog',
-                            location,
-                            showExpanded,
-                          ),
-                          _buildNavItem(
-                            '/service-areas',
-                            Icons.my_location_outlined,
-                            Icons.my_location_rounded,
-                            'Service Areas',
-                            location,
-                            showExpanded,
-                          ),
-                          _buildCategoryHeader(
-                              'Marketing', showExpanded, textMuted),
-                          _buildNavItem(
-                            '/marketing/hero-carousel',
-                            Icons.view_carousel_outlined,
-                            Icons.view_carousel_rounded,
-                            'Hero Carousel',
-                            location,
-                            showExpanded,
-                          ),
-                          _buildNavItem(
-                            '/marketing/advertisements',
-                            Icons.campaign_outlined,
-                            Icons.campaign_rounded,
-                            'Advertisements',
-                            location,
-                            showExpanded,
-                          ),
-                          _buildCategoryHeader(
-                              'Finance', showExpanded, textMuted),
-                          _buildNavItem(
-                            '/finance',
-                            Icons.account_balance_outlined,
-                            Icons.account_balance_rounded,
-                            'Overview',
-                            location,
-                            showExpanded,
-                          ),
-                          _buildNavItem(
-                            '/finance/payouts',
-                            Icons.payments_outlined,
-                            Icons.payments_rounded,
-                            'Payouts',
-                            location,
-                            showExpanded,
-                          ),
-                          _buildNavItem(
-                            '/finance/refunds',
-                            Icons.receipt_long_outlined,
-                            Icons.receipt_long_rounded,
-                            'Refunds',
-                            location,
-                            showExpanded,
-                          ),
-                          _buildNavItem(
-                            '/finance/tax-summary',
-                            Icons.request_quote_outlined,
-                            Icons.request_quote_rounded,
-                            'Tax Summary',
-                            location,
-                            showExpanded,
-                          ),
-                          _buildNavItem(
-                            '/reports',
-                            Icons.download_outlined,
-                            Icons.download_rounded,
-                            'Reports',
-                            location,
-                            showExpanded,
-                          ),
-                          _buildCategoryHeader(
-                              'Communication', showExpanded, textMuted),
-                          _buildNavItem(
-                            '/push',
-                            Icons.campaign_outlined,
-                            Icons.campaign_rounded,
-                            'Broadcasts',
-                            location,
-                            showExpanded,
-                          ),
-                          _buildNavItem(
-                            '/platform-settings',
-                            Icons.tune_outlined,
-                            Icons.tune_rounded,
-                            'Platform Settings',
-                            location,
-                            showExpanded,
-                          ),
-                          _buildCategoryHeader(
-                              'Governance', showExpanded, textMuted),
-                          _buildNavItem(
-                            '/audit-logs',
-                            Icons.assignment_outlined,
-                            Icons.assignment_rounded,
-                            'Audit Logs',
-                            location,
-                            showExpanded,
-                          ),
-                        ],
-                      ),
-                    ),
-                    if (showExpanded)
+        backgroundColor: Colors.transparent,
+        body: Row(
+          children: [
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 220),
+              curve: Curves.easeInOut,
+              width: sidebarWidth,
+              decoration: BoxDecoration(
+                color: panelColor,
+                border: Border(right: BorderSide(color: borderColor)),
+                boxShadow: AbzioTheme.shadowFor(Theme.of(context).brightness),
+              ),
+              child: ClipRRect(
+                child: BackdropFilter(
+                  filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
                       Padding(
-                        padding: const EdgeInsets.all(24),
-                        child: Text(
-                          '(c) 2026 VeeduFix',
-                          style: GoogleFonts.inter(
-                            color: textMuted.withValues(alpha: 0.72),
-                            fontSize: 12,
-                          ),
+                        padding: EdgeInsets.fromLTRB(
+                          showExpanded ? 24 : 12,
+                          32,
+                          showExpanded ? 24 : 12,
+                          28,
+                        ),
+                        child: Row(
+                          mainAxisAlignment: showExpanded
+                              ? MainAxisAlignment.spaceBetween
+                              : MainAxisAlignment.center,
+                          children: [
+                            if (showExpanded)
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const AdminLogo(
+                                      height: 28, color: Color(0xFF0F766E)),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    'ADMIN PANEL',
+                                    style: GoogleFonts.inter(
+                                      color: textMuted,
+                                      fontWeight: FontWeight.w700,
+                                      letterSpacing: 1.5,
+                                      fontSize: 10,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            IconButton(
+                              icon: Icon(
+                                showExpanded
+                                    ? Icons.menu_open_rounded
+                                    : Icons.menu_rounded,
+                                size: showExpanded ? 20 : 24,
+                                color: textMuted,
+                              ),
+                              onPressed: () => setState(
+                                  () => _isSidebarExpanded = !showExpanded),
+                            ),
+                          ],
                         ),
                       ),
-                  ],
+                      Expanded(
+                        child: ListView(
+                          padding: const EdgeInsets.symmetric(horizontal: 12),
+                          children: [
+                            _buildCategoryHeader(
+                                'Overview', showExpanded, textMuted),
+                            _buildNavItem(
+                              '/admin',
+                              Icons.space_dashboard_outlined,
+                              Icons.space_dashboard_rounded,
+                              'Dashboard',
+                              location,
+                              showExpanded,
+                            ),
+                            _buildNavItem(
+                              '/analytics',
+                              Icons.insights_outlined,
+                              Icons.insights_rounded,
+                              'Analytics',
+                              location,
+                              showExpanded,
+                            ),
+                            _buildCategoryHeader(
+                                'Operations', showExpanded, textMuted),
+                            _buildNavItem(
+                              '/ops/overview',
+                              Icons.monitor_heart_outlined,
+                              Icons.monitor_heart_rounded,
+                              'Health',
+                              location,
+                              showExpanded,
+                            ),
+                            _buildNavItem(
+                              '/ops/system-health',
+                              Icons.cloud_done_outlined,
+                              Icons.cloud_done_rounded,
+                              'System Status',
+                              location,
+                              showExpanded,
+                            ),
+                            _buildNavItem(
+                              '/ops/live-jobs',
+                              Icons.map_outlined,
+                              Icons.map_rounded,
+                              'Live Jobs',
+                              location,
+                              showExpanded,
+                            ),
+                            _buildNavItem(
+                              '/ops/alerts',
+                              Icons.warning_amber_outlined,
+                              Icons.warning_rounded,
+                              'Alerts',
+                              location,
+                              showExpanded,
+                              badge: _badgeLabel(alertsCount),
+                            ),
+                            _buildNavItem(
+                              '/admin/action-inbox',
+                              Icons.inbox_outlined,
+                              Icons.inbox_rounded,
+                              'Action Inbox',
+                              location,
+                              showExpanded,
+                              badge: _badgeLabel(actionInboxCount),
+                            ),
+                            _buildNavItem(
+                              '/ops/disputes',
+                              Icons.gavel_outlined,
+                              Icons.gavel_rounded,
+                              'Disputes',
+                              location,
+                              showExpanded,
+                            ),
+                            _buildCategoryHeader(
+                                'Workforce', showExpanded, textMuted),
+                            _buildNavItem(
+                              '/workers',
+                              Icons.people_outline_rounded,
+                              Icons.people_rounded,
+                              'Directory',
+                              location,
+                              showExpanded,
+                            ),
+                            _buildNavItem(
+                              '/worker-review',
+                              Icons.how_to_reg_outlined,
+                              Icons.how_to_reg_rounded,
+                              'Review Queue',
+                              location,
+                              showExpanded,
+                              badge: _badgeLabel(workerReviewsCount),
+                            ),
+                            _buildNavItem(
+                              '/worker-payout-changes',
+                              Icons.account_balance_wallet_outlined,
+                              Icons.account_balance_wallet_rounded,
+                              'Payout Changes',
+                              location,
+                              showExpanded,
+                            ),
+                            _buildNavItem(
+                              '/support-tickets',
+                              Icons.support_agent_outlined,
+                              Icons.support_agent_rounded,
+                              'Support Tickets',
+                              location,
+                              showExpanded,
+                              badge: _badgeLabel(supportTicketsCount),
+                            ),
+                            _buildCategoryHeader(
+                                'Marketplace', showExpanded, textMuted),
+                            _buildNavItem(
+                              '/catalog',
+                              Icons.category_outlined,
+                              Icons.category_rounded,
+                              'Catalog',
+                              location,
+                              showExpanded,
+                            ),
+                            _buildNavItem(
+                              '/review-moderation',
+                              Icons.rate_review_outlined,
+                              Icons.rate_review_rounded,
+                              'Review Moderation',
+                              location,
+                              showExpanded,
+                            ),
+                            _buildNavItem(
+                              '/service-areas',
+                              Icons.my_location_outlined,
+                              Icons.my_location_rounded,
+                              'Service Areas',
+                              location,
+                              showExpanded,
+                            ),
+                            _buildCategoryHeader(
+                                'Marketing', showExpanded, textMuted),
+                            _buildNavItem(
+                              '/marketing/hero-carousel',
+                              Icons.view_carousel_outlined,
+                              Icons.view_carousel_rounded,
+                              'Hero Carousel',
+                              location,
+                              showExpanded,
+                            ),
+                            _buildNavItem(
+                              '/marketing/advertisements',
+                              Icons.campaign_outlined,
+                              Icons.campaign_rounded,
+                              'Advertisements',
+                              location,
+                              showExpanded,
+                            ),
+                            _buildCategoryHeader(
+                                'Finance', showExpanded, textMuted),
+                            _buildNavItem(
+                              '/finance',
+                              Icons.account_balance_outlined,
+                              Icons.account_balance_rounded,
+                              'Overview',
+                              location,
+                              showExpanded,
+                            ),
+                            _buildNavItem(
+                              '/finance/payouts',
+                              Icons.payments_outlined,
+                              Icons.payments_rounded,
+                              'Payouts',
+                              location,
+                              showExpanded,
+                            ),
+                            _buildNavItem(
+                              '/finance/refunds',
+                              Icons.receipt_long_outlined,
+                              Icons.receipt_long_rounded,
+                              'Refunds',
+                              location,
+                              showExpanded,
+                            ),
+                            _buildNavItem(
+                              '/finance/tax-summary',
+                              Icons.request_quote_outlined,
+                              Icons.request_quote_rounded,
+                              'Tax Summary',
+                              location,
+                              showExpanded,
+                            ),
+                            _buildNavItem(
+                              '/reports',
+                              Icons.download_outlined,
+                              Icons.download_rounded,
+                              'Reports',
+                              location,
+                              showExpanded,
+                            ),
+                            _buildCategoryHeader(
+                                'Communication', showExpanded, textMuted),
+                            _buildNavItem(
+                              '/push',
+                              Icons.campaign_outlined,
+                              Icons.campaign_rounded,
+                              'Broadcasts',
+                              location,
+                              showExpanded,
+                            ),
+                            _buildNavItem(
+                              '/platform-settings',
+                              Icons.tune_outlined,
+                              Icons.tune_rounded,
+                              'Platform Settings',
+                              location,
+                              showExpanded,
+                            ),
+                            _buildCategoryHeader(
+                                'Governance', showExpanded, textMuted),
+                            _buildNavItem(
+                              '/audit-logs',
+                              Icons.assignment_outlined,
+                              Icons.assignment_rounded,
+                              'Audit Logs',
+                              location,
+                              showExpanded,
+                            ),
+                          ],
+                        ),
+                      ),
+                      if (showExpanded)
+                        Padding(
+                          padding: const EdgeInsets.all(24),
+                          child: Text(
+                            '(c) 2026 VeeduFix',
+                            style: GoogleFonts.inter(
+                              color: textMuted.withValues(alpha: 0.72),
+                              fontSize: 12,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
                 ),
               ),
             ),
-          ),
-          Expanded(
-            child: Column(
-              children: [
-                Container(
-                  height: 72,
-                  padding: const EdgeInsets.symmetric(horizontal: 32),
-                  decoration: BoxDecoration(
-                    color: panelColor,
-                    border: Border(bottom: BorderSide(color: borderColor)),
-                  ),
-                  child: ClipRRect(
-                    child: BackdropFilter(
-                      filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
-                      child: Row(
-                        children: [
-                          Container(
-                            width: 320,
-                            height: 42,
-                            padding: const EdgeInsets.symmetric(horizontal: 16),
-                            decoration: BoxDecoration(
-                              color: cs.surfaceContainerHighest
-                                  .withValues(alpha: 0.82),
-                              borderRadius:
-                                  BorderRadius.circular(AbzioTheme.cardRadius),
-                              border: Border.all(color: borderColor),
-                            ),
-                            child: Row(
-                              children: [
-                                Icon(Icons.search_rounded,
-                                    size: 18, color: textMuted),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: TextField(
-                                    readOnly: true,
-                                    onTap: () => _openQuickLauncher(context),
-                                    decoration: InputDecoration(
-                                      hintText:
-                                          'Search jobs, workers, support, etc. (Ctrl+K)',
-                                      hintStyle: GoogleFonts.inter(
-                                          fontSize: 13, color: textMuted),
-                                      border: InputBorder.none,
-                                      isDense: true,
+            Expanded(
+              child: Column(
+                children: [
+                  Container(
+                    height: 72,
+                    padding: const EdgeInsets.symmetric(horizontal: 32),
+                    decoration: BoxDecoration(
+                      color: panelColor,
+                      border: Border(bottom: BorderSide(color: borderColor)),
+                    ),
+                    child: ClipRRect(
+                      child: BackdropFilter(
+                        filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+                        child: Row(
+                          children: [
+                            Flexible(
+                              child: Container(
+                                constraints:
+                                    const BoxConstraints(maxWidth: 320),
+                                height: 42,
+                                padding:
+                                    const EdgeInsets.symmetric(horizontal: 16),
+                                decoration: BoxDecoration(
+                                  color: cs.surfaceContainerHighest
+                                      .withValues(alpha: 0.82),
+                                  borderRadius: BorderRadius.circular(
+                                      AbzioTheme.cardRadius),
+                                  border: Border.all(color: borderColor),
+                                ),
+                                child: Row(
+                                  children: [
+                                    Icon(Icons.search_rounded,
+                                        size: 18, color: textMuted),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: TextField(
+                                        readOnly: true,
+                                        onTap: () =>
+                                            _openQuickLauncher(context),
+                                        decoration: InputDecoration(
+                                          hintText:
+                                              'Search jobs, workers, support, etc. (Ctrl+K)',
+                                          hintStyle: GoogleFonts.inter(
+                                              fontSize: 13, color: textMuted),
+                                          border: InputBorder.none,
+                                          isDense: true,
+                                        ),
+                                        style: GoogleFonts.inter(
+                                            fontSize: 14, color: textPrimary),
+                                      ),
                                     ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                            const Spacer(),
+                            IconButton(
+                              icon: Icon(Icons.notifications_none_rounded,
+                                  color: textMuted),
+                              onPressed: () => context.go('/ops/alerts'),
+                            ),
+                            const SizedBox(width: 16),
+                            Container(width: 1, height: 24, color: borderColor),
+                            const SizedBox(width: 16),
+                            TapScale(
+                              onTap: () => context.go('/profile'),
+                              child: Row(
+                                children: [
+                                  CircleAvatar(
+                                    radius: 16,
+                                    backgroundColor: const Color(0xFF0F766E)
+                                        .withValues(alpha: 0.12),
+                                    child: Text(
+                                      adminInitial,
+                                      style: const TextStyle(
+                                        color: Color(0xFF0F766E),
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    adminName,
                                     style: GoogleFonts.inter(
-                                        fontSize: 14, color: textPrimary),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          const Spacer(),
-                          IconButton(
-                            icon: Icon(Icons.notifications_none_rounded,
-                                color: textMuted),
-                            onPressed: () => context.go('/ops/alerts'),
-                          ),
-                          const SizedBox(width: 16),
-                          Container(width: 1, height: 24, color: borderColor),
-                          const SizedBox(width: 16),
-                          TapScale(
-                            onTap: () => context.go('/profile'),
-                            child: Row(
-                              children: [
-                                CircleAvatar(
-                                  radius: 16,
-                                  backgroundColor: const Color(0xFF0F766E)
-                                      .withValues(alpha: 0.12),
-                                  child: Text(
-                                    adminInitial,
-                                    style: const TextStyle(
-                                      color: Color(0xFF0F766E),
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.bold,
+                                      fontWeight: FontWeight.w600,
+                                      color: textPrimary,
                                     ),
                                   ),
-                                ),
-                                const SizedBox(width: 8),
-                                Text(
-                                  adminName,
-                                  style: GoogleFonts.inter(
-                                    fontWeight: FontWeight.w600,
-                                    color: textPrimary,
-                                  ),
-                                ),
-                                Icon(Icons.keyboard_arrow_down_rounded,
-                                    size: 16, color: textMuted),
-                              ],
+                                  Icon(Icons.keyboard_arrow_down_rounded,
+                                      size: 16, color: textMuted),
+                                ],
+                              ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
                     ),
                   ),
-                ),
-                Expanded(
-                  child: ClipRect(
-                    child: widget.child,
+                  Expanded(
+                    child: ClipRect(
+                      child: widget.child,
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-        ],
-      ),
+          ],
+        ),
       ),
     );
   }
@@ -464,8 +495,10 @@ class _AppShellPageState extends ConsumerState<AppShellPage> {
       _QuickAction('Worker Review', '/worker-review', Icons.how_to_reg_rounded),
       _QuickAction('Workers', '/workers', Icons.people_rounded),
       _QuickAction('Catalog', '/catalog', Icons.category_rounded),
-      _QuickAction('Hero carousel', '/marketing/hero-carousel', Icons.view_carousel_rounded),
-      _QuickAction('Advertisements', '/marketing/advertisements', Icons.campaign_rounded),
+      _QuickAction('Hero carousel', '/marketing/hero-carousel',
+          Icons.view_carousel_rounded),
+      _QuickAction('Advertisements', '/marketing/advertisements',
+          Icons.campaign_rounded),
       _QuickAction(
           'Service Areas', '/service-areas', Icons.my_location_rounded),
       _QuickAction('Finance', '/finance', Icons.account_balance_rounded),

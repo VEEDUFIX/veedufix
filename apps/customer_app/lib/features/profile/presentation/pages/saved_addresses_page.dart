@@ -96,13 +96,19 @@ class _SavedAddressesPageState extends ConsumerState<SavedAddressesPage> {
       final savedAddress = existing == null
           ? await _api.createAddress(result.toJson())
           : await _api.updateAddress(existing.id, result.toJson());
-      await ref
-          .read(selectedLocationProvider.notifier)
-          .setLocation(
-            latitude: savedAddress.lat,
-            longitude: savedAddress.lng,
-            label: '${savedAddress.addressLine1}, ${savedAddress.city}',
-          );
+      final currentLocation = ref.read(selectedLocationProvider);
+      final wasSelected = existing != null &&
+          _isSelectedAddress(currentLocation, existing);
+      if (savedAddress.isDefault || wasSelected) {
+        await ref
+            .read(selectedLocationProvider.notifier)
+            .setLocation(
+              latitude: savedAddress.lat,
+              longitude: savedAddress.lng,
+              label: '${savedAddress.addressLine1}, ${savedAddress.city}',
+              addressId: savedAddress.id,
+            );
+      }
       await _loadAddresses();
     } catch (error) {
       if (!mounted) return;
@@ -152,10 +158,7 @@ class _SavedAddressesPageState extends ConsumerState<SavedAddressesPage> {
     try {
       await _api.deleteAddress(address.id);
       final selectedLocation = ref.read(selectedLocationProvider);
-      final wasSelected =
-          selectedLocation != null &&
-          (selectedLocation.latitude - address.lat).abs() < 0.000001 &&
-          (selectedLocation.longitude - address.lng).abs() < 0.000001;
+      final wasSelected = _isSelectedAddress(selectedLocation, address);
       if (wasSelected) {
         try {
           final remainingAddresses = await _api.listAddresses();
@@ -172,6 +175,7 @@ class _SavedAddressesPageState extends ConsumerState<SavedAddressesPage> {
                   latitude: replacement.lat,
                   longitude: replacement.lng,
                   label: '${replacement.addressLine1}, ${replacement.city}',
+                  addressId: replacement.id,
                 );
           }
         } catch (_) {
@@ -208,6 +212,7 @@ class _SavedAddressesPageState extends ConsumerState<SavedAddressesPage> {
             latitude: selectedAddress.lat,
             longitude: selectedAddress.lng,
             label: '${selectedAddress.addressLine1}, ${selectedAddress.city}',
+            addressId: selectedAddress.id,
           );
       await _loadAddresses();
     } catch (error) {
@@ -360,6 +365,19 @@ class _SavedAddressesPageState extends ConsumerState<SavedAddressesPage> {
   }
 }
 
+bool _isSelectedAddress(
+  SelectedLocation? selectedLocation,
+  SavedAddressItem address,
+) {
+  if (selectedLocation == null) return false;
+  final selectedAddressId = selectedLocation.addressId;
+  if (selectedAddressId != null && selectedAddressId.isNotEmpty) {
+    return selectedAddressId == address.id;
+  }
+  return (selectedLocation.latitude - address.lat).abs() < 0.000001 &&
+      (selectedLocation.longitude - address.lng).abs() < 0.000001;
+}
+
 class _AddressCard extends StatelessWidget {
   const _AddressCard({
     required this.address,
@@ -395,6 +413,23 @@ class _AddressCard extends StatelessWidget {
           children: [
             Row(
               children: [
+                Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: Theme.of(context)
+                        .colorScheme
+                        .primaryContainer
+                        .withValues(alpha: 0.65),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Icon(
+                    _addressLabelIcon(address.label),
+                    color: Theme.of(context).colorScheme.primary,
+                    size: 20,
+                  ),
+                ),
+                const SizedBox(width: 12),
                 Expanded(
                   child: Text(
                     address.label,
@@ -414,8 +449,22 @@ class _AddressCard extends StatelessWidget {
                 context,
               ).textTheme.bodyMedium?.copyWith(height: 1.4),
             ),
-            const SizedBox(height: 8),
-            const SizedBox(height: 12),
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                _AddressMetadata(
+                  icon: Icons.location_city_rounded,
+                  label: address.city,
+                ),
+                _AddressMetadata(
+                  icon: Icons.local_post_office_outlined,
+                  label: address.pincode,
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
             Wrap(
               spacing: 8,
               runSpacing: 8,
@@ -445,6 +494,52 @@ class _AddressCard extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+IconData _addressLabelIcon(String label) {
+  switch (label.trim().toLowerCase()) {
+    case 'home':
+      return Icons.home_rounded;
+    case 'work':
+    case 'office':
+      return Icons.work_rounded;
+    default:
+      return Icons.location_on_rounded;
+  }
+}
+
+class _AddressMetadata extends StatelessWidget {
+  const _AddressMetadata({required this.icon, required this.label});
+
+  final IconData icon;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
+      decoration: BoxDecoration(
+        color: cs.surfaceContainerHighest.withValues(alpha: 0.55),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: cs.onSurfaceVariant),
+          const SizedBox(width: 5),
+          Text(
+            label,
+            style: tt.labelSmall?.copyWith(
+              color: cs.onSurfaceVariant,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
       ),
     );
   }

@@ -44,7 +44,10 @@ class WorkerJob {
         bookingId: json['bookingId'] as String? ?? '',
         code: json['code'] as String? ?? '',
         status: json['status'] as String? ?? '',
-        scheduledAt: DateTime.tryParse(json['scheduledAt'] as String? ?? '') ?? DateTime.now(),
+        scheduledAt:
+            (DateTime.tryParse(json['scheduledAt'] as String? ?? '') ??
+                    DateTime.now())
+                .toLocal(),
         totalAmount: (json['totalAmount'] as num?)?.toDouble() ?? 0.0,
         serviceId: json['serviceId'] as String?,
         serviceName: json['serviceName'] as String? ?? 'Service',
@@ -67,7 +70,7 @@ class WorkerJob {
         customerAvatarUrl: json['customerAvatarUrl'] as String?,
         offerId: json['offerId'] as String?,
         expiresAt: json['expiresAt'] != null
-            ? DateTime.tryParse(json['expiresAt'] as String)
+            ? DateTime.tryParse(json['expiresAt'] as String)?.toLocal()
             : null,
         customQuoteStatus: json['customQuoteStatus'] as String?,
       );

@@ -1,0 +1,22 @@
+reviews:
+  path_instructions:
+    - path: "apps/customer_app/lib/**"
+      instructions: |
+        Review Flutter UI and UX for actionable issues: responsive layout,
+        overflow, text scaling, accessibility, tap targets, contrast, keyboard
+        and safe-area handling, navigation, and loading, error, and empty states.
+        Report only issues supported by the code; avoid subjective redesign
+        suggestions.
+    - path: "apps/worker_app/lib/**"
+      instructions: |
+        Review Flutter UI and UX for actionable issues: responsive layout,
+        overflow, text scaling, accessibility, tap targets, contrast, keyboard
+        and safe-area handling, navigation, and loading, error, and empty states.
+        Report only issues supported by the code; avoid subjective redesign
+        suggestions.
+    - path: "apps/admin_web/lib/**"
+      instructions: |
+        Review Flutter web UI and UX for actionable issues: responsive layouts,
+        overflow, keyboard navigation, accessibility, contrast, navigation,
+        and loading, error, and empty states. Report only issues supported by
+        the code; avoid subjective redesign suggestions.

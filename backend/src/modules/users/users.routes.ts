@@ -6,6 +6,7 @@ import { serializeWorkerProfile } from "../worker-onboarding/worker-onboarding.s
 import { requestWorkerPayout } from "../wallet/wallet.service.js";
 import { generateSignedUrl, getCloudinaryFormatFromUrl } from "../../lib/cloudinary.js";
 import { getCustomerScheduleSlots } from "../availability/availability.service.js";
+import { createUserDataExport } from "./data-export.service.js";
 
 export const usersRouter = Router();
 
@@ -81,6 +82,45 @@ usersRouter.patch("/notifications/:notificationId/read", requireAuth, async (req
 });
 
 // ─── Current user profile ────────────────────────────────────────────────────
+usersRouter.get("/me/notification-preferences", requireAuth, async (request: AuthenticatedRequest, response) => {
+  const user = await prisma.user.findUnique({
+    where: { id: request.auth!.userId },
+    select: { marketingNotificationsEnabled: true }
+  });
+  if (!user) {
+    response.status(404).json({ message: "User not found" });
+    return;
+  }
+  response.setHeader("Cache-Control", "private, no-store");
+  response.status(200).json({ marketingNotificationsEnabled: user.marketingNotificationsEnabled });
+});
+
+usersRouter.get("/me/data-export", requireAuth, async (request: AuthenticatedRequest, response) => {
+  const exported = await createUserDataExport(request.auth!.userId);
+  if (!exported) {
+    response.status(404).json({ message: "User not found" });
+    return;
+  }
+  response.setHeader("Cache-Control", "private, no-store");
+  response.setHeader("Content-Disposition", 'attachment; filename="veedufix-account-data.json"');
+  response.status(200).json(exported);
+});
+
+usersRouter.patch("/me/notification-preferences", requireAuth, async (request: AuthenticatedRequest, response) => {
+  const enabled = request.body?.marketingNotificationsEnabled;
+  if (typeof enabled !== "boolean") {
+    response.status(400).json({ message: "marketingNotificationsEnabled must be a boolean" });
+    return;
+  }
+  const user = await prisma.user.update({
+    where: { id: request.auth!.userId },
+    data: { marketingNotificationsEnabled: enabled },
+    select: { marketingNotificationsEnabled: true }
+  });
+  response.setHeader("Cache-Control", "private, no-store");
+  response.status(200).json({ marketingNotificationsEnabled: user.marketingNotificationsEnabled });
+});
+
 usersRouter.get("/me", requireAuth, async (request: AuthenticatedRequest, response) => {
   const user = await prisma.user.findUnique({
     where: { id: request.auth!.userId },
@@ -450,8 +490,25 @@ usersRouter.get("/bookings/:bookingId", requireAuth, async (request: Authenticat
       },
       sparePartRequest: true,
       jobExecution: {
-        select: { completedAt: true },
+        select: {
+          completedAt: true,
+          beforePhotos: true,
+          afterPhotos: true,
+        },
       },
+      refunds: {
+        orderBy: { createdAt: "desc" },
+        select: {
+          id: true,
+          amount: true,
+          gatewayAmount: true,
+          walletAmount: true,
+          status: true,
+          createdAt: true,
+          updatedAt: true,
+          walletCreditedAt: true
+        }
+      }
     },
   });
 
@@ -506,6 +563,27 @@ usersRouter.get("/bookings/:bookingId", requireAuth, async (request: Authenticat
       sparePartReceiptUrl: booking.sparePartRequest?.receiptPhotoUrl ?? null,
       // Dispute window — completedAt from jobExecution lets the app enforce 48h limit
       completedAt: booking.jobExecution?.completedAt?.toISOString() ?? null,
+      beforePhotoUrls: booking.jobExecution?.beforePhotos ?? [],
+      afterPhotoUrls: booking.jobExecution?.afterPhotos ?? [],
+      refunds: booking.refunds.map((refund: {
+        id: string;
+        amount: unknown;
+        gatewayAmount: unknown;
+        walletAmount: unknown;
+        status: string;
+        createdAt: Date;
+        updatedAt: Date;
+        walletCreditedAt: Date | null;
+      }) => ({
+        id: refund.id,
+        amount: Number(refund.amount),
+        gatewayAmount: refund.gatewayAmount == null ? null : Number(refund.gatewayAmount),
+        walletAmount: Number(refund.walletAmount ?? 0),
+        status: refund.status,
+        createdAt: refund.createdAt.toISOString(),
+        updatedAt: refund.updatedAt.toISOString(),
+        walletCreditedAt: refund.walletCreditedAt?.toISOString() ?? null
+      })),
       timeline: (await getBookingTimelineEvents(booking.id)).map((event) => ({
         id: event.id,
         status: event.status,
@@ -833,6 +911,7 @@ usersRouter.get("/workers/:workerId/profile", requireAuth, async (request, respo
       },
       portfolioPhotos: { orderBy: { createdAt: "desc" as const }, take: 12 },
       reviews: {
+        where: { moderationStatus: "published" },
         orderBy: { createdAt: "desc" as const },
         take: 10,
         include: { reviewer: { select: { name: true, avatarUrl: true } } }
@@ -870,6 +949,8 @@ usersRouter.get("/workers/:workerId/profile", requireAuth, async (request, respo
         id: r.id,
         rating: r.rating,
         comment: r.comment ?? null,
+        workerResponse: r.workerResponse ?? null,
+        workerResponseAt: r.workerResponseAt?.toISOString() ?? null,
         customerName: r.reviewer?.name ?? "Customer",
         customerAvatarUrl: r.reviewer?.avatarUrl ?? null,
         createdAt: r.createdAt.toISOString()

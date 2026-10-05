@@ -12,6 +12,8 @@ import {
 import { recordBookingTimelineEvent } from "../../lib/booking-timeline.js";
 import { dispatchBookingAfterPayment } from "../matching/matching.service.js";
 import { raiseOpsAlert } from "../ops/ops.service.js";
+import { settleRefundFromProvider } from "../refund/refund.service.js";
+import { settleWalletPayoutFromProvider } from "../wallet/wallet.service.js";
 
 type RazorpayWebhookEvent = {
   event?: string;
@@ -23,6 +25,7 @@ type RazorpayWebhookEvent = {
         amount?: number;
         currency?: string;
         status?: string;
+        notes?: Record<string, string>;
       };
     };
     payment?: {
@@ -42,7 +45,24 @@ type RazorpayWebhookEvent = {
         status?: string;
       };
     };
+    payout?: {
+      entity?: {
+        id?: string;
+        reference_id?: string;
+        status?: string;
+        error_description?: string;
+        notes?: Record<string, string>;
+      };
+    };
   };
+};
+
+type RazorpayPayoutEntity = {
+  id?: string;
+  reference_id?: string;
+  status?: string;
+  error_description?: string;
+  notes?: Record<string, string>;
 };
 
 type PaymentWithBooking = Prisma.PaymentGetPayload<{
@@ -421,34 +441,66 @@ async function updatePaymentForRefundWebhook(
   const refundId = typeof notes.refundId === "string" ? notes.refundId : null;
   const refundRecord = refundId
     ? await prisma.refund.findFirst({
-        where: { razorpayRefundId: refundId },
+        where: { bookingId: payment.bookingId, razorpayRefundId: refundId },
         select: { id: true, status: true }
       })
     : null;
+  const internalRefundId = typeof notes.refundRecordId === "string" ? notes.refundRecordId : null;
+  const providerAttemptId = typeof notes.refundAttemptId === "string" ? notes.refundAttemptId : null;
+  const internalRefundRecord = internalRefundId
+    ? await prisma.refund.findUnique({
+        where: { id: internalRefundId },
+        select: { id: true, status: true, razorpayRefundId: true, providerAttemptId: true }
+      })
+    : null;
+  const internalRefundMatchesProviderId = Boolean(
+    internalRefundRecord && refundId && internalRefundRecord.razorpayRefundId === refundId
+  );
+  const internalRefundMatchesAttempt = Boolean(
+    internalRefundRecord &&
+    internalRefundRecord.razorpayRefundId == null &&
+    refundId &&
+    providerAttemptId &&
+    internalRefundRecord.providerAttemptId === providerAttemptId
+  );
+  const matchedRefund = refundRecord ?? (
+    internalRefundMatchesProviderId || internalRefundMatchesAttempt ? internalRefundRecord : null
+  );
+  if (internalRefundRecord && !matchedRefund) {
+    logger.warn(
+      { paymentId, refundId, internalRefundId },
+      "Ignoring refund webhook for a stale provider attempt"
+    );
+    return payment;
+  }
   const refundFailed = status === PaymentStatus.FAILED;
 
-  if (refundFailed && refundRecord?.status === "processed") {
+  if (refundFailed && matchedRefund?.status === "processed") {
     logger.warn({ paymentId, refundId }, "Ignoring failed event for an already processed refund");
     return payment;
   }
 
-  if (refundRecord) {
-    await prisma.refund.update({
-      where: { id: refundRecord.id },
-      data: {
-        status: refundFailed ? "failed" : "processed",
-        failureReason: refundFailed
-          ? String(notes.refundStatus ?? "Refund failed at the payment provider")
-          : null
-      }
-    });
+  if (matchedRefund) {
+    const settled = await settleRefundFromProvider(
+      matchedRefund.id,
+      !refundFailed,
+      String(notes.refundStatus ?? "Refund failed at the payment provider"),
+      { providerRefundId: refundId!, providerAttemptId }
+    );
+    if (settled === null) {
+      logger.warn(
+        { paymentId, refundId, internalRefundId: matchedRefund.id },
+        "Ignoring refund webhook after its provider attempt became stale"
+      );
+      return payment;
+    }
   }
 
   const processedRefunds = await prisma.refund.aggregate({
     where: { bookingId: payment.bookingId, status: "processed" },
     _sum: { amount: true }
   });
-  const untrackedRefundAmount = refundRecord
+  const untrackedRefundAmount = matchedRefund
     ? 0
     : Math.max(0, Number(notes.refundAmount ?? 0) / 100);
   const refundedAmount = Number(processedRefunds._sum.amount ?? 0) + untrackedRefundAmount;
@@ -562,9 +614,15 @@ export async function handleRazorpayWebhook(
 async function processClaimedRazorpayWebhook(body: RazorpayWebhookEvent): Promise<{ ok: true }> {
   const event = body.event ?? "unknown";
   const refundEntity = body.payload?.refund?.entity;
+  const payoutEntity = body.payload?.payout?.entity;
   const paymentEntity = body.payload?.payment?.entity;
   const orderEntity = body.payload?.order?.entity;
   const orderId = paymentEntity?.order_id ?? orderEntity?.id;
+
+  if (event.startsWith("payout.")) {
+    await processPayoutWebhook(event, payoutEntity);
+    return { ok: true };
+  }
 
   if (event.startsWith("refund.")) {
     const refundPaymentId = refundEntity?.payment_id;
@@ -579,7 +637,9 @@ async function processClaimedRazorpayWebhook(body: RazorpayWebhookEvent): Promis
         refundId: refundEntity?.id,
         refundStatus: refundEntity?.status,
         paymentId: refundPaymentId,
-        refundAmount: refundEntity?.amount
+        refundAmount: refundEntity?.amount,
+        refundRecordId: refundEntity?.notes?.refundRecordId,
+        refundAttemptId: refundEntity?.notes?.refundAttemptId
       });
     } else if (event === "refund.failed") {
       await updatePaymentForRefundWebhook(refundPaymentId, PaymentStatus.FAILED, {
@@ -587,7 +647,9 @@ async function processClaimedRazorpayWebhook(body: RazorpayWebhookEvent): Promis
         refundId: refundEntity?.id,
         refundStatus: refundEntity?.status,
         paymentId: refundPaymentId,
-        refundAmount: refundEntity?.amount
+        refundAmount: refundEntity?.amount,
+        refundRecordId: refundEntity?.notes?.refundRecordId,
+        refundAttemptId: refundEntity?.notes?.refundAttemptId
       });
     } else {
       logger.info({ event, refundPaymentId }, "Ignored refund lifecycle event");
@@ -618,4 +680,86 @@ async function processClaimedRazorpayWebhook(body: RazorpayWebhookEvent): Promis
   }
 
   return { ok: true };
+}
+
+async function processPayoutWebhook(
+  event: string,
+  entity: RazorpayPayoutEntity | undefined
+): Promise<void> {
+  const providerPayoutId = entity?.id;
+  const referenceId = entity?.reference_id;
+  const providerAttemptId = entity?.notes?.payoutAttemptId;
+  const walletTransactionId = entity?.notes?.walletTransactionId;
+  const status = event === "payout.processed"
+    ? "processed"
+    : event === "payout.failed"
+      ? "failed"
+      : event === "payout.reversed"
+        ? "reversed"
+        : null;
+
+  if (!providerPayoutId || !status) {
+    logger.info({ event, providerPayoutId }, "Ignored incomplete or unsupported payout webhook");
+    return;
+  }
+
+  if (walletTransactionId || referenceId) {
+    const transactionId = walletTransactionId ?? referenceId!;
+    const settled = await settleWalletPayoutFromProvider({
+      transactionId,
+      providerPayoutId,
+      providerAttemptId,
+      status,
+      failureReason: entity?.error_description ?? `Razorpay payout ${status}`
+    });
+    if (settled) {
+      logger.info({ event, transactionId, providerPayoutId }, "Wallet payout settled from Razorpay webhook");
+    }
+  }
+
+  // Wallet payout references are wallet transaction IDs. Booking payouts also
+  // use the internal payout ID as reference_id, so only process a matching row.
+  const payout = await prisma.payout.findFirst({
+    where: {
+      OR: [
+        { razorpayPayoutId: providerPayoutId },
+        ...(referenceId ? [{ id: referenceId }] : [])
+      ]
+    },
+    select: { id: true, status: true, razorpayPayoutId: true, providerAttemptId: true }
+  });
+  if (!payout) return;
+  if (payout.razorpayPayoutId && payout.razorpayPayoutId !== providerPayoutId) {
+    logger.warn({ event, payoutId: payout.id, providerPayoutId }, "Ignored payout webhook for a stale provider payout");
+    return;
+  }
+  if (providerAttemptId && payout.providerAttemptId !== providerAttemptId) {
+    logger.warn({ event, payoutId: payout.id, providerAttemptId }, "Ignored payout webhook for a stale payout attempt");
+    return;
+  }
+  if (!payout.razorpayPayoutId && !providerAttemptId) {
+    logger.warn({ event, payoutId: payout.id }, "Ignored payout webhook without an identifiable active attempt");
+    return;
+  }
+
+  const eligibleStatuses = status === "reversed"
+    ? ["pending", "processing", "success"]
+    : status === "processed"
+      ? ["pending", "processing", "failed"]
+      : ["pending", "processing"];
+  const result = await prisma.payout.updateMany({
+    where: {
+      id: payout.id,
+      status: { in: eligibleStatuses },
+      ...(payout.providerAttemptId ? { providerAttemptId: payout.providerAttemptId } : {})
+    },
+    data: {
+      status: status === "processed" ? "success" : "failed",
+      razorpayPayoutId: providerPayoutId,
+      failureReason: status === "processed" ? null : (entity?.error_description ?? `Razorpay payout ${status}`)
+    }
+  });
+  if (result.count > 0) {
+    logger.info({ event, payoutId: payout.id, providerPayoutId }, "Booking payout settled from Razorpay webhook");
+  }
 }

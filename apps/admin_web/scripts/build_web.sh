@@ -19,6 +19,7 @@ flutter config --no-analytics
 flutter pub get
 flutter build web --release \
   --dart-define=API_BASE_URL="${API_BASE_URL:-https://veedufix.onrender.com/api}" \
+  --dart-define=GOOGLE_MAPS_API_KEY="${GOOGLE_MAPS_API_KEY:-}" \
   --dart-define=GOOGLE_SERVER_CLIENT_ID="${GOOGLE_SERVER_CLIENT_ID:-}" \
   --dart-define=FIREBASE_PROJECT_ID="${FIREBASE_PROJECT_ID:-}" \
   --dart-define=FIREBASE_API_KEY="${FIREBASE_API_KEY:-}" \

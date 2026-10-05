@@ -15,9 +15,21 @@ export const raiseDisputeSchema = z.object({
   })
 });
 
+export const customerDisputeParamsSchema = z.object({
+  params: bookingIdParamsSchema
+});
+
 export const listDisputesQuerySchema = z.object({
   query: z.object({
     city: z.string().trim().min(1).optional(),
+    status: z.enum([
+      "all",
+      "open",
+      "under_review",
+      "refund_pending",
+      "resolved_refund",
+      "resolved_rejected"
+    ]).optional(),
     page: z.coerce.number().int().positive().default(1),
     pageSize: z.coerce.number().int().positive().max(100).default(20)
   })

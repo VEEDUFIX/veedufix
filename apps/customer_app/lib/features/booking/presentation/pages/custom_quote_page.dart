@@ -1,8 +1,8 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:marketplace_shared/marketplace_shared.dart';
-import 'package:dio/dio.dart';
 
 class CustomQuotePage extends ConsumerStatefulWidget {
   const CustomQuotePage({super.key, required this.bookingId});
@@ -14,6 +14,8 @@ class CustomQuotePage extends ConsumerStatefulWidget {
 }
 
 class _CustomQuotePageState extends ConsumerState<CustomQuotePage> {
+  static const _maxNotesLength = 500;
+
   final _notesController = TextEditingController();
   bool _isSubmitting = false;
   bool _isSuccess = false;
@@ -25,10 +27,28 @@ class _CustomQuotePageState extends ConsumerState<CustomQuotePage> {
     super.dispose();
   }
 
+  String _requestError(Object error) {
+    if (error is DioException) {
+      final data = error.response?.data;
+      final message = data is Map ? data['message']?.toString() : null;
+      if (error.type == DioExceptionType.connectionError ||
+          error.type == DioExceptionType.connectionTimeout ||
+          error.type == DioExceptionType.receiveTimeout ||
+          error.type == DioExceptionType.sendTimeout) {
+        return 'Could not connect. Check your connection and try again.';
+      }
+      if (message?.isNotEmpty == true) return message!;
+    }
+    return 'We could not send your request. Please try again.';
+  }
+
   Future<void> _submit() async {
     final notes = _notesController.text.trim();
     if (notes.isEmpty) {
-      setState(() => _error = 'Please provide details for the custom quote.');
+      setState(
+        () => _error =
+            'Add a few details so the professional can prepare a quote.',
+      );
       return;
     }
 
@@ -43,15 +63,16 @@ class _CustomQuotePageState extends ConsumerState<CustomQuotePage> {
         '/bookings/${widget.bookingId}/custom-quote/request',
         data: {'notes': notes},
       );
+      if (!mounted) return;
       setState(() {
         _isSubmitting = false;
         _isSuccess = true;
       });
-    } catch (e) {
+    } catch (error) {
+      if (!mounted) return;
       setState(() {
         _isSubmitting = false;
-        final data = e is DioException ? e.response?.data : null;
-        _error = data is Map ? (data['message'] ?? e.toString()) : e.toString();
+        _error = _requestError(error);
       });
     }
   }
@@ -66,29 +87,54 @@ class _CustomQuotePageState extends ConsumerState<CustomQuotePage> {
         backgroundColor: cs.surface,
         appBar: AppBar(backgroundColor: cs.surface, elevation: 0),
         body: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(32),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(Icons.check_circle_rounded, size: 64, color: Color(0xFF10B981)),
-                const SizedBox(height: 24),
-                Text('Quote Requested', style: tt.headlineSmall?.copyWith(fontWeight: FontWeight.w800)),
-                const SizedBox(height: 12),
-                Text(
-                  'We have received your request for a custom quote. Our professional will review the details and get back to you shortly.',
-                  textAlign: TextAlign.center,
-                  style: tt.bodyMedium?.copyWith(color: cs.onSurfaceVariant),
-                ),
-                const SizedBox(height: 32),
-                FilledButton(
-                  onPressed: () {
-                    // Assuming bookingDetailPageProvider is exported from marketplace_shared or handled by refresh on pop
-                    context.pop();
-                  },
-                  child: const Text('Return to Booking'),
-                ),
-              ],
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(28),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 420),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 76,
+                    height: 76,
+                    decoration: BoxDecoration(
+                      color: cs.primary.withValues(alpha: 0.1),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      Icons.request_quote_rounded,
+                      size: 38,
+                      color: cs.primary,
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  Text(
+                    'Request sent',
+                    textAlign: TextAlign.center,
+                    style: tt.headlineSmall?.copyWith(
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    'The professional will review your requirements and share a quote. You can review the price before deciding whether to proceed.',
+                    textAlign: TextAlign.center,
+                    style: tt.bodyMedium?.copyWith(
+                      color: cs.onSurfaceVariant,
+                      height: 1.5,
+                    ),
+                  ),
+                  const SizedBox(height: 28),
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton.icon(
+                      onPressed: () => context.pop(),
+                      icon: const Icon(Icons.arrow_back_rounded),
+                      label: const Text('Return to booking'),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ),
@@ -100,66 +146,116 @@ class _CustomQuotePageState extends ConsumerState<CustomQuotePage> {
       appBar: AppBar(
         backgroundColor: cs.surface,
         elevation: 0,
-        leading: Padding(
-          padding: const EdgeInsets.all(8),
-          child: TapScale(
-            onTap: () => context.pop(),
-            child: Container(
-              decoration: BoxDecoration(
-                color: cs.surfaceContainerHighest.withValues(alpha: 0.5),
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(Icons.arrow_back_ios_new_rounded, size: 18),
-            ),
-          ),
+        leading: IconButton(
+          tooltip: 'Back to booking',
+          onPressed: _isSubmitting ? null : () => context.pop(),
+          icon: const Icon(Icons.arrow_back_ios_new_rounded),
         ),
-        title: Text('Request Custom Quote', style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
+        title: Text(
+          'Request a quote',
+          style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+        ),
       ),
       body: ListView(
-        padding: const EdgeInsets.all(20),
+        keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+        padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
         children: [
-          PremiumGlassCard(
-            child: Padding(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Describe your requirements',
-                    style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w800),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'For big jobs or special requirements, please describe what needs to be done. We will review and provide a custom quote before proceeding.',
-                    style: tt.bodyMedium?.copyWith(color: cs.onSurfaceVariant, height: 1.5),
-                  ),
-                  const SizedBox(height: 24),
-                  TextField(
-                    controller: _notesController,
-                    maxLines: 6,
-                    decoration: InputDecoration(
-                      hintText: 'E.g., I need to repaint the entire living room including the ceiling...',
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(AbzioTheme.cardRadius),
+          Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 560),
+              child: PremiumGlassCard(
+                child: Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        width: 48,
+                        height: 48,
+                        decoration: BoxDecoration(
+                          color: cs.primary.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        child: Icon(
+                          Icons.home_repair_service_rounded,
+                          color: cs.primary,
+                        ),
                       ),
-                    ),
+                      const SizedBox(height: 16),
+                      Text(
+                        'Tell us what you need',
+                        style: tt.titleLarge?.copyWith(
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Describe the size of the job, areas involved, materials, or any special requirements. The professional will send a quote for your approval before the work proceeds.',
+                        style: tt.bodyMedium?.copyWith(
+                          color: cs.onSurfaceVariant,
+                          height: 1.5,
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+                      TextField(
+                        controller: _notesController,
+                        maxLength: _maxNotesLength,
+                        maxLines: 6,
+                        minLines: 4,
+                        textCapitalization: TextCapitalization.sentences,
+                        onChanged: (_) {
+                          if (_error != null) setState(() => _error = null);
+                        },
+                        decoration: InputDecoration(
+                          labelText: 'Job details',
+                          hintText:
+                              'For example: repaint two bedrooms, including the ceilings',
+                          alignLabelWithHint: true,
+                          helperText:
+                              'Include measurements or photos in the booking chat if helpful.',
+                          errorText: _error,
+                          filled: true,
+                          fillColor: cs.surface,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(
+                              AbzioTheme.cardRadius,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
-                  if (_error != null) ...[
-                    const SizedBox(height: 12),
-                    Text(_error!, style: tt.bodyMedium?.copyWith(color: cs.error)),
-                  ],
-                ],
+                ),
               ),
             ),
           ),
         ],
       ),
       bottomNavigationBar: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: FilledButton(
-            onPressed: _isSubmitting ? null : _submit,
-            child: _isSubmitting ? const CircularProgressIndicator(color: Colors.white) : const Text('Submit Request'),
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 560),
+            child: Padding(
+              padding: const EdgeInsets.all(20),
+              child: SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  onPressed: _isSubmitting ? null : _submit,
+                  icon: _isSubmitting
+                      ? const SizedBox.square(
+                          dimension: 18,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Icon(Icons.send_rounded),
+                  label: Text(
+                    _isSubmitting ? 'Sending request…' : 'Send quote request',
+                  ),
+                ),
+              ),
+            ),
           ),
         ),
       ),

@@ -104,6 +104,7 @@ model User {
   emailVerifiedAt  DateTime?
   phoneVerifiedAt   DateTime?
   isActive         Boolean  @default(true)
+  marketingNotificationsEnabled Boolean @default(false)
   referralCode     String?  @unique
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
@@ -113,6 +114,7 @@ model User {
   savedAddresses   SavedAddress[]
   bookings         Booking[] @relation("CustomerBookings")
   reviewsWritten   Review[]  @relation("ReviewerReviews")
+  reviewReports    ReviewReport[]
   notifications    Notification[]
   deviceTokens     DeviceToken[]
   refreshTokens    RefreshToken[]
@@ -201,8 +203,28 @@ model WorkerProfile {
   earnings            WalletTransaction[]
   profileDocuments    Document[]
   availability        WorkerAvailability[]
+  payoutChangeRequests WorkerPayoutChangeRequest[]
 
   @@index([onboardingStatus, verificationStatus])
+}
+
+model WorkerPayoutChangeRequest {
+  id                String        @id @default(cuid())
+  workerProfileId   String
+  workerProfile     WorkerProfile @relation(fields: [workerProfileId], references: [id], onDelete: Cascade)
+  pendingKey        String?       @unique
+  bankAccountNumber String?
+  bankIfsc          String?
+  upiId             String?
+  status            String        @default("pending")
+  rejectionReason   String?
+  reviewedBy        String?
+  reviewedAt        DateTime?
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  @@index([status, createdAt])
+  @@index([workerProfileId, createdAt])
 }
 
 model WalletTransaction {
@@ -437,6 +459,7 @@ model Payout {
   commissionAmount Float
   status           String   @default("pending")
   razorpayPayoutId String?
+  providerAttemptId String?
   failureReason    String?
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
@@ -509,9 +532,13 @@ model Refund {
   disputeId        String?
   dispute          Dispute? @relation("DisputeRefund")
   amount           Float
+  gatewayAmount    Float?
+  walletAmount     Float    @default(0)
+  walletCreditedAt DateTime?
   reason           String
   status           String   @default("pending")
   razorpayRefundId String?
+  providerAttemptId String?
   failureReason    String?
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
@@ -604,10 +631,30 @@ model Review {
   rating        Int
   comment       String?
   mediaUrls     Json?
+  workerResponse String?
+  workerResponseAt DateTime?
+  moderationStatus String   @default("published")
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
+  reports       ReviewReport[]
 
   @@index([workerId])
+  @@index([moderationStatus, createdAt])
+}
+
+model ReviewReport {
+  id         String   @id @default(cuid())
+  reviewId   String
+  review     Review   @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+  reporterId String
+  reporter   User     @relation(fields: [reporterId], references: [id], onDelete: Cascade)
+  reason     String
+  status     String   @default("open")
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([reviewId, reporterId])
+  @@index([status, createdAt])
 }
 
 model Notification {

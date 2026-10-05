@@ -1,4 +1,7 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:marketplace_shared/marketplace_shared.dart';
@@ -51,7 +54,13 @@ class SettingsPage extends ConsumerWidget {
             icon: Icons.notifications_rounded,
             title: appText(context, 'Notifications', 'அறிவிப்புகள்'),
             subtitle: 'Manage alerts for jobs and payouts',
-            onTap: () => _showNotificationPrefs(context),
+            onTap: () => _showNotificationPrefs(context, ref),
+          ),
+          _SettingsTile(
+            icon: Icons.network_check_rounded,
+            title: 'Connection diagnostics',
+            subtitle: 'Check the app and service connection',
+            onTap: () => context.push('/connection-diagnostics'),
           ),
           const SizedBox(height: 32),
           
@@ -68,13 +77,9 @@ class SettingsPage extends ConsumerWidget {
           ),
           _SettingsTile(
             icon: Icons.download_rounded,
-            title: 'Request a data export',
-            subtitle: 'Contact support to request a copy of your data',
-            onTap: () => _openSupportRequest(
-              context,
-              subject: 'Request a copy of my data',
-              message: 'Please help me request an export of my Veedufix Partner account data.',
-            ),
+            title: 'Export My Data',
+            subtitle: 'Copy your account data as JSON',
+            onTap: () => _exportWorkerData(context, ref),
           ),
           _SettingsTile(
             icon: Icons.delete_forever_rounded,
@@ -239,6 +244,25 @@ class _SettingsTile extends StatelessWidget {
   }
 }
 
+Future<void> _exportWorkerData(BuildContext context, WidgetRef ref) async {
+  try {
+    final data = await ref.read(apiClientProvider).get('/users/me/data-export');
+    final json = const JsonEncoder.withIndent('  ').convert(data);
+    await Clipboard.setData(ClipboardData(text: json));
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Your account export was copied as JSON. Store it securely.'),
+      ));
+    }
+  } catch (error) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not export your data: $error')),
+      );
+    }
+  }
+}
+
 void _showInfoDialog(BuildContext context, {required String title, required String body}) {
   showDialog<void>(
     context: context,
@@ -286,15 +310,74 @@ Future<void> _showLanguagePicker(BuildContext context, WidgetRef ref) async {
   }
 }
 
-void _showNotificationPrefs(BuildContext context) {
-  showDialog<void>(
+Future<void> _showNotificationPrefs(BuildContext context, WidgetRef ref) async {
+  var marketingEnabled = false;
+  String? errorMessage;
+  try {
+    final preferences = await ref
+        .read(apiClientProvider)
+        .get('/users/me/notification-preferences');
+    marketingEnabled = preferences['marketingNotificationsEnabled'] == true;
+  } catch (_) {
+    errorMessage = 'Could not load your saved notification preference.';
+  }
+  if (!context.mounted) return;
+  var isSaving = false;
+
+  await showDialog<void>(
     context: context,
-    builder: (context) => AlertDialog(
-      title: const Text('Notification preferences'),
-      content: const Text('Push notifications depend on your device permissions. Email and SMS preferences cannot currently be changed in the app.'),
-      actions: [
-        TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('OK')),
-      ],
+    builder: (dialogContext) => StatefulBuilder(
+      builder: (context, setDialogState) => AlertDialog(
+        title: const Text('Notification preferences'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Job and payout alerts follow your device notification permission.'),
+            SwitchListTile.adaptive(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Offers and promotions'),
+              subtitle: const Text('Receive promotional messages on your account'),
+              value: marketingEnabled,
+              onChanged: isSaving
+                  ? null
+                  : (value) async {
+                      setDialogState(() {
+                        isSaving = true;
+                        errorMessage = null;
+                      });
+                      try {
+                        final updated = await ref.read(apiClientProvider).patch(
+                          '/users/me/notification-preferences',
+                          data: {'marketingNotificationsEnabled': value},
+                        );
+                        if (!context.mounted) return;
+                        setDialogState(() {
+                          marketingEnabled = updated['marketingNotificationsEnabled'] == true;
+                        });
+                      } catch (_) {
+                        if (context.mounted) {
+                          setDialogState(() => errorMessage = 'Could not save this preference. Try again.');
+                        }
+                      } finally {
+                        if (context.mounted) setDialogState(() => isSaving = false);
+                      }
+                    },
+            ),
+            if (isSaving) const LinearProgressIndicator(),
+            if (errorMessage != null) ...[
+              const SizedBox(height: 8),
+              Text(errorMessage!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
+            ],
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: isSaving ? null : () => Navigator.of(dialogContext).pop(),
+            child: const Text('Done'),
+          ),
+        ],
+      ),
     ),
   );
 }

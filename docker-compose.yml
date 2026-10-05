@@ -1,3 +1,4 @@
+# Local development stack. Do not expose these ports or use these defaults in production.
 version: '3.8'
 
 services:
@@ -5,10 +6,10 @@ services:
     image: postgres:15-alpine
     environment:
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: password
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-password}
       POSTGRES_DB: veedufix
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -20,7 +21,7 @@ services:
   redis:
     image: redis:7-alpine
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
     volumes:
       - redis_data:/data
     healthcheck:
@@ -34,14 +35,14 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     ports:
-      - "5000:5000"
+      - "127.0.0.1:5000:5000"
     environment:
-      - NODE_ENV=production
-      - PORT=5000
-      - DATABASE_URL=postgresql://postgres:password@postgres:5432/veedufix?schema=public
-      - REDIS_URL=redis://redis:6379
-      - JWT_ACCESS_SECRET=super_secret_access_token_key_change_in_prod
-      - JWT_REFRESH_SECRET=super_secret_refresh_token_key_change_in_prod
+      NODE_ENV: development
+      PORT: 5000
+      DATABASE_URL: "postgresql://postgres:${POSTGRES_PASSWORD:-password}@postgres:5432/veedufix?schema=public"
+      DIRECT_URL: "postgresql://postgres:${POSTGRES_PASSWORD:-password}@postgres:5432/veedufix?schema=public"
+      REDIS_URL: redis://redis:6379
+      APP_CORS_ORIGIN: "http://localhost,http://localhost:80,http://localhost:3000"
     depends_on:
       postgres:
         condition: service_healthy
@@ -52,8 +53,11 @@ services:
     build:
       context: .
       dockerfile: apps/admin_web/Dockerfile
+      args:
+        API_BASE_URL: http://localhost:5000/api
+        GOOGLE_MAPS_API_KEY: ${GOOGLE_MAPS_API_KEY:-}
     ports:
-      - "80:80"
+      - "127.0.0.1:80:80"
     depends_on:
       - api
 

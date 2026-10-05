@@ -26,6 +26,7 @@ class GenerateQuotePage extends ConsumerStatefulWidget {
 
 class _GenerateQuotePageState extends ConsumerState<GenerateQuotePage> {
   final _items = <_QuoteItem>[];
+  final _formKey = GlobalKey<FormState>();
   final _notesController = TextEditingController();
   bool _submitting = false;
 
@@ -41,7 +42,8 @@ class _GenerateQuotePageState extends ConsumerState<GenerateQuotePage> {
     super.dispose();
   }
 
-  void _addItem() => setState(() => _items.add(_QuoteItem(label: '', amount: 0)));
+  void _addItem() =>
+      setState(() => _items.add(_QuoteItem(label: '', amount: 0)));
 
   void _removeItem(int index) {
     if (_items.length > 1) setState(() => _items.removeAt(index));
@@ -49,13 +51,12 @@ class _GenerateQuotePageState extends ConsumerState<GenerateQuotePage> {
 
   double get _total => _items.fold(0.0, (s, i) => s + i.amount);
 
+  String _formatAmount(double amount) => amount == amount.roundToDouble()
+      ? amount.toStringAsFixed(0)
+      : amount.toStringAsFixed(2);
+
   Future<void> _submit() async {
-    if (_items.any((i) => i.label.trim().isEmpty || i.amount <= 0)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please fill all line items with valid amounts.')),
-      );
-      return;
-    }
+    if (_submitting || !(_formKey.currentState?.validate() ?? false)) return;
 
     setState(() => _submitting = true);
     try {
@@ -63,24 +64,31 @@ class _GenerateQuotePageState extends ConsumerState<GenerateQuotePage> {
       final total = _total;
       final payload = QuotePayload(
         amount: total,
-        itemized: _items.map((i) => QuoteItem(
-          label: i.label.trim(),
-          qty: 1,
-          unitPrice: i.amount,
-        )).toList(),
-        notes: _notesController.text.trim().isNotEmpty ? _notesController.text.trim() : null,
+        itemized: _items
+            .map((i) => QuoteItem(
+                  label: i.label.trim(),
+                  qty: 1,
+                  unitPrice: i.amount,
+                ))
+            .toList(),
+        notes: _notesController.text.trim().isNotEmpty
+            ? _notesController.text.trim()
+            : null,
       );
       await repo.generateQuote(widget.bookingId, payload.toJson());
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Custom quote submitted successfully ✅')),
+          const SnackBar(
+              content: Text('Custom quote submitted successfully ✅')),
         );
         Navigator.of(context).pop(true); // pop and signal success
       }
-    } catch (e) {
+    } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to send quote: $e')),
+          const SnackBar(
+            content: Text('Could not send the quote. Please try again.'),
+          ),
         );
       }
     } finally {
@@ -101,179 +109,224 @@ class _GenerateQuotePageState extends ConsumerState<GenerateQuotePage> {
         backgroundColor: cs.surface,
         surfaceTintColor: Colors.transparent,
       ),
-      body: ListView(
-        padding: const EdgeInsets.all(20),
-        children: [
-          // Header card
-          PremiumGlassCard(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: cs.primary.withValues(alpha: 0.12),
-                      shape: BoxShape.circle,
+      body: Form(
+        key: _formKey,
+        child: ListView(
+          padding: const EdgeInsets.all(20),
+          children: [
+            // Header card
+            PremiumGlassCard(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: cs.primary.withValues(alpha: 0.12),
+                        shape: BoxShape.circle,
+                      ),
+                      child:
+                          Icon(Icons.request_quote_rounded, color: cs.primary),
                     ),
-                    child: Icon(Icons.request_quote_rounded, color: cs.primary),
-                  ),
-                  const SizedBox(width: 14),
-                  Expanded(
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Site Visit Complete',
+                              style: tt.titleMedium
+                                  ?.copyWith(fontWeight: FontWeight.w800)),
+                          const SizedBox(height: 2),
+                          Text(
+                            'Add materials and labor charges below. The customer will review and approve before you proceed.',
+                            style: tt.bodySmall
+                                ?.copyWith(color: cs.onSurfaceVariant),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 24),
+
+            // Line items header
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text('Line Items',
+                    style:
+                        tt.titleSmall?.copyWith(fontWeight: FontWeight.w800)),
+                TextButton.icon(
+                  onPressed: _submitting ? null : _addItem,
+                  icon: const Icon(Icons.add_circle_outline_rounded, size: 18),
+                  label: const Text('Add Item'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+
+            // Items list
+            ..._items.asMap().entries.map((entry) {
+              final index = entry.key;
+              final item = entry.value;
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                key: ObjectKey(item),
+                child: PremiumGlassCard(
+                  child: Padding(
+                    padding: const EdgeInsets.all(14),
                     child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('Site Visit Complete',
-                            style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
-                        const SizedBox(height: 2),
-                        Text(
-                          'Add materials and labor charges below. The customer will review and approve before you proceed.',
-                          style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+                        Row(
+                          children: [
+                            Expanded(
+                              flex: 3,
+                              child: TextFormField(
+                                initialValue: item.label,
+                                decoration: InputDecoration(
+                                  labelText: 'Description',
+                                  hintText: 'e.g. Asian Paints Royale',
+                                  border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(10)),
+                                  contentPadding: const EdgeInsets.symmetric(
+                                      horizontal: 12, vertical: 10),
+                                ),
+                                textCapitalization:
+                                    TextCapitalization.sentences,
+                                readOnly: _submitting,
+                                validator: (value) =>
+                                    value == null || value.trim().isEmpty
+                                        ? 'Enter a description'
+                                        : null,
+                                onChanged: (v) => item.label = v,
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              flex: 2,
+                              child: TextFormField(
+                                initialValue: item.amount > 0
+                                    ? _formatAmount(item.amount)
+                                    : '',
+                                decoration: InputDecoration(
+                                  labelText: 'Amount (₹)',
+                                  border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(10)),
+                                  contentPadding: const EdgeInsets.symmetric(
+                                      horizontal: 12, vertical: 10),
+                                  prefixText: '₹ ',
+                                ),
+                                keyboardType:
+                                    const TextInputType.numberWithOptions(
+                                  decimal: true,
+                                ),
+                                inputFormatters: [
+                                  FilteringTextInputFormatter.allow(
+                                    RegExp(r'^\d*\.?\d{0,2}'),
+                                  ),
+                                ],
+                                readOnly: _submitting,
+                                validator: (value) {
+                                  final amount = double.tryParse(value ?? '');
+                                  return amount == null || amount <= 0
+                                      ? 'Enter an amount above ₹0'
+                                      : null;
+                                },
+                                onChanged: (v) => setState(() =>
+                                    item.amount = double.tryParse(v) ?? 0),
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                            IconButton(
+                              icon: Icon(Icons.remove_circle_outline_rounded,
+                                  color: _items.length > 1
+                                      ? cs.error
+                                      : cs.outlineVariant),
+                              onPressed:
+                                  _submitting ? null : () => _removeItem(index),
+                            ),
+                          ],
                         ),
                       ],
                     ),
                   ),
-                ],
+                ),
+              );
+            }),
+
+            const SizedBox(height: 8),
+
+            // Notes
+            TextFormField(
+              controller: _notesController,
+              readOnly: _submitting,
+              decoration: InputDecoration(
+                labelText: 'Notes for customer (optional)',
+                hintText: 'e.g. Includes 2 coats of paint. Work takes 3 days.',
+                border:
+                    OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                contentPadding: const EdgeInsets.all(14),
               ),
+              maxLines: 3,
+              textCapitalization: TextCapitalization.sentences,
             ),
-          ),
-          const SizedBox(height: 24),
+            const SizedBox(height: 24),
 
-          // Line items header
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text('Line Items', style: tt.titleSmall?.copyWith(fontWeight: FontWeight.w800)),
-              TextButton.icon(
-                onPressed: _addItem,
-                icon: const Icon(Icons.add_circle_outline_rounded, size: 18),
-                label: const Text('Add Item'),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-
-          // Items list
-          ..._items.asMap().entries.map((entry) {
-            final index = entry.key;
-            final item = entry.value;
-            return Padding(
-              padding: const EdgeInsets.only(bottom: 12),
-              child: PremiumGlassCard(
-                child: Padding(
-                  padding: const EdgeInsets.all(14),
-                  child: Column(
-                    children: [
-                      Row(
-                        children: [
-                          Expanded(
-                            flex: 3,
-                            child: TextFormField(
-                              initialValue: item.label,
-                              decoration: InputDecoration(
-                                labelText: 'Description',
-                                hintText: 'e.g. Asian Paints Royale',
-                                border: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(10)),
-                                contentPadding: const EdgeInsets.symmetric(
-                                    horizontal: 12, vertical: 10),
-                              ),
-                              textCapitalization: TextCapitalization.sentences,
-                              onChanged: (v) => item.label = v,
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            flex: 2,
-                            child: TextFormField(
-                              initialValue: item.amount > 0 ? item.amount.toStringAsFixed(0) : '',
-                              decoration: InputDecoration(
-                                labelText: 'Amount (₹)',
-                                border: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(10)),
-                                contentPadding: const EdgeInsets.symmetric(
-                                    horizontal: 12, vertical: 10),
-                                prefixText: '₹ ',
-                              ),
-                              keyboardType: TextInputType.number,
-                              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                              onChanged: (v) => setState(() => item.amount = double.tryParse(v) ?? 0),
-                            ),
-                          ),
-                          const SizedBox(width: 4),
-                          IconButton(
-                            icon: Icon(Icons.remove_circle_outline_rounded,
-                                color: _items.length > 1 ? cs.error : cs.outlineVariant),
-                            onPressed: () => _removeItem(index),
-                          ),
-                        ],
+            // Total summary
+            PremiumGlassCard(
+              child: Padding(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text('Total Quote',
+                        style: tt.titleMedium
+                            ?.copyWith(fontWeight: FontWeight.w700)),
+                    Text(
+                      '₹${_formatAmount(_total)}',
+                      style: tt.headlineSmall?.copyWith(
+                        color: cs.primary,
+                        fontWeight: FontWeight.w900,
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
               ),
-            );
-          }),
-
-          const SizedBox(height: 8),
-
-          // Notes
-          TextFormField(
-            controller: _notesController,
-            decoration: InputDecoration(
-              labelText: 'Notes for customer (optional)',
-              hintText: 'e.g. Includes 2 coats of paint. Work takes 3 days.',
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-              contentPadding: const EdgeInsets.all(14),
             ),
-            maxLines: 3,
-            textCapitalization: TextCapitalization.sentences,
-          ),
-          const SizedBox(height: 24),
+            const SizedBox(height: 24),
 
-          // Total summary
-          PremiumGlassCard(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text('Total Quote',
-                      style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
-                  Text(
-                    '₹${_total.toStringAsFixed(0)}',
-                    style: tt.headlineSmall?.copyWith(
-                      color: cs.primary,
-                      fontWeight: FontWeight.w900,
-                    ),
-                  ),
-                ],
+            // Submit button
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                onPressed: _submitting ? null : _submit,
+                icon: _submitting
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                            strokeWidth: 2, color: Colors.white),
+                      )
+                    : const Icon(Icons.send_rounded),
+                label: Text(
+                  _submitting
+                      ? 'Sending...'
+                      : 'Send Quote • ₹${_formatAmount(_total)}',
+                ),
+                style: FilledButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  textStyle: const TextStyle(
+                      fontSize: 16, fontWeight: FontWeight.w700),
+                ),
               ),
             ),
-          ),
-          const SizedBox(height: 24),
-
-          // Submit button
-          SizedBox(
-            width: double.infinity,
-            child: FilledButton.icon(
-              onPressed: _submitting ? null : _submit,
-              icon: _submitting
-                  ? const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                    )
-                  : const Icon(Icons.send_rounded),
-              label: Text(_submitting ? 'Sending...' : 'Send Quote to Customer'),
-              style: FilledButton.styleFrom(
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
-              ),
-            ),
-          ),
-          const SizedBox(height: 32),
-        ],
+            const SizedBox(height: 32),
+          ],
+        ),
       ),
     );
   }

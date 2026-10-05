@@ -26,7 +26,7 @@ class HomeServiceCard extends StatelessWidget {
           color: Colors.white,
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
-            color: const Color(0xFFE8E5DE),
+            color: AbzioTheme.lightBorder,
             width: 1,
           ),
           boxShadow: [
@@ -44,14 +44,14 @@ class HomeServiceCard extends StatelessWidget {
               height: 72,
               width: double.infinity,
               decoration: BoxDecoration(
-                color: const Color(0xFFF3F0E9),
+                color: AbzioTheme.lightMuted,
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Center(
                 child: Icon(
                   _serviceIcon(),
                   size: 28,
-                  color: const Color(0xFFC6A769),
+                  color: AbzioTheme.accentColor,
                 ),
               ),
             ),
@@ -60,10 +60,10 @@ class HomeServiceCard extends StatelessWidget {
               service.name,
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
-              style: GoogleFonts.inter(
+              style: GoogleFonts.outfit(
                 fontSize: 13.5,
                 fontWeight: FontWeight.w700,
-                color: const Color(0xFF111111),
+                color: AbzioTheme.lightTextPrimary,
               ),
             ),
             const SizedBox(height: 4),
@@ -71,10 +71,10 @@ class HomeServiceCard extends StatelessWidget {
               _subtitle,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: GoogleFonts.inter(
+              style: GoogleFonts.outfit(
                 fontSize: 11.5,
                 fontWeight: FontWeight.w400,
-                color: const Color(0xFF6B6B6B),
+                color: AbzioTheme.lightTextSecondary,
               ),
             ),
             const Spacer(),
@@ -83,10 +83,10 @@ class HomeServiceCard extends StatelessWidget {
               children: [
                 Text(
                   '₹${service.startingPrice.toInt()}',
-                  style: GoogleFonts.inter(
+                  style: GoogleFonts.outfit(
                     fontSize: 14,
                     fontWeight: FontWeight.w700,
-                    color: const Color(0xFF111111),
+                    color: AbzioTheme.lightTextPrimary,
                   ),
                 ),
                 Row(
@@ -100,10 +100,10 @@ class HomeServiceCard extends StatelessWidget {
                     const SizedBox(width: 4),
                     Text(
                       service.rating.toStringAsFixed(1),
-                      style: GoogleFonts.inter(
+                      style: GoogleFonts.outfit(
                         fontSize: 11.5,
                         fontWeight: FontWeight.w600,
-                        color: const Color(0xFF6B6B6B),
+                        color: AbzioTheme.lightTextSecondary,
                       ),
                     ),
                   ],

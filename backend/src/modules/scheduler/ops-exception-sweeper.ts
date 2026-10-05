@@ -403,14 +403,13 @@ async function sweepPayouts(): Promise<SyncResult> {
 }
 
 async function sweepRefunds(): Promise<SyncResult> {
-  const refunds = await prisma.refund.findMany({
-    where: {
-      status: "failed"
-    },
+  const findRefundsByStatus = (status: "failed" | "pending") => prisma.refund.findMany({
+    where: { status },
     select: {
       id: true,
       bookingId: true,
       amount: true,
+      status: true,
       reason: true,
       failureReason: true,
       createdAt: true,
@@ -429,8 +428,14 @@ async function sweepRefunds(): Promise<SyncResult> {
     orderBy: {
       updatedAt: "asc"
     },
-    take: 200
+    take: 201
   });
+  const [failedRefunds, pendingRefunds] = await Promise.all([
+    findRefundsByStatus("failed"),
+    findRefundsByStatus("pending")
+  ]);
+  const truncated = failedRefunds.length > 200 || pendingRefunds.length > 200;
+  const refunds = [...failedRefunds.slice(0, 200), ...pendingRefunds.slice(0, 200)];
 
   const activeSourceIds = new Set<string>();
   let opened = 0;
@@ -449,16 +454,19 @@ async function sweepRefunds(): Promise<SyncResult> {
     const state: AlertState = {
       sourceId,
       kind: "refund_failure",
-      title: `Customer refund failed`,
-      message: `Refund for booking ${refund.booking.code} has been failing for ${formatAge(ageHours)}${refund.failureReason ? `: ${refund.failureReason}` : "."}`,
+      title: refund.status === "pending" ? "Customer refund is pending" : "Customer refund failed",
+      message: refund.status === "pending"
+        ? `Refund for booking ${refund.booking.code} has not been confirmed by the payment provider for ${formatAge(ageHours)}.`
+        : `Refund for booking ${refund.booking.code} has been failing for ${formatAge(ageHours)}${refund.failureReason ? `: ${refund.failureReason}` : "."}`,
       bookingId: refund.bookingId,
       severity,
       metadata: {
-        title: `Refund failure - ${refund.booking.code}`,
+        title: `${refund.status === "pending" ? "Refund pending" : "Refund failure"} - ${refund.booking.code}`,
         refundId: refund.id,
         bookingCode: refund.booking.code,
         customerName: refund.booking.customer.name,
         amount: refund.amount,
+        status: refund.status,
         failureReason: refund.failureReason,
         reason: refund.reason,
         ageHours,
@@ -471,7 +479,10 @@ async function sweepRefunds(): Promise<SyncResult> {
     }
   }
 
-  const resolved = await resolveMissingAlerts(REFUND_ALERT_PREFIX, activeSourceIds);
+  if (truncated) {
+    logger.warn({ failed: failedRefunds.length, pending: pendingRefunds.length }, "Refund alert scan reached its per-status limit; stale alerts were left open");
+  }
+  const resolved = truncated ? 0 : await resolveMissingAlerts(REFUND_ALERT_PREFIX, activeSourceIds);
   return { scanned: refunds.length, opened, resolved };
 }
 

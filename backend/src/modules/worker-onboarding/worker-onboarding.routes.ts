@@ -10,7 +10,10 @@ import {
   adminWorkerHistoryParamsSchema,
   adminWorkersQuerySchema,
   onboardingStatusSchema,
+  payoutChangeRequestParamsSchema,
+  payoutChangeRequestSchema,
   pendingReviewQuerySchema,
+  rejectPayoutChangeRequestSchema,
   rejectProfileSchema,
   reinstateProfileSchema,
   submitForReviewSchema,
@@ -23,18 +26,23 @@ import {
 import {
   addSkillHandler,
   addServiceHandler,
+  approvePayoutChangeRequestHandler,
   approveWorkerHandler,
   getAdminAadhaarDocHandler,
   getAdminSkillCertDocHandler,
   getOwnAadhaarDocHandler,
   getOwnSkillCertDocHandler,
   getStatusHandler,
+  getMyPayoutChangeRequestHandler,
   getWorkerDirectoryHandler,
   getWorkerHistoryHandler,
   pendingReviewHandler,
+  pendingPayoutChangeRequestsHandler,
+  rejectPayoutChangeRequestHandler,
   rejectWorkerHandler,
   reinstateWorkerHandler,
   submitForReviewHandler,
+  submitPayoutChangeRequestHandler,
   suspendWorkerHandler,
   workerReviewDetailHandler,
   updateProfileHandler,
@@ -52,6 +60,8 @@ workerOnboardingRouter.post("/skills", validate(addSkillSchema), addSkillHandler
 workerOnboardingRouter.post("/services", validate(addServiceSchema), addServiceHandler);
 workerOnboardingRouter.post("/submit", validate(submitForReviewSchema), submitForReviewHandler);
 workerOnboardingRouter.get("/status", validate(onboardingStatusSchema), getStatusHandler);
+workerOnboardingRouter.get("/payout-change-request", getMyPayoutChangeRequestHandler);
+workerOnboardingRouter.post("/payout-change-request", validate(payoutChangeRequestSchema), submitPayoutChangeRequestHandler);
 // KYC document access — worker retrieves their own documents via signed URLs
 workerOnboardingRouter.get("/documents/aadhaar", validate(workerDocAadhaarSchema), getOwnAadhaarDocHandler);
 workerOnboardingRouter.get("/documents/skills/:skillId/certification", validate(workerDocSkillParamsSchema), getOwnSkillCertDocHandler);
@@ -60,6 +70,9 @@ adminWorkerReviewRouter.use(requireAuth, requireRole("ADMIN"));
 // Static paths must be registered before /:profileId, otherwise Express
 // interprets "pending" as a profile id.
 adminWorkerReviewRouter.get("/pending", validate(pendingReviewQuerySchema), pendingReviewHandler);
+adminWorkerReviewRouter.get("/payout-changes/pending", pendingPayoutChangeRequestsHandler);
+adminWorkerReviewRouter.post("/payout-changes/:requestId/approve", validate(payoutChangeRequestParamsSchema), approvePayoutChangeRequestHandler);
+adminWorkerReviewRouter.post("/payout-changes/:requestId/reject", validate(rejectPayoutChangeRequestSchema), rejectPayoutChangeRequestHandler);
 adminWorkerReviewRouter.get("/:profileId", validate(adminProfileParamsSchema), workerReviewDetailHandler);
 adminWorkerReviewRouter.post("/:profileId/approve", validate(adminProfileParamsSchema), approveWorkerHandler);
 adminWorkerReviewRouter.post("/:profileId/reject", validate(rejectProfileSchema), rejectWorkerHandler);

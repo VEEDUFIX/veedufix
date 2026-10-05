@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:marketplace_shared/marketplace_shared.dart';
@@ -46,8 +47,7 @@ class OffersPage extends ConsumerWidget {
               physics: const AlwaysScrollableScrollPhysics(),
               padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
               itemCount: offers.length + 1,
-              separatorBuilder: (context, index) =>
-                  const SizedBox(height: 12),
+              separatorBuilder: (context, index) => const SizedBox(height: 12),
               itemBuilder: (context, index) {
                 if (index == 0) {
                   return Padding(
@@ -91,104 +91,152 @@ class _CouponCard extends StatelessWidget {
     final accent = cs.primary;
 
     return Container(
-        decoration: BoxDecoration(
-          color: cs.surface,
-          borderRadius: BorderRadius.circular(AbzioTheme.cardRadius),
-          border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.55)),
-          boxShadow: AbzioTheme.shadowFor(Theme.of(context).brightness),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Icon(Icons.local_offer_rounded, color: accent, size: 22),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          offer.title,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: tt.titleMedium?.copyWith(
+      decoration: BoxDecoration(
+        color: cs.surface,
+        borderRadius: BorderRadius.circular(AbzioTheme.cardRadius),
+        border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.55)),
+        boxShadow: AbzioTheme.shadowFor(Theme.of(context).brightness),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(Icons.local_offer_rounded, color: accent, size: 22),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        offer.title,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: tt.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 6,
+                        ),
+                        decoration: BoxDecoration(
+                          color: cs.primaryContainer.withValues(alpha: 0.55),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          offer.discountLabel,
+                          style: tt.labelLarge?.copyWith(
+                            color: cs.onPrimaryContainer,
                             fontWeight: FontWeight.w800,
                           ),
                         ),
-                        const SizedBox(height: 4),
+                      ),
+                      if (offer.description.trim().isNotEmpty) ...[
+                        const SizedBox(height: 6),
                         Text(
-                          offer.discountLabel,
-                          style: tt.titleSmall?.copyWith(
-                            color: accent,
-                            fontWeight: FontWeight.w700,
+                          offer.description,
+                          style: tt.bodySmall?.copyWith(
+                            color: cs.onSurfaceVariant,
+                            height: 1.4,
                           ),
                         ),
-                        if (offer.description.trim().isNotEmpty) ...[
-                          const SizedBox(height: 6),
-                          Text(
-                            offer.description,
-                            style: tt.bodySmall?.copyWith(
-                              color: cs.onSurfaceVariant,
-                              height: 1.4,
+                      ],
+                      const SizedBox(height: 10),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          _OfferDetail(label: offer.expiryLabel),
+                          if (offer.minOrderAmount != null &&
+                              offer.minOrderAmount! > 0)
+                            _OfferDetail(
+                              label:
+                                  'Min. order ₹${offer.minOrderAmount!.toStringAsFixed(0)}',
                             ),
-                          ),
+                          if (offer.maxDiscountAmount != null &&
+                              offer.discountType.toUpperCase() == 'PERCENTAGE')
+                            _OfferDetail(
+                              label:
+                                  'Up to ₹${offer.maxDiscountAmount!.toStringAsFixed(0)} off',
+                            ),
                         ],
-                        const SizedBox(height: 10),
-                        Wrap(
-                          spacing: 8,
-                          runSpacing: 8,
-                          children: [
-                            _OfferDetail(label: offer.expiryLabel),
-                            if (offer.minOrderAmount != null &&
-                                offer.minOrderAmount! > 0)
-                              _OfferDetail(
-                                label:
-                                    'Min. order ₹${offer.minOrderAmount!.toStringAsFixed(0)}',
-                              ),
-                            if (offer.maxDiscountAmount != null &&
-                                offer.discountType.toUpperCase() == 'PERCENTAGE')
-                              _OfferDetail(
-                                label:
-                                    'Up to ₹${offer.maxDiscountAmount!.toStringAsFixed(0)} off',
-                              ),
-                          ],
+                      ),
+                      const SizedBox(height: 14),
+                      Container(
+                        padding: const EdgeInsets.fromLTRB(12, 4, 4, 4),
+                        decoration: BoxDecoration(
+                          color: cs.surfaceContainerHighest.withValues(
+                            alpha: 0.45,
+                          ),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: cs.outlineVariant.withValues(alpha: 0.65),
+                          ),
                         ),
-                        const SizedBox(height: 14),
-                        Row(
+                        child: Row(
                           children: [
                             Expanded(
                               child: Text(
-                                offer.code,
+                                offer.code.trim().isEmpty
+                                    ? 'CODE UNAVAILABLE'
+                                    : offer.code,
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                                 style: tt.labelLarge?.copyWith(
                                   color: cs.onSurface,
+                                  letterSpacing: 1.1,
                                   fontWeight: FontWeight.w800,
                                 ),
                               ),
                             ),
-                            const SizedBox(width: 12),
-                            FilledButton.tonal(
+                            IconButton(
+                              tooltip: 'Copy offer code',
+                              visualDensity: VisualDensity.compact,
                               onPressed: offer.code.trim().isEmpty
                                   ? null
-                                  : () => context.pop(offer.code),
-                              child: const Text('Use code'),
+                                  : () async {
+                                      await Clipboard.setData(
+                                        ClipboardData(text: offer.code),
+                                      );
+                                      if (!context.mounted) return;
+                                      ScaffoldMessenger.of(context)
+                                        ..hideCurrentSnackBar()
+                                        ..showSnackBar(
+                                          const SnackBar(
+                                            content: Text('Offer code copied'),
+                                          ),
+                                        );
+                                    },
+                              icon: const Icon(Icons.copy_rounded, size: 18),
                             ),
                           ],
                         ),
-                      ],
-                    ),
+                      ),
+                      const SizedBox(height: 8),
+                      SizedBox(
+                        width: double.infinity,
+                        child: FilledButton.tonal(
+                          onPressed: offer.code.trim().isEmpty
+                              ? null
+                              : () => context.pop(offer.code),
+                          child: const Text('Use this offer'),
+                        ),
+                      ),
+                    ],
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
-          ],
-        ),
-      );
+          ),
+        ],
+      ),
+    );
   }
 }
 

@@ -53,13 +53,13 @@ class HomeCategoryChip extends StatelessWidget {
               decoration: BoxDecoration(
                 color: Colors.white,
                 borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: const Color(0xFFE8E5DE)),
+                border: Border.all(color: AbzioTheme.lightBorder),
               ),
               child: Center(
                 child: Icon(
                   _categoryIcon(category.name),
                   size: 24,
-                  color: const Color(0xFFC6A769),
+                  color: AbzioTheme.accentColor,
                 ),
               ),
             ),
@@ -69,10 +69,10 @@ class HomeCategoryChip extends StatelessWidget {
               textAlign: TextAlign.center,
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
-              style: GoogleFonts.inter(
+              style: GoogleFonts.outfit(
                 fontSize: 11,
                 fontWeight: FontWeight.w600,
-                color: const Color(0xFF111111),
+                color: AbzioTheme.lightTextPrimary,
               ),
             ),
           ],

@@ -14,7 +14,8 @@ import '../providers/earnings_provider.dart';
 import '../../../../core/widgets/liquid_refresh.dart';
 import '../../../../core/widgets/metallic_card.dart';
 
-final workerPayoutProfileProvider = FutureProvider.autoDispose<Map<String, dynamic>>((ref) async {
+final workerPayoutProfileProvider =
+    FutureProvider.autoDispose<Map<String, dynamic>>((ref) async {
   final api = ref.watch(apiClientProvider);
   return api.get('/users/me');
 });
@@ -33,7 +34,8 @@ class _EarningsPageState extends ConsumerState<EarningsPage> {
   final ScrollController _scrollController = ScrollController();
 
   WorkerEarningsSummary? _summary;
-  final List<WorkerEarningsTransaction> _transactions = <WorkerEarningsTransaction>[];
+  final List<WorkerEarningsTransaction> _transactions =
+      <WorkerEarningsTransaction>[];
   String? _loadError;
   bool _loadingInitial = true;
   bool _loadingMore = false;
@@ -103,7 +105,8 @@ class _EarningsPageState extends ConsumerState<EarningsPage> {
 
     try {
       final nextPage = _page + 1;
-      final page = await _repo.fetchTransactions(page: nextPage, limit: _pageSize);
+      final page =
+          await _repo.fetchTransactions(page: nextPage, limit: _pageSize);
       if (!mounted) {
         return;
       }
@@ -182,22 +185,34 @@ class _EarningsPageState extends ConsumerState<EarningsPage> {
     if (summary == null) {
       return const Scaffold(body: SizedBox.shrink());
     }
-    final payoutProfile = payoutProfileAsync.valueOrNull ?? const <String, dynamic>{};
-    final userMap = (payoutProfile['user'] as Map<String, dynamic>?) ?? const <String, dynamic>{};
-    final workerProfile = (userMap['workerProfile'] as Map<String, dynamic>?) ?? const <String, dynamic>{};
+    final payoutProfile =
+        payoutProfileAsync.valueOrNull ?? const <String, dynamic>{};
+    final userMap = (payoutProfile['user'] as Map<String, dynamic>?) ??
+        const <String, dynamic>{};
+    final workerProfile = (userMap['workerProfile'] as Map<String, dynamic>?) ??
+        const <String, dynamic>{};
     final hasUpi = _nonEmpty(workerProfile['upiId']) != null;
     final hasBank = _nonEmpty(workerProfile['bankAccountNumber']) != null &&
         _nonEmpty(workerProfile['bankIfsc']) != null;
     final hasPayoutMethod = hasUpi || hasBank;
-    final payoutSetupLabel = hasPayoutMethod ? 'Payout details on file' : 'Add UPI or bank details';
+    final payoutSetupLabel =
+        hasPayoutMethod ? 'Payout details on file' : 'Add UPI or bank details';
     final payoutSetupSubtitle = hasUpi
         ? 'UPI is available for wallet withdrawals.'
         : hasBank
             ? 'Bank details are saved. Verification and payout readiness are not confirmed here.'
             : 'Complete onboarding to enable worker payouts.';
-    final latestStatus = _transactions.isNotEmpty ? _transactions.first.status : 'pending';
-    final recentPayouts = _transactions.where((entry) => entry.status == 'success' || entry.status == 'processing').take(4).toList(growable: false);
-    final recentFailures = _transactions.where((entry) => entry.status == 'failed').take(2).toList(growable: false);
+    final latestStatus =
+        _transactions.isNotEmpty ? _transactions.first.status : 'pending';
+    final recentPayouts = _transactions
+        .where((entry) =>
+            entry.status == 'success' || entry.status == 'processing')
+        .take(4)
+        .toList(growable: false);
+    final recentFailures = _transactions
+        .where((entry) => entry.status == 'failed')
+        .take(2)
+        .toList(growable: false);
 
     return Scaffold(
       body: LiquidRefresh(
@@ -216,7 +231,10 @@ class _EarningsPageState extends ConsumerState<EarningsPage> {
                         Expanded(
                           child: Text(
                             'Earnings',
-                            style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                            style: Theme.of(context)
+                                .textTheme
+                                .headlineMedium
+                                ?.copyWith(
                                   fontWeight: FontWeight.w900,
                                   letterSpacing: -0.5,
                                 ),
@@ -227,7 +245,8 @@ class _EarningsPageState extends ConsumerState<EarningsPage> {
                           width: 48,
                           decoration: BoxDecoration(
                             color: Theme.of(context).colorScheme.surface,
-                            borderRadius: BorderRadius.circular(AbzioTheme.buttonRadius),
+                            borderRadius:
+                                BorderRadius.circular(AbzioTheme.buttonRadius),
                           ),
                           child: IconButton(
                             onPressed: _reload,
@@ -253,7 +272,7 @@ class _EarningsPageState extends ConsumerState<EarningsPage> {
                             label: 'Weekly',
                             value: _formatMoney(summary.weeklyTotal),
                             icon: Icons.date_range_rounded,
-                            accentColor: const Color(0xFF10B981),
+                            accentColor: const Color(0xFFC2A15E),
                           ),
                         ),
                       ],
@@ -263,12 +282,13 @@ class _EarningsPageState extends ConsumerState<EarningsPage> {
                       label: 'Monthly',
                       value: _formatMoney(summary.monthlyTotal),
                       icon: Icons.payments_rounded,
-                      accentColor: const Color(0xFF38BDF8),
+                      accentColor: const Color(0xFFC2A15E),
                     ),
                     const SizedBox(height: 18),
                     const PremiumSectionHeader(
                       title: 'Payout setup',
-                      subtitle: 'Make sure the worker can receive automatic payouts.',
+                      subtitle:
+                          'Make sure the worker can receive automatic payouts.',
                     ),
                     const SizedBox(height: 12),
                     PremiumGlassCard(
@@ -283,30 +303,44 @@ class _EarningsPageState extends ConsumerState<EarningsPage> {
                                   width: 52,
                                   height: 52,
                                   decoration: BoxDecoration(
-                                    color: const Color(0xFF10B981).withValues(alpha: 0.12),
+                                    color: const Color(0xFF10B981)
+                                        .withValues(alpha: 0.12),
                                     borderRadius: BorderRadius.circular(16),
                                   ),
                                   child: Icon(
-                                    hasPayoutMethod ? Icons.account_balance_rounded : Icons.warning_rounded,
-                                    color: hasPayoutMethod ? const Color(0xFFC2A15E) : const Color(0xFFF59E0B),
+                                    hasPayoutMethod
+                                        ? Icons.account_balance_rounded
+                                        : Icons.warning_rounded,
+                                    color: hasPayoutMethod
+                                        ? const Color(0xFFC2A15E)
+                                        : const Color(0xFFF59E0B),
                                   ),
                                 ),
                                 const SizedBox(width: 14),
                                 Expanded(
                                   child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: [
                                       Text(
                                         payoutSetupLabel,
-                                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .titleMedium
+                                            ?.copyWith(
                                               fontWeight: FontWeight.w800,
                                             ),
                                       ),
                                       const SizedBox(height: 4),
                                       Text(
                                         payoutSetupSubtitle,
-                                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                              color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .bodyMedium
+                                            ?.copyWith(
+                                              color: Theme.of(context)
+                                                  .colorScheme
+                                                  .onSurfaceVariant,
                                             ),
                                       ),
                                     ],
@@ -319,7 +353,8 @@ class _EarningsPageState extends ConsumerState<EarningsPage> {
                               Align(
                                 alignment: Alignment.centerRight,
                                 child: TextButton(
-                                  onPressed: () => context.push('/profile/bank-details'),
+                                  onPressed: () =>
+                                      context.push('/profile/bank-details'),
                                   child: const Text('Set up payout'),
                                 ),
                               ),
@@ -357,15 +392,23 @@ class _EarningsPageState extends ConsumerState<EarningsPage> {
                           children: [
                             Text(
                               'Payout management',
-                              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .titleMedium
+                                  ?.copyWith(
                                     fontWeight: FontWeight.w800,
                                   ),
                             ),
                             const SizedBox(height: 6),
                             Text(
                               'Open the wallet, update payout details, or ask for help if a withdrawal is stuck.',
-                              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .bodyMedium
+                                  ?.copyWith(
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .onSurfaceVariant,
                                   ),
                             ),
                             const SizedBox(height: 14),
@@ -375,19 +418,25 @@ class _EarningsPageState extends ConsumerState<EarningsPage> {
                               children: [
                                 FilledButton.icon(
                                   onPressed: () => context.push('/wallet'),
-                                  icon: const Icon(Icons.account_balance_wallet_rounded, size: 18),
+                                  icon: const Icon(
+                                      Icons.account_balance_wallet_rounded,
+                                      size: 18),
                                   label: const Text('Open wallet'),
                                 ),
                                 OutlinedButton.icon(
-                                  onPressed: () => context.push('/profile/payout-change'),
-                                  icon: const Icon(Icons.account_balance_rounded, size: 18),
+                                  onPressed: () =>
+                                      context.push('/profile/payout-change'),
+                                  icon: const Icon(
+                                      Icons.account_balance_rounded,
+                                      size: 18),
                                   label: const Text('Change payout account'),
                                 ),
                                 TextButton.icon(
                                   onPressed: () => context.push(
-                                  '/support?autoFocusForm=true&category=payment&subject=${Uri.encodeComponent('Payout or wallet issue')}&message=${Uri.encodeComponent('I need help with my worker payout setup or a withdrawal that needs attention.')}',
+                                    '/support?autoFocusForm=true&category=payment&subject=${Uri.encodeComponent('Payout or wallet issue')}&message=${Uri.encodeComponent('I need help with my worker payout setup or a withdrawal that needs attention.')}',
                                   ),
-                                  icon: const Icon(Icons.support_agent_rounded, size: 18),
+                                  icon: const Icon(Icons.support_agent_rounded,
+                                      size: 18),
                                   label: const Text('Get support'),
                                 ),
                               ],
@@ -399,7 +448,8 @@ class _EarningsPageState extends ConsumerState<EarningsPage> {
                     const SizedBox(height: 18),
                     const PremiumSectionHeader(
                       title: 'Recent payouts',
-                      subtitle: 'Track the most recent settlements and payout attempts.',
+                      subtitle:
+                          'Track the most recent settlements and payout attempts.',
                     ),
                     const SizedBox(height: 12),
                     PremiumGlassCard(
@@ -408,8 +458,13 @@ class _EarningsPageState extends ConsumerState<EarningsPage> {
                         child: recentPayouts.isEmpty
                             ? Text(
                                 'No successful or processing payouts yet.',
-                                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .bodyMedium
+                                    ?.copyWith(
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .onSurfaceVariant,
                                     ),
                               )
                             : Column(
@@ -420,12 +475,16 @@ class _EarningsPageState extends ConsumerState<EarningsPage> {
                                   return Padding(
                                     padding: const EdgeInsets.only(bottom: 12),
                                     child: TapScale(
-                                      onTap: () => _showTransactionDetails(context, entry),
+                                      onTap: () => _showTransactionDetails(
+                                          context, entry),
                                       child: Container(
                                         padding: const EdgeInsets.all(14),
                                         decoration: BoxDecoration(
-                                          color: Theme.of(context).colorScheme.surface,
-                                          borderRadius: BorderRadius.circular(16),
+                                          color: Theme.of(context)
+                                              .colorScheme
+                                              .surface,
+                                          borderRadius:
+                                              BorderRadius.circular(16),
                                         ),
                                         child: Row(
                                           children: [
@@ -433,12 +492,15 @@ class _EarningsPageState extends ConsumerState<EarningsPage> {
                                               height: 42,
                                               width: 42,
                                               decoration: BoxDecoration(
-                                                color: accent.withValues(alpha: 0.12),
-                                                borderRadius: BorderRadius.circular(14),
+                                                color: accent.withValues(
+                                                    alpha: 0.12),
+                                                borderRadius:
+                                                    BorderRadius.circular(14),
                                               ),
                                               child: Icon(
                                                 entry.status == 'success'
-                                                    ? Icons.check_circle_outline_rounded
+                                                    ? Icons
+                                                        .check_circle_outline_rounded
                                                     : Icons.schedule_rounded,
                                                 color: accent,
                                                 size: 20,
@@ -447,27 +509,43 @@ class _EarningsPageState extends ConsumerState<EarningsPage> {
                                             const SizedBox(width: 12),
                                             Expanded(
                                               child: Column(
-                                                crossAxisAlignment: CrossAxisAlignment.start,
+                                                crossAxisAlignment:
+                                                    CrossAxisAlignment.start,
                                                 children: [
                                                   Text(
-                                                    entry.bookingCode?.isNotEmpty == true
+                                                    entry.bookingCode
+                                                                ?.isNotEmpty ==
+                                                            true
                                                         ? 'Booking ${entry.bookingCode}'
                                                         : entry.serviceName,
-                                                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                                                          fontWeight: FontWeight.w800,
+                                                    style: Theme.of(context)
+                                                        .textTheme
+                                                        .titleSmall
+                                                        ?.copyWith(
+                                                          fontWeight:
+                                                              FontWeight.w800,
                                                         ),
                                                   ),
                                                   const SizedBox(height: 4),
                                                   Text(
                                                     '${_formatMoney(entry.amount)} - ${_formatStatusLabel(entry.status)}',
-                                                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                                    style: Theme.of(context)
+                                                        .textTheme
+                                                        .bodyMedium
+                                                        ?.copyWith(
+                                                          color: Theme.of(
+                                                                  context)
+                                                              .colorScheme
+                                                              .onSurfaceVariant,
                                                         ),
                                                   ),
                                                 ],
                                               ),
                                             ),
-                                            Icon(Icons.chevron_right_rounded, color: Theme.of(context).colorScheme.onSurfaceVariant),
+                                            Icon(Icons.chevron_right_rounded,
+                                                color: Theme.of(context)
+                                                    .colorScheme
+                                                    .onSurfaceVariant),
                                           ],
                                         ),
                                       ),
@@ -487,7 +565,10 @@ class _EarningsPageState extends ConsumerState<EarningsPage> {
                             children: [
                               Text(
                                 'Payout issues',
-                                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .titleMedium
+                                    ?.copyWith(
                                       fontWeight: FontWeight.w800,
                                     ),
                               ),
@@ -496,8 +577,13 @@ class _EarningsPageState extends ConsumerState<EarningsPage> {
                                 recentFailures.first.status == 'failed'
                                     ? 'A payout attempt needs attention.'
                                     : recentFailures.first.status,
-                                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .bodyMedium
+                                    ?.copyWith(
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .onSurfaceVariant,
                                     ),
                               ),
                             ],
@@ -507,7 +593,8 @@ class _EarningsPageState extends ConsumerState<EarningsPage> {
                     const SizedBox(height: 18),
                     const PremiumSectionHeader(
                       title: 'Performance snapshot',
-                      subtitle: 'A calm overview of earnings, jobs, and payouts.',
+                      subtitle:
+                          'A calm overview of earnings, jobs, and payouts.',
                     ),
                     const SizedBox(height: 12),
                     PremiumGlassCard(
@@ -521,12 +608,18 @@ class _EarningsPageState extends ConsumerState<EarningsPage> {
                                 Expanded(
                                   child: Text(
                                     'This week',
-                                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .titleMedium
+                                        ?.copyWith(
                                           fontWeight: FontWeight.w800,
                                         ),
                                   ),
                                 ),
-                                const _LegendDot(color: Color(0xFF38BDF8), label: 'Daily earnings'),
+                                const _LegendDot(
+                                  color: Color(0xFFC2A15E),
+                                  label: 'Daily earnings',
+                                ),
                               ],
                             ),
                             const SizedBox(height: 18),
@@ -537,7 +630,8 @@ class _EarningsPageState extends ConsumerState<EarningsPage> {
                                 Expanded(
                                   child: _MiniMetric(
                                     title: 'Settled payouts',
-                                    value: '${_transactions.where((entry) => entry.status == 'success').length}',
+                                    value:
+                                        '${_transactions.where((entry) => entry.status == 'success').length}',
                                     icon: Icons.check_circle_outline_rounded,
                                   ),
                                 ),
@@ -546,7 +640,8 @@ class _EarningsPageState extends ConsumerState<EarningsPage> {
                                   child: _MiniMetric(
                                     title: 'Latest payout',
                                     value: _transactions.isNotEmpty
-                                        ? _formatMoney(_transactions.first.amount)
+                                        ? _formatMoney(
+                                            _transactions.first.amount)
                                         : '₹0',
                                     icon: Icons.schedule_rounded,
                                   ),
@@ -564,7 +659,7 @@ class _EarningsPageState extends ConsumerState<EarningsPage> {
                         title: 'Withdraw Earnings',
                         subtitle: 'Open wallet to request a real payout',
                         icon: Icons.account_balance_wallet_rounded,
-                        baseColor: Color(0xFF14B8A6),
+                        baseColor: Color(0xFFC2A15E),
                       ),
                     ),
                     const SizedBox(height: 24),
@@ -584,7 +679,8 @@ class _EarningsPageState extends ConsumerState<EarningsPage> {
                   child: PremiumEmptyState(
                     icon: Icons.receipt_long_rounded,
                     title: 'No transactions yet',
-                    subtitle: 'Your completed jobs and payouts will appear here.',
+                    subtitle:
+                        'Your completed jobs and payouts will appear here.',
                   ),
                 ),
               )
@@ -645,12 +741,14 @@ String? _nonEmpty(dynamic value) {
 }
 
 String _formatMoney(double value) {
-  return NumberFormat.currency(locale: 'en_IN', symbol: '₹', decimalDigits: 0).format(value);
+  return NumberFormat.currency(locale: 'en_IN', symbol: '₹', decimalDigits: 0)
+      .format(value);
 }
 
 String _buildTransactionSubtitle(WorkerEarningsTransaction entry) {
-  final bookingLabel =
-      entry.bookingCode?.isNotEmpty == true ? 'Booking ${entry.bookingCode}' : 'Booking';
+  final bookingLabel = entry.bookingCode?.isNotEmpty == true
+      ? 'Booking ${entry.bookingCode}'
+      : 'Booking';
   final dateLabel = DateFormat('dd MMM yyyy').format(entry.date);
   final statusLabel = _formatStatusLabel(entry.status);
   return '$bookingLabel - $dateLabel - $statusLabel';
@@ -682,7 +780,9 @@ class _MiniChart extends StatelessWidget {
   Widget build(BuildContext context) {
     final maxAmount = math.max(
       1,
-      points.fold<double>(0, (highest, point) => math.max(highest, point.amount)).ceil(),
+      points
+          .fold<double>(0, (highest, point) => math.max(highest, point.amount))
+          .ceil(),
     );
 
     return SizedBox(
@@ -707,7 +807,10 @@ class _MiniChart extends StatelessWidget {
                           gradient: LinearGradient(
                             colors: [
                               Theme.of(context).colorScheme.primary,
-                              Theme.of(context).colorScheme.primary.withValues(alpha: 0.4),
+                              Theme.of(context)
+                                  .colorScheme
+                                  .primary
+                                  .withValues(alpha: 0.4),
                             ],
                             begin: Alignment.topCenter,
                             end: Alignment.bottomCenter,
@@ -770,10 +873,14 @@ class _MiniMetric extends StatelessWidget {
             height: 40,
             width: 40,
             decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.75),
+              color: Theme.of(context)
+                  .colorScheme
+                  .primaryContainer
+                  .withValues(alpha: 0.75),
               borderRadius: BorderRadius.circular(14),
             ),
-            child: Icon(icon, size: 18, color: Theme.of(context).colorScheme.primary),
+            child: Icon(icon,
+                size: 18, color: Theme.of(context).colorScheme.primary),
           ),
           const SizedBox(width: 10),
           Expanded(
@@ -850,41 +957,43 @@ class _TransactionTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final accent = positive ? const Color(0xFF10B981) : Theme.of(context).colorScheme.primary;
+    final accent = positive
+        ? const Color(0xFF10B981)
+        : Theme.of(context).colorScheme.primary;
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: TapScale(
         onTap: onTap,
         child: PremiumGlassCard(
           child: ListTile(
-          contentPadding: const EdgeInsets.all(16),
-          leading: Container(
-            height: 48,
-            width: 48,
-            decoration: BoxDecoration(
-              color: accent.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(AbzioTheme.buttonRadius),
+            contentPadding: const EdgeInsets.all(16),
+            leading: Container(
+              height: 48,
+              width: 48,
+              decoration: BoxDecoration(
+                color: accent.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(AbzioTheme.buttonRadius),
+              ),
+              child: Icon(
+                positive ? Icons.south_east_rounded : Icons.north_east_rounded,
+                color: accent,
+              ),
             ),
-            child: Icon(
-              positive ? Icons.south_east_rounded : Icons.north_east_rounded,
-              color: accent,
+            title: Text(
+              title,
+              style: const TextStyle(fontWeight: FontWeight.w800),
             ),
-          ),
-          title: Text(
-            title,
-            style: const TextStyle(fontWeight: FontWeight.w800),
-          ),
-          subtitle: Padding(
-            padding: const EdgeInsets.only(top: 4),
-            child: Text(subtitle),
-          ),
-          trailing: Text(
-            amount,
-            style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                  fontWeight: FontWeight.w900,
-                  color: accent,
-                ),
-          ),
+            subtitle: Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text(subtitle),
+            ),
+            trailing: Text(
+              amount,
+              style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w900,
+                    color: accent,
+                  ),
+            ),
           ),
         ),
       ),
@@ -892,7 +1001,8 @@ class _TransactionTile extends StatelessWidget {
   }
 }
 
-Future<void> _showTransactionDetails(BuildContext context, WorkerEarningsTransaction entry) {
+Future<void> _showTransactionDetails(
+    BuildContext context, WorkerEarningsTransaction entry) {
   return showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
@@ -900,7 +1010,8 @@ Future<void> _showTransactionDetails(BuildContext context, WorkerEarningsTransac
     builder: (sheetContext) {
       final tt = Theme.of(sheetContext).textTheme;
       final cs = Theme.of(sheetContext).colorScheme;
-      final accent = entry.status == 'success' ? const Color(0xFF10B981) : cs.primary;
+      final accent =
+          entry.status == 'success' ? const Color(0xFF10B981) : cs.primary;
 
       return SafeArea(
         child: Padding(
@@ -916,10 +1027,13 @@ Future<void> _showTransactionDetails(BuildContext context, WorkerEarningsTransac
                     width: 52,
                     decoration: BoxDecoration(
                       color: accent.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(AbzioTheme.buttonRadius),
+                      borderRadius:
+                          BorderRadius.circular(AbzioTheme.buttonRadius),
                     ),
                     child: Icon(
-                      entry.status == 'success' ? Icons.check_circle_outline_rounded : Icons.receipt_long_rounded,
+                      entry.status == 'success'
+                          ? Icons.check_circle_outline_rounded
+                          : Icons.receipt_long_rounded,
                       color: accent,
                     ),
                   ),
@@ -928,16 +1042,24 @@ Future<void> _showTransactionDetails(BuildContext context, WorkerEarningsTransac
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(entry.serviceName, style: tt.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
+                        Text(entry.serviceName,
+                            style: tt.titleLarge
+                                ?.copyWith(fontWeight: FontWeight.w800)),
                         const SizedBox(height: 4),
-                        Text(_formatStatusLabel(entry.status), style: tt.bodyMedium?.copyWith(color: cs.onSurfaceVariant)),
+                        Text(_formatStatusLabel(entry.status),
+                            style: tt.bodyMedium
+                                ?.copyWith(color: cs.onSurfaceVariant)),
                       ],
                     ),
                   ),
                 ],
               ),
               const SizedBox(height: 16),
-              _DetailRow(label: 'Booking', value: entry.bookingCode?.isNotEmpty == true ? entry.bookingCode! : entry.bookingId),
+              _DetailRow(
+                  label: 'Booking',
+                  value: entry.bookingCode?.isNotEmpty == true
+                      ? entry.bookingCode!
+                      : entry.bookingId),
               _DetailRow(
                 label: 'Net payout after commission',
                 value: _formatMoney(entry.amount),
@@ -946,14 +1068,17 @@ Future<void> _showTransactionDetails(BuildContext context, WorkerEarningsTransac
                 label: 'Platform commission',
                 value: _formatMoney(entry.commissionAmount),
               ),
-              _DetailRow(label: 'Date', value: DateFormat('d MMM y, h:mm a').format(entry.date)),
+              _DetailRow(
+                  label: 'Date',
+                  value: DateFormat('d MMM y, h:mm a').format(entry.date)),
               const SizedBox(height: 12),
               Row(
                 children: [
                   Expanded(
                     child: FilledButton.tonal(
                       onPressed: () async {
-                        await Clipboard.setData(ClipboardData(text: entry.bookingId));
+                        await Clipboard.setData(
+                            ClipboardData(text: entry.bookingId));
                         if (sheetContext.mounted) {
                           ScaffoldMessenger.of(sheetContext).showSnackBar(
                             const SnackBar(content: Text('Booking ID copied')),
@@ -990,9 +1115,13 @@ class _DetailRow extends StatelessWidget {
         children: [
           SizedBox(
             width: 90,
-            child: Text(label, style: tt.bodyMedium?.copyWith(color: cs.onSurfaceVariant, fontWeight: FontWeight.w700)),
+            child: Text(label,
+                style: tt.bodyMedium?.copyWith(
+                    color: cs.onSurfaceVariant, fontWeight: FontWeight.w700)),
           ),
-          Expanded(child: Text(value, style: tt.bodyMedium?.copyWith(fontWeight: FontWeight.w600))),
+          Expanded(
+              child: Text(value,
+                  style: tt.bodyMedium?.copyWith(fontWeight: FontWeight.w600))),
         ],
       ),
     );

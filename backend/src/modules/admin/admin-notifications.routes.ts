@@ -17,20 +17,22 @@ const broadcastSchema = z.object({
     title: z.string().min(1),
     body: z.string().min(1),
     targetRole: z.enum(["CUSTOMER", "WORKER", "ALL"]),
+    category: z.enum(["SERVICE", "PROMOTIONAL"]).default("SERVICE"),
     route: z.string().optional()
   })
 });
 
-function getBroadcastData(data: unknown): { broadcastId: string | null; route: string | null; targetRole: string | null } {
+function getBroadcastData(data: unknown): { broadcastId: string | null; route: string | null; targetRole: string | null; category: string | null } {
   if (!data || typeof data !== "object" || Array.isArray(data)) {
-    return { broadcastId: null, route: null, targetRole: null };
+    return { broadcastId: null, route: null, targetRole: null, category: null };
   }
 
   const payload = data as Record<string, unknown>;
   return {
     broadcastId: typeof payload.broadcastId === "string" ? payload.broadcastId : null,
     route: typeof payload.route === "string" ? payload.route : null,
-    targetRole: typeof payload.targetRole === "string" ? payload.targetRole : null
+    targetRole: typeof payload.targetRole === "string" ? payload.targetRole : null,
+    category: typeof payload.category === "string" ? payload.category : null
   };
 }
 
@@ -48,6 +50,7 @@ function buildBroadcastGroups(notifications: Array<{
       body: string;
       route: string | null;
       targetRole: string | null;
+      category: string | null;
       recipientCount: number;
       sentAt: string;
       _sentAtMs: number;
@@ -59,7 +62,7 @@ function buildBroadcastGroups(notifications: Array<{
     const sentAtMs = notification.createdAt.getTime();
     const key =
       payload.broadcastId ??
-      `${notification.title}|${notification.body}|${payload.route ?? ""}|${payload.targetRole ?? ""}|${notification.createdAt
+      `${notification.title}|${notification.body}|${payload.route ?? ""}|${payload.targetRole ?? ""}|${payload.category ?? ""}|${notification.createdAt
         .toISOString()
         .slice(0, 16)}`;
 
@@ -79,6 +82,7 @@ function buildBroadcastGroups(notifications: Array<{
       body: notification.body,
       route: payload.route,
       targetRole: payload.targetRole,
+      category: payload.category,
       recipientCount: 1,
       sentAt: notification.createdAt.toISOString(),
       _sentAtMs: sentAtMs
@@ -149,6 +153,7 @@ adminNotificationsRouter.get("/broadcasts/:broadcastId", async (req, res) => {
       body: notification.body,
       route: getBroadcastData(notification.data).route,
       targetRole: getBroadcastData(notification.data).targetRole,
+      category: getBroadcastData(notification.data).category,
       sentAt: notification.createdAt.toISOString()
     }));
 
@@ -165,10 +170,13 @@ adminNotificationsRouter.post(
   validate(broadcastSchema),
   async (req, res) => {
     try {
-      const { title, body, targetRole, route } = req.body;
+      const { title, body, targetRole, category, route } = req.body;
       const broadcastId = randomUUID();
 
-      const userWhere = targetRole === "ALL" ? {} : { role: targetRole };
+      const userWhere = {
+        ...(targetRole === "ALL" ? {} : { role: targetRole }),
+        ...(category === "PROMOTIONAL" ? { marketingNotificationsEnabled: true } : {})
+      };
 
       // Find users matching the criteria
       const users = await prisma.user.findMany({
@@ -184,7 +192,9 @@ adminNotificationsRouter.post(
           successCount: 0,
           failureCount: 0,
           notificationCount: 0,
-          message: "No matching users found"
+          message: category === "PROMOTIONAL"
+            ? "No matching users have opted in to promotional notifications"
+            : "No matching users found"
         });
       }
 
@@ -192,6 +202,7 @@ adminNotificationsRouter.post(
         type: "ADMIN_BROADCAST",
         broadcastId,
         targetRole,
+        category,
         ...(route ? { route } : {})
       };
 

@@ -28,7 +28,6 @@ class HomePage extends ConsumerWidget {
     final categories = catalogAsync.valueOrNull?.categories ?? const [];
     final featured = catalogAsync.valueOrNull?.featured ?? const [];
     final trending = catalogAsync.valueOrNull?.trending ?? const [];
-    final moreServices = trending.skip(8).take(8).toList(growable: false);
     final professionals = professionalsAsync.valueOrNull ?? const [];
     final isLoading = catalogAsync.isLoading;
 
@@ -68,8 +67,8 @@ class HomePage extends ConsumerWidget {
                   HomeSearchBar(
                     hint: appText(
                       context,
-                      'Search for AC service',
-                      'ஏசி சேவையைத் தேடுங்கள்',
+                      'What service do you need?',
+                      'உங்களுக்கு என்ன சேவை தேவை?',
                     ),
                     onVoiceTap: () => showAiAssistantSheet(context),
                   ),
@@ -121,6 +120,10 @@ class HomePage extends ConsumerWidget {
               ),
               const SizedBox(height: 28),
             ],
+            const Padding(
+              padding: EdgeInsets.fromLTRB(20, 0, 20, 20),
+              child: _TrustHighlights(),
+            ),
             if (isLoading || trending.isNotEmpty) ...[
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -155,40 +158,9 @@ class HomePage extends ConsumerWidget {
                 ),
               const SizedBox(height: 28),
             ],
-            if (!isLoading && moreServices.isNotEmpty) ...[
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                child: HomeSectionLabel(
-                  title: appText(
-                    context,
-                    'More to explore',
-                    'மேலும் சேவைகள்',
-                  ),
-                  subtitle: appText(
-                    context,
-                    'Find the right help for your home',
-                    'உங்கள் வீட்டிற்கான சரியான சேவையைக் கண்டறியுங்கள்',
-                  ),
-                  onSeeAll: () => context.push('/search'),
-                ),
-              ),
-              const SizedBox(height: 16),
-              SizedBox(
-                height: 242,
-                child: ListView.separated(
-                  scrollDirection: Axis.horizontal,
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
-                  itemCount: moreServices.length,
-                  separatorBuilder: (_, __) => const SizedBox(width: 14),
-                  itemBuilder: (context, i) => SizedBox(
-                    width: 168,
-                    child: HomeServiceCard(service: moreServices[i]),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 28),
-            ],
-            if (!professionalsAsync.isLoading && professionals.isNotEmpty) ...[
+            if (professionals.isNotEmpty ||
+                (professionalsAsync.isLoading && professionals.isEmpty) ||
+                (professionalsAsync.hasError && professionals.isEmpty)) ...[
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
                 child: HomeSectionLabel(
@@ -200,20 +172,29 @@ class HomePage extends ConsumerWidget {
                 ),
               ),
               const SizedBox(height: 16),
-              SizedBox(
-                height: 224,
-                child: ListView.separated(
-                  scrollDirection: Axis.horizontal,
+              if (professionalsAsync.isLoading && professionals.isEmpty)
+                _buildProfessionalShimmerRail()
+              else if (professionalsAsync.hasError && professionals.isEmpty)
+                Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 20),
-                  itemCount: professionals.length,
-                  separatorBuilder: (_, __) => const SizedBox(width: 12),
-                  itemBuilder: (context, i) =>
-                      ProfessionalCard(professional: professionals[i]),
+                  child: _ProfessionalsErrorState(
+                    onRetry: () => ref.invalidate(homeProfessionalsProvider),
+                  ),
+                )
+              else
+                SizedBox(
+                  height: 224,
+                  child: ListView.separated(
+                    scrollDirection: Axis.horizontal,
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                    itemCount: professionals.length,
+                    separatorBuilder: (_, __) => const SizedBox(width: 12),
+                    itemBuilder: (context, i) =>
+                        ProfessionalCard(professional: professionals[i]),
+                  ),
                 ),
-              ),
               const SizedBox(height: 28),
             ],
-            const SizedBox(height: 8),
           ],
         ),
       ),
@@ -299,6 +280,20 @@ class HomePage extends ConsumerWidget {
     );
   }
 
+  Widget _buildProfessionalShimmerRail() {
+    return SizedBox(
+      height: 224,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 20),
+        itemCount: 3,
+        separatorBuilder: (_, __) => const SizedBox(width: 12),
+        itemBuilder: (context, _) =>
+            const ShimmerPlaceholder(width: 200, height: 224, borderRadius: 16),
+      ),
+    );
+  }
+
   String _locationLabel(
     BuildContext context,
     AuthSession? session,
@@ -321,6 +316,91 @@ class HomePage extends ConsumerWidget {
         .where((part) => part.isNotEmpty)
         .map((part) => '${part[0].toUpperCase()}${part.substring(1)}')
         .join(' ');
+  }
+}
+
+class _TrustHighlights extends StatelessWidget {
+  const _TrustHighlights();
+
+  @override
+  Widget build(BuildContext context) {
+    final textTheme = Theme.of(context).textTheme;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          appText(context, 'Why Veedufix?', 'ஏன் வீடுஃபிக்ஸ்?'),
+          style: textTheme.titleMedium?.copyWith(
+            color: const Color(0xFF13110F),
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+        const SizedBox(height: 14),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: _TrustPoint(
+                icon: Icons.verified_user_outlined,
+                label: appText(
+                  context,
+                  'Verified pros',
+                  'சரிபார்க்கப்பட்ட நிபுணர்கள்',
+                ),
+              ),
+            ),
+            Container(width: 1, height: 42, color: AbzioTheme.lightBorder),
+            Expanded(
+              child: _TrustPoint(
+                icon: Icons.receipt_long_outlined,
+                label: appText(context, 'Clear pricing', 'தெளிவான விலை'),
+              ),
+            ),
+            Container(width: 1, height: 42, color: AbzioTheme.lightBorder),
+            Expanded(
+              child: _TrustPoint(
+                icon: Icons.lock_outline_rounded,
+                label: appText(
+                  context,
+                  'Secure payments',
+                  'பாதுகாப்பான கட்டணங்கள்',
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 18),
+        const Divider(height: 1),
+      ],
+    );
+  }
+}
+
+class _TrustPoint extends StatelessWidget {
+  const _TrustPoint({required this.icon, required this.label});
+
+  final IconData icon;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        const SizedBox(height: 2),
+        Icon(icon, size: 20, color: const Color(0xFFC2A15E)),
+        const SizedBox(height: 7),
+        Text(
+          label,
+          textAlign: TextAlign.center,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          style: Theme.of(context).textTheme.labelSmall?.copyWith(
+            color: const Color(0xFF514A40),
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      ],
+    );
   }
 }
 
@@ -353,6 +433,48 @@ class _CatalogErrorState extends StatelessWidget {
                 'சேவைகளை ஏற்ற முடியவில்லை. இணைப்பைச் சரிபார்த்து மீண்டும் முயற்சிக்கவும்.',
               ),
               style: text.bodySmall?.copyWith(color: colors.onSurface),
+            ),
+          ),
+          IconButton(
+            tooltip: 'Try again',
+            onPressed: onRetry,
+            icon: const Icon(Icons.refresh_rounded),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ProfessionalsErrorState extends StatelessWidget {
+  const _ProfessionalsErrorState({required this.onRetry});
+
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.fromLTRB(14, 12, 8, 12),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: colors.outlineVariant),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.cloud_off_outlined, color: colors.onSurfaceVariant),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              appText(
+                context,
+                'Professionals could not load. Try again.',
+                'நிபுணர்களை ஏற்ற முடியவில்லை. மீண்டும் முயற்சிக்கவும்.',
+              ),
+              style: Theme.of(
+                context,
+              ).textTheme.bodySmall?.copyWith(color: colors.onSurface),
             ),
           ),
           IconButton(

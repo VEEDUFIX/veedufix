@@ -73,6 +73,7 @@ final routerProvider = Provider<GoRouter>((ref) {
           location == '/notifications' ||
           location == '/support' ||
           location == '/settings' ||
+          location == '/connection-diagnostics' ||
           location == '/arrival-otp' ||
           location == '/completion-otp' ||
           location == '/booking-rating' ||
@@ -225,19 +226,6 @@ final routerProvider = Provider<GoRouter>((ref) {
         },
       ),
       GoRoute(
-        path: '/search',
-        builder: (context, state) {
-          final query = state.uri.queryParameters['q'] ?? '';
-          final categorySlug = state.uri.queryParameters['categorySlug'];
-          final subcategorySlug = state.uri.queryParameters['subcategorySlug'];
-          return SearchPage(
-            initialQuery: query,
-            initialCategorySlug: categorySlug,
-            initialSubcategorySlug: subcategorySlug,
-          );
-        },
-      ),
-      GoRoute(
         path: '/notifications',
         builder: (context, state) => const NotificationsPage(),
       ),
@@ -279,6 +267,10 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (context, state) => const SettingsPage(),
       ),
       GoRoute(
+        path: '/connection-diagnostics',
+        builder: (context, state) => const ConnectionDiagnosticsPage(),
+      ),
+      GoRoute(
         path: '/favorites',
         builder: (context, state) => const FavoritesPage(),
       ),
@@ -297,6 +289,20 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/app',
             builder: (context, state) => const HomePage(),
+          ),
+          GoRoute(
+            path: '/search',
+            builder: (context, state) {
+              final query = state.uri.queryParameters['q'] ?? '';
+              final categorySlug = state.uri.queryParameters['categorySlug'];
+              final subcategorySlug =
+                  state.uri.queryParameters['subcategorySlug'];
+              return SearchPage(
+                initialQuery: query,
+                initialCategorySlug: categorySlug,
+                initialSubcategorySlug: subcategorySlug,
+              );
+            },
           ),
           GoRoute(
             path: '/bookings',

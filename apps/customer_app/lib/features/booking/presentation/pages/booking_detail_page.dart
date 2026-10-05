@@ -151,10 +151,10 @@ class _BookingDetailBody extends ConsumerWidget {
   };
 
   Color get _statusColor => switch (booking.status) {
-    'COMPLETED' => const Color(0xFF2D7A57),
-    'CANCELLED' || 'REFUNDED' => const Color(0xFFB34B43),
-    'IN_PROGRESS' || 'ARRIVED' => const Color(0xFF397AA5),
-    'EN_ROUTE' => const Color(0xFF397AA5),
+    'COMPLETED' => AbzioTheme.successColor,
+    'CANCELLED' || 'REFUNDED' => AbzioTheme.dangerColor,
+    'IN_PROGRESS' || 'ARRIVED' => AbzioTheme.infoColor,
+    'EN_ROUTE' => AbzioTheme.infoColor,
     _ => _accent,
   };
 
@@ -316,59 +316,21 @@ class _BookingDetailBody extends ConsumerWidget {
             const SizedBox(height: 10),
           ],
 
-          _BookingHelpCard(
-            booking: booking,
-            canEdit: booking.status == 'PENDING',
-          ),
-          const SizedBox(height: 16),
-
           if (isActive) ...[
             if (booking.status == 'EN_ROUTE' ||
                 booking.status == 'ARRIVED' ||
                 booking.status == 'IN_PROGRESS')
-              Consumer(
-                builder: (context, ref, _) => TapScale(
-                  onTap: () =>
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  onPressed: () =>
                       context.push('/tracking?bookingId=${booking.id}'),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 20,
-                      vertical: 14,
-                    ),
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [cs.primary, cs.primary.withValues(alpha: 0.8)],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                      ),
-                      borderRadius: BorderRadius.circular(
-                        AbzioTheme.buttonRadius,
-                      ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: cs.primary.withValues(alpha: 0.35),
-                          blurRadius: 16,
-                          offset: const Offset(0, 6),
-                        ),
-                      ],
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        const Icon(
-                          Icons.location_on_rounded,
-                          color: Colors.white,
-                          size: 20,
-                        ),
-                        const SizedBox(width: 10),
-                        Text(
-                          'Track Professional',
-                          style: tt.titleSmall?.copyWith(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                      ],
+                  icon: const Icon(Icons.location_on_rounded),
+                  label: const Text('Track your professional'),
+                  style: FilledButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    textStyle: tt.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w800,
                     ),
                   ),
                 ),
@@ -418,6 +380,12 @@ class _BookingDetailBody extends ConsumerWidget {
             ],
             const SizedBox(height: 16),
           ],
+
+          _BookingHelpCard(
+            booking: booking,
+            canEdit: booking.status == 'PENDING',
+          ),
+          const SizedBox(height: 16),
 
           // ─── Service info ──────────────────────────────────────────────────
           PremiumGlassCard(
@@ -598,7 +566,7 @@ class _BookingDetailBody extends ConsumerWidget {
                   ),
                   const SizedBox(height: 12),
                   Text(
-                    'Payment, refund, and transaction details are available on the invoice.',
+                    'Your payment summary and invoice are available here. Refund progress appears below when a refund is issued.',
                     style: tt.bodySmall?.copyWith(
                       color: cs.onSurfaceVariant,
                       height: 1.4,
@@ -609,6 +577,33 @@ class _BookingDetailBody extends ConsumerWidget {
             ),
           ),
           const SizedBox(height: 12),
+
+          if (booking.refunds.isNotEmpty) ...[
+            PremiumGlassCard(
+              child: Padding(
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const _SectionLabel(label: 'Refund tracking'),
+                    const SizedBox(height: 14),
+                    for (var index = 0; index < booking.refunds.length; index++) ...[
+                      _RefundStatusRow(refund: booking.refunds[index]),
+                      if (index < booking.refunds.length - 1)
+                        const Divider(height: 24),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+          ],
+
+          if (booking.beforePhotoUrls.isNotEmpty ||
+              booking.afterPhotoUrls.isNotEmpty) ...[
+            _JobPhotoGallery(booking: booking),
+            const SizedBox(height: 12),
+          ],
 
           // ─── Timeline ─────────────────────────────────────────────────────
           PremiumGlassCard(
@@ -730,45 +725,38 @@ class _BookingDetailBody extends ConsumerWidget {
               ),
             ),
             const SizedBox(height: 10),
-            // Dispute CTA — only shown within 48h of completion
-            if (booking.canDispute)
-              Consumer(
-                builder: (context, ref, _) => TapScale(
-                  onTap: () => _raiseDisputeDialog(context, ref, booking),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFF97316).withValues(alpha: 0.08),
-                      borderRadius: BorderRadius.circular(
-                        AbzioTheme.buttonRadius,
-                      ),
-                      border: Border.all(
-                        color: const Color(0xFFF97316).withValues(alpha: 0.3),
-                      ),
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        const Icon(
-                          Icons.flag_rounded,
-                          size: 18,
-                          color: Color(0xFFF97316),
-                        ),
-                        const SizedBox(width: 8),
-                        Text(
-                          'Raise a Dispute',
-                          style: Theme.of(context).textTheme.titleSmall
-                              ?.copyWith(
-                                color: const Color(0xFFF97316),
-                                fontWeight: FontWeight.w700,
-                              ),
-                        ),
-                      ],
-                    ),
+            Consumer(
+              builder: (context, ref, _) {
+                final disputeAsync = ref.watch(
+                  bookingDisputeStatusProvider(booking.id),
+                );
+                return disputeAsync.when(
+                  loading: () => const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 12),
+                    child: LinearProgressIndicator(minHeight: 2),
                   ),
-                ),
-              ),
-            if (booking.canDispute) const SizedBox(height: 10),
+                  error: (_, _) => TextButton.icon(
+                    onPressed: () => ref.invalidate(
+                      bookingDisputeStatusProvider(booking.id),
+                    ),
+                    icon: const Icon(Icons.refresh_rounded),
+                    label: const Text('Retry dispute status'),
+                  ),
+                  data: (dispute) {
+                    if (dispute != null) {
+                      return _CustomerDisputeCard(dispute: dispute);
+                    }
+                    return booking.canDispute
+                        ? _DisputeAction(
+                            onPressed: () =>
+                                _raiseDisputeDialog(context, ref, booking),
+                          )
+                        : const SizedBox.shrink();
+                  },
+                );
+              },
+            ),
+            const SizedBox(height: 10),
           ],
 
           if (canCancel) ...[
@@ -988,7 +976,7 @@ class _BookingHelpCard extends StatelessWidget {
                 _HelpActionChip(
                   label: 'Payment issue',
                   icon: Icons.payments_rounded,
-                  color: const Color(0xFF10B981),
+                  color: AbzioTheme.successColor,
                   onTap: () => _openSupportDraft(
                     context,
                     category: 'payment',
@@ -1201,6 +1189,28 @@ Future<void> _confirmCancelBooking(
                           }
                         } catch (error) {
                           if (!dialogContext.mounted) return;
+                          if (error is DioException &&
+                              error.response?.statusCode == 409) {
+                            try {
+                              ref.invalidate(
+                                bookingDetailPageProvider(booking.id),
+                              );
+                              final latestBooking = await ref.read(
+                                bookingDetailPageProvider(booking.id).future,
+                              );
+                              if (!dialogContext.mounted) return;
+                              if (const {
+                                'CANCELLED',
+                                'CANCELLED_MANUAL',
+                                'CANCELLED_NO_SHOW',
+                              }.contains(latestBooking.status.toUpperCase())) {
+                                Navigator.of(dialogContext).pop(true);
+                                return;
+                              }
+                            } catch (_) {
+                              if (!dialogContext.mounted) return;
+                            }
+                          }
                           setDialogState(() {
                             isSubmitting = false;
                             errorMessage = error is DioException
@@ -1474,6 +1484,7 @@ Future<void> _raiseDisputeDialog(
         .read(apiClientProvider)
         .post('/bookings/${booking.id}/dispute', data: {'reason': reason});
     ref.invalidate(bookingDetailPageProvider(booking.id));
+    ref.invalidate(bookingDisputeStatusProvider(booking.id));
     if (!context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
@@ -1490,6 +1501,93 @@ Future<void> _raiseDisputeDialog(
     ).showSnackBar(const SnackBar(content: Text('Could not submit dispute.')));
   }
 }
+
+class _DisputeAction extends StatelessWidget {
+  const _DisputeAction({required this.onPressed});
+
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) => OutlinedButton.icon(
+    onPressed: onPressed,
+    icon: const Icon(Icons.flag_rounded),
+    label: const Text('Raise a dispute'),
+    style: OutlinedButton.styleFrom(
+      foregroundColor: const Color(0xFFF97316),
+      side: const BorderSide(color: Color(0xFFF97316)),
+      padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 18),
+    ),
+  );
+}
+
+class _CustomerDisputeCard extends StatelessWidget {
+  const _CustomerDisputeCard({required this.dispute});
+
+  final CustomerDisputeStatus dispute;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final color = switch (dispute.status) {
+      'resolved_refund' => AbzioTheme.successColor,
+      'resolved_rejected' => cs.onSurfaceVariant,
+      'refund_pending' => AbzioTheme.infoColor,
+      _ => AbzioTheme.warningColor,
+    };
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.07),
+        borderRadius: BorderRadius.circular(AbzioTheme.cardRadius),
+        border: Border.all(color: color.withValues(alpha: 0.25)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.gavel_rounded, color: color),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'Dispute ${_disputeStatusLabel(dispute.status)}',
+                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                    color: color,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+              Text(
+                DateFormat('d MMM').format(dispute.createdAt.toLocal()),
+                style: Theme.of(context).textTheme.labelSmall,
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(dispute.reason, style: Theme.of(context).textTheme.bodyMedium),
+          if (dispute.resolutionNote?.trim().isNotEmpty == true) ...[
+            const SizedBox(height: 10),
+            Text(
+              dispute.resolutionNote!,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+String _disputeStatusLabel(String status) => switch (status) {
+  'open' => 'submitted',
+  'under_review' => 'under review',
+  'refund_pending' => 'refund processing',
+  'resolved_refund' => 'resolved with refund',
+  'resolved_rejected' => 'resolved',
+  _ => status.replaceAll('_', ' '),
+};
 
 Future<void> _showEditBookingSheet(
   BuildContext context,
@@ -1526,6 +1624,7 @@ class _BookingEditSheetState extends ConsumerState<_BookingEditSheet> {
   String? _error;
   String? _slotError;
   String? _slotNotice;
+  int _slotRequestId = 0;
 
   @override
   void initState() {
@@ -1566,8 +1665,20 @@ class _BookingEditSheetState extends ConsumerState<_BookingEditSheet> {
   }
 
   Future<void> _loadSlots() async {
+    final requestId = ++_slotRequestId;
     final addressId = _selectedAddressId;
-    if (addressId == null || widget.booking.serviceIds.isEmpty) return;
+    if (addressId == null || widget.booking.serviceIds.isEmpty) {
+      if (mounted) {
+        setState(() {
+          _loadingSlots = false;
+          _availableSlots = const [];
+          _selectedSlotIso = null;
+          _slotError = null;
+        });
+      }
+      return;
+    }
+    final selectedDate = _selectedDate;
     setState(() {
       _loadingSlots = true;
       _slotError = null;
@@ -1582,10 +1693,11 @@ class _BookingEditSheetState extends ConsumerState<_BookingEditSheet> {
             '/users/bookings/${widget.booking.id}/reschedule-slots',
             queryParameters: {
               'addressId': addressId,
-              'startDate': DateFormat('yyyy-MM-dd').format(_selectedDate),
+              'startDate': DateFormat('yyyy-MM-dd').format(selectedDate),
               'days': 7,
             },
           );
+      if (!mounted || requestId != _slotRequestId) return;
       final rows = data['slots'];
       final slots = rows is List
           ? rows.whereType<Map>().map((row) {
@@ -1607,14 +1719,16 @@ class _BookingEditSheetState extends ConsumerState<_BookingEditSheet> {
         _selectedSlotIso = currentSlot?.toUtc().toIso8601String();
       });
     } catch (error) {
-      if (mounted) {
+      if (mounted && requestId == _slotRequestId) {
         setState(
           () => _slotError =
               'Could not load available appointment times. Please retry.',
         );
       }
     } finally {
-      if (mounted) setState(() => _loadingSlots = false);
+      if (mounted && requestId == _slotRequestId) {
+        setState(() => _loadingSlots = false);
+      }
     }
   }
 
@@ -1876,6 +1990,78 @@ class _BookingEditSheetState extends ConsumerState<_BookingEditSheet> {
   }
 }
 
+class _RefundStatusRow extends StatelessWidget {
+  const _RefundStatusRow({required this.refund});
+
+  final BookingRefund refund;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final status = refund.status.toLowerCase();
+    final (label, color, icon) = switch (status) {
+      'processed' => ('Completed', const Color(0xFF15803D), Icons.check_circle_rounded),
+      'failed' => ('Needs attention', theme.colorScheme.error, Icons.error_rounded),
+      _ => ('Processing', const Color(0xFF2563EB), Icons.hourglass_top_rounded),
+    };
+    final gatewayAmount = refund.gatewayAmount ??
+        (refund.amount - refund.walletAmount).clamp(0, refund.amount).toDouble();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Icon(icon, size: 18, color: color),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                label,
+                style: theme.textTheme.titleSmall?.copyWith(
+                  color: color,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ),
+            Text(
+              '₹${refund.amount.toStringAsFixed(2)}',
+              style: theme.textTheme.titleSmall?.copyWith(
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 6),
+        if (gatewayAmount > 0)
+          Text('Refund to original payment: ₹${gatewayAmount.toStringAsFixed(2)}'),
+        if (refund.walletAmount > 0)
+          Text(
+            refund.walletCreditedAt != null
+                ? 'Wallet credit: ₹${refund.walletAmount.toStringAsFixed(2)} (credited)'
+                : 'Wallet credit: ₹${refund.walletAmount.toStringAsFixed(2)}',
+          ),
+        const SizedBox(height: 4),
+        Text(
+          'Last updated ${DateFormat('d MMM y, h:mm a').format(refund.updatedAt.toLocal())}',
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+        ),
+        if (status == 'failed')
+          Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: Text(
+              'Please contact support if you need help with this refund.',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
 class _SectionLabel extends StatelessWidget {
   const _SectionLabel({required this.label});
   final String label;
@@ -1935,15 +2121,14 @@ class _TimelineStep extends StatelessWidget {
   final bool isLast;
 
   Color _statusColor(ColorScheme cs) => switch (status) {
-    'COMPLETED' => const Color(0xFF10B981),
+    'COMPLETED' => AbzioTheme.successColor,
     'REFUNDED' ||
     'CANCELLED' ||
     'CANCELLED_MANUAL' ||
-    'CANCELLED_NO_SHOW' => const Color(0xFFEF4444),
-    'ARRIVED' || 'IN_PROGRESS' => const Color(0xFF6366F1),
-    'WORKER_ASSIGNED' => const Color(0xFF0F766E),
-    'PAYMENT_CAPTURED' => const Color(0xFF14B8A6),
-    'DISPATCH_FAILED' => const Color(0xFFF59E0B),
+    'CANCELLED_NO_SHOW' => AbzioTheme.dangerColor,
+    'ARRIVED' || 'IN_PROGRESS' || 'WORKER_ASSIGNED' => AbzioTheme.infoColor,
+    'PAYMENT_CAPTURED' => AbzioTheme.successColor,
+    'DISPATCH_FAILED' => AbzioTheme.warningColor,
     _ => cs.primary,
   };
 
@@ -2071,6 +2256,112 @@ class _TimelineBadge extends StatelessWidget {
   }
 }
 
+class _JobPhotoGallery extends StatelessWidget {
+  const _JobPhotoGallery({required this.booking});
+
+  final BookingDetail booking;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return PremiumGlassCard(
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const _SectionLabel(label: 'Work photos'),
+            const SizedBox(height: 14),
+            if (booking.beforePhotoUrls.isNotEmpty) ...[
+              Text('Before', style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800)),
+              const SizedBox(height: 8),
+              _PhotoStrip(urls: booking.beforePhotoUrls),
+            ],
+            if (booking.beforePhotoUrls.isNotEmpty &&
+                booking.afterPhotoUrls.isNotEmpty)
+              const SizedBox(height: 16),
+            if (booking.afterPhotoUrls.isNotEmpty) ...[
+              Text('After', style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800)),
+              const SizedBox(height: 8),
+              _PhotoStrip(urls: booking.afterPhotoUrls),
+            ],
+            const SizedBox(height: 10),
+            Text(
+              'Photos shared by your professional during the job.',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _PhotoStrip extends StatelessWidget {
+  const _PhotoStrip({required this.urls});
+
+  final List<String> urls;
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+    height: 104,
+    child: ListView.separated(
+      scrollDirection: Axis.horizontal,
+      itemCount: urls.length,
+      separatorBuilder: (_, __) => const SizedBox(width: 10),
+      itemBuilder: (context, index) {
+        final url = urls[index];
+        return Semantics(
+          button: true,
+          label: 'Open work photo ${index + 1}',
+          child: GestureDetector(
+            onTap: () => showDialog<void>(
+              context: context,
+              builder: (dialogContext) => Dialog.fullscreen(
+                child: Scaffold(
+                  appBar: AppBar(
+                    leading: IconButton(
+                      tooltip: 'Close photo',
+                      onPressed: () => Navigator.of(dialogContext).pop(),
+                      icon: const Icon(Icons.close_rounded),
+                    ),
+                    title: Text('Photo ${index + 1} of ${urls.length}'),
+                  ),
+                  body: Center(
+                    child: InteractiveViewer(
+                      child: MarketplaceNetworkImage(
+                        imageUrl: url,
+                        width: MediaQuery.sizeOf(dialogContext).width,
+                        height: MediaQuery.sizeOf(dialogContext).height,
+                        fit: BoxFit.contain,
+                        backgroundColor: Theme.of(dialogContext).colorScheme.surface,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(AbzioTheme.buttonRadius),
+              child: MarketplaceNetworkImage(
+                imageUrl: url,
+                width: 104,
+                height: 104,
+                fit: BoxFit.cover,
+                cloudinaryWidth: 240,
+                cloudinaryHeight: 240,
+                backgroundColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+              ),
+            ),
+          ),
+        );
+      },
+    ),
+  );
+}
+
 // ─── BookingDetail entity ──────────────────────────────────────────────────────
 // Extended entity with full detail for this page
 
@@ -2086,6 +2377,7 @@ class BookingDetail {
     this.serviceSlug,
     this.addressLabel,
     this.worker,
+    this.refunds = const [],
     this.timeline = const [],
     this.customQuoteAmount,
     this.customQuoteItemized,
@@ -2096,6 +2388,8 @@ class BookingDetail {
     this.sparePartItems,
     this.sparePartReceiptUrl,
     this.completedAt,
+    this.beforePhotoUrls = const [],
+    this.afterPhotoUrls = const [],
     this.bookingType,
     this.addressId,
     this.serviceIds = const [],
@@ -2116,6 +2410,7 @@ class BookingDetail {
   final String? serviceSlug;
   final String? addressLabel;
   final BookingWorker? worker;
+  final List<BookingRefund> refunds;
   final List<BookingTimelineEvent> timeline;
   final double? customQuoteAmount;
   final List<Map<String, dynamic>>? customQuoteItemized;
@@ -2126,6 +2421,8 @@ class BookingDetail {
   final List<Map<String, dynamic>>? sparePartItems;
   final String? sparePartReceiptUrl;
   final DateTime? completedAt;
+  final List<String> beforePhotoUrls;
+  final List<String> afterPhotoUrls;
   final String? bookingType;
   final String? addressId;
   final List<String> serviceIds;
@@ -2168,6 +2465,12 @@ class BookingDetail {
     worker: json['worker'] != null
         ? BookingWorker.fromJson(json['worker'] as Map<String, dynamic>)
         : null,
+    refunds: (json['refunds'] as List<dynamic>? ?? const [])
+        .whereType<Map>()
+        .map((refund) => BookingRefund.fromJson(
+              Map<String, dynamic>.from(refund),
+            ))
+        .toList(growable: false),
     timeline: (json['timeline'] as List<dynamic>? ?? [])
         .map(
           (item) => BookingTimelineEvent.fromJson(item as Map<String, dynamic>),
@@ -2188,7 +2491,50 @@ class BookingDetail {
     completedAt: json['completedAt'] != null
         ? DateTime.tryParse(json['completedAt'] as String)
         : null,
+    beforePhotoUrls: (json['beforePhotoUrls'] as List<dynamic>? ?? const [])
+        .whereType<String>()
+        .where((url) => url.trim().isNotEmpty)
+        .toList(growable: false),
+    afterPhotoUrls: (json['afterPhotoUrls'] as List<dynamic>? ?? const [])
+        .whereType<String>()
+        .where((url) => url.trim().isNotEmpty)
+        .toList(growable: false),
   );
+}
+
+class BookingRefund {
+  const BookingRefund({
+    required this.id,
+    required this.amount,
+    required this.walletAmount,
+    required this.status,
+    required this.createdAt,
+    required this.updatedAt,
+    this.gatewayAmount,
+    this.walletCreditedAt,
+  });
+
+  final String id;
+  final double amount;
+  final double? gatewayAmount;
+  final double walletAmount;
+  final String status;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  final DateTime? walletCreditedAt;
+
+  factory BookingRefund.fromJson(Map<String, dynamic> json) => BookingRefund(
+        id: json['id'] as String? ?? '',
+        amount: (json['amount'] as num?)?.toDouble() ?? 0,
+        gatewayAmount: (json['gatewayAmount'] as num?)?.toDouble(),
+        walletAmount: (json['walletAmount'] as num?)?.toDouble() ?? 0,
+        status: json['status'] as String? ?? 'pending',
+        createdAt: DateTime.tryParse(json['createdAt'] as String? ?? '') ?? DateTime.now(),
+        updatedAt: DateTime.tryParse(json['updatedAt'] as String? ?? '') ?? DateTime.now(),
+        walletCreditedAt: json['walletCreditedAt'] is String
+            ? DateTime.tryParse(json['walletCreditedAt'] as String)
+            : null,
+      );
 }
 
 class BookingTimelineEvent {
@@ -2384,8 +2730,8 @@ class _SparePartsBannerState extends ConsumerState<_SparePartsBanner> {
 
     final (borderColor, bgColor, icon, label) = switch (status) {
       'PAID' => (
-        const Color(0xFF10B981),
-        const Color(0xFF10B981),
+        AbzioTheme.successColor,
+        AbzioTheme.successColor,
         Icons.check_circle_rounded,
         'Spare Parts Paid',
       ),
@@ -2396,8 +2742,8 @@ class _SparePartsBannerState extends ConsumerState<_SparePartsBanner> {
         'Spare Parts Rejected',
       ),
       _ => (
-        const Color(0xFFF97316),
-        const Color(0xFFF97316),
+        AbzioTheme.warningColor,
+        AbzioTheme.warningColor,
         Icons.hardware_rounded,
         'Spare Parts Added — Payment Required',
       ),
@@ -2598,8 +2944,8 @@ class _CustomQuoteBannerState extends ConsumerState<_CustomQuoteBanner> {
 
     final (borderColor, bgColor, icon, label) = switch (status) {
       'ACCEPTED' => (
-        const Color(0xFF10B981),
-        const Color(0xFF10B981),
+        AbzioTheme.successColor,
+        AbzioTheme.successColor,
         Icons.check_circle_rounded,
         'Quote Accepted',
       ),
@@ -2610,8 +2956,8 @@ class _CustomQuoteBannerState extends ConsumerState<_CustomQuoteBanner> {
         'Quote Rejected',
       ),
       _ => (
-        const Color(0xFFF59E0B),
-        const Color(0xFFF59E0B),
+        AbzioTheme.warningColor,
+        AbzioTheme.warningColor,
         Icons.request_quote_rounded,
         'Quote Received — Review Required',
       ),
@@ -2755,7 +3101,7 @@ class _CustomQuoteBannerState extends ConsumerState<_CustomQuoteBanner> {
                         _loading ? 'Processing…' : 'Accept & Proceed',
                       ),
                       style: FilledButton.styleFrom(
-                        backgroundColor: const Color(0xFF10B981),
+                        backgroundColor: AbzioTheme.successColor,
                         padding: const EdgeInsets.symmetric(vertical: 12),
                       ),
                     ),
@@ -2777,4 +3123,37 @@ final bookingDetailPageProvider = FutureProvider.family
       final api = ref.watch(apiClientProvider);
       final data = await api.get('/users/bookings/$bookingId');
       return BookingDetail.fromJson(data['booking'] as Map<String, dynamic>);
+    });
+
+class CustomerDisputeStatus {
+  const CustomerDisputeStatus({
+    required this.status,
+    required this.reason,
+    required this.createdAt,
+    this.resolutionNote,
+  });
+
+  final String status;
+  final String reason;
+  final DateTime createdAt;
+  final String? resolutionNote;
+
+  factory CustomerDisputeStatus.fromJson(Map<String, dynamic> json) =>
+      CustomerDisputeStatus(
+        status: json['status'] as String? ?? 'open',
+        reason: json['reason'] as String? ?? '',
+        createdAt:
+            DateTime.tryParse(json['createdAt'] as String? ?? '') ??
+            DateTime.now(),
+        resolutionNote: json['resolutionNote'] as String?,
+      );
+}
+
+final bookingDisputeStatusProvider = FutureProvider.family
+    .autoDispose<CustomerDisputeStatus?, String>((ref, bookingId) async {
+      final api = ref.watch(apiClientProvider);
+      final data = await api.get('/bookings/$bookingId/dispute');
+      final raw = data['dispute'];
+      if (raw is! Map) return null;
+      return CustomerDisputeStatus.fromJson(Map<String, dynamic>.from(raw));
     });

@@ -41,8 +41,15 @@ class _BookingRatingPageState extends ConsumerState<BookingRatingPage> {
     if (_submitting) {
       return;
     }
+    if (_rating < 1 || _rating > 5) {
+      setState(() => _submissionError = 'Choose a rating from 1 to 5 stars.');
+      return;
+    }
 
-    setState(() => _submitting = true);
+    setState(() {
+      _submitting = true;
+      _submissionError = null;
+    });
     try {
       await _api.submitRating(
         bookingId: widget.bookingId,
@@ -185,7 +192,7 @@ class _BookingRatingPageState extends ConsumerState<BookingRatingPage> {
                                 starValue <= _rating
                                     ? Icons.star_rounded
                                     : Icons.star_border_rounded,
-                                color: const Color(0xFFB58B3A),
+                                color: AbzioTheme.accentColor,
                                 size: 36,
                               ),
                             );
@@ -193,12 +200,16 @@ class _BookingRatingPageState extends ConsumerState<BookingRatingPage> {
                         ),
                       ),
                       const SizedBox(height: 16),
-                      Text(
-                        _rating == 0
-                            ? 'Tap a star to rate your experience'
-                            : '$_rating / 5 · ${_ratingLabel(_rating)}',
-                        style: Theme.of(context).textTheme.titleMedium
-                            ?.copyWith(fontWeight: FontWeight.w800),
+                      Align(
+                        alignment: Alignment.center,
+                        child: Text(
+                          _rating == 0
+                              ? 'Tap a star to rate your experience'
+                              : '$_rating / 5 · ${_ratingLabel(_rating)}',
+                          textAlign: TextAlign.center,
+                          style: Theme.of(context).textTheme.titleMedium
+                              ?.copyWith(fontWeight: FontWeight.w800),
+                        ),
                       ),
                       const SizedBox(height: 14),
                       TextField(

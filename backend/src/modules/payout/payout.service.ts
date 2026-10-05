@@ -41,12 +41,20 @@ type RazorpayPayoutResponse = {
 
 type PayoutAttemptContext = {
   payout: PayoutRecordWithBooking;
+  providerAttemptId: string;
   bookingCode: string;
   workerName: string;
   mode: "UPI" | "IMPS";
   fundAccount: Record<string, unknown>;
   amountPaise: number;
 };
+
+class PayoutProviderRequestError extends Error {
+  constructor(message: string, readonly definitivelyRejected: boolean) {
+    super(message);
+    this.name = "PayoutProviderRequestError";
+  }
+}
 
 function toNumber(value: Prisma.Decimal | number | string): number {
   return typeof value === "number" ? value : Number(value);
@@ -193,7 +201,9 @@ async function claimRetryablePayout(payoutId: string): Promise<PayoutRecordWithB
     },
     data: {
       status: "pending",
-      failureReason: null
+      failureReason: null,
+      razorpayPayoutId: null,
+      providerAttemptId: randomUUID()
     }
   });
 
@@ -280,6 +290,7 @@ function buildAttemptContext(payout: PayoutRecordWithBooking): PayoutAttemptCont
 
   return {
     payout,
+    providerAttemptId: payout.providerAttemptId ?? payout.id,
     bookingCode: payout.booking.code,
     workerName,
     mode,
@@ -294,7 +305,7 @@ async function callRazorpayPayout(context: PayoutAttemptContext): Promise<Razorp
     headers: {
       Authorization: getRazorpayAuthHeader(),
       "Content-Type": "application/json",
-      "X-Payout-Idempotency": context.payout.id
+      "X-Payout-Idempotency": context.providerAttemptId
     },
     body: JSON.stringify({
       account_number: getRazorpayAccountNumber(),
@@ -307,6 +318,7 @@ async function callRazorpayPayout(context: PayoutAttemptContext): Promise<Razorp
       narration: `VeeduFix payout`,
       fund_account: context.fundAccount,
       notes: {
+        payoutAttemptId: context.providerAttemptId,
         bookingId: context.payout.bookingId,
         bookingCode: context.bookingCode,
         workerId: context.payout.workerId,
@@ -318,11 +330,16 @@ async function callRazorpayPayout(context: PayoutAttemptContext): Promise<Razorp
   const payload = (await response.json().catch(() => null)) as RazorpayPayoutResponse | { error?: unknown } | null;
 
   if (!response.ok) {
-    throw new AppError(502, extractFailureReason(payload, `Razorpay payout request failed with status ${response.status}`));
+    const isDefinitiveRejection = response.status >= 400 && response.status < 500 &&
+      ![408, 409, 425, 429].includes(response.status);
+    throw new PayoutProviderRequestError(
+      extractFailureReason(payload, `Razorpay payout request failed with status ${response.status}`),
+      isDefinitiveRejection
+    );
   }
 
   if (!payload || typeof payload !== "object" || !("id" in payload)) {
-    throw new AppError(502, "Razorpay payout response was malformed");
+    throw new PayoutProviderRequestError("Razorpay payout response was malformed", false);
   }
 
   return payload as RazorpayPayoutResponse;
@@ -360,11 +377,18 @@ async function attemptPayout(payout: PayoutRecordWithBooking): Promise<void> {
 
   try {
     const razorpayResponse = await callRazorpayPayout(context);
-
-    await persistPayoutAttempt(payout.id, "success", {
-      status: "success",
+    const providerStatus = razorpayResponse.status?.toLowerCase();
+    const finalStatus = providerStatus === "processed"
+      ? "success"
+      : providerStatus === "failed" || providerStatus === "reversed"
+        ? "failed"
+        : "processing";
+    await persistPayoutAttempt(payout.id, finalStatus, {
+      status: finalStatus,
       razorpayPayoutId: razorpayResponse.id,
-      failureReason: null
+      failureReason: finalStatus === "failed"
+        ? `Razorpay payout ${providerStatus}`
+        : null
     });
 
     logger.info(
@@ -376,14 +400,18 @@ async function attemptPayout(payout: PayoutRecordWithBooking): Promise<void> {
         mode: context.mode,
         amountPaise: context.amountPaise
       },
-      "Worker payout released"
+      finalStatus === "success"
+        ? "Worker payout processed"
+        : finalStatus === "failed"
+          ? "Worker payout rejected by provider"
+          : "Worker payout accepted and awaiting provider confirmation"
     );
   } catch (error) {
     const failureReason = error instanceof Error ? error.message : "Unknown payout failure";
-
-    await persistPayoutAttempt(payout.id, "failed", {
-      status: "failed",
-      failureReason
+    const definitive = error instanceof PayoutProviderRequestError && error.definitivelyRejected;
+    await persistPayoutAttempt(payout.id, definitive ? "failed" : "processing", {
+      status: definitive ? "failed" : "processing",
+      failureReason: definitive ? failureReason : `Provider outcome is uncertain: ${failureReason}`
     });
 
     logger.error(
@@ -435,16 +463,10 @@ async function createPendingPayoutRecord(bookingId: string) {
       workerId: booking.workerId,
       amount,
       commissionAmount,
-      status: "pending"
-    },
-    update: {
-      workerId: booking.workerId,
-      amount,
-      commissionAmount,
       status: "pending",
-      failureReason: null,
-      razorpayPayoutId: null
+      providerAttemptId: randomUUID()
     },
+    update: {},
     include: {
       booking: {
         include: {

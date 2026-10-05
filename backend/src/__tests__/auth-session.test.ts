@@ -50,7 +50,7 @@ describe('auth-session', () => {
     } as never);
     vi.mocked(prisma.authSession.findFirst).mockResolvedValue({
       id: 'sess-1',
-      user: { id: 'user-1', role: 'CUSTOMER' },
+      user: { id: 'user-1', role: 'CUSTOMER', isActive: true },
     } as never);
 
     const payload = await authenticateAccessToken('token-123');

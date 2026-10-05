@@ -453,33 +453,154 @@ class BankDetailsPage extends ConsumerWidget {
       }));
 }
 
-class ChangePayoutAccountPage extends ConsumerWidget {
+class ChangePayoutAccountPage extends ConsumerStatefulWidget {
   const ChangePayoutAccountPage({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) => _ProfileDetailScaffold(
+  ConsumerState<ChangePayoutAccountPage> createState() =>
+      _ChangePayoutAccountPageState();
+}
+
+class _ChangePayoutAccountPageState
+    extends ConsumerState<ChangePayoutAccountPage> {
+  final _accountController = TextEditingController();
+  final _ifscController = TextEditingController();
+  final _upiController = TextEditingController();
+  late Future<Map<String, dynamic>?> _requestFuture;
+  bool _submitting = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _requestFuture = ref
+        .read(workerProfileRepositoryProvider)
+        .fetchPayoutChangeRequest();
+  }
+
+  @override
+  void dispose() {
+    _accountController.dispose();
+    _ifscController.dispose();
+    _upiController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    final account = _accountController.text.trim();
+    final ifsc = _ifscController.text.trim().toUpperCase();
+    final upi = _upiController.text.trim();
+    if ((account.isEmpty != ifsc.isEmpty) ||
+        (account.isEmpty && upi.isEmpty)) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Enter both bank account and IFSC, or provide a UPI ID.'),
+      ));
+      return;
+    }
+    final details = <String, dynamic>{
+      if (account.isNotEmpty) 'bankAccountNumber': account,
+      if (ifsc.isNotEmpty) 'bankIfsc': ifsc,
+      if (upi.isNotEmpty) 'upiId': upi,
+    };
+    setState(() => _submitting = true);
+    try {
+      await ref
+          .read(workerProfileRepositoryProvider)
+          .submitPayoutChangeRequest(details);
+      if (!mounted) return;
+      _accountController.clear();
+      _ifscController.clear();
+      _upiController.clear();
+      setState(() {
+        _requestFuture = ref
+            .read(workerProfileRepositoryProvider)
+            .fetchPayoutChangeRequest();
+      });
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Request sent. Your current payout account stays active until approval.'),
+      ));
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(error.toString())));
+      }
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => _ProfileDetailScaffold(
         title: 'Change payout account',
-        child: Column(
+        child: FutureBuilder<Map<String, dynamic>?>(
+          future: _requestFuture,
+          builder: (context, snapshot) {
+            final request = snapshot.data;
+            final status = _text(request?['status'], '');
+            final pending = status == 'pending';
+            final rejected = status == 'rejected';
+            return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const _StatusCard(
-              title: 'Account changes need secure verification',
+              title: 'Account changes need admin approval',
               icon: Icons.shield_outlined,
               color: _gold,
             ),
             const SizedBox(height: 12),
-            const Text(
-              'Bank verification is not available in the app yet. Your current payout details have not changed.',
-              style: TextStyle(color: _muted),
-            ),
-            const SizedBox(height: 16),
-            _PrimaryAction(
-              label: 'Contact support',
-              onPressed: () => context.push(
-                '/support?autoFocusForm=true&category=payment&subject=Payout%20account%20change&message=I%20need%20help%20changing%20my%20payout%20account.%20Please%20verify%20my%20request%20securely.',
+            if (snapshot.connectionState == ConnectionState.waiting)
+              const Center(child: CircularProgressIndicator())
+            else if (snapshot.hasError)
+              Text('Could not load request status: ${snapshot.error}',
+                  style: const TextStyle(color: _muted))
+            else if (pending)
+              const _StatusCard(
+                title: 'Payout change request is awaiting review',
+                icon: Icons.hourglass_top_rounded,
+                color: _gold,
+              )
+            else if (rejected)
+              _StatusCard(
+                title: 'Request declined: ${_text(request?['rejectionReason'], 'Please submit corrected details.')}',
+                icon: Icons.info_outline_rounded,
+                color: Colors.red.shade700,
               ),
+            const SizedBox(height: 16),
+            if (!pending) ...[
+              const Text('Add a bank account and IFSC, a UPI ID, or both. An admin will review the change before it takes effect.',
+                  style: TextStyle(color: _muted)),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _accountController,
+                keyboardType: TextInputType.number,
+                maxLength: 18,
+                decoration: const InputDecoration(labelText: 'New bank account number', counterText: ''),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: _ifscController,
+                textCapitalization: TextCapitalization.characters,
+                maxLength: 11,
+                decoration: const InputDecoration(labelText: 'IFSC code', counterText: ''),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: _upiController,
+                keyboardType: TextInputType.emailAddress,
+                decoration: const InputDecoration(labelText: 'UPI ID (optional if bank details are entered)'),
+              ),
+              const SizedBox(height: 16),
+              _PrimaryAction(
+                label: _submitting ? 'Submitting…' : 'Submit for review',
+                onPressed: _submitting ? null : _submit,
+              ),
+            ],
+            const SizedBox(height: 14),
+            const _SecurityNote(
+              text: 'Your current payout account remains active until an admin approves this change. New account details are sent only to the review queue.',
             ),
           ],
+        );
+          },
         ),
       );
 }

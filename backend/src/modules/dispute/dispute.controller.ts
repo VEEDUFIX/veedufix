@@ -69,10 +69,33 @@ export async function raiseDisputeHandler(request: Request, response: Response):
   }
 }
 
+export async function getCustomerDisputeHandler(request: Request, response: Response): Promise<void> {
+  const authRequest = request as AuthenticatedRequest;
+  if (!authRequest.auth) {
+    response.status(401).json({ message: "Authentication required" });
+    return;
+  }
+
+  try {
+    const dispute = await disputeService.getCustomerDispute(
+      String(request.params.bookingId),
+      authRequest.auth.userId
+    );
+    response.status(200).json({ dispute });
+  } catch (error) {
+    if (!handleDisputeError(response, error)) {
+      throw error;
+    }
+  }
+}
+
 export async function listDisputesHandler(request: Request, response: Response): Promise<void> {
   try {
     const result = await disputeService.listOpenDisputes({
       city: typeof request.query.city === "string" ? request.query.city : undefined,
+      status: typeof request.query.status === "string"
+        ? request.query.status as "all" | "open" | "under_review" | "refund_pending" | "resolved_refund" | "resolved_rejected"
+        : undefined,
       page:
         typeof request.query.page === "number" ? request.query.page : Number(request.query.page ?? 1),
       pageSize:

@@ -26,10 +26,10 @@ class HomeSectionLabel extends StatelessWidget {
             children: [
               Text(
                 title,
-                style: GoogleFonts.poppins(
-                  fontSize: 20,
+                style: GoogleFonts.outfit(
+                  fontSize: 19,
                   fontWeight: FontWeight.w800,
-                  color: const Color(0xFF111111),
+                  color: AbzioTheme.lightTextPrimary,
                   letterSpacing: -0.2,
                 ),
               ),
@@ -39,10 +39,10 @@ class HomeSectionLabel extends StatelessWidget {
                   subtitle!,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: GoogleFonts.inter(
+                  style: GoogleFonts.outfit(
                     fontSize: 13,
                     fontWeight: FontWeight.w500,
-                    color: const Color(0xFF696969),
+                    color: AbzioTheme.lightTextSecondary,
                   ),
                 ),
               ],
@@ -56,10 +56,10 @@ class HomeSectionLabel extends StatelessWidget {
               padding: const EdgeInsets.only(left: 8),
               child: Text(
                 'See all',
-                style: GoogleFonts.inter(
+                style: GoogleFonts.outfit(
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
-                  color: const Color(0xFFC6A769),
+                  color: AbzioTheme.accentColor,
                 ),
               ),
             ),

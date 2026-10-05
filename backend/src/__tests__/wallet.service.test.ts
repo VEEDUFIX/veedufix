@@ -18,7 +18,7 @@ const prismaMockTx = {
   workerProfile: { findUnique: vi.fn() },
   referral: { create: vi.fn() },
   user: { update: vi.fn(), updateMany: vi.fn(), findUnique: vi.fn() },
-  walletTransaction: { create: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
+    walletTransaction: { create: vi.fn(), findUnique: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
 };
 
 vi.mock('../lib/logger.js', () => ({
@@ -271,14 +271,19 @@ describe('Wallet Service', () => {
 
       (global.fetch as any).mockResolvedValue({
         ok: true,
-        json: async () => ({ id: 'pout_123' })
+          json: async () => ({ id: 'pout_123', status: 'processed' })
       });
+      prismaMockTx.walletTransaction.findUnique.mockResolvedValue({
+        id: 'tx1', userId: 'u1', workerId: 'w1', amount: new Prisma.Decimal(-500),
+        type: 'PAYOUT_PENDING', metadata: { upiId: 'test@upi' }
+      } as any);
+      prismaMockTx.walletTransaction.updateMany.mockResolvedValue({ count: 1 });
 
       await processPendingWalletPayouts();
 
       expect(global.fetch).toHaveBeenCalledWith('https://api.razorpay.com/v1/payouts', expect.any(Object));
-      expect(prisma.walletTransaction.update).toHaveBeenCalledWith(expect.objectContaining({
-        where: { id: 'tx1' },
+      expect(prismaMockTx.walletTransaction.updateMany).toHaveBeenCalledWith(expect.objectContaining({
+        where: { id: 'tx1', type: 'PAYOUT_PENDING' },
         data: expect.objectContaining({ type: 'PAYOUT_SUCCESS' })
       }));
     });
@@ -300,11 +305,15 @@ describe('Wallet Service', () => {
 
       prismaMockTx.walletTransaction.updateMany.mockResolvedValue({ count: 1 });
       prismaMockTx.user.update.mockResolvedValue({ walletBalance: new Prisma.Decimal(500) } as any);
+      prismaMockTx.walletTransaction.findUnique.mockResolvedValue({
+        id: 'tx1', userId: 'u1', workerId: 'w1', amount: new Prisma.Decimal(-500),
+        type: 'PAYOUT_PENDING', metadata: { upiId: 'test@upi' }
+      } as any);
 
       await processPendingWalletPayouts();
 
       expect(prismaMockTx.walletTransaction.updateMany).toHaveBeenCalledWith(expect.objectContaining({
-        where: { id: 'tx1', type: 'PAYOUT_PENDING' },
+        where: { id: 'tx1', type: { in: ['PAYOUT_PENDING'] } },
         data: expect.objectContaining({ type: 'PAYOUT_FAILED' })
       }));
       expect(prismaMockTx.user.update).toHaveBeenCalledWith({

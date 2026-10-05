@@ -10,11 +10,13 @@ class SelectedLocation {
     required this.latitude,
     required this.longitude,
     this.label,
+    this.addressId,
   });
 
   final double latitude;
   final double longitude;
   final String? label;
+  final String? addressId;
 
   LatLng get latLng => LatLng(latitude, longitude);
 
@@ -97,6 +99,7 @@ class SelectedLocationController extends StateNotifier<SelectedLocation?> {
         latitude: lat,
         longitude: lng,
         label: prefs.getString(_key(scope, 'label')),
+        addressId: prefs.getString(_key(scope, 'addressId')),
       );
     } catch (_) {
       // The last selected location is a convenience; startup can continue without it.
@@ -118,12 +121,14 @@ class SelectedLocationController extends StateNotifier<SelectedLocation?> {
     await prefs.remove(_key(scope, 'lat'));
     await prefs.remove(_key(scope, 'lng'));
     await prefs.remove(_key(scope, 'label'));
+    await prefs.remove(_key(scope, 'addressId'));
   }
 
   Future<void> setLocation({
     required double latitude,
     required double longitude,
     String? label,
+    String? addressId,
   }) async {
     if (!_isValidCoordinate(latitude, longitude)) {
       throw ArgumentError('Choose a valid map location.');
@@ -133,6 +138,7 @@ class SelectedLocationController extends StateNotifier<SelectedLocation?> {
       latitude: latitude,
       longitude: longitude,
       label: label,
+      addressId: addressId,
     );
     final prefs = await SharedPreferences.getInstance();
     await prefs.setDouble(_key(scope, 'lat'), latitude);
@@ -142,6 +148,12 @@ class SelectedLocationController extends StateNotifier<SelectedLocation?> {
       await prefs.remove(_key(scope, 'label'));
     } else {
       await prefs.setString(_key(scope, 'label'), value);
+    }
+    final normalizedAddressId = addressId?.trim() ?? '';
+    if (normalizedAddressId.isEmpty) {
+      await prefs.remove(_key(scope, 'addressId'));
+    } else {
+      await prefs.setString(_key(scope, 'addressId'), normalizedAddressId);
     }
     if (mounted && scope == _storageScope) {
       state = next;

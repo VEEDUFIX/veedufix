@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:marketplace_shared/marketplace_shared.dart';
 
 import '../data/booking_otp_api.dart';
+import '../widgets/otp_security_notice.dart';
 
 class CompletionOtpPage extends ConsumerStatefulWidget {
   const CompletionOtpPage({
@@ -87,8 +88,13 @@ class _CompletionOtpPageState extends ConsumerState<CompletionOtpPage> {
             children: [
               const PremiumSectionHeader(
                 title: 'Completion OTP',
-                subtitle:
-                    'Check the finished work, then share this code with your professional to close the job.',
+                subtitle: 'Confirm the work is complete before sharing this code.',
+              ),
+              const SizedBox(height: 12),
+              const OtpSecurityNotice(
+                title: 'Review the finished work first',
+                message:
+                    'Check the after-photos and service before sharing the code. It confirms that the job is complete.',
               ),
               const SizedBox(height: 16),
               PremiumGlassCard(
@@ -203,7 +209,7 @@ class _CompletionOtpPageState extends ConsumerState<CompletionOtpPage> {
                               label: 'Expires',
                               value: _expiryLabel(expiry),
                               icon: Icons.schedule_rounded,
-                              accentColor: const Color(0xFF0F766E),
+                              accentColor: AbzioTheme.warningColor,
                             ),
                           ),
                         ],

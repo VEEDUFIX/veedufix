@@ -98,7 +98,7 @@ class HomeHeroCard extends StatelessWidget {
                           children: [
                             Text(
                               'What do you need fixed?',
-                              style: GoogleFonts.poppins(
+                              style: GoogleFonts.outfit(
                                 fontSize: 16,
                                 fontWeight: FontWeight.w700,
                                 color: Colors.white,
@@ -108,7 +108,7 @@ class HomeHeroCard extends StatelessWidget {
                             const SizedBox(height: 4),
                             Text(
                               'Trusted professionals near $location, ready to help.',
-                              style: GoogleFonts.inter(
+                              style: GoogleFonts.outfit(
                                 fontSize: 12.5,
                                 fontWeight: FontWeight.w400,
                                 color: Colors.white.withValues(alpha: 0.72),
@@ -153,7 +153,7 @@ class HomeHeroCard extends StatelessWidget {
                             alignment: Alignment.center,
                             child: Text(
                               'Find a service',
-                              style: GoogleFonts.poppins(
+                              style: GoogleFonts.outfit(
                                 fontSize: 13,
                                 fontWeight: FontWeight.w600,
                                 color: Colors.black,
@@ -178,7 +178,7 @@ class HomeHeroCard extends StatelessWidget {
                           alignment: Alignment.center,
                           child: Text(
                             'My bookings',
-                            style: GoogleFonts.poppins(
+                            style: GoogleFonts.outfit(
                               fontSize: 13,
                               fontWeight: FontWeight.w600,
                               color: Colors.white,

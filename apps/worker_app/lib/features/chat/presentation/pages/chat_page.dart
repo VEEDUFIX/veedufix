@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -20,7 +22,15 @@ class _WorkerChatPageState extends ConsumerState<WorkerChatPage>
   final ScrollController _scrollController = ScrollController();
   final ImagePicker _picker = ImagePicker();
   final List<ChatAttachment> _draftAttachments = [];
+  final Set<String> _markedReadMessageIds = <String>{};
+  Timer? _draftSaveTimer;
+  Future<void> _draftPersistence = Future<void>.value();
+  String? _draftOwnerId;
+  bool _draftWasEdited = false;
   bool _isTyping = false;
+  bool _isSending = false;
+  bool _isChoosingAttachment = false;
+  bool _isUploadingAttachment = false;
 
   late final AnimationController _quickReplyAnimController;
   late final Animation<double> _quickReplyFadeAnim;
@@ -36,6 +46,9 @@ class _WorkerChatPageState extends ConsumerState<WorkerChatPage>
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      unawaited(_restoreDraft());
+    });
     _quickReplyAnimController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 600),
@@ -47,8 +60,87 @@ class _WorkerChatPageState extends ConsumerState<WorkerChatPage>
     _quickReplyAnimController.forward();
   }
 
+  Future<void> _restoreDraft() async {
+    final userId = ref.read(authControllerProvider).valueOrNull?.user.id;
+    if (userId == null) return;
+    _draftOwnerId = userId;
+    final message = await ChatDraftStore.read(
+      mode: AppMode.worker,
+      userId: userId,
+      bookingId: widget.bookingId,
+    );
+    if (!mounted ||
+        message == null ||
+        _messageController.text.isNotEmpty ||
+        _draftAttachments.isNotEmpty ||
+        ref.read(authControllerProvider).valueOrNull?.user.id != userId) {
+      return;
+    }
+    setState(() {
+      _messageController.value = TextEditingValue(
+        text: message,
+        selection: TextSelection.collapsed(offset: message.length),
+      );
+      _isTyping = message.trim().isNotEmpty;
+    });
+  }
+
+  void _scheduleDraftSave(String message) {
+    final userId = ref.read(authControllerProvider).valueOrNull?.user.id;
+    if (userId == null) return;
+    _draftOwnerId = userId;
+    _draftWasEdited = true;
+    _draftSaveTimer?.cancel();
+    _draftSaveTimer = Timer(const Duration(milliseconds: 400), () {
+      _draftSaveTimer = null;
+      _queueDraftPersistence(
+        () => ChatDraftStore.write(
+          mode: AppMode.worker,
+          userId: userId,
+          bookingId: widget.bookingId,
+          message: message,
+        ),
+      );
+    });
+  }
+
+  void _queueDraftPersistence(Future<void> Function() operation) {
+    _draftPersistence = _draftPersistence.then((_) => operation());
+  }
+
+  void _clearSavedDraft(String userId) {
+    _draftSaveTimer?.cancel();
+    _draftSaveTimer = null;
+    _draftWasEdited = false;
+    _queueDraftPersistence(
+      () => ChatDraftStore.clear(
+        mode: AppMode.worker,
+        userId: userId,
+        bookingId: widget.bookingId,
+      ),
+    );
+  }
+
+  void _saveDraftBeforeExit() {
+    _draftSaveTimer?.cancel();
+    _draftSaveTimer = null;
+    final userId = _draftOwnerId;
+    if (userId == null || !_draftWasEdited) return;
+    final message = _messageController.text;
+    _draftWasEdited = false;
+    _queueDraftPersistence(
+      () => ChatDraftStore.write(
+        mode: AppMode.worker,
+        userId: userId,
+        bookingId: widget.bookingId,
+        message: message,
+      ),
+    );
+  }
+
   @override
   void dispose() {
+    _saveDraftBeforeExit();
     _messageController.dispose();
     _scrollController.dispose();
     _quickReplyAnimController.dispose();
@@ -56,25 +148,70 @@ class _WorkerChatPageState extends ConsumerState<WorkerChatPage>
   }
 
   Future<void> _pickAttachment() async {
-    final picked =
-        await _picker.pickImage(source: ImageSource.gallery, imageQuality: 80);
-    if (picked == null) return;
+    if (_isSending || _isChoosingAttachment || _isUploadingAttachment) return;
+    setState(() => _isChoosingAttachment = true);
     try {
+      final source = await showModalBottomSheet<ImageSource>(
+        context: context,
+        builder: (sheetContext) => SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.camera_alt_outlined),
+                title: const Text('Take a photo'),
+                onTap: () => Navigator.pop(sheetContext, ImageSource.camera),
+              ),
+              ListTile(
+                leading: const Icon(Icons.photo_library_outlined),
+                title: const Text('Choose from gallery'),
+                onTap: () => Navigator.pop(sheetContext, ImageSource.gallery),
+              ),
+            ],
+          ),
+        ),
+      );
+      if (source == null || !mounted) return;
+      final picked = await _picker.pickImage(
+        source: source,
+        imageQuality: 80,
+        maxWidth: 1600,
+        maxHeight: 1600,
+      );
+      if (picked == null || !mounted) return;
+      final bytes = await picked.readAsBytes();
+      if (!mounted) return;
+      setState(() {
+        _isChoosingAttachment = false;
+        _isUploadingAttachment = true;
+      });
       final attachment =
           await ref.read(chatControllerProvider).uploadAttachment(
                 bookingId: widget.bookingId,
-                bytes: await picked.readAsBytes(),
+                bytes: bytes,
                 filename: picked.name,
               );
       if (!mounted) return;
       setState(() {
         _draftAttachments.add(attachment);
+        _isTyping = _messageController.text.trim().isNotEmpty ||
+            _draftAttachments.isNotEmpty;
       });
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Could not attach the selected image.')),
+        const SnackBar(
+          content: Text(
+              'Could not attach the photo. Check camera or photo access and try again.'),
+        ),
       );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isChoosingAttachment = false;
+          _isUploadingAttachment = false;
+        });
+      }
     }
   }
 
@@ -88,40 +225,69 @@ class _WorkerChatPageState extends ConsumerState<WorkerChatPage>
     }
   }
 
-  void _sendMessage([String? quickText]) {
+  Future<void> _sendMessage([String? quickText]) async {
+    if (_isSending || _isUploadingAttachment) return;
+    final isQuickMessage = quickText != null;
     final text = quickText ?? _messageController.text.trim();
-    if (text.isEmpty && _draftAttachments.isEmpty) return;
+    if (text.isEmpty && (isQuickMessage || _draftAttachments.isEmpty)) return;
 
     final auth = ref.read(authControllerProvider).valueOrNull;
-    if (auth == null) return;
+    if (auth == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please sign in again to send messages.')),
+      );
+      return;
+    }
 
-    ref.read(chatControllerProvider).sendMessage(
-      bookingId: widget.bookingId,
-      text: text,
-      senderId: auth.user.id,
-      attachments: [..._draftAttachments],
-    );
-
-    setState(() {
-      _messageController.clear();
-      _draftAttachments.clear();
-      _isTyping = false;
-    });
-
-    Future.delayed(const Duration(milliseconds: 100), _scrollToBottom);
+    setState(() => _isSending = true);
+    try {
+      await ref.read(chatControllerProvider).sendMessage(
+            bookingId: widget.bookingId,
+            text: text,
+            senderId: auth.user.id,
+            attachments: isQuickMessage ? const [] : [..._draftAttachments],
+          );
+      if (!isQuickMessage) _clearSavedDraft(auth.user.id);
+      if (!mounted) return;
+      setState(() {
+        if (!isQuickMessage) {
+          _messageController.clear();
+          _draftAttachments.clear();
+        }
+        _isTyping = _messageController.text.trim().isNotEmpty ||
+            _draftAttachments.isNotEmpty;
+      });
+      Future.delayed(const Duration(milliseconds: 100), _scrollToBottom);
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content:
+              Text('Message not sent. Check your connection and try again.'),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _isSending = false);
+    }
   }
 
   String _formatTime(DateTime time) {
-    final h = time.hour.toString().padLeft(2, '0');
-    final m = time.minute.toString().padLeft(2, '0');
+    final localTime = time.toLocal();
+    final h = localTime.hour.toString().padLeft(2, '0');
+    final m = localTime.minute.toString().padLeft(2, '0');
     return '$h:$m';
   }
 
   bool _isDifferentDay(DateTime d1, DateTime d2) {
-    return d1.year != d2.year || d1.month != d2.month || d1.day != d2.day;
+    final first = d1.toLocal();
+    final second = d2.toLocal();
+    return first.year != second.year ||
+        first.month != second.month ||
+        first.day != second.day;
   }
 
   String _formatDateSeparator(DateTime date) {
+    date = date.toLocal();
     final now = DateTime.now();
     if (date.year == now.year &&
         date.month == now.month &&
@@ -193,19 +359,11 @@ class _WorkerChatPageState extends ConsumerState<WorkerChatPage>
                   ),
                   Row(
                     children: [
-                      Container(
-                        width: 8,
-                        height: 8,
-                        decoration: const BoxDecoration(
-                          color: Color(0xFF10B981),
-                          shape: BoxShape.circle,
-                        ),
-                      ),
-                      const SizedBox(width: 4),
                       Text(
-                        'Active Booking',
-                        style: tt.labelSmall
-                            ?.copyWith(color: const Color(0xFF10B981)),
+                        'Booking conversation',
+                        style: tt.labelSmall?.copyWith(
+                          color: cs.onSurfaceVariant,
+                        ),
                       ),
                     ],
                   ),
@@ -224,11 +382,11 @@ class _WorkerChatPageState extends ConsumerState<WorkerChatPage>
               child: Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF10B981).withValues(alpha: 0.1),
+                  color: cs.primary.withValues(alpha: 0.1),
                   shape: BoxShape.circle,
                 ),
-                child: const Icon(Icons.call_rounded,
-                    color: Color(0xFF10B981), size: 20),
+                child: Icon(Icons.support_agent_rounded,
+                    color: cs.primary, size: 20),
               ),
             ),
           ),
@@ -247,18 +405,39 @@ class _WorkerChatPageState extends ConsumerState<WorkerChatPage>
                     onRetry: () =>
                         ref.invalidate(chatProvider(widget.bookingId)),
                     onRefresh: () async {
-                      await ref.refresh(chatProvider(widget.bookingId).future).then<void>((_) {});
+                      await ref
+                          .refresh(chatProvider(widget.bookingId).future)
+                          .then<void>((_) {});
                     },
                   ),
                   data: (messages) {
                     final auth = ref.read(authControllerProvider).valueOrNull;
                     if (auth != null) {
-                      WidgetsBinding.instance.addPostFrameCallback((_) {
-                        ref.read(chatControllerProvider).markAsRead(
-                              bookingId: widget.bookingId,
-                              userId: auth.user.id,
-                            );
-                      });
+                      final pendingReadIds = messages
+                          .where(
+                            (message) =>
+                                !message.isRead &&
+                                message.senderId != auth.user.id &&
+                                message.id.isNotEmpty &&
+                                !_markedReadMessageIds.contains(message.id),
+                          )
+                          .map((message) => message.id)
+                          .toSet();
+                      if (pendingReadIds.isNotEmpty) {
+                        _markedReadMessageIds.addAll(pendingReadIds);
+                        WidgetsBinding.instance.addPostFrameCallback((_) {
+                          if (!mounted) return;
+                          ref
+                              .read(chatControllerProvider)
+                              .markAsRead(
+                                bookingId: widget.bookingId,
+                                userId: auth.user.id,
+                              )
+                              .catchError((_) {
+                            _markedReadMessageIds.removeAll(pendingReadIds);
+                          });
+                        });
+                      }
                     }
                     if (messages.isEmpty) {
                       return Center(
@@ -292,9 +471,15 @@ class _WorkerChatPageState extends ConsumerState<WorkerChatPage>
                       );
                     }
 
-                    WidgetsBinding.instance.addPostFrameCallback((_) {
-                      _scrollToBottom();
-                    });
+                    final shouldFollowLatest = !_scrollController.hasClients ||
+                        _scrollController.position.maxScrollExtent -
+                                _scrollController.position.pixels <=
+                            120;
+                    if (shouldFollowLatest) {
+                      WidgetsBinding.instance.addPostFrameCallback((_) {
+                        if (mounted) _scrollToBottom();
+                      });
+                    }
 
                     return ListView.builder(
                       controller: _scrollController,
@@ -359,7 +544,9 @@ class _WorkerChatPageState extends ConsumerState<WorkerChatPage>
                 children: _quickReplies
                     .map((reply) => _QuickReply(
                           label: reply,
-                          onTap: () => _sendMessage(reply),
+                          onTap: _isSending || _isUploadingAttachment
+                              ? null
+                              : () => _sendMessage(reply),
                         ))
                     .toList(),
               ),
@@ -373,11 +560,15 @@ class _WorkerChatPageState extends ConsumerState<WorkerChatPage>
                 spacing: 8,
                 runSpacing: 8,
                 children: _draftAttachments.map((attachment) {
-                  return Chip(
-                    avatar: const Icon(Icons.image_rounded, size: 18),
-                    label: Text(attachment.name ?? 'Attachment'),
-                    onDeleted: () {
-                      setState(() => _draftAttachments.remove(attachment));
+                  return PendingChatAttachmentTile(
+                    imageUrl: attachment.url,
+                    name: attachment.name,
+                    onRemove: () {
+                      setState(() {
+                        _draftAttachments.remove(attachment);
+                        _isTyping = _messageController.text.trim().isNotEmpty ||
+                            _draftAttachments.isNotEmpty;
+                      });
                     },
                   );
                 }).toList(growable: false),
@@ -394,7 +585,11 @@ class _WorkerChatPageState extends ConsumerState<WorkerChatPage>
               child: Row(
                 children: [
                   TapScale(
-                    onTap: _pickAttachment,
+                    onTap: _isSending ||
+                            _isChoosingAttachment ||
+                            _isUploadingAttachment
+                        ? null
+                        : _pickAttachment,
                     child: Container(
                       width: 48,
                       height: 48,
@@ -402,8 +597,16 @@ class _WorkerChatPageState extends ConsumerState<WorkerChatPage>
                         color: cs.surfaceContainerHighest,
                         shape: BoxShape.circle,
                       ),
-                      child: Icon(Icons.attach_file_rounded,
-                          color: cs.onSurfaceVariant),
+                      child: _isUploadingAttachment
+                          ? Padding(
+                              padding: const EdgeInsets.all(14),
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: cs.primary,
+                              ),
+                            )
+                          : Icon(Icons.attach_file_rounded,
+                              color: cs.onSurfaceVariant),
                     ),
                   ),
                   const SizedBox(width: 10),
@@ -417,8 +620,12 @@ class _WorkerChatPageState extends ConsumerState<WorkerChatPage>
                       ),
                       child: TextField(
                         controller: _messageController,
-                        onChanged: (v) =>
-                            setState(() => _isTyping = v.trim().isNotEmpty),
+                        onChanged: (v) {
+                          _scheduleDraftSave(v);
+                          setState(() => _isTyping = v.trim().isNotEmpty ||
+                              _draftAttachments.isNotEmpty);
+                        },
+                        readOnly: _isSending,
                         textCapitalization: TextCapitalization.sentences,
                         decoration: InputDecoration(
                           hintText: 'Type a message…',
@@ -431,7 +638,9 @@ class _WorkerChatPageState extends ConsumerState<WorkerChatPage>
                   ),
                   const SizedBox(width: 10),
                   TapScale(
-                    onTap: () => _sendMessage(),
+                    onTap: _isSending || _isUploadingAttachment
+                        ? null
+                        : _sendMessage,
                     child: AnimatedContainer(
                       duration: const Duration(milliseconds: 200),
                       width: 48,
@@ -449,11 +658,21 @@ class _WorkerChatPageState extends ConsumerState<WorkerChatPage>
                               ]
                             : null,
                       ),
-                      child: Icon(
-                        Icons.send_rounded,
-                        color: _isTyping ? cs.onPrimary : cs.onSurfaceVariant,
-                        size: 20,
-                      ),
+                      child: _isSending
+                          ? const Padding(
+                              padding: EdgeInsets.all(14),
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
+                            )
+                          : Icon(
+                              Icons.send_rounded,
+                              color: _isTyping
+                                  ? cs.onPrimary
+                                  : cs.onSurfaceVariant,
+                              size: 20,
+                            ),
                     ),
                   ),
                 ],
@@ -622,27 +841,33 @@ class _AttachmentPreview extends StatelessWidget {
 class _QuickReply extends StatelessWidget {
   const _QuickReply({required this.label, required this.onTap});
   final String label;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     return Padding(
       padding: const EdgeInsets.only(right: 8),
-      child: TapScale(
-        onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-          decoration: BoxDecoration(
-            border: Border.all(color: cs.primary.withValues(alpha: 0.5)),
-            borderRadius: BorderRadius.circular(AbzioTheme.cardRadius),
-          ),
-          child: Text(
-            label,
-            style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                  color: cs.primary,
-                  fontWeight: FontWeight.w600,
-                ),
+      child: IgnorePointer(
+        ignoring: onTap == null,
+        child: Opacity(
+          opacity: onTap == null ? 0.5 : 1,
+          child: TapScale(
+            onTap: onTap ?? () {},
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              decoration: BoxDecoration(
+                border: Border.all(color: cs.primary.withValues(alpha: 0.5)),
+                borderRadius: BorderRadius.circular(AbzioTheme.cardRadius),
+              ),
+              child: Text(
+                label,
+                style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                      color: cs.primary,
+                      fontWeight: FontWeight.w600,
+                    ),
+              ),
+            ),
           ),
         ),
       ),

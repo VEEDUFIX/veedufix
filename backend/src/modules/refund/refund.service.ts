@@ -1,4 +1,5 @@
-import { PaymentStatus, Prisma } from "@prisma/client";
+import { BookingStatus, PaymentStatus, Prisma } from "@prisma/client";
+import { randomUUID } from "node:crypto";
 import Razorpay from "razorpay";
 import { AppError } from "../../lib/app-error.js";
 import { env } from "../../config/env.js";
@@ -20,6 +21,17 @@ export class RefundConflictError extends Error {
   }
 }
 
+export class RefundProcessingError extends Error {
+  constructor(
+    readonly refundId: string,
+    message: string,
+    readonly providerRequestStarted: boolean
+  ) {
+    super(message);
+    this.name = "RefundProcessingError";
+  }
+}
+
 export type RefundStatus = "pending" | "processed" | "failed";
 
 type RefundRecord = {
@@ -27,9 +39,13 @@ type RefundRecord = {
   bookingId: string;
   disputeId: string | null;
   amount: number;
+  gatewayAmount: number | null;
+  walletAmount: number;
+  walletCreditedAt: Date | null;
   reason: string;
   status: string;
   razorpayRefundId: string | null;
+  providerAttemptId: string | null;
   failureReason: string | null;
   createdAt: Date;
   updatedAt: Date;
@@ -61,7 +77,16 @@ type RefundListItem = RefundRecord & {
   };
 };
 
-const razorpay = createRazorpayClient();
+// Keep provider setup lazy so importing refund helpers (for webhooks and tests)
+// does not make the whole service fail when payment credentials are absent.
+let razorpayClient: Razorpay | null = null;
+
+function getRazorpayClient(): Razorpay {
+  if (!razorpayClient) {
+    razorpayClient = createRazorpayClient();
+  }
+  return razorpayClient;
+}
 
 function createRazorpayClient(): Razorpay {
   if (!env.RAZORPAY_KEY_ID || !env.RAZORPAY_KEY_SECRET) {
@@ -92,8 +117,10 @@ function extractPaymentId(notes: Prisma.JsonValue | null | undefined): string | 
   return typeof paymentId === "string" && paymentId.trim().length > 0 ? paymentId.trim() : null;
 }
 
-async function fetchCapturedPayment(bookingId: string) {
-  return prisma.payment.findFirst({
+type RefundDbClient = Prisma.TransactionClient | typeof prisma;
+
+async function fetchCapturedPayment(bookingId: string, db: RefundDbClient = prisma) {
+  return db.payment.findFirst({
     where: {
       bookingId,
       provider: "RAZORPAY",
@@ -110,7 +137,9 @@ async function fetchCapturedPayment(bookingId: string) {
       booking: {
         select: {
           id: true,
-          code: true
+          code: true,
+          customerId: true,
+          totalAmount: true
         }
       }
     }
@@ -121,26 +150,36 @@ async function createRefundRecord(input: {
   bookingId: string;
   disputeId?: string | null;
   amount: Prisma.Decimal | number | string;
+  gatewayAmount?: Prisma.Decimal | number | string | null;
+  walletAmount?: Prisma.Decimal | number | string;
+  walletCreditedAt?: Date | null;
   reason: string;
   status: RefundStatus;
   razorpayRefundId?: string | null;
+  providerAttemptId?: string | null;
   failureReason?: string | null;
-}): Promise<RefundRecord> {
-  return prisma.refund.create({
+}, db: RefundDbClient = prisma): Promise<RefundRecord> {
+  return db.refund.create({
     data: {
       bookingId: input.bookingId,
       disputeId: input.disputeId ?? null,
       amount: toRupees(input.amount),
+      gatewayAmount: input.gatewayAmount == null ? null : toRupees(input.gatewayAmount),
+      walletAmount: toRupees(input.walletAmount ?? 0),
+      walletCreditedAt: input.walletCreditedAt ?? null,
       reason: input.reason,
       status: input.status,
       razorpayRefundId: input.razorpayRefundId ?? null,
+      providerAttemptId: input.providerAttemptId ?? null,
       failureReason: input.failureReason ?? null
     }
   });
 }
 
 async function attemptRazorpayRefund(
-  bookingId: string,
+  payment: NonNullable<Awaited<ReturnType<typeof fetchCapturedPayment>>>,
+  refundId: string,
+  providerAttemptId: string,
   amount: Prisma.Decimal | number | string,
   reason: string
 ): Promise<{
@@ -148,20 +187,14 @@ async function attemptRazorpayRefund(
   razorpayRefundId?: string;
   failureReason?: string;
   paymentId?: string;
+  definitivelyRejected?: boolean;
 }> {
-  const payment = await fetchCapturedPayment(bookingId);
-  if (!payment) {
-    return {
-      ok: false,
-      failureReason: "No captured Razorpay payment was found for this booking"
-    };
-  }
-
   const paymentId = extractPaymentId(payment.notes);
   if (!paymentId) {
     return {
       ok: false,
-      failureReason: "The captured payment does not include a Razorpay payment_id"
+      failureReason: "The captured payment does not include a Razorpay payment_id",
+      definitivelyRejected: true
     };
   }
 
@@ -169,7 +202,8 @@ async function attemptRazorpayRefund(
   if (amountPaise <= 0) {
     return {
       ok: false,
-      failureReason: "Refund amount must be greater than zero"
+      failureReason: "Refund amount must be greater than zero",
+      definitivelyRejected: true
     };
   }
 
@@ -178,74 +212,328 @@ async function attemptRazorpayRefund(
     return {
       ok: false,
       paymentId,
-      failureReason: "Refund amount exceeds the amount captured by Razorpay"
+      failureReason: "Refund amount exceeds the amount captured by Razorpay",
+      definitivelyRejected: true
     };
   }
 
   try {
-    const refund = await razorpay.payments.refund(paymentId, {
+    const refund = await getRazorpayClient().payments.refund(paymentId, {
       amount: amountPaise,
       notes: {
-        reason
+        reason,
+        refundRecordId: refundId,
+        refundAttemptId: providerAttemptId
       }
     });
 
+    const razorpayRefundId = typeof refund.id === "string" ? refund.id : "";
+    if (!razorpayRefundId) {
+      return {
+        ok: false,
+        paymentId,
+        failureReason: "Razorpay accepted the refund request but returned no refund ID"
+      };
+    }
+
     return {
       ok: true,
-      razorpayRefundId: String(refund.id ?? ""),
+      razorpayRefundId,
       paymentId
     };
   } catch (error) {
+    const errorRecord = typeof error === "object" && error !== null
+      ? error as Record<string, unknown>
+      : {};
+    const nestedError = typeof errorRecord.error === "object" && errorRecord.error !== null
+      ? errorRecord.error as Record<string, unknown>
+      : {};
+    const statusCode = Number(errorRecord.statusCode ?? errorRecord.status ?? nestedError.statusCode);
+    const definitivelyRejected = statusCode >= 400 && statusCode < 500 &&
+      ![408, 409, 425, 429].includes(statusCode);
     return {
       ok: false,
       paymentId,
-      failureReason: error instanceof Error ? error.message : "Failed to create Razorpay refund"
+      failureReason: error instanceof Error ? error.message : "Failed to create Razorpay refund",
+      definitivelyRejected
     };
   }
+}
+
+async function calculateRefundAllocation(
+  bookingId: string,
+  amount: Prisma.Decimal | number | string,
+  excludeRefundId?: string,
+  db: RefundDbClient = prisma
+) {
+  const payment = await fetchCapturedPayment(bookingId, db);
+  if (!payment) {
+    return { payment: null, gatewayAmount: 0, walletAmount: 0 };
+  }
+
+  const priorRefunds = await db.refund.findMany({
+    where: {
+      bookingId,
+      status: { in: ["pending", "processed"] },
+      ...(excludeRefundId ? { id: { not: excludeRefundId } } : {})
+    },
+    select: { amount: true, gatewayAmount: true, walletAmount: true }
+  });
+  const rows = (priorRefunds ?? []) as Array<{
+    amount: Prisma.Decimal | number;
+    gatewayAmount: Prisma.Decimal | number | null;
+    walletAmount: Prisma.Decimal | number | null;
+  }>;
+  const requestedPaise = toPaise(amount);
+  const refundedTotalPaise = rows.reduce((sum, refund) => sum + toPaise(refund.amount), 0);
+  const remainingTotalPaise = Math.max(0, toPaise(payment.booking.totalAmount) - refundedTotalPaise);
+  if (requestedPaise <= 0 || requestedPaise > remainingTotalPaise) {
+    throw AppError.conflict("Refund amount exceeds the remaining refundable booking balance");
+  }
+
+  const refundedGatewayPaise = rows.reduce(
+    (sum, refund) => sum + toPaise(refund.gatewayAmount ?? refund.amount),
+    0
+  );
+  const refundedWalletPaise = rows.reduce((sum, refund) => sum + toPaise(refund.walletAmount ?? 0), 0);
+  const gatewayRemainingPaise = Math.max(0, toPaise(payment.amount) - refundedGatewayPaise);
+  const walletDeductAmountPaise = (() => {
+    if (!payment.notes || typeof payment.notes !== "object" || Array.isArray(payment.notes)) {
+      return Math.max(0, toPaise(payment.booking.totalAmount) - toPaise(payment.amount));
+    }
+    const storedAmount = (payment.notes as Record<string, unknown>).walletDeductAmountPaise;
+    return typeof storedAmount === "number"
+      ? Math.max(0, Math.round(storedAmount))
+      : Math.max(0, toPaise(payment.booking.totalAmount) - toPaise(payment.amount));
+  })();
+  const walletRemainingPaise = Math.max(0, walletDeductAmountPaise - refundedWalletPaise);
+  const gatewayAmountPaise = Math.min(requestedPaise, gatewayRemainingPaise);
+  const walletAmountPaise = requestedPaise - gatewayAmountPaise;
+
+  if (walletAmountPaise > walletRemainingPaise) {
+    throw AppError.conflict("Refund amount exceeds the remaining gateway and wallet contributions");
+  }
+
+  return {
+    payment,
+    gatewayAmount: gatewayAmountPaise / 100,
+    walletAmount: walletAmountPaise / 100
+  };
+}
+
+export async function settleRefundFromProvider(
+  refundId: string,
+  succeeded: boolean,
+  failureReason?: string,
+  providerEvent?: { providerRefundId: string; providerAttemptId: string | null }
+) {
+  return prisma.$transaction(async (tx) => {
+    let refund = await tx.refund.findUnique({
+      where: { id: refundId },
+      include: { booking: { select: { customerId: true } } }
+    });
+    if (!refund) return null;
+    if (providerEvent) {
+      await tx.$queryRaw<Array<{ id: string }>>`SELECT "id" FROM "Booking" WHERE "id" = ${refund.bookingId} FOR UPDATE`;
+      await tx.$queryRaw<Array<{ id: string }>>`SELECT "id" FROM "Refund" WHERE "id" = ${refundId} FOR UPDATE`;
+      refund = await tx.refund.findUnique({
+        where: { id: refundId },
+        include: { booking: { select: { customerId: true } } }
+      });
+      if (!refund) return null;
+
+      const refundIdMatches = refund.razorpayRefundId === providerEvent.providerRefundId;
+      const attemptMatches = providerEvent.providerAttemptId !== null &&
+        refund.providerAttemptId === providerEvent.providerAttemptId;
+      if (!refundIdMatches && !attemptMatches) return null;
+    }
+
+    if (!succeeded) {
+      if (refund.status === "processed") return refund;
+      const failedRefund = await tx.refund.update({
+        where: { id: refund.id },
+        data: { status: "failed", failureReason: failureReason ?? "Refund failed at the payment provider" }
+      });
+      if (refund.disputeId) {
+        await tx.dispute.updateMany({
+          where: { id: refund.disputeId, status: "refund_pending" },
+          data: { status: "under_review", resolvedAt: null }
+        });
+      }
+      return failedRefund;
+    }
+
+    if (refund.walletAmount > 0 && !refund.walletCreditedAt) {
+      const creditedAt = new Date();
+      const claim = await tx.refund.updateMany({
+        where: { id: refund.id, walletCreditedAt: null },
+        data: { walletCreditedAt: creditedAt, status: "processed", failureReason: null }
+      });
+      if (claim.count === 1) {
+        const customer = await tx.user.update({
+          where: { id: refund.booking.customerId },
+          data: { walletBalance: { increment: refund.walletAmount } },
+          select: { walletBalance: true }
+        });
+        await tx.walletTransaction.create({
+          data: {
+            userId: refund.booking.customerId,
+            type: "WALLET_CREDIT",
+            amount: refund.walletAmount,
+            referenceType: "BOOKING_REFUND",
+            referenceId: refund.id,
+            balanceAfter: customer.walletBalance,
+            metadata: { reason: refund.reason, gatewayRefundId: refund.razorpayRefundId }
+          }
+        });
+      }
+    } else {
+      await tx.refund.update({
+        where: { id: refund.id },
+        data: { status: "processed", failureReason: null }
+      });
+    }
+
+    if (refund.disputeId) {
+      await tx.dispute.updateMany({
+        where: { id: refund.disputeId, status: { in: ["refund_pending", "under_review"] } },
+        data: { status: "resolved_refund", resolvedAt: new Date() }
+      });
+    }
+
+    const [processedRefunds, booking] = await Promise.all([
+      tx.refund.aggregate({
+        where: { bookingId: refund.bookingId, status: "processed" },
+        _sum: { amount: true }
+      }),
+      tx.booking.findUnique({
+        where: { id: refund.bookingId },
+        select: { totalAmount: true }
+      })
+    ]);
+    if (booking && toPaise(processedRefunds._sum.amount ?? 0) >= toPaise(booking.totalAmount)) {
+      await tx.booking.update({
+        where: { id: refund.bookingId },
+        data: { status: BookingStatus.REFUNDED }
+      });
+      await tx.payment.updateMany({
+        where: { bookingId: refund.bookingId },
+        data: { status: PaymentStatus.REFUNDED }
+      });
+    }
+
+    return tx.refund.findUnique({ where: { id: refund.id } });
+  });
 }
 
 export async function processRefund(
   bookingId: string,
   amount: Prisma.Decimal | number | string,
-  reason: string
+  reason: string,
+  disputeId?: string | null
 ): Promise<RefundRecord> {
-  const booking = await prisma.booking.findUnique({
-    where: { id: bookingId },
-    select: {
-      id: true,
-      code: true
+  const reservation = await prisma.$transaction(async (tx) => {
+    // Serialize refund balance checks and pending-reservation creation per booking.
+    await tx.$queryRaw<Array<{ id: string }>>`SELECT "id" FROM "Booking" WHERE "id" = ${bookingId} FOR UPDATE`;
+    const booking = await tx.booking.findUnique({
+      where: { id: bookingId },
+      select: { id: true, code: true, totalAmount: true }
+    });
+    if (!booking) {
+      throw AppError.notFound("Booking not found for refund processing");
     }
-  });
 
-  if (!booking) {
-    throw AppError.notFound("Booking not found for refund processing");
+    const allocation = await calculateRefundAllocation(booking.id, amount, undefined, tx);
+    const providerAttemptId = allocation.payment && allocation.gatewayAmount > 0
+      ? randomUUID()
+      : null;
+    const refund = await createRefundRecord({
+      bookingId: booking.id,
+      disputeId,
+      amount: toPaise(amount) / 100,
+      reason,
+      gatewayAmount: allocation.gatewayAmount,
+      walletAmount: allocation.walletAmount,
+      status: "pending",
+      providerAttemptId
+    }, tx);
+    return { booking, allocation, refund };
+  });
+  const { booking, allocation, refund } = reservation;
+  let providerRequestStarted = false;
+
+  try {
+    if (allocation.gatewayAmount === 0 && allocation.walletAmount > 0) {
+      await settleRefundFromProvider(refund.id, true);
+    } else if (allocation.payment) {
+      const providerAttemptId = refund.providerAttemptId;
+      if (!providerAttemptId) {
+        throw new Error("Refund provider attempt was not initialized");
+      }
+      providerRequestStarted = true;
+      const result = await attemptRazorpayRefund(
+        allocation.payment,
+        refund.id,
+        providerAttemptId,
+        allocation.gatewayAmount,
+        reason
+      );
+      const updated = await prisma.refund.updateMany({
+        where: { id: refund.id, status: "pending" },
+        data: result.ok
+          ? { razorpayRefundId: result.razorpayRefundId ?? null }
+          : result.definitivelyRejected
+            ? { status: "failed", failureReason: result.failureReason ?? null }
+            : { failureReason: result.failureReason ?? "Provider outcome is uncertain; reconciliation is required" }
+      });
+      if (result.ok && updated.count === 0) {
+        await prisma.refund.updateMany({
+          where: { id: refund.id, razorpayRefundId: null },
+          data: { razorpayRefundId: result.razorpayRefundId ?? null }
+        });
+      }
+    } else {
+      await prisma.refund.updateMany({
+        where: { id: refund.id, status: "pending" },
+        data: { status: "failed", failureReason: "No captured Razorpay payment was found for this booking" }
+      });
+    }
+  } catch (error) {
+    const failureReason = error instanceof Error ? error.message : "Failed to persist refund processing result";
+    try {
+      await prisma.refund.updateMany({
+        where: { id: refund.id, status: "pending" },
+        data: providerRequestStarted
+          ? { failureReason: `Provider outcome requires reconciliation: ${failureReason}` }
+          : { status: "failed", failureReason }
+      });
+    } catch (persistenceError) {
+      logger.error(
+        { refundId: refund.id, error: persistenceError },
+        "Failed to record refund processing failure"
+      );
+    }
+    if (providerRequestStarted) {
+      throw new RefundProcessingError(refund.id, failureReason, true);
+    }
+    throw error;
   }
 
-  const result = await attemptRazorpayRefund(bookingId, amount, reason);
-  const status: RefundStatus = result.ok ? "processed" : "failed";
-
-  const refund = await createRefundRecord({
-    bookingId: booking.id,
-    amount,
-    reason,
-    status,
-    razorpayRefundId: result.ok ? result.razorpayRefundId ?? null : null,
-    failureReason: result.ok ? null : result.failureReason ?? null
-  });
+  const recordedRefund = await prisma.refund.findUnique({ where: { id: refund.id } }) as RefundRecord;
 
   logger.info(
     {
       bookingId: booking.id,
       bookingCode: booking.code,
       refundId: refund.id,
-      status,
-      razorpayRefundId: result.razorpayRefundId ?? null,
-      failureReason: result.failureReason ?? null
+      status: recordedRefund.status,
+      razorpayRefundId: recordedRefund.razorpayRefundId,
+      failureReason: recordedRefund.failureReason
     },
     "Refund attempt recorded"
   );
 
-  return refund;
+  return recordedRefund;
 }
 
 export async function retryRefund(refundId: string): Promise<RefundRecord> {
@@ -255,6 +543,8 @@ export async function retryRefund(refundId: string): Promise<RefundRecord> {
       id: true,
       bookingId: true,
       amount: true,
+      gatewayAmount: true,
+      walletAmount: true,
       reason: true,
       status: true
     }
@@ -268,25 +558,75 @@ export async function retryRefund(refundId: string): Promise<RefundRecord> {
     throw new RefundConflictError("Only failed refunds can be retried");
   }
 
-  await prisma.refund.update({
-    where: { id: refundId },
-    data: {
-      status: "pending",
-      failureReason: null
+  const retry = await prisma.$transaction(async (tx) => {
+    await tx.$queryRaw<Array<{ id: string }>>`SELECT "id" FROM "Booking" WHERE "id" = ${existing.bookingId} FOR UPDATE`;
+    const allocation = await calculateRefundAllocation(existing.bookingId, existing.amount, existing.id, tx);
+    const providerAttemptId = allocation.payment && allocation.gatewayAmount > 0
+      ? randomUUID()
+      : null;
+    const retryClaim = await tx.refund.updateMany({
+      where: { id: refundId, status: "failed" },
+      data: {
+        status: "pending",
+        gatewayAmount: allocation.gatewayAmount,
+        walletAmount: allocation.walletAmount,
+        failureReason: null,
+        razorpayRefundId: null,
+        providerAttemptId
+      }
+    });
+    if (retryClaim.count !== 1) {
+      throw new RefundConflictError("This refund is already being retried");
     }
+    return { allocation, providerAttemptId };
   });
+  const { allocation, providerAttemptId } = retry;
+  const gatewayAmount = allocation.gatewayAmount;
+  const walletAmount = allocation.walletAmount;
 
-  const result = await attemptRazorpayRefund(existing.bookingId, existing.amount, existing.reason);
-  const nextStatus: RefundStatus = result.ok ? "processed" : "failed";
+  if (gatewayAmount === 0 && walletAmount > 0) {
+    await settleRefundFromProvider(refundId, true);
+    const settledRefund = await prisma.refund.findUnique({ where: { id: refundId } });
+    if (!settledRefund) throw new RefundNotFoundError();
+    return settledRefund;
+  }
 
-  const updated = await prisma.refund.update({
-    where: { id: refundId },
-    data: {
-      status: nextStatus,
-      razorpayRefundId: result.ok ? result.razorpayRefundId ?? null : null,
-      failureReason: result.ok ? null : result.failureReason ?? null
-    }
+  if (!allocation.payment) {
+    await prisma.refund.updateMany({
+      where: { id: refundId, status: "pending" },
+      data: { status: "failed", failureReason: "No captured Razorpay payment was found for this booking" }
+    });
+    const failedRefund = await prisma.refund.findUnique({ where: { id: refundId } });
+    if (!failedRefund) throw new RefundNotFoundError();
+    return failedRefund;
+  }
+
+  if (!providerAttemptId) {
+    throw new RefundConflictError("This refund has no active provider attempt");
+  }
+  const result = await attemptRazorpayRefund(
+    allocation.payment,
+    refundId,
+    providerAttemptId,
+    gatewayAmount,
+    existing.reason
+  );
+
+  const retryUpdate = await prisma.refund.updateMany({
+    where: { id: refundId, status: "pending" },
+    data: result.ok
+      ? { razorpayRefundId: result.razorpayRefundId ?? null }
+      : result.definitivelyRejected
+        ? { status: "failed", failureReason: result.failureReason ?? null }
+        : { failureReason: result.failureReason ?? "Provider outcome is uncertain; reconciliation is required" }
   });
+  if (result.ok && retryUpdate.count === 0) {
+    await prisma.refund.updateMany({
+      where: { id: refundId, razorpayRefundId: null },
+      data: { razorpayRefundId: result.razorpayRefundId ?? null }
+    });
+  }
+  const updated = await prisma.refund.findUnique({ where: { id: refundId } }) as RefundRecord;
 
   logger.info(
     {
@@ -332,6 +672,9 @@ export async function getAllRefunds(filters: RefundListFilters = {}): Promise<{
         bookingId: true,
         disputeId: true,
         amount: true,
+        gatewayAmount: true,
+        walletAmount: true,
+        walletCreditedAt: true,
         reason: true,
         status: true,
         razorpayRefundId: true,
@@ -409,7 +752,9 @@ export async function bulkRetryFailedRefunds(): Promise<{ attempted: number; suc
     try {
       await retryRefund(refund.id);
       const result = await prisma.refund.findUnique({ where: { id: refund.id }, select: { status: true } });
-      if (result?.status === "processed") {
+      // A provider refund is accepted asynchronously; its webhook will move
+      // it from pending to processed after Razorpay confirms settlement.
+      if (result?.status === "pending" || result?.status === "processed") {
         succeeded++;
       } else {
         failed++;

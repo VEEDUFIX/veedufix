@@ -141,6 +141,14 @@ class _OpsOverviewPageState extends ConsumerState<OpsOverviewPage> {
                         onPressed: () => context.go('/ops/alerts'),
                       ),
                       _QuickActionCard(
+                        icon: Icons.cloud_done_rounded,
+                        color: const Color(0xFF0F766E),
+                        title: 'System Status',
+                        subtitle: 'Check API, database, and cache health.',
+                        actionLabel: 'Open',
+                        onPressed: () => context.go('/ops/system-health'),
+                      ),
+                      _QuickActionCard(
                         icon: Icons.gavel_rounded,
                         color: const Color(0xFFB45309),
                         title: 'Disputes',

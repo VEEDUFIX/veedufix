@@ -146,9 +146,14 @@ class _WorkerAvailabilityPageState
         title: const Text('Weekly availability'),
         actions: [
           TextButton.icon(
-            onPressed: _isSaving ? null : _saveAvailability,
-            icon: const Icon(Icons.save_rounded),
-            label: const Text('Save'),
+            onPressed: _isSaving || _isLoading ? null : _saveAvailability,
+            icon: _isSaving
+                ? const SizedBox.square(
+                    dimension: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.save_rounded),
+            label: Text(_isSaving ? 'Saving' : 'Save'),
           ),
         ],
       ),
@@ -192,7 +197,18 @@ class _WorkerAvailabilityPageState
               PremiumGlassCard(
                 child: Padding(
                   padding: const EdgeInsets.all(18),
-                  child: Text(_errorMessage!),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(_errorMessage!),
+                      const SizedBox(height: 8),
+                      TextButton.icon(
+                        onPressed: _loadAvailability,
+                        icon: const Icon(Icons.refresh_rounded),
+                        label: const Text('Try again'),
+                      ),
+                    ],
+                  ),
                 ),
               )
             else
@@ -338,7 +354,7 @@ class _TimeSlotEditor extends StatelessWidget {
                   label: 'Start',
                   value: slot.startTime == null
                       ? 'Select'
-                      : _formatTime(slot.startTime!),
+                      : slot.startTime!.format(context),
                   onPressed: () async {
                     final selected = await showTimePicker(
                       context: context,
@@ -357,7 +373,7 @@ class _TimeSlotEditor extends StatelessWidget {
                   label: 'End',
                   value: slot.endTime == null
                       ? 'Select'
-                      : _formatTime(slot.endTime!),
+                      : slot.endTime!.format(context),
                   onPressed: () async {
                     final selected = await showTimePicker(
                       context: context,

@@ -57,8 +57,10 @@ class WorkerWalletPage extends ConsumerWidget {
         ),
         data: (wallet) => RefreshIndicator(
           onRefresh: () async {
-            await ref.read(workerWalletProvider.future);
-            await ref.read(workerAccountProfileProvider.future);
+            await ref.refresh(workerWalletProvider.future).then<void>((_) {});
+            await ref
+                .refresh(workerAccountProfileProvider.future)
+                .then<void>((_) {});
           },
           child: _WalletBody(wallet: wallet, profileAsync: profileAsync),
         ),
@@ -86,11 +88,7 @@ class _WalletBody extends ConsumerWidget {
         Container(
           padding: const EdgeInsets.all(28),
           decoration: BoxDecoration(
-            gradient: LinearGradient(
-              colors: [const Color(0xFF0F766E), cs.primary],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
+            color: const Color(0xFF282620),
             borderRadius: BorderRadius.circular(AbzioTheme.cardRadius),
             boxShadow: AbzioTheme.eliteShadow,
           ),
@@ -99,35 +97,48 @@ class _WalletBody extends ConsumerWidget {
             children: [
               Row(
                 children: [
-                  const Icon(Icons.account_balance_wallet_rounded,
-                      color: Colors.white70, size: 18),
+                  Icon(Icons.account_balance_wallet_rounded,
+                      color: cs.primary, size: 18),
                   const SizedBox(width: 8),
                   Text('Available Balance',
                       style: tt.labelMedium?.copyWith(color: Colors.white70)),
                 ],
               ),
               const SizedBox(height: 10),
-              Text(
-                '₹${wallet.balance.toStringAsFixed(2)}',
-                style: tt.displaySmall?.copyWith(
-                    color: Colors.white, fontWeight: FontWeight.w900),
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  '₹${wallet.balance.toStringAsFixed(2)}',
+                  style: tt.displaySmall?.copyWith(
+                    color: cs.primary,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
               ),
               const SizedBox(height: 20),
               Row(
                 children: [
-                  _StatChip(
+                  Expanded(
+                    child: _StatChip(
                       label: 'Total Earned',
-                      value: '₹${wallet.totalEarnings.toStringAsFixed(0)}'),
+                      value: '₹${wallet.totalEarnings.toStringAsFixed(0)}',
+                    ),
+                  ),
                   const SizedBox(width: 12),
-                  _StatChip(
+                  Expanded(
+                    child: _StatChip(
                       label: 'Pending',
-                      value: '₹${wallet.pendingPayout.toStringAsFixed(0)}'),
+                      value: '₹${wallet.pendingPayout.toStringAsFixed(0)}',
+                    ),
+                  ),
                 ],
               ),
               const SizedBox(height: 14),
               Text(
                 wallet.payoutsPaused
-                    ? wallet.payoutPauseReason ?? 'Partner payouts are temporarily paused.'
+                    ? wallet.payoutPauseReason ??
+                        'Partner payouts are temporarily paused.'
                     : 'Withdrawals start at ₹${wallet.minimumPayout.toStringAsFixed(2)}. Processing time can vary; track each request below.',
                 style:
                     tt.bodySmall?.copyWith(color: Colors.white70, height: 1.3),
@@ -149,7 +160,9 @@ class _WalletBody extends ConsumerWidget {
         TapScale(
           onTap: wallet.payoutsPaused
               ? () => ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text(wallet.payoutPauseReason ?? 'Partner payouts are temporarily paused.')),
+                    SnackBar(
+                        content: Text(wallet.payoutPauseReason ??
+                            'Partner payouts are temporarily paused.')),
                   )
               : hasPayoutDetails
                   ? () => _showPayoutSheet(context, ref, wallet.balance,
@@ -174,16 +187,22 @@ class _WalletBody extends ConsumerWidget {
                   hasPayoutDetails && !wallet.payoutsPaused
                       ? Icons.payments_rounded
                       : Icons.person_rounded,
-                  color: hasPayoutDetails && !wallet.payoutsPaused ? cs.primary : cs.onSurfaceVariant,
+                  color: hasPayoutDetails && !wallet.payoutsPaused
+                      ? cs.primary
+                      : cs.onSurfaceVariant,
                   size: 20,
                 ),
                 const SizedBox(width: 10),
                 Text(
                   wallet.payoutsPaused
                       ? 'Payouts paused'
-                      : hasPayoutDetails ? 'Request payout' : 'Add payout details',
+                      : hasPayoutDetails
+                          ? 'Request payout'
+                          : 'Add payout details',
                   style: tt.titleSmall?.copyWith(
-                    color: hasPayoutDetails && !wallet.payoutsPaused ? cs.primary : cs.onSurface,
+                    color: hasPayoutDetails && !wallet.payoutsPaused
+                        ? cs.primary
+                        : cs.onSurface,
                     fontWeight: FontWeight.w800,
                   ),
                 ),
@@ -325,6 +344,8 @@ class _StatChip extends StatelessWidget {
                   ?.copyWith(color: Colors.white70)),
           const SizedBox(height: 2),
           Text(value,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
               style: Theme.of(context)
                   .textTheme
                   .titleSmall
@@ -569,184 +590,192 @@ class _PayoutSheetState extends ConsumerState<_PayoutSheet> {
     return Padding(
       padding:
           EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
-      child: Container(
-        padding: const EdgeInsets.fromLTRB(24, 24, 24, 32),
-        decoration: BoxDecoration(
-          color: cs.surface,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
-        ),
-        child: Form(
-          key: _formKey,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Center(
-                child: Container(
-                  width: 40,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: cs.outlineVariant,
-                    borderRadius: BorderRadius.circular(2),
+      child: SingleChildScrollView(
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(24, 24, 24, 32),
+          decoration: BoxDecoration(
+            color: cs.surface,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+          ),
+          child: Form(
+            key: _formKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Center(
+                  child: Container(
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: cs.outlineVariant,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
                   ),
                 ),
-              ),
-              const SizedBox(height: 20),
-              Text('Withdraw Earnings',
-                  style: tt.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
-              const SizedBox(height: 4),
-              Text(
-                'Available: ₹${widget.availableBalance.toStringAsFixed(2)}',
-                style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant),
-              ),
-              const SizedBox(height: 20),
-              if (widget.availableBalance < widget.minimumPayout) ...[
+                const SizedBox(height: 20),
+                Text('Withdraw Earnings',
+                    style:
+                        tt.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
+                const SizedBox(height: 4),
+                Text(
+                  'Available: ₹${widget.availableBalance.toStringAsFixed(2)}',
+                  style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+                ),
+                const SizedBox(height: 20),
+                if (widget.availableBalance < widget.minimumPayout) ...[
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: cs.errorContainer.withValues(alpha: 0.45),
+                      borderRadius: BorderRadius.circular(16),
+                      border:
+                          Border.all(color: cs.error.withValues(alpha: 0.2)),
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Icon(Icons.info_outline_rounded,
+                            color: cs.error, size: 20),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            'You need at least ₹${widget.minimumPayout.toStringAsFixed(2)} to request a payout. Keep earning and come back once your balance crosses the threshold.',
+                            style: tt.bodySmall
+                                ?.copyWith(color: cs.onSurface, height: 1.35),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                ],
                 Container(
                   width: double.infinity,
                   padding: const EdgeInsets.all(14),
                   decoration: BoxDecoration(
-                    color: cs.errorContainer.withValues(alpha: 0.45),
+                    color: cs.surfaceContainerHighest.withValues(alpha: 0.4),
                     borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: cs.error.withValues(alpha: 0.2)),
+                    border: Border.all(
+                        color: cs.outlineVariant.withValues(alpha: 0.6)),
                   ),
-                  child: Row(
+                  child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Icon(Icons.info_outline_rounded,
-                          color: cs.error, size: 20),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Text(
-                          'You need at least ₹${widget.minimumPayout.toStringAsFixed(2)} to request a payout. Keep earning and come back once your balance crosses the threshold.',
-                          style: tt.bodySmall
-                              ?.copyWith(color: cs.onSurface, height: 1.35),
-                        ),
+                      Text('Payout destination',
+                          style: tt.labelLarge
+                              ?.copyWith(fontWeight: FontWeight.w800)),
+                      const SizedBox(height: 6),
+                      Text(
+                        widget.payoutUpiId ?? 'No UPI saved yet',
+                        style: tt.titleSmall
+                            ?.copyWith(fontWeight: FontWeight.w700),
                       ),
+                      const SizedBox(height: 6),
+                      Text(
+                        widget.payoutUpiId != null
+                            ? 'This request will be sent to the UPI saved in your profile.'
+                            : 'Add a UPI in your profile before you can request a payout.',
+                        style: tt.bodySmall
+                            ?.copyWith(color: cs.onSurfaceVariant, height: 1.3),
+                      ),
+                      if (widget.payoutUpiId == null) ...[
+                        const SizedBox(height: 12),
+                        FilledButton.tonal(
+                          onPressed: () =>
+                              context.push('/profile/bank-details'),
+                          child: const Text('Open profile'),
+                        ),
+                      ],
                     ],
                   ),
                 ),
-                const SizedBox(height: 16),
-              ],
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(
-                  color: cs.surfaceContainerHighest.withValues(alpha: 0.4),
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(
-                      color: cs.outlineVariant.withValues(alpha: 0.6)),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('Payout destination',
-                        style: tt.labelLarge
-                            ?.copyWith(fontWeight: FontWeight.w800)),
-                    const SizedBox(height: 6),
-                    Text(
-                      widget.payoutUpiId ?? 'No UPI saved yet',
-                      style:
-                          tt.titleSmall?.copyWith(fontWeight: FontWeight.w700),
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      widget.payoutUpiId != null
-                          ? 'This request will be sent to the UPI saved in your profile.'
-                          : 'Add a UPI in your profile before you can request a payout.',
-                      style: tt.bodySmall
-                          ?.copyWith(color: cs.onSurfaceVariant, height: 1.3),
-                    ),
-                    if (widget.payoutUpiId == null) ...[
-                      const SizedBox(height: 12),
-                      FilledButton.tonal(
-                        onPressed: () => context.push('/profile/bank-details'),
-                        child: const Text('Open profile'),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-              const SizedBox(height: 14),
-              TextFormField(
-                controller: _amountController,
-                decoration: InputDecoration(
-                  labelText: 'Amount (₹)',
-                  hintText: '500',
-                  prefixIcon: const Icon(Icons.currency_rupee_rounded),
-                  border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(14)),
-                ),
-                keyboardType:
-                    const TextInputType.numberWithOptions(decimal: true),
-                textInputAction: TextInputAction.done,
-                validator: (v) {
-                  final amount = double.tryParse(v ?? '');
-                  if (amount == null || amount <= 0) {
-                    return 'Enter a valid amount';
-                  }
-                  if (amount > widget.availableBalance) {
-                    return 'Insufficient balance';
-                  }
-                  if (amount < widget.minimumPayout) {
-                    return 'Minimum withdrawal is ₹${widget.minimumPayout.toStringAsFixed(2)}';
-                  }
-                  return null;
-                },
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Minimum withdrawal is ₹${widget.minimumPayout.toStringAsFixed(2)}. Higher amounts will process in the same payout queue.',
-                style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant),
-              ),
-              const SizedBox(height: 14),
-              Wrap(
-                spacing: 10,
-                runSpacing: 10,
-                children: [
-                  for (final amount in presetAmounts)
-                    ActionChip(
-                      label: Text('₹${_formatPresetAmount(amount)}'),
-                      onPressed: () => _setAmount(amount),
-                      labelStyle:
-                          tt.labelLarge?.copyWith(fontWeight: FontWeight.w700),
-                    ),
-                  if (showFullBalanceChip)
-                    ActionChip(
-                      label: const Text('Full balance'),
-                      onPressed: () => _setAmount(widget.availableBalance),
-                      labelStyle:
-                          tt.labelLarge?.copyWith(fontWeight: FontWeight.w700),
-                    ),
-                ],
-              ),
-              const SizedBox(height: 20),
-              SizedBox(
-                width: double.infinity,
-                child: FilledButton(
-                  onPressed: isLoading ? null : _submit,
-                  style: FilledButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(
+                const SizedBox(height: 14),
+                TextFormField(
+                  controller: _amountController,
+                  decoration: InputDecoration(
+                    labelText: 'Amount (₹)',
+                    hintText: '500',
+                    prefixIcon: const Icon(Icons.currency_rupee_rounded),
+                    border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(14)),
                   ),
-                  child: isLoading
-                      ? const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(
-                              color: Colors.white, strokeWidth: 2))
-                      : Text('Request payout',
-                          style: tt.titleSmall?.copyWith(
-                              color: Colors.white,
-                              fontWeight: FontWeight.w800)),
+                  keyboardType:
+                      const TextInputType.numberWithOptions(decimal: true),
+                  textInputAction: TextInputAction.done,
+                  validator: (v) {
+                    final amount = double.tryParse(v ?? '');
+                    if (amount == null || amount <= 0) {
+                      return 'Enter a valid amount';
+                    }
+                    if (amount > widget.availableBalance) {
+                      return 'Insufficient balance';
+                    }
+                    if (amount < widget.minimumPayout) {
+                      return 'Minimum withdrawal is ₹${widget.minimumPayout.toStringAsFixed(2)}';
+                    }
+                    return null;
+                  },
                 ),
-              ),
-              const SizedBox(height: 12),
-              Text(
-                'We’ll queue this request for approval and processing.',
-                style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant),
-              ),
-            ],
+                const SizedBox(height: 8),
+                Text(
+                  'Minimum withdrawal is ₹${widget.minimumPayout.toStringAsFixed(2)}. Higher amounts will process in the same payout queue.',
+                  style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+                ),
+                const SizedBox(height: 14),
+                Wrap(
+                  spacing: 10,
+                  runSpacing: 10,
+                  children: [
+                    for (final amount in presetAmounts)
+                      ActionChip(
+                        label: Text('₹${_formatPresetAmount(amount)}'),
+                        onPressed: () => _setAmount(amount),
+                        labelStyle: tt.labelLarge
+                            ?.copyWith(fontWeight: FontWeight.w700),
+                      ),
+                    if (showFullBalanceChip)
+                      ActionChip(
+                        label: const Text('Full balance'),
+                        onPressed: () => _setAmount(widget.availableBalance),
+                        labelStyle: tt.labelLarge
+                            ?.copyWith(fontWeight: FontWeight.w700),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 20),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton(
+                    onPressed: isLoading ||
+                            widget.availableBalance < widget.minimumPayout
+                        ? null
+                        : _submit,
+                    style: FilledButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14)),
+                    ),
+                    child: isLoading
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                                color: Colors.white, strokeWidth: 2))
+                        : Text('Request payout',
+                            style: tt.titleSmall?.copyWith(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w800)),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  'We’ll queue this request for approval and processing.',
+                  style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+                ),
+              ],
+            ),
           ),
         ),
       ),

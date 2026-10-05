@@ -54,15 +54,20 @@ class ReviewsPage extends ConsumerWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        _buildOverallRating(cs, tt, profile),
-                        const SizedBox(height: 32),
+                        PremiumGlassCard(
+                          child: Padding(
+                            padding: const EdgeInsets.all(16),
+                            child: _buildOverallRating(cs, tt, profile),
+                          ),
+                        ),
+                        const SizedBox(height: 24),
                         Text('Badges Earned',
                             style: tt.titleMedium?.copyWith(
                                 fontWeight: FontWeight.bold,
                                 color: cs.onSurface)),
                         const SizedBox(height: 16),
                         _buildBadgesScroll(cs, tt, profile, reviews),
-                        const SizedBox(height: 32),
+                        const SizedBox(height: 24),
                         Text('Recent Reviews',
                             style: tt.titleMedium?.copyWith(
                                 fontWeight: FontWeight.bold,
@@ -87,6 +92,12 @@ class ReviewsPage extends ConsumerWidget {
                                 cs: cs,
                                 tt: tt,
                                 review: review,
+                                onRespond: () => _respondToReview(
+                                  context,
+                                  ref,
+                                  workerId,
+                                  review,
+                                ),
                               );
                             },
                           ),
@@ -103,7 +114,9 @@ class ReviewsPage extends ConsumerWidget {
               icon: Icons.star_outline_rounded,
               onRetry: () => ref.invalidate(workerProfileProvider(workerId)),
               onRefresh: () async {
-                await ref.refresh(workerProfileProvider(workerId).future).then<void>((_) {});
+                await ref
+                    .refresh(workerProfileProvider(workerId).future)
+                    .then<void>((_) {});
               },
             ),
           ),
@@ -113,6 +126,66 @@ class ReviewsPage extends ConsumerWidget {
           const Scaffold(body: Center(child: CircularProgressIndicator())),
       error: (_, __) => const Scaffold(body: Center(child: Text('Auth error'))),
     );
+  }
+
+  Future<void> _respondToReview(
+    BuildContext context,
+    WidgetRef ref,
+    String workerId,
+    WorkerPublicProfileReview review,
+  ) async {
+    final existingResponse = review.workerResponse?.trim();
+    final hasResponse = existingResponse?.isNotEmpty == true;
+    final controller = TextEditingController(text: existingResponse ?? '');
+    try {
+      final responseText = await showDialog<String>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: Text(hasResponse ? 'Edit your reply' : 'Reply to review'),
+          content: TextField(
+            controller: controller,
+            autofocus: true,
+            maxLength: 500,
+            maxLines: 5,
+            decoration: const InputDecoration(
+              hintText: 'Thank the customer or address their feedback',
+              alignLabelWithHint: true,
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () {
+                final value = controller.text.trim();
+                if (value.length >= 3) Navigator.of(dialogContext).pop(value);
+              },
+              child: const Text('Post reply'),
+            ),
+          ],
+        ),
+      );
+      if (responseText == null || !context.mounted) return;
+
+      await ref.read(apiClientProvider).patch(
+        '/reviews/worker/${Uri.encodeComponent(review.id)}/response',
+        data: {'response': responseText},
+      );
+      ref.invalidate(workerProfileProvider(workerId));
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Your reply is now visible on your profile.')),
+      );
+    } catch (_) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not post your reply. Please try again.')),
+      );
+    } finally {
+      controller.dispose();
+    }
   }
 
   Widget _buildOverallRating(
@@ -150,7 +223,7 @@ class ReviewsPage extends ConsumerWidget {
                 textBaseline: TextBaseline.alphabetic,
                 children: [
                   Text(profile.averageRating.toStringAsFixed(1),
-                      style: tt.displayMedium?.copyWith(
+                      style: tt.displaySmall?.copyWith(
                           fontWeight: FontWeight.bold, color: cs.onSurface)),
                   const SizedBox(width: 4),
                   const Icon(Icons.star_rounded,
@@ -217,7 +290,7 @@ class ReviewsPage extends ConsumerWidget {
     // Derive badges based on real data
     if (profile.averageRating >= 4.5) {
       badges.add(_buildBadgeItem(
-          'Top Rated', Icons.emoji_events, const Color(0xFF8B5CF6), cs, tt));
+          'Top Rated', Icons.emoji_events, const Color(0xFFB58B3A), cs, tt));
       badges.add(const SizedBox(width: 12));
     }
 
@@ -232,11 +305,11 @@ class ReviewsPage extends ConsumerWidget {
 
     if (profile.completedJobsCount >= 50) {
       badges.add(_buildBadgeItem(
-          'Master', Icons.verified, const Color(0xFF3B82F6), cs, tt));
+          'Master', Icons.verified, const Color(0xFFB58B3A), cs, tt));
       badges.add(const SizedBox(width: 12));
     } else if (profile.completedJobsCount >= 10) {
       badges.add(_buildBadgeItem(
-          'Experienced', Icons.work, const Color(0xFF14B8A6), cs, tt));
+          'Experienced', Icons.work, const Color(0xFFB58B3A), cs, tt));
       badges.add(const SizedBox(width: 12));
     }
 
@@ -281,7 +354,9 @@ class ReviewsPage extends ConsumerWidget {
     required ColorScheme cs,
     required TextTheme tt,
     required WorkerPublicProfileReview review,
+    required VoidCallback onRespond,
   }) {
+    final hasWorkerResponse = review.workerResponse?.trim().isNotEmpty == true;
     final String initials = review.customerName.isNotEmpty
         ? review.customerName.substring(0, 1).toUpperCase()
         : '?';
@@ -345,6 +420,34 @@ class ReviewsPage extends ConsumerWidget {
           const SizedBox(height: 12),
           Text(review.comment ?? '',
               style: tt.bodyMedium?.copyWith(color: cs.onSurface)),
+          const SizedBox(height: 10),
+          if (hasWorkerResponse) ...[
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: cs.primaryContainer.withValues(alpha: 0.45),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Your reply', style: tt.labelLarge?.copyWith(fontWeight: FontWeight.w800)),
+                  const SizedBox(height: 4),
+                  Text(review.workerResponse!.trim(), style: tt.bodyMedium),
+                ],
+              ),
+            ),
+            const SizedBox(height: 6),
+          ],
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton.icon(
+              onPressed: onRespond,
+              icon: const Icon(Icons.reply_rounded, size: 18),
+              label: Text(hasWorkerResponse ? 'Edit reply' : 'Reply'),
+            ),
+          ),
         ],
       ),
     );

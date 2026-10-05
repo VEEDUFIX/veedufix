@@ -190,12 +190,39 @@ class _ProfileBody extends StatelessWidget {
                                 const SizedBox(width: 6),
                                 if (const {'VERIFIED', 'APPROVED'}.contains(
                                   profile.verificationStatus.toUpperCase(),
-                                ))
-                                  Icon(
-                                    Icons.verified_rounded,
-                                    size: 18,
-                                    color: cs.secondary,
+                                )) ...[
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 8,
+                                      vertical: 5,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: const Color(
+                                        0xFF16845B,
+                                      ).withValues(alpha: 0.1),
+                                      borderRadius: BorderRadius.circular(999),
+                                    ),
+                                    child: const Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(
+                                          Icons.verified_rounded,
+                                          size: 14,
+                                          color: Color(0xFF16845B),
+                                        ),
+                                        SizedBox(width: 4),
+                                        Text(
+                                          'Verified',
+                                          style: TextStyle(
+                                            color: Color(0xFF16845B),
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.w700,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
                                   ),
+                                ],
                               ],
                             ),
                             const SizedBox(height: 4),
@@ -570,12 +597,12 @@ class _StatBadge extends StatelessWidget {
   }
 }
 
-class _ReviewCard extends StatelessWidget {
+class _ReviewCard extends ConsumerWidget {
   const _ReviewCard({required this.review});
   final WorkerPublicProfileReview review;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final cs = Theme.of(context).colorScheme;
     final tt = Theme.of(context).textTheme;
 
@@ -633,6 +660,16 @@ class _ReviewCard extends StatelessWidget {
                       ),
                     ),
                   ),
+                  PopupMenuButton<String>(
+                    tooltip: 'Review options',
+                    onSelected: (_) => _reportReview(context, ref, review),
+                    itemBuilder: (context) => const [
+                      PopupMenuItem(
+                        value: 'report',
+                        child: Text('Report review'),
+                      ),
+                    ],
+                  ),
                 ],
               ),
               if (review.comment != null) ...[
@@ -642,6 +679,37 @@ class _ReviewCard extends StatelessWidget {
                   style: tt.bodyMedium?.copyWith(
                     color: cs.onSurfaceVariant,
                     height: 1.45,
+                  ),
+                ),
+              ],
+              if (review.workerResponse?.trim().isNotEmpty == true) ...[
+                const SizedBox(height: 12),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: cs.primaryContainer.withValues(alpha: 0.45),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Professional response',
+                        style: tt.labelLarge?.copyWith(
+                          color: cs.primary,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        review.workerResponse!,
+                        style: tt.bodyMedium?.copyWith(
+                          color: cs.onSurfaceVariant,
+                          height: 1.4,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ],
@@ -659,4 +727,93 @@ class _ReviewCard extends StatelessWidget {
     if (diff.inHours > 0) return '${diff.inHours} hours ago';
     return 'Just now';
   }
+}
+
+Future<void> _reportReview(
+  BuildContext context,
+  WidgetRef ref,
+  WorkerPublicProfileReview review,
+) async {
+  if (ref.read(authControllerProvider).valueOrNull == null) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Sign in to report a review.')),
+    );
+    return;
+  }
+
+  final reason = await showDialog<String>(
+    context: context,
+    builder: (_) => const _ReviewReportDialog(),
+  );
+  if (reason == null || !context.mounted) return;
+
+  try {
+    await ref.read(apiClientProvider).post(
+      '/reviews/${Uri.encodeComponent(review.id)}/report',
+      data: {'reason': reason},
+    );
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Thanks. Our team will review this report.')),
+    );
+  } catch (_) {
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Could not submit the report.')),
+    );
+  }
+}
+
+class _ReviewReportDialog extends StatefulWidget {
+  const _ReviewReportDialog();
+
+  @override
+  State<_ReviewReportDialog> createState() => _ReviewReportDialogState();
+}
+
+class _ReviewReportDialogState extends State<_ReviewReportDialog> {
+  final _controller = TextEditingController();
+  final _formKey = GlobalKey<FormState>();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+    title: const Text('Report this review'),
+    content: Form(
+      key: _formKey,
+      child: TextFormField(
+        controller: _controller,
+        autofocus: true,
+        maxLength: 500,
+        maxLines: 4,
+        decoration: const InputDecoration(
+          labelText: 'Why should we review it?',
+          hintText: 'Describe the issue (at least 10 characters)',
+          alignLabelWithHint: true,
+        ),
+        validator: (value) => (value?.trim().length ?? 0) >= 10
+            ? null
+            : 'Please enter at least 10 characters.',
+      ),
+    ),
+    actions: [
+      TextButton(
+        onPressed: () => Navigator.of(context).pop(),
+        child: const Text('Cancel'),
+      ),
+      FilledButton(
+        onPressed: () {
+          if (_formKey.currentState?.validate() ?? false) {
+            Navigator.of(context).pop(_controller.text.trim());
+          }
+        },
+        child: const Text('Send report'),
+      ),
+    ],
+  );
 }

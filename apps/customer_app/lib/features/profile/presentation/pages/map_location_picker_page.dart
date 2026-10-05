@@ -39,6 +39,8 @@ class _MapLocationPickerPageState extends State<MapLocationPickerPage>
   Timer? _labelDebounce;
   Timer? _suggestionDebounce;
   int _suggestionRequestId = 0;
+  int _labelRequestId = 0;
+  bool _preserveSuggestionRequestForCameraMove = false;
   List<_LocationSuggestion> _suggestions = <_LocationSuggestion>[];
 
   @override
@@ -66,12 +68,23 @@ class _MapLocationPickerPageState extends State<MapLocationPickerPage>
     super.dispose();
   }
 
-  Future<void> _animateTo(LatLng target) async {
+  Future<void> _animateTo(
+    LatLng target, {
+    bool preserveSuggestionRequest = false,
+  }) async {
+    if (!mounted) return;
+    final cameraWillMove = _mapController.isCompleted && target != _currentCenter;
     setState(() => _currentCenter = target);
     if (_mapController.isCompleted) {
       final controller = await _mapController.future;
-      await controller.animateCamera(CameraUpdate.newLatLngZoom(target, 16));
+      if (!mounted) return;
+      if (cameraWillMove) {
+        _preserveSuggestionRequestForCameraMove = preserveSuggestionRequest;
+        await controller.animateCamera(CameraUpdate.newLatLngZoom(target, 16));
+        _preserveSuggestionRequestForCameraMove = false;
+      }
     }
+    if (!mounted) return;
     _refreshLocationLabel();
   }
 
@@ -189,7 +202,7 @@ class _MapLocationPickerPageState extends State<MapLocationPickerPage>
 
   Future<void> _applySuggestion(_LocationSuggestion suggestion) async {
     _suggestionDebounce?.cancel();
-    _suggestionRequestId++;
+    final requestId = ++_suggestionRequestId;
     _autocompleteSessionToken = null;
     _searchController.text = suggestion.label;
     _searchController.selection = TextSelection.collapsed(
@@ -215,6 +228,7 @@ class _MapLocationPickerPageState extends State<MapLocationPickerPage>
           'key': _environment.googleMapsApiKey,
         },
       );
+      if (!mounted || requestId != _suggestionRequestId) return;
       final payload = response.data ?? <String, dynamic>{};
       if (payload['status']?.toString() != 'OK') {
         if (!mounted) return;
@@ -248,8 +262,14 @@ class _MapLocationPickerPageState extends State<MapLocationPickerPage>
       }
 
       final formattedAddress = first['formatted_address']?.toString().trim();
-      await _animateTo(LatLng(lat, lon));
-      if (formattedAddress != null && formattedAddress.isNotEmpty && mounted) {
+      await _animateTo(
+        LatLng(lat, lon),
+        preserveSuggestionRequest: true,
+      );
+      if (formattedAddress != null &&
+          formattedAddress.isNotEmpty &&
+          mounted &&
+          requestId == _suggestionRequestId) {
         setState(() => _locationLabel = formattedAddress);
       }
     } catch (_) {
@@ -268,18 +288,23 @@ class _MapLocationPickerPageState extends State<MapLocationPickerPage>
 
   void _refreshLocationLabel({bool debounced = true}) {
     _labelDebounce?.cancel();
+    final requestId = ++_labelRequestId;
+    final target = _currentCenter;
     if (!debounced) {
-      unawaited(_updateLocationLabel());
+      unawaited(_updateLocationLabel(target, requestId));
       return;
     }
     _labelDebounce = Timer(const Duration(milliseconds: 350), () {
-      unawaited(_updateLocationLabel());
+      unawaited(_updateLocationLabel(target, requestId));
     });
   }
 
-  Future<void> _updateLocationLabel() async {
-    final label = await _resolveLocationLabel(_currentCenter);
-    if (!mounted) {
+  Future<void> _updateLocationLabel(LatLng target, int requestId) async {
+    final label = await _resolveLocationLabel(target);
+    if (!mounted ||
+        _isDragging ||
+        requestId != _labelRequestId ||
+        _currentCenter != target) {
       return;
     }
     setState(() {
@@ -397,7 +422,7 @@ class _MapLocationPickerPageState extends State<MapLocationPickerPage>
       return;
     }
 
-    _suggestionRequestId++;
+    final requestId = ++_suggestionRequestId;
     _suggestionDebounce?.cancel();
     _autocompleteSessionToken = null;
     setState(() {
@@ -413,6 +438,7 @@ class _MapLocationPickerPageState extends State<MapLocationPickerPage>
           'key': _environment.googleMapsApiKey,
         },
       );
+      if (!mounted || requestId != _suggestionRequestId) return;
       final payload = response.data ?? <String, dynamic>{};
       final status = payload['status']?.toString() ?? 'UNKNOWN_ERROR';
       if (status != 'OK') {
@@ -530,6 +556,14 @@ class _MapLocationPickerPageState extends State<MapLocationPickerPage>
               }
             },
             onCameraMoveStarted: () {
+              if (_preserveSuggestionRequestForCameraMove) {
+                _preserveSuggestionRequestForCameraMove = false;
+              } else {
+                _suggestionRequestId++;
+              }
+              _isLoadingSuggestions = false;
+              _labelRequestId++;
+              _labelDebounce?.cancel();
               setState(() => _isDragging = true);
               _pinBounce.forward();
             },

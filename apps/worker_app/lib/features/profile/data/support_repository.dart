@@ -22,6 +22,39 @@ class SupportRepository {
     }
   }
 
+  Future<WorkerSupportThread> fetchTicketThread(String ticketId) async {
+    try {
+      final data = await _api.get(
+        '/support/tickets/${Uri.encodeComponent(ticketId)}',
+      );
+      final ticket = data['ticket'];
+      if (ticket is! Map<String, dynamic>) {
+        throw const FormatException('Support ticket data is unavailable.');
+      }
+      return WorkerSupportThread.fromJson(ticket);
+    } on DioException catch (e) {
+      throw _handleError(e);
+    } catch (_) {
+      throw Exception('Failed to load support conversation.');
+    }
+  }
+
+  Future<void> replyToTicket({
+    required String ticketId,
+    required String message,
+  }) async {
+    try {
+      await _api.post(
+        '/support/tickets/${Uri.encodeComponent(ticketId)}/replies',
+        data: {'message': message},
+      );
+    } on DioException catch (e) {
+      throw _handleError(e);
+    } catch (_) {
+      throw Exception('Failed to send support reply.');
+    }
+  }
+
   Future<void> submitTicket({
     required String subject,
     required String message,
@@ -30,11 +63,7 @@ class SupportRepository {
     try {
       await _api.post(
         '/support/tickets',
-        data: {
-          'subject': subject,
-          'message': message,
-          'category': category,
-        },
+        data: {'subject': subject, 'message': message, 'category': category},
       );
     } on DioException catch (e) {
       throw _handleError(e);

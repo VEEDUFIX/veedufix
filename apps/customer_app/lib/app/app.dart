@@ -79,10 +79,16 @@ class _AppBootstrapState extends ConsumerState<AppBootstrap>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed &&
-        ref.read(authControllerProvider).valueOrNull != null) {
-      unawaited(_registerDeviceToken());
+    if (state != AppLifecycleState.resumed) return;
+    if (ref.read(authControllerProvider).valueOrNull == null) return;
+
+    for (final status in const ['upcoming', 'completed', 'cancelled']) {
+      ref.invalidate(customerBookingsProvider(status));
     }
+    ref.invalidate(walletProvider);
+    ref.invalidate(notificationsProvider);
+    ref.invalidate(notificationsUnreadCountProvider);
+    unawaited(_registerDeviceToken());
   }
 
   Future<bool> _restoreBackendSessionFromFirebase({bool force = false}) async {
@@ -157,6 +163,7 @@ class _AppBootstrapState extends ConsumerState<AppBootstrap>
       token: session.accessToken,
     );
     _activeUserId = nextUserId;
+    final router = ref.read(routerProvider);
 
     _notificationSubscription = _notificationChannel!.stream.listen(
       (message) {
@@ -167,10 +174,23 @@ class _AppBootstrapState extends ConsumerState<AppBootstrap>
           if (type == 'notification.event') {
             final title = payload['title'] as String? ?? 'Update';
             final body = payload['body'] as String? ?? 'You have a new notification.';
-            _messengerKey.currentState?.showSnackBar(
-              SnackBar(content: Text('$title: $body')),
+            final route = _notificationRouteForPayload(payload);
+            final messenger = _messengerKey.currentState;
+            if (messenger == null) return;
+            final openLabel = ref.read(appLocaleProvider).languageCode == 'ta'
+                ? 'திற'
+                : 'Open';
+            messenger.showSnackBar(
+              SnackBar(
+                content: Text('$title: $body'),
+                action: route == null
+                    ? null
+                    : SnackBarAction(
+                        label: openLabel,
+                        onPressed: () => router.push(route),
+                      ),
+              ),
             );
-            _routeNotificationPayload(payload);
           }
         } catch (_) {
           // Ignore malformed push messages.
@@ -198,14 +218,6 @@ class _AppBootstrapState extends ConsumerState<AppBootstrap>
       ref.read(apiClientProvider),
       platform: platform,
     );
-  }
-
-  void _routeNotificationPayload(Map<String, dynamic> payload) {
-    final route = _notificationRouteForPayload(payload);
-    if (route == null) {
-      return;
-    }
-    ref.read(routerProvider).push(route);
   }
 
   void _tryHandlePendingNotificationTap() {
@@ -330,7 +342,13 @@ class _AppBootstrapState extends ConsumerState<AppBootstrap>
       scaffoldMessengerKey: _messengerKey,
       builder: (context, child) => AppBackdrop(
         variant: AppBackdropVariant.customer,
-        child: child ?? const SplashPage(mode: AppMode.customer),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const NetworkStatusBanner(),
+            Expanded(child: child ?? const SplashPage(mode: AppMode.customer)),
+          ],
+        ),
       ),
       routerConfig: router,
     );

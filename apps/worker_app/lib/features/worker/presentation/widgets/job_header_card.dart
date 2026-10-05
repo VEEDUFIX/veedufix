@@ -32,7 +32,8 @@ class JobHeaderCard extends StatelessWidget {
                   width: 52,
                   decoration: BoxDecoration(
                     color: accentColor.withValues(alpha: 0.14),
-                    borderRadius: BorderRadius.circular(AbzioTheme.buttonRadius),
+                    borderRadius:
+                        BorderRadius.circular(AbzioTheme.buttonRadius),
                   ),
                   child: Icon(
                     Icons.assignment_rounded,
@@ -54,7 +55,9 @@ class JobHeaderCard extends StatelessWidget {
                       Text(
                         '${booking.customerName} • ${booking.locationLabel}',
                         style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                              color: Theme.of(context).colorScheme.onSurfaceVariant,
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .onSurfaceVariant,
                             ),
                       ),
                     ],
@@ -71,44 +74,76 @@ class JobHeaderCard extends StatelessWidget {
             ),
             const SizedBox(height: 16),
             Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
               children: [
                 Expanded(
-                  child: PremiumStatCard(
-                    label: 'Progress',
-                    value: '${state.currentStep.clamp(1, 7)} of 7',
-                    icon: Icons.route_rounded,
-                    accentColor: accentColor,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        completed
+                            ? 'Job progress'
+                            : 'Step ${state.currentStep.clamp(1, 7)} of 7',
+                        style:
+                            Theme.of(context).textTheme.labelMedium?.copyWith(
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .onSurfaceVariant,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        completed ? 'Complete' : 'In progress',
+                        style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                              color: accentColor,
+                              fontWeight: FontWeight.w800,
+                            ),
+                      ),
+                    ],
                   ),
                 ),
                 const SizedBox(width: 12),
-                Expanded(
-                  child: PremiumStatCard(
-                    label: 'Payout',
-                    value: booking.earningsLabel,
-                    icon: Icons.payments_rounded,
-                    accentColor: const Color(0xFF0F766E),
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 128),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text(
+                        'Your payout',
+                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .onSurfaceVariant,
+                              fontWeight: FontWeight.w700,
+                            ),
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        booking.earningsLabel,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                              color: const Color(0xFF0F766E),
+                              fontWeight: FontWeight.w900,
+                            ),
+                      ),
+                    ],
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 10),
             ClipRRect(
               borderRadius: BorderRadius.circular(999),
               child: LinearProgressIndicator(
-                minHeight: 10,
+                minHeight: 8,
                 value: progress,
-                backgroundColor: Theme.of(context).colorScheme.primary.withValues(alpha: 0.08),
+                backgroundColor: Theme.of(context)
+                    .colorScheme
+                    .primary
+                    .withValues(alpha: 0.08),
               ),
-            ),
-            const SizedBox(height: 10),
-            Text(
-              completed
-                  ? 'Flow complete'
-                  : 'Step ${state.currentStep.clamp(1, 7)} of 7',
-              style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                    fontWeight: FontWeight.w800,
-                    color: accentColor,
-                  ),
             ),
           ],
         ),

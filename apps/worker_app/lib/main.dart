@@ -8,37 +8,10 @@ import 'package:marketplace_shared/marketplace_shared.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
 import 'app/app.dart';
 import 'app/router.dart';
+import 'app/worker_notification_routes.dart';
 
 void _handleWorkerNotificationTap(RemoteMessage message, GoRouter router) {
-  final data = message.data;
-  final type = data['type'] is String ? data['type'] as String : null;
-  final bookingId = data['bookingId'] is String ? data['bookingId'] as String : null;
-
-  switch (type) {
-    case 'NEW_JOB':
-    case 'JOB_ASSIGNED':
-      router.push('/jobs');
-      break;
-    case 'CHAT':
-      if (bookingId != null) router.push('/chat?bookingId=$bookingId');
-      break;
-    case 'PAYOUT':
-    case 'EARNINGS':
-      router.push('/wallet');
-      break;
-    case 'REVIEW':
-      router.push('/reviews');
-      break;
-    default:
-      final requestedRoute = data['route'] is String ? data['route'] as String : null;
-      final routeUri = requestedRoute == null ? null : Uri.tryParse(requestedRoute);
-      final isInternalRoute = routeUri != null &&
-          !routeUri.hasScheme &&
-          !routeUri.hasAuthority &&
-          routeUri.path.startsWith('/') &&
-          allowedRoutesForMode(AppMode.worker).contains(routeUri.path);
-      router.push(isInternalRoute ? routeUri.toString() : '/notifications');
-  }
+  router.push(workerNotificationRoute(message.data));
 }
 
 void main() {

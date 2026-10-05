@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:dio/dio.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -37,7 +37,7 @@ class CheckoutPage extends ConsumerStatefulWidget {
 class _CheckoutPageState extends ConsumerState<CheckoutPage> {
   int _step = 0; // 0: Address, 1: DateTime, 2: Summary
 
-  // â”€â”€ State â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── State ────────────────────────────────────────────────────────────────
   int _selectedDate = 0;
   int _selectedSlot = 2;
 
@@ -358,7 +358,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
           ? const Center(child: CircularProgressIndicator())
           : Column(
               children: [
-                // â”€â”€â”€ Progress stepper â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+                // ─── Progress stepper ────────────────────────────────────────
                 Padding(
                   padding:
                       const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
@@ -366,7 +366,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
                 ),
                 const Divider(height: 1),
 
-                // â”€â”€â”€ Step content â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+                // ─── Step content ────────────────────────────────────────────
                 Expanded(
                   child: SingleChildScrollView(
                     padding: const EdgeInsets.all(24),
@@ -431,7 +431,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
                   ),
                 ),
 
-                // â”€â”€â”€ Bottom CTA â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+                // ─── Bottom CTA ───────────────────────────────────────────────
                 Container(
                   padding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
                   decoration: BoxDecoration(
@@ -439,46 +439,68 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
                     boxShadow: AbzioTheme.eliteShadow,
                   ),
                   child: SafeArea(
-                    child: TapScale(
-                      onTap: () {
-                        if (_step == 0 &&
-                            _selectedAddress == null &&
-                            _selectedGeoPoint == null) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                                content: Text(
-                                    'Please select an address or use current location')),
-                          );
-                          return;
-                        }
-                        if (_step < 2) {
-                          setState(() {
-                            _step++;
-                          });
-                        } else {
-                          _openCheckout(resolvedServiceId);
-                        }
-                      },
-                      child: Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.symmetric(vertical: 18),
-                        decoration: BoxDecoration(
-                          color: cs.primary,
-                          borderRadius:
-                              BorderRadius.circular(AbzioTheme.buttonRadius),
-                          boxShadow: AbzioTheme.eliteShadow,
-                        ),
-                        child: Text(
-                          _step < 2
-                              ? 'Continue'
-                              : _isProcessing
-                                  ? 'Processing...'
-                                  : 'Proceed to payment',
-                          textAlign: TextAlign.center,
-                          style: tt.titleMedium?.copyWith(
-                            color: cs.onPrimary,
-                            fontWeight: FontWeight.w700,
+                    child: SizedBox(
+                      width: double.infinity,
+                      height: 56,
+                      child: FilledButton(
+                        onPressed: _isProcessing
+                            ? null
+                            : () {
+                                if (_step == 0 &&
+                                    _selectedAddress == null &&
+                                    _selectedGeoPoint == null) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                      content: Text(
+                                        'Please select an address or use current location',
+                                      ),
+                                    ),
+                                  );
+                                  return;
+                                }
+                                if (_step < 2) {
+                                  setState(() => _step++);
+                                } else {
+                                  _openCheckout(resolvedServiceId);
+                                }
+                              },
+                        style: FilledButton.styleFrom(
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(
+                              AbzioTheme.buttonRadius,
+                            ),
                           ),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            if (_isProcessing) ...[
+                              SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: cs.onPrimary,
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                            ],
+                            Text(
+                              _step < 2
+                                  ? 'Continue'
+                                  : _isProcessing
+                                      ? 'Processing payment…'
+                                      : 'Proceed to payment',
+                              style: tt.titleMedium?.copyWith(
+                                color: cs.onPrimary,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            if (_step < 2 && !_isProcessing) ...[
+                              const SizedBox(width: 8),
+                              const Icon(Icons.arrow_forward_rounded, size: 18),
+                            ],
+                          ],
                         ),
                       ),
                     ),
@@ -490,7 +512,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
   }
 }
 
-// â”€â”€ Stepper â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Stepper ───────────────────────────────────────────────────────────────────
 
 class _Stepper extends StatelessWidget {
   const _Stepper({required this.currentStep});
@@ -500,51 +522,76 @@ class _Stepper extends StatelessWidget {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final steps = const ['Address', 'Date & Time', 'Summary'];
-    return Row(
-      children: List.generate(steps.length * 2 - 1, (i) {
-        if (i.isOdd) {
-          // connector line
-          final leftIndex = i ~/ 2;
-          final filled = currentStep > leftIndex;
-          return Expanded(
-            child: Container(
-              height: 2,
-              color: filled
-                  ? cs.primary
-                  : cs.outlineVariant.withValues(alpha: 0.4),
-            ),
-          );
-        }
-        final index = i ~/ 2;
-        final active = index == currentStep;
-        final done = index < currentStep;
-        return AnimatedContainer(
-          duration: const Duration(milliseconds: 250),
-          width: active ? 32 : 28,
-          height: active ? 32 : 28,
-          decoration: BoxDecoration(
-            color: done || active ? cs.primary : cs.surfaceContainerHighest,
-            shape: BoxShape.circle,
-          ),
-          child: Center(
-            child: done
-                ? const Icon(Icons.check_rounded, size: 16, color: Colors.white)
-                : Text(
-                    '${index + 1}',
-                    style: TextStyle(
-                      color: active ? Colors.white : cs.onSurfaceVariant,
-                      fontWeight: FontWeight.w700,
-                      fontSize: 13,
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Row(
+          children: List.generate(steps.length * 2 - 1, (i) {
+            if (i.isOdd) {
+              final leftIndex = i ~/ 2;
+              final filled = currentStep > leftIndex;
+              return Expanded(
+                child: Container(
+                  height: 2,
+                  color: filled
+                      ? cs.primary
+                      : cs.outlineVariant.withValues(alpha: 0.4),
+                ),
+              );
+            }
+            final index = i ~/ 2;
+            final active = index == currentStep;
+            final done = index < currentStep;
+            return AnimatedContainer(
+              duration: const Duration(milliseconds: 250),
+              width: active ? 32 : 28,
+              height: active ? 32 : 28,
+              decoration: BoxDecoration(
+                color: done || active ? cs.primary : cs.surfaceContainerHighest,
+                shape: BoxShape.circle,
+              ),
+              child: Center(
+                child: done
+                    ? Icon(Icons.check_rounded, size: 16, color: cs.onPrimary)
+                    : Text(
+                        '${index + 1}',
+                        style: TextStyle(
+                          color: active ? cs.onPrimary : cs.onSurfaceVariant,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 13,
+                        ),
+                      ),
+              ),
+            );
+          }),
+        ),
+        const SizedBox(height: 8),
+        Row(
+          children: List.generate(steps.length, (index) {
+            final active = index == currentStep;
+            final done = index < currentStep;
+            return Expanded(
+              child: Text(
+                steps[index],
+                textAlign: TextAlign.center,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                      color: active || done
+                          ? cs.onSurface
+                          : cs.onSurfaceVariant,
+                      fontWeight: active ? FontWeight.w800 : FontWeight.w600,
                     ),
-                  ),
-          ),
-        );
-      }),
+              ),
+            );
+          }),
+        ),
+      ],
     );
   }
 }
 
-// â”€â”€ Step 0: Address â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Step 0: Address ───────────────────────────────────────────────────────────
 
 class _StepAddress extends ConsumerWidget {
   const _StepAddress({
@@ -734,7 +781,7 @@ class _StepAddress extends ConsumerWidget {
   }
 }
 
-// â”€â”€ Step 1: Date & Time â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Step 1: Date & Time ───────────────────────────────────────────────────────
 
 class _StepDateTime extends StatelessWidget {
   const _StepDateTime({
@@ -852,7 +899,7 @@ class _StepDateTime extends StatelessWidget {
   }
 }
 
-// â”€â”€ Step 2: Summary â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Step 2: Summary ───────────────────────────────────────────────────────────
 
 class _StepSummary extends StatelessWidget {
   const _StepSummary({

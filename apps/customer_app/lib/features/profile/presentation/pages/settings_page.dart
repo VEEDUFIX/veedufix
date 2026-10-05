@@ -1,9 +1,13 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:marketplace_shared/marketplace_shared.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../../../../core/notifications/customer_device_token.dart';
 
@@ -16,6 +20,28 @@ class SettingsPage extends ConsumerStatefulWidget {
 
 class _SettingsPageState extends ConsumerState<SettingsPage> {
   bool _isSigningOut = false;
+  bool _isExporting = false;
+
+  Future<void> _exportMyData() async {
+    if (_isExporting) return;
+    setState(() => _isExporting = true);
+    try {
+      final data = await ref.read(apiClientProvider).get('/users/me/data-export');
+      final bytes = Uint8List.fromList(utf8.encode(const JsonEncoder.withIndent('  ').convert(data)));
+      await Share.shareXFiles(
+        [XFile.fromData(bytes, mimeType: 'application/json', name: 'veedufix-account-data.json')],
+        subject: 'Veedufix account data export',
+      );
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not export your data. Please try again.')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isExporting = false);
+    }
+  }
 
   Future<void> _confirmAndSignOut() async {
     if (_isSigningOut) return;
@@ -103,8 +129,14 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
           _SettingsTile(
             icon: Icons.notifications_rounded,
             title: appText(context, 'Notifications', 'அறிவிப்புகள்'),
-            subtitle: 'Push notifications on this device',
+            subtitle: 'Device alerts and promotional messages',
             onTap: () => _showNotificationPrefs(context, ref),
+          ),
+          _SettingsTile(
+            icon: Icons.network_check_rounded,
+            title: 'Connection diagnostics',
+            subtitle: 'Check the app and service connection',
+            onTap: () => context.push('/connection-diagnostics'),
           ),
           const SizedBox(height: 32),
           _SectionHeader(
@@ -128,17 +160,13 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
           _SettingsTile(
             icon: Icons.download_rounded,
             title: 'Export My Data',
-            onTap: () => _openSupportRequest(
-              context,
-              category: 'privacy',
-              subject: 'Request a copy of my data',
-              message:
-                  'Please help me request a copy of the personal data associated with my Veedufix account.',
-            ),
+            subtitle: _isExporting ? 'Preparing your secure export…' : 'Download a copy of your account data',
+            onTap: _isExporting ? null : _exportMyData,
           ),
           _SettingsTile(
             icon: Icons.delete_forever_rounded,
             title: 'Delete Account',
+            subtitle: 'Request account deletion through support',
             isDestructive: true,
             onTap: () => _confirmDeleteAccount(context),
           ),
@@ -156,41 +184,22 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                 _openLegalPage(context, 'https://veedufix.com/privacy'),
           ),
           const SizedBox(height: 48),
-          Center(
-            child: TapScale(
-              onTap: _isSigningOut ? () {} : _confirmAndSignOut,
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 32,
-                  vertical: 16,
-                ),
-                decoration: BoxDecoration(
-                  color: cs.error.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(AbzioTheme.buttonRadius),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (_isSigningOut) ...[
-                      SizedBox.square(
-                        dimension: 18,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: cs.error,
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                    ],
-                    Text(
-                      _isSigningOut ? 'Signing out…' : 'Log Out',
-                      style: tt.titleMedium?.copyWith(
-                        color: cs.error,
-                        fontWeight: FontWeight.w700,
-                      ),
+          OutlinedButton.icon(
+            onPressed: _isSigningOut ? null : _confirmAndSignOut,
+            icon: _isSigningOut
+                ? SizedBox.square(
+                    dimension: 18,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: cs.error,
                     ),
-                  ],
-                ),
-              ),
+                  )
+                : const Icon(Icons.logout_rounded),
+            label: Text(_isSigningOut ? 'Signing out…' : 'Sign out'),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: cs.error,
+              side: BorderSide(color: cs.error.withValues(alpha: 0.45)),
+              padding: const EdgeInsets.symmetric(vertical: 14),
             ),
           ),
           const SizedBox(height: 48),
@@ -226,81 +235,94 @@ class _SettingsTile extends StatelessWidget {
     required this.title,
     this.subtitle,
     this.isDestructive = false,
-    required this.onTap,
+    this.onTap,
   });
 
   final IconData icon;
   final String title;
   final String? subtitle;
   final bool isDestructive;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final tt = Theme.of(context).textTheme;
     final color = isDestructive ? cs.error : cs.onSurface;
+    final isEnabled = onTap != null;
 
     return TapScale(
       onTap: onTap,
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 12),
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: cs.surfaceContainerHighest.withValues(alpha: 0.3),
-          borderRadius: BorderRadius.circular(AbzioTheme.cardRadius),
-          border: Border.all(
-            color: isDestructive
-                ? cs.error.withValues(alpha: 0.3)
-                : cs.outlineVariant.withValues(alpha: 0.5),
-          ),
-        ),
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: isDestructive
-                    ? cs.error.withValues(alpha: 0.1)
-                    : cs.primary.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Icon(
-                icon,
-                color: isDestructive ? cs.error : cs.primary,
-                size: 22,
-              ),
+      child: Opacity(
+        opacity: isEnabled ? 1 : 0.58,
+        child: Container(
+          margin: const EdgeInsets.only(bottom: 12),
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: cs.surfaceContainerHighest.withValues(alpha: 0.3),
+            borderRadius: BorderRadius.circular(AbzioTheme.cardRadius),
+            border: Border.all(
+              color: isDestructive
+                  ? cs.error.withValues(alpha: 0.3)
+                  : cs.outlineVariant.withValues(alpha: 0.5),
             ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: tt.titleMedium?.copyWith(
-                      color: color,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  if (subtitle != null) ...[
-                    const SizedBox(height: 2),
+          ),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: isDestructive
+                      ? cs.error.withValues(alpha: 0.1)
+                      : cs.primary.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(
+                  icon,
+                  color: isDestructive ? cs.error : cs.primary,
+                  size: 22,
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
                     Text(
-                      subtitle!,
-                      style: tt.bodyMedium?.copyWith(
-                        color: cs.onSurfaceVariant,
+                      title,
+                      style: tt.titleMedium?.copyWith(
+                        color: color,
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
+                    if (subtitle != null) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        subtitle!,
+                        style: tt.bodyMedium?.copyWith(
+                          color: cs.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
                   ],
-                ],
+                ),
               ),
-            ),
-            Icon(
-              Icons.arrow_forward_ios_rounded,
-              size: 16,
-              color: cs.onSurfaceVariant,
-            ),
-          ],
+              if (isEnabled)
+                Icon(
+                  Icons.arrow_forward_ios_rounded,
+                  size: 16,
+                  color: cs.onSurfaceVariant,
+                )
+              else
+                SizedBox.square(
+                  dimension: 16,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: cs.onSurfaceVariant,
+                  ),
+                ),
+            ],
+          ),
         ),
       ),
     );
@@ -364,6 +386,10 @@ Future<void> _showLanguagePicker(BuildContext context, WidgetRef ref) async {
 Future<void> _showNotificationPrefs(BuildContext context, WidgetRef ref) async {
   final hasFirebaseConfig = ref.read(environmentProvider).hasFirebaseConfig;
   var enabled = false;
+  var marketingEnabled = false;
+  var marketingPreferenceLoaded = false;
+  String? marketingErrorMessage;
+  String? errorMessage;
   if (hasFirebaseConfig) {
     try {
       enabled = await customerPushNotificationsEnabled();
@@ -371,9 +397,44 @@ Future<void> _showNotificationPrefs(BuildContext context, WidgetRef ref) async {
       enabled = false;
     }
   }
+  try {
+    final preferences = await ref
+        .read(apiClientProvider)
+        .get('/users/me/notification-preferences');
+    marketingEnabled = preferences['marketingNotificationsEnabled'] == true;
+    marketingPreferenceLoaded = true;
+  } catch (_) {
+    marketingErrorMessage = 'Could not load your saved promotional preference.';
+  }
   if (!context.mounted) return;
   var isSaving = false;
-  String? errorMessage;
+
+  Future<void> updateMarketingPreference(
+    bool value,
+    BuildContext dialogContext,
+    StateSetter setDialogState,
+  ) async {
+    setDialogState(() {
+      isSaving = true;
+      marketingErrorMessage = null;
+    });
+    try {
+      final updated = await ref.read(apiClientProvider).patch(
+        '/users/me/notification-preferences',
+        data: {'marketingNotificationsEnabled': value},
+      );
+      if (!dialogContext.mounted) return;
+      setDialogState(() {
+        marketingEnabled = updated['marketingNotificationsEnabled'] == true;
+      });
+    } catch (_) {
+      if (dialogContext.mounted) {
+        setDialogState(() => marketingErrorMessage = 'Could not save this preference. Try again.');
+      }
+    } finally {
+      if (dialogContext.mounted) setDialogState(() => isSaving = false);
+    }
+  }
 
   Future<void> updatePreference(
     bool value,
@@ -436,6 +497,26 @@ Future<void> _showNotificationPrefs(BuildContext context, WidgetRef ref) async {
                 const Text(
                   'Push notifications are not available in this app build.',
                 ),
+              SwitchListTile.adaptive(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Offers and promotions'),
+                subtitle: const Text('Receive promotional messages on your account'),
+                value: marketingEnabled,
+                onChanged: isSaving || !marketingPreferenceLoaded
+                    ? null
+                    : (value) => updateMarketingPreference(
+                        value,
+                        context,
+                        setDialogState,
+                      ),
+              ),
+              if (marketingErrorMessage != null) ...[
+                const SizedBox(height: 8),
+                Text(
+                  marketingErrorMessage!,
+                  style: TextStyle(color: Theme.of(context).colorScheme.error),
+                ),
+              ],
               if (isSaving) const LinearProgressIndicator(),
               if (errorMessage != null) ...[
                 const SizedBox(height: 8),

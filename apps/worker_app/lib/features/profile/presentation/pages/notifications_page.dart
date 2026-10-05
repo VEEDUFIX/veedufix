@@ -22,10 +22,12 @@ class NotificationsPage extends ConsumerWidget {
           ),
           title: const Text('Notifications'),
           actions: [
-            TextButton(
-              onPressed: () => _markAllNotificationsRead(context, ref),
-              child: const Text('Mark all read'),
-            ),
+            if (notificationsAsync.valueOrNull?.any((item) => !item.isRead) ==
+                true)
+              TextButton(
+                onPressed: () => _markAllNotificationsRead(context, ref),
+                child: const Text('Mark all read'),
+              ),
           ],
           bottom: const TabBar(
             isScrollable: true,
@@ -46,33 +48,40 @@ class NotificationsPage extends ConsumerWidget {
                   notifications: notifications,
                   onRefresh: () async =>
                       ref.refresh(notificationsProvider.future),
+                  onOpen: (item) => _openWorkerNotification(context, ref, item),
                   onDismiss: (notificationId) =>
                       _markNotificationRead(ref, notificationId),
                 ),
                 _NotificationList(
                   notifications: notifications
-                      .where((n) => n.type == 'BOOKING' || n.type == 'JOB')
+                      .where((n) => const {'BOOKING', 'JOB', 'JOB_EXECUTION'}
+                          .contains(n.type.toUpperCase()))
                       .toList(),
                   onRefresh: () async =>
                       ref.refresh(notificationsProvider.future),
+                  onOpen: (item) => _openWorkerNotification(context, ref, item),
                   onDismiss: (notificationId) =>
                       _markNotificationRead(ref, notificationId),
                 ),
                 _NotificationList(
                   notifications: notifications
-                      .where((n) => n.type == 'PAYMENT' || n.type == 'EARNINGS')
+                      .where((n) => const {'PAYMENT', 'EARNINGS'}
+                          .contains(n.type.toUpperCase()))
                       .toList(),
                   onRefresh: () async =>
                       ref.refresh(notificationsProvider.future),
+                  onOpen: (item) => _openWorkerNotification(context, ref, item),
                   onDismiss: (notificationId) =>
                       _markNotificationRead(ref, notificationId),
                 ),
                 _NotificationList(
                   notifications: notifications
-                      .where((n) => n.type == 'SYSTEM' || n.type == 'INFO')
+                      .where((n) => const {'SYSTEM', 'INFO'}
+                          .contains(n.type.toUpperCase()))
                       .toList(),
                   onRefresh: () async =>
                       ref.refresh(notificationsProvider.future),
+                  onOpen: (item) => _openWorkerNotification(context, ref, item),
                   onDismiss: (notificationId) =>
                       _markNotificationRead(ref, notificationId),
                 ),
@@ -86,7 +95,9 @@ class NotificationsPage extends ConsumerWidget {
             icon: Icons.notifications_off_outlined,
             onRetry: () => ref.invalidate(notificationsProvider),
             onRefresh: () async {
-              await ref.refresh(notificationsProvider.future).then<void>((_) {});
+              await ref
+                  .refresh(notificationsProvider.future)
+                  .then<void>((_) {});
             },
           ),
         ),
@@ -99,42 +110,45 @@ class _NotificationList extends StatelessWidget {
   final List<AppNotification> notifications;
   final Future<void> Function() onRefresh;
   final Future<void> Function(String notificationId) onDismiss;
+  final ValueChanged<AppNotification> onOpen;
 
   const _NotificationList({
     required this.notifications,
     required this.onRefresh,
     required this.onDismiss,
+    required this.onOpen,
   });
 
   @override
   Widget build(BuildContext context) {
     if (notifications.isEmpty) {
-      return const PremiumEmptyState(
-        icon: Icons.notifications_off,
-        title: 'No notifications',
-        subtitle: 'You are all caught up!',
+      return RefreshIndicator(
+        onRefresh: onRefresh,
+        child: ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          children: const [
+            SizedBox(height: 120),
+            PremiumEmptyState(
+              icon: Icons.notifications_off,
+              title: 'No notifications',
+              subtitle: 'You are all caught up!',
+            ),
+          ],
+        ),
       );
     }
 
     return RefreshIndicator(
       onRefresh: onRefresh,
       child: ListView.builder(
+        padding: const EdgeInsets.symmetric(vertical: 8),
         itemCount: notifications.length,
         itemBuilder: (context, index) {
           final item = notifications[index];
-          return Dismissible(
-            key: Key(item.id),
-            background: Container(
-              color: Colors.red,
-              alignment: Alignment.centerRight,
-              padding: const EdgeInsets.only(right: 16),
-              child: const Icon(Icons.delete, color: Colors.white),
-            ),
-            direction: DismissDirection.endToStart,
-            onDismissed: (_) async {
-              await onDismiss(item.id);
-            },
-            child: _NotificationCard(item: item),
+          return _NotificationCard(
+            item: item,
+            onTap: () => onOpen(item),
+            onMarkRead: item.isRead ? null : () => onDismiss(item.id),
           );
         },
       ),
@@ -170,8 +184,14 @@ Future<void> _markNotificationRead(WidgetRef ref, String notificationId) async {
 
 class _NotificationCard extends StatelessWidget {
   final AppNotification item;
+  final VoidCallback onTap;
+  final VoidCallback? onMarkRead;
 
-  const _NotificationCard({required this.item});
+  const _NotificationCard({
+    required this.item,
+    required this.onTap,
+    required this.onMarkRead,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -197,6 +217,7 @@ class _NotificationCard extends StatelessWidget {
     return Container(
       color: isRead ? Colors.transparent : cs.primary.withValues(alpha: 0.05),
       child: ListTile(
+        onTap: onTap,
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         leading: CircleAvatar(
           backgroundColor: color.withValues(alpha: 0.1),
@@ -237,6 +258,13 @@ class _NotificationCard extends StatelessWidget {
             ),
           ],
         ),
+        trailing: onMarkRead == null
+            ? const Icon(Icons.chevron_right_rounded)
+            : IconButton(
+                tooltip: 'Mark as read',
+                onPressed: onMarkRead,
+                icon: const Icon(Icons.mark_email_read_outlined),
+              ),
       ),
     );
   }
@@ -254,5 +282,40 @@ class _NotificationCard extends StatelessWidget {
     } else {
       return 'Just now';
     }
+  }
+}
+
+Future<void> _openWorkerNotification(
+  BuildContext context,
+  WidgetRef ref,
+  AppNotification item,
+) async {
+  if (!item.isRead) {
+    await _markNotificationRead(ref, item.id);
+  }
+  if (!context.mounted) return;
+
+  final bookingId = item.data?['bookingId'];
+  if (bookingId is String && bookingId.trim().isNotEmpty) {
+    context.push(
+      '/job-execution?bookingId=${Uri.encodeComponent(bookingId.trim())}',
+    );
+    return;
+  }
+
+  switch (item.type.toUpperCase()) {
+    case 'BOOKING':
+    case 'JOB':
+    case 'JOB_EXECUTION':
+      context.go('/jobs');
+      break;
+    case 'PAYMENT':
+    case 'EARNINGS':
+      context.go('/earnings');
+      break;
+    case 'SYSTEM':
+    case 'INFO':
+      context.go('/profile');
+      break;
   }
 }

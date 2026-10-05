@@ -19,7 +19,7 @@ class CartPage extends ConsumerWidget {
     );
 
     return Scaffold(
-      backgroundColor: cs.surface,
+      backgroundColor: AbzioTheme.lightBackground,
       appBar: AppBar(
         title: const Text('Your Cart'),
         backgroundColor: cs.surface,
@@ -159,11 +159,16 @@ class CartPage extends ConsumerWidget {
                       children: [
                         const Icon(Icons.lock_outline_rounded, size: 18),
                         const SizedBox(width: 8),
-                        Text(
-                          'Continue · ₹${total.toStringAsFixed(2)}',
-                          style: tt.titleSmall?.copyWith(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
+                        Flexible(
+                          child: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Text(
+                              'Continue · ₹${total.toStringAsFixed(2)}',
+                              style: tt.titleSmall?.copyWith(
+                                color: cs.onPrimary,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
                           ),
                         ),
                       ],
@@ -192,89 +197,121 @@ class _CartItemTile extends ConsumerWidget {
         borderRadius: BorderRadius.circular(AbzioTheme.cardRadius),
         border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.5)),
       ),
-      child: Row(
+      child: Column(
         children: [
-          Container(
-            width: 60,
-            height: 60,
-            clipBehavior: Clip.antiAlias,
-            decoration: BoxDecoration(
-              color: cs.primaryContainer.withValues(alpha: 0.3),
-              borderRadius: BorderRadius.circular(AbzioTheme.buttonRadius),
-            ),
-            child: item.service.images.isEmpty
-                ? Icon(Icons.design_services_rounded, color: cs.primary)
-                : Image.network(
-                    item.service.images.first.url,
-                    fit: BoxFit.cover,
-                    errorBuilder: (_, __, ___) =>
-                        Icon(Icons.design_services_rounded, color: cs.primary),
-                  ),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  item.service.name,
-                  style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w600),
+          Row(
+            children: [
+              Container(
+                width: 60,
+                height: 60,
+                clipBehavior: Clip.antiAlias,
+                decoration: BoxDecoration(
+                  color: cs.primaryContainer.withValues(alpha: 0.3),
+                  borderRadius: BorderRadius.circular(AbzioTheme.buttonRadius),
                 ),
-                const SizedBox(height: 4),
-                Text(
-                  '₹${item.service.startingPrice.toStringAsFixed(2)} each',
-                  style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  '₹${(item.service.startingPrice * item.quantity).toStringAsFixed(2)}',
-                  style: tt.titleSmall?.copyWith(
-                    color: cs.primary,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Container(
-            decoration: BoxDecoration(
-              color: cs.surfaceContainerHighest.withValues(alpha: 0.5),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Row(
-              children: [
-                IconButton(
-                  tooltip: 'Remove one ${item.service.name}',
-                  onPressed: () => ref
-                      .read(cartProvider.notifier)
-                      .removeService(item.service.id),
-                  icon: const Icon(Icons.remove, size: 20),
-                  constraints: const BoxConstraints.tightFor(
-                    width: 48,
-                    height: 48,
-                  ),
-                ),
-                Semantics(
-                  label: '${item.quantity} ${item.service.name} in cart',
-                  child: Text(
-                    '${item.quantity}',
-                    style: tt.titleMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
+                child: item.service.images.isEmpty
+                    ? Icon(Icons.design_services_rounded, color: cs.primary)
+                    : Image.network(
+                        item.service.images.first.url,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => Icon(
+                          Icons.design_services_rounded,
+                          color: cs.primary,
+                        ),
+                      ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      item.service.name,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: tt.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
-                  ),
+                    const SizedBox(height: 5),
+                    Text(
+                      '₹${item.service.startingPrice.toStringAsFixed(2)} each',
+                      style: tt.bodySmall?.copyWith(
+                        color: cs.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
                 ),
-                IconButton(
-                  tooltip: 'Add one ${item.service.name}',
-                  onPressed: () =>
-                      ref.read(cartProvider.notifier).addService(item.service),
-                  icon: const Icon(Icons.add, size: 20),
-                  constraints: const BoxConstraints.tightFor(
-                    width: 48,
-                    height: 48,
-                  ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Item total',
+                      style: tt.bodySmall?.copyWith(
+                        color: cs.onSurfaceVariant,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      '₹${(item.service.startingPrice * item.quantity).toStringAsFixed(2)}',
+                      style: tt.titleSmall?.copyWith(
+                        color: cs.primary,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ],
                 ),
-              ],
-            ),
+              ),
+              Container(
+                decoration: BoxDecoration(
+                  color: cs.surfaceContainerHighest.withValues(alpha: 0.5),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton(
+                      tooltip: 'Remove one ${item.service.name}',
+                      onPressed: () => ref
+                          .read(cartProvider.notifier)
+                          .removeService(item.service.id),
+                      icon: const Icon(Icons.remove_rounded, size: 20),
+                      constraints: const BoxConstraints.tightFor(
+                        width: 48,
+                        height: 48,
+                      ),
+                    ),
+                    Semantics(
+                      label: '${item.quantity} ${item.service.name} in cart',
+                      child: Text(
+                        '${item.quantity}',
+                        style: tt.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ),
+                    IconButton(
+                      tooltip: 'Add one ${item.service.name}',
+                      onPressed: () => ref
+                          .read(cartProvider.notifier)
+                          .addService(item.service),
+                      icon: const Icon(Icons.add_rounded, size: 20),
+                      constraints: const BoxConstraints.tightFor(
+                        width: 48,
+                        height: 48,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
         ],
       ),

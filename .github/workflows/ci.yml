@@ -25,6 +25,12 @@ jobs:
           
       - name: Install dependencies
         run: npm ci
+
+      - name: Build TypeScript
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/veedufix?schema=public
+          DIRECT_URL: postgresql://postgres:postgres@127.0.0.1:5432/veedufix?schema=public
+        run: npm run build
         
       - name: Run Linter
         run: npm run lint
@@ -82,6 +88,9 @@ jobs:
       - name: Run Tests
         run: flutter test
 
+      - name: Build Android debug app
+        run: flutter build apk --debug
+
   worker_app:
     name: Worker App Test & Lint
     runs-on: ubuntu-latest
@@ -109,6 +118,9 @@ jobs:
       - name: Run Tests
         run: flutter test || echo "No tests found yet"
 
+      - name: Build Android debug app
+        run: flutter build apk --debug
+
   admin_web:
     name: Admin Web Test & Lint
     runs-on: ubuntu-latest
@@ -135,3 +147,8 @@ jobs:
         
       - name: Run Tests
         run: flutter test || echo "No tests found yet"
+
+      - name: Build admin web release
+        env:
+          API_BASE_URL: https://veedufix.onrender.com/api
+        run: flutter build web --release --dart-define=API_BASE_URL=$API_BASE_URL --dart-define=PRODUCTION=true

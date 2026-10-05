@@ -17,7 +17,7 @@ import { disputeRouter } from "./modules/dispute/dispute.routes.js";
 import { cancellationRouter } from "./modules/matching/cancellation.routes.js";
 import { opsRouter, adminAlertsRouter } from "./modules/ops/ops.routes.js";
 import { jobExecutionRouter } from "./modules/job-execution/job-execution.routes.js";
-import { healthRouter } from "./modules/health/health.routes.js";
+import { adminHealthRouter, healthRouter } from "./modules/health/health.routes.js";
 import { mediaRouter } from "./modules/media/media.routes.js";
 import { matchingRouter } from "./modules/matching/matching.routes.js";
 import { addressRouter } from "./modules/address/address.routes.js";
@@ -154,6 +154,7 @@ export function createApp() {
   });
 
   app.use("/api/health", healthRouter);
+  app.use("/api/admin/system-health", adminHealthRouter);
   app.use("/api/auth", authRouter);
   app.use("/api/catalog", catalogRouter);
   app.use("/api/admin/catalog", adminCatalogRouter);

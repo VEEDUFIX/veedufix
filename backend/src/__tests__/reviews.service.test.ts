@@ -26,6 +26,21 @@ import { submitReview } from '../modules/reviews/reviews.service.js';
 describe('submitReview eligibility', () => {
   beforeEach(() => vi.clearAllMocks());
 
+  it('rejects invalid ratings before loading the booking', async () => {
+    await expect(submitReview({
+      bookingId: 'booking-1', reviewerId: 'customer-1', rating: 0,
+    })).rejects.toMatchObject({ statusCode: 400 } satisfies Partial<AppError>);
+    expect(mocks.bookingFindUnique).not.toHaveBeenCalled();
+  });
+
+  it('rejects comments over 500 characters before loading the booking', async () => {
+    await expect(submitReview({
+      bookingId: 'booking-1', reviewerId: 'customer-1', rating: 5,
+      comment: 'x'.repeat(501),
+    })).rejects.toMatchObject({ statusCode: 400 } satisfies Partial<AppError>);
+    expect(mocks.bookingFindUnique).not.toHaveBeenCalled();
+  });
+
   it('rejects reviews until the booking is completed', async () => {
     mocks.bookingFindUnique.mockResolvedValue({
       id: 'booking-1', customerId: 'customer-1', workerId: 'worker-1', status: 'IN_PROGRESS',
@@ -59,7 +74,11 @@ describe('submitReview eligibility', () => {
 
     await expect(submitReview({
       bookingId: 'booking-1', reviewerId: 'customer-1', rating: 5,
+      comment: '  Great service!  ',
     })).resolves.toMatchObject({ id: 'review-1' });
+    expect(mocks.reviewCreate).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ comment: 'Great service!' }),
+    }));
     expect(mocks.workerProfileUpdate).toHaveBeenCalledWith(expect.objectContaining({
       where: { id: 'worker-1' },
       data: { averageRating: 5 },

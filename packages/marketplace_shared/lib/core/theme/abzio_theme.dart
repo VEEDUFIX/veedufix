@@ -4,6 +4,12 @@ import '../../ui/widgets/abzio_motion.dart';
 
 class AbzioTheme {
   static const Color accentColor = Color(0xFFC2A15E);
+  static const Color workerPrimary = Color(0xFF0F766E);
+  static const Color workerAccent = Color(0xFF14B8A6);
+  static const Color successColor = Color(0xFF2D7A57);
+  static const Color infoColor = Color(0xFF397AA5);
+  static const Color warningColor = Color(0xFFAA7C2F);
+  static const Color dangerColor = Color(0xFFB34B43);
   static const Color primaryColor = lightBackground;
   static const Color backgroundColor = lightBackground;
   static const Color cardColor = lightCard;

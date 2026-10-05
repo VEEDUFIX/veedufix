@@ -46,6 +46,7 @@ class AdminBroadcastSummary {
     required this.body,
     required this.route,
     required this.targetRole,
+    required this.category,
     required this.recipientCount,
     required this.sentAt,
   });
@@ -55,6 +56,7 @@ class AdminBroadcastSummary {
   final String body;
   final String? route;
   final String? targetRole;
+  final String category;
   final int recipientCount;
   final DateTime sentAt;
 
@@ -65,6 +67,7 @@ class AdminBroadcastSummary {
       body: json['body'] as String? ?? '',
       route: json['route'] as String?,
       targetRole: json['targetRole'] as String?,
+      category: json['category'] as String? ?? 'SERVICE',
       recipientCount: (json['recipientCount'] as num?)?.toInt() ?? 0,
       sentAt: DateTime.tryParse(json['sentAt'] as String? ?? '') ?? DateTime.now(),
     );
@@ -104,6 +107,7 @@ class AdminBroadcastDetail {
     required this.body,
     required this.route,
     required this.targetRole,
+    required this.category,
     required this.recipientCount,
     required this.sentAt,
     required this.deliveries,
@@ -114,6 +118,7 @@ class AdminBroadcastDetail {
   final String body;
   final String? route;
   final String? targetRole;
+  final String category;
   final int recipientCount;
   final DateTime sentAt;
   final List<AdminBroadcastDelivery> deliveries;
@@ -125,6 +130,7 @@ class AdminBroadcastDetail {
       body: json['body'] as String? ?? '',
       route: json['route'] as String?,
       targetRole: json['targetRole'] as String?,
+      category: json['category'] as String? ?? 'SERVICE',
       recipientCount: (json['recipientCount'] as num?)?.toInt() ?? deliveries.length,
       sentAt: DateTime.tryParse(json['sentAt'] as String? ?? '') ?? DateTime.now(),
       deliveries: deliveries,
@@ -145,6 +151,7 @@ class _PushSenderPageState extends ConsumerState<PushSenderPage> {
   final _bodyCtrl = TextEditingController();
   final _routeCtrl = TextEditingController();
   String _targetRole = 'ALL';
+  String _category = 'SERVICE';
   bool _isSubmitting = false;
 
   @override
@@ -166,6 +173,7 @@ class _PushSenderPageState extends ConsumerState<PushSenderPage> {
         'title': _titleCtrl.text.trim(),
         'body': _bodyCtrl.text.trim(),
         'targetRole': _targetRole,
+        'category': _category,
         if (_routeCtrl.text.trim().isNotEmpty) 'route': _routeCtrl.text.trim(),
       });
 
@@ -245,6 +253,21 @@ class _PushSenderPageState extends ConsumerState<PushSenderPage> {
                   DropdownMenuItem(value: 'WORKER', child: Text('Professionals Only')),
                 ],
                 onChanged: (val) => setState(() => _targetRole = val ?? 'ALL'),
+              ),
+              const SizedBox(height: 16),
+              DropdownButtonFormField<String>(
+                initialValue: _category,
+                decoration: InputDecoration(
+                  labelText: 'Message purpose',
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(AbzioTheme.buttonRadius)),
+                  filled: true,
+                  fillColor: cs.surfaceContainerHighest.withValues(alpha: 0.2),
+                ),
+                items: const [
+                  DropdownMenuItem(value: 'SERVICE', child: Text('Service update')),
+                  DropdownMenuItem(value: 'PROMOTIONAL', child: Text('Offers and promotions (opt-in only)')),
+                ],
+                onChanged: (value) => setState(() => _category = value ?? 'SERVICE'),
               ),
               const SizedBox(height: 16),
               TextFormField(
@@ -404,6 +427,10 @@ class _BroadcastHistoryCard extends StatelessWidget {
                 runSpacing: 8,
                 children: [
                   _BroadcastMetaChip(label: broadcast.targetRole ?? 'ALL', icon: Icons.group_rounded),
+                  _BroadcastMetaChip(
+                    label: broadcast.category == 'PROMOTIONAL' ? 'Promotional' : 'Service update',
+                    icon: broadcast.category == 'PROMOTIONAL' ? Icons.local_offer_rounded : Icons.notifications_active_rounded,
+                  ),
                   if (broadcast.route != null && broadcast.route!.trim().isNotEmpty)
                     _BroadcastMetaChip(label: broadcast.route!, icon: Icons.open_in_new_rounded),
                   _BroadcastMetaChip(
@@ -481,6 +508,7 @@ class _BroadcastDetailPageState extends ConsumerState<BroadcastDetailPage> {
                 'body': widget.initialBroadcast!.body,
                 'route': widget.initialBroadcast!.route,
                 'targetRole': widget.initialBroadcast!.targetRole,
+                'category': widget.initialBroadcast!.category,
                 'recipientCount': widget.initialBroadcast!.recipientCount,
                 'sentAt': widget.initialBroadcast!.sentAt.toIso8601String(),
               },
@@ -555,6 +583,10 @@ class _BroadcastDetailPageState extends ConsumerState<BroadcastDetailPage> {
                       runSpacing: 8,
                       children: [
                         _BroadcastMetaChip(label: broadcast.targetRole ?? 'ALL', icon: Icons.group_rounded),
+                        _BroadcastMetaChip(
+                          label: broadcast.category == 'PROMOTIONAL' ? 'Promotional' : 'Service update',
+                          icon: broadcast.category == 'PROMOTIONAL' ? Icons.local_offer_rounded : Icons.notifications_active_rounded,
+                        ),
                         if (broadcast.route != null && broadcast.route!.trim().isNotEmpty)
                           _BroadcastMetaChip(label: broadcast.route!, icon: Icons.open_in_new_rounded),
                         _BroadcastMetaChip(
@@ -570,6 +602,10 @@ class _BroadcastDetailPageState extends ConsumerState<BroadcastDetailPage> {
                     const SizedBox(height: 16),
                     _DetailLine(label: 'Broadcast ID', value: broadcast.broadcastId),
                     _DetailLine(label: 'Target audience', value: broadcast.targetRole ?? 'ALL'),
+                    _DetailLine(
+                      label: 'Message purpose',
+                      value: broadcast.category == 'PROMOTIONAL' ? 'Promotional (opt-in recipients)' : 'Service update',
+                    ),
                     _DetailLine(label: 'Deep link', value: broadcast.route ?? 'None'),
                     const SizedBox(height: 12),
                     Wrap(

@@ -1,9 +1,12 @@
+import 'dart:js_interop';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
+import 'package:dio/dio.dart';
 import 'package:marketplace_shared/marketplace_shared.dart';
+import 'package:web/web.dart' as web;
 
 class AdminCustomerDetailPage extends ConsumerStatefulWidget {
   const AdminCustomerDetailPage({
@@ -14,11 +17,14 @@ class AdminCustomerDetailPage extends ConsumerStatefulWidget {
   final String customerId;
 
   @override
-  ConsumerState<AdminCustomerDetailPage> createState() => _AdminCustomerDetailPageState();
+  ConsumerState<AdminCustomerDetailPage> createState() =>
+      _AdminCustomerDetailPageState();
 }
 
-class _AdminCustomerDetailPageState extends ConsumerState<AdminCustomerDetailPage> {
+class _AdminCustomerDetailPageState
+    extends ConsumerState<AdminCustomerDetailPage> {
   late final Future<_AdminCustomerDetail> _future;
+  bool _exporting = false;
 
   @override
   void initState() {
@@ -53,6 +59,64 @@ class _AdminCustomerDetailPageState extends ConsumerState<AdminCustomerDetailPag
     );
   }
 
+  Future<void> _exportCustomerData() async {
+    if (_exporting) return;
+    final approved = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Export customer data?'),
+        content: const Text(
+            'This file contains personal, booking, payment, and support data. Continue only for a verified privacy request.'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('Cancel')),
+          FilledButton(
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: const Text('Export')),
+        ],
+      ),
+    );
+    if (approved != true || !mounted) return;
+    setState(() => _exporting = true);
+    try {
+      final response = await ref.read(apiClientProvider).dio.get<List<int>>(
+            '/admin/customers/${Uri.encodeComponent(widget.customerId)}/data-export',
+            options: Options(responseType: ResponseType.bytes),
+          );
+      final bytes = response.data;
+      if (bytes == null || bytes.isEmpty) {
+        throw StateError('The export is empty');
+      }
+      final blob = web.Blob(
+        <JSAny>[Uint8List.fromList(bytes).toJS].toJS,
+        web.BlobPropertyBag(type: 'application/json;charset=utf-8'),
+      );
+      final objectUrl = web.URL.createObjectURL(blob);
+      final anchor = web.HTMLAnchorElement()
+        ..href = objectUrl
+        ..download = 'veedufix-customer-data.json';
+      web.document.body?.append(anchor);
+      anchor.click();
+      anchor.remove();
+      Future<void>.delayed(
+          const Duration(seconds: 1), () => web.URL.revokeObjectURL(objectUrl));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Customer data export downloaded.')),
+        );
+      }
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Unable to export customer data: $error')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _exporting = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
@@ -76,7 +140,8 @@ class _AdminCustomerDetailPageState extends ConsumerState<AdminCustomerDetailPag
             ),
           ),
         ),
-        title: Text('Customer detail', style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
+        title: Text('Customer detail',
+            style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
         actions: [
           IconButton(
             onPressed: _reload,
@@ -87,7 +152,8 @@ class _AdminCustomerDetailPageState extends ConsumerState<AdminCustomerDetailPag
       body: FutureBuilder<_AdminCustomerDetail>(
         future: _future,
         builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting && !snapshot.hasData) {
+          if (snapshot.connectionState == ConnectionState.waiting &&
+              !snapshot.hasData) {
             return const Center(child: CircularProgressIndicator());
           }
 
@@ -116,7 +182,9 @@ class _AdminCustomerDetailPageState extends ConsumerState<AdminCustomerDetailPag
             );
           }
 
-          final searchTerm = customer.phone.trim().isNotEmpty ? customer.phone.trim() : customer.id;
+          final searchTerm = customer.phone.trim().isNotEmpty
+              ? customer.phone.trim()
+              : customer.id;
 
           return RefreshIndicator(
             onRefresh: _reload,
@@ -136,7 +204,11 @@ class _AdminCustomerDetailPageState extends ConsumerState<AdminCustomerDetailPag
                               imageUrl: customer.avatarUrl,
                               radius: 34,
                               fallback: Text(
-                                customer.name.isNotEmpty ? customer.name.substring(0, 1).toUpperCase() : 'C',
+                                customer.name.isNotEmpty
+                                    ? customer.name
+                                        .substring(0, 1)
+                                        .toUpperCase()
+                                    : 'C',
                               ),
                             ),
                             const SizedBox(width: 14),
@@ -144,25 +216,36 @@ class _AdminCustomerDetailPageState extends ConsumerState<AdminCustomerDetailPag
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Text(customer.name, style: tt.headlineSmall?.copyWith(fontWeight: FontWeight.w900)),
+                                  Text(customer.name,
+                                      style: tt.headlineSmall?.copyWith(
+                                          fontWeight: FontWeight.w900)),
                                   const SizedBox(height: 4),
                                   Text(
-                                    customer.isActive ? 'Active customer' : 'Banned customer',
-                                    style: tt.bodyMedium?.copyWith(color: cs.onSurfaceVariant),
+                                    customer.isActive
+                                        ? 'Active customer'
+                                        : 'Banned customer',
+                                    style: tt.bodyMedium
+                                        ?.copyWith(color: cs.onSurfaceVariant),
                                   ),
                                 ],
                               ),
                             ),
                             Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 12, vertical: 6),
                               decoration: BoxDecoration(
-                                color: customer.isActive ? const Color(0xFF10B981).withValues(alpha: 0.12) : Colors.red.withValues(alpha: 0.12),
+                                color: customer.isActive
+                                    ? const Color(0xFF10B981)
+                                        .withValues(alpha: 0.12)
+                                    : Colors.red.withValues(alpha: 0.12),
                                 borderRadius: BorderRadius.circular(999),
                               ),
                               child: Text(
                                 customer.isActive ? 'Active' : 'Banned',
                                 style: tt.labelMedium?.copyWith(
-                                  color: customer.isActive ? const Color(0xFF10B981) : Colors.red,
+                                  color: customer.isActive
+                                      ? const Color(0xFF10B981)
+                                      : Colors.red,
                                   fontWeight: FontWeight.w800,
                                 ),
                               ),
@@ -183,7 +266,8 @@ class _AdminCustomerDetailPageState extends ConsumerState<AdminCustomerDetailPag
                             Expanded(
                               child: _MetricCard(
                                 label: 'Spend',
-                                value: '₹${customer.totalSpend.toStringAsFixed(0)}',
+                                value:
+                                    '₹${customer.totalSpend.toStringAsFixed(0)}',
                                 icon: Icons.currency_rupee_rounded,
                               ),
                             ),
@@ -195,33 +279,51 @@ class _AdminCustomerDetailPageState extends ConsumerState<AdminCustomerDetailPag
                           runSpacing: 10,
                           children: [
                             OutlinedButton.icon(
-                              onPressed: () => _copyToClipboard(customer.id, 'Customer ID'),
+                              onPressed: () =>
+                                  _copyToClipboard(customer.id, 'Customer ID'),
                               icon: const Icon(Icons.copy_rounded),
                               label: const Text('Copy customer ID'),
                             ),
                             OutlinedButton.icon(
-                              onPressed: () => _copyToClipboard(customer.phone, 'Phone number'),
+                              onPressed:
+                                  _exporting ? null : _exportCustomerData,
+                              icon: _exporting
+                                  ? const SizedBox(
+                                      width: 16,
+                                      height: 16,
+                                      child: CircularProgressIndicator(
+                                          strokeWidth: 2))
+                                  : const Icon(Icons.download_rounded),
+                              label: const Text('Export data'),
+                            ),
+                            OutlinedButton.icon(
+                              onPressed: () => _copyToClipboard(
+                                  customer.phone, 'Phone number'),
                               icon: const Icon(Icons.phone_rounded),
                               label: const Text('Copy phone'),
                             ),
                             if ((customer.email ?? '').trim().isNotEmpty)
                               OutlinedButton.icon(
-                                onPressed: () => _copyToClipboard(customer.email!, 'Email address'),
+                                onPressed: () => _copyToClipboard(
+                                    customer.email!, 'Email address'),
                                 icon: const Icon(Icons.mail_outline_rounded),
                                 label: const Text('Copy email'),
                               ),
                             OutlinedButton.icon(
-                              onPressed: () => context.push('/audit-logs?search=${Uri.encodeComponent(customer.id)}'),
+                              onPressed: () => context.push(
+                                  '/audit-logs?search=${Uri.encodeComponent(customer.id)}'),
                               icon: const Icon(Icons.manage_search_rounded),
                               label: const Text('Audit trail'),
                             ),
                             OutlinedButton.icon(
-                              onPressed: () => context.push('/admin-bookings?search=${Uri.encodeComponent(searchTerm)}'),
+                              onPressed: () => context.push(
+                                  '/admin-bookings?search=${Uri.encodeComponent(searchTerm)}'),
                               icon: const Icon(Icons.receipt_long_rounded),
                               label: const Text('Bookings'),
                             ),
                             OutlinedButton.icon(
-                              onPressed: () => context.push('/support-tickets?search=${Uri.encodeComponent(searchTerm)}'),
+                              onPressed: () => context.push(
+                                  '/support-tickets?search=${Uri.encodeComponent(searchTerm)}'),
                               icon: const Icon(Icons.support_agent_rounded),
                               label: const Text('Support'),
                             ),
@@ -240,8 +342,13 @@ class _AdminCustomerDetailPageState extends ConsumerState<AdminCustomerDetailPag
                     child: Column(
                       children: [
                         _DetailRow(label: 'Phone', value: customer.phone),
-                        _DetailRow(label: 'Email', value: customer.email ?? 'Not provided'),
-                        _DetailRow(label: 'Joined', value: DateFormat('d MMM y').format(customer.createdAt)),
+                        _DetailRow(
+                            label: 'Email',
+                            value: customer.email ?? 'Not provided'),
+                        _DetailRow(
+                            label: 'Joined',
+                            value: DateFormat('d MMM y')
+                                .format(customer.createdAt)),
                       ],
                     ),
                   ),
@@ -264,7 +371,8 @@ class _AdminCustomerDetailPageState extends ConsumerState<AdminCustomerDetailPag
                             padding: const EdgeInsets.only(bottom: 10),
                             child: _BookingRow(
                               booking: booking,
-                              onTap: () => context.push('/admin-bookings/${booking.id}'),
+                              onTap: () =>
+                                  context.push('/admin-bookings/${booking.id}'),
                             ),
                           ),
                         )
@@ -288,7 +396,8 @@ class _AdminCustomerDetailPageState extends ConsumerState<AdminCustomerDetailPag
                             padding: const EdgeInsets.only(bottom: 10),
                             child: _SupportTicketRow(
                               ticket: ticket,
-                              onTap: () => context.push('/support-tickets/${ticket.id}'),
+                              onTap: () =>
+                                  context.push('/support-tickets/${ticket.id}'),
                             ),
                           ),
                         )
@@ -344,7 +453,8 @@ class _AdminCustomerDetail {
       isActive: json['isActive'] as bool? ?? true,
       totalBookings: (json['totalBookings'] as num?)?.toInt() ?? 0,
       totalSpend: (json['totalSpend'] as num?)?.toDouble() ?? 0,
-      createdAt: DateTime.tryParse(json['createdAt'] as String? ?? '') ?? DateTime.now(),
+      createdAt: DateTime.tryParse(json['createdAt'] as String? ?? '') ??
+          DateTime.now(),
       recentBookings: bookingsJson
           .whereType<Map<String, dynamic>>()
           .map(_AdminCustomerBooking.fromJson)
@@ -383,7 +493,8 @@ class _AdminCustomerBooking {
       id: json['id'] as String? ?? '',
       code: json['code'] as String? ?? '',
       status: json['status'] as String? ?? 'PENDING',
-      scheduledAt: DateTime.tryParse(json['scheduledAt'] as String? ?? '') ?? DateTime.now(),
+      scheduledAt: DateTime.tryParse(json['scheduledAt'] as String? ?? '') ??
+          DateTime.now(),
       totalAmount: (json['totalAmount'] as num?)?.toDouble() ?? 0,
       workerName: json['workerName'] as String?,
       serviceName: json['serviceName'] as String? ?? 'Service',
@@ -418,8 +529,10 @@ class _AdminCustomerSupportTicket {
       status: json['status'] as String? ?? 'OPEN',
       replyCount: (json['replyCount'] as num?)?.toInt() ?? 0,
       assignedToName: json['assignedToName'] as String?,
-      createdAt: DateTime.tryParse(json['createdAt'] as String? ?? '') ?? DateTime.now(),
-      updatedAt: DateTime.tryParse(json['updatedAt'] as String? ?? '') ?? DateTime.now(),
+      createdAt: DateTime.tryParse(json['createdAt'] as String? ?? '') ??
+          DateTime.now(),
+      updatedAt: DateTime.tryParse(json['updatedAt'] as String? ?? '') ??
+          DateTime.now(),
     );
   }
 }
@@ -453,9 +566,13 @@ class _BookingRow extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('#${booking.code}', style: tt.labelMedium?.copyWith(fontWeight: FontWeight.w800)),
+                    Text('#${booking.code}',
+                        style: tt.labelMedium
+                            ?.copyWith(fontWeight: FontWeight.w800)),
                     const SizedBox(height: 4),
-                    Text(booking.serviceName, style: tt.titleSmall?.copyWith(fontWeight: FontWeight.w800)),
+                    Text(booking.serviceName,
+                        style: tt.titleSmall
+                            ?.copyWith(fontWeight: FontWeight.w800)),
                     const SizedBox(height: 2),
                     Text(
                       '${booking.status.replaceAll('_', ' ')} • ${DateFormat('d MMM y, h:mm a').format(booking.scheduledAt)}',
@@ -467,9 +584,13 @@ class _BookingRow extends StatelessWidget {
               Column(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
-                  Text('₹${booking.totalAmount.toStringAsFixed(0)}', style: tt.titleSmall?.copyWith(fontWeight: FontWeight.w800)),
+                  Text('₹${booking.totalAmount.toStringAsFixed(0)}',
+                      style:
+                          tt.titleSmall?.copyWith(fontWeight: FontWeight.w800)),
                   const SizedBox(height: 4),
-                  Text(booking.workerName ?? 'Unassigned', style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
+                  Text(booking.workerName ?? 'Unassigned',
+                      style:
+                          tt.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
                 ],
               ),
             ],
@@ -510,7 +631,9 @@ class _SupportTicketRow extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(ticket.subject, style: tt.titleSmall?.copyWith(fontWeight: FontWeight.w800)),
+                    Text(ticket.subject,
+                        style: tt.titleSmall
+                            ?.copyWith(fontWeight: FontWeight.w800)),
                     const SizedBox(height: 2),
                     Text(
                       '${ticket.status.replaceAll('_', ' ')} · ${ticket.replyCount} replies',
@@ -529,7 +652,8 @@ class _SupportTicketRow extends StatelessWidget {
                   const SizedBox(height: 4),
                   Text(
                     DateFormat('d MMM y').format(ticket.updatedAt),
-                    style: tt.labelMedium?.copyWith(fontWeight: FontWeight.w700),
+                    style:
+                        tt.labelMedium?.copyWith(fontWeight: FontWeight.w700),
                   ),
                 ],
               ),
@@ -577,8 +701,10 @@ class _MetricCard extends StatelessWidget {
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(label, style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
-              Text(value, style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
+              Text(label,
+                  style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
+              Text(value,
+                  style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
             ],
           ),
         ],
@@ -593,7 +719,11 @@ class _SectionTitle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Text(title, style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900));
+    return Text(title,
+        style: Theme.of(context)
+            .textTheme
+            .titleLarge
+            ?.copyWith(fontWeight: FontWeight.w900));
   }
 }
 
@@ -613,9 +743,13 @@ class _DetailRow extends StatelessWidget {
         children: [
           SizedBox(
             width: 90,
-            child: Text(label, style: tt.bodyMedium?.copyWith(color: cs.onSurfaceVariant, fontWeight: FontWeight.w700)),
+            child: Text(label,
+                style: tt.bodyMedium?.copyWith(
+                    color: cs.onSurfaceVariant, fontWeight: FontWeight.w700)),
           ),
-          Expanded(child: Text(value, style: tt.bodyMedium?.copyWith(fontWeight: FontWeight.w600))),
+          Expanded(
+              child: Text(value,
+                  style: tt.bodyMedium?.copyWith(fontWeight: FontWeight.w600))),
         ],
       ),
     );

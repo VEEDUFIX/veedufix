@@ -116,8 +116,9 @@ Set these variables in Render for `backend`:
 - `GOOGLE_SERVER_CLIENT_ID=<Google OAuth web client ID>`
 - `RAZORPAY_KEY_ID=<Razorpay key id>`
 - `RAZORPAY_KEY_SECRET=<Razorpay key secret>`
-- `RAZORPAY_WEBHOOK_URL=https://veedufix-backend.onrender.com/api/webhooks/razorpay`
+- `RAZORPAY_WEBHOOK_URL=https://veedufix.onrender.com/api/webhooks/razorpay`
 - `RAZORPAY_WEBHOOK_SECRET=<Razorpay webhook secret>`
+- `RAZORPAY_ACCOUNT_NUMBER=<RazorpayX account number; required to enable payouts>`
 - `CLOUDINARY_CLOUD_NAME=<Cloudinary cloud name>`
 - `CLOUDINARY_API_KEY=<Cloudinary api key>`
 - `CLOUDINARY_API_SECRET=<Cloudinary api secret>`
@@ -158,7 +159,8 @@ The admin web build reads build-time defines from environment variables in `apps
 
 Set these in the Vercel project:
 
-- `API_BASE_URL=https://<your-render-service>.onrender.com/api`
+- `API_BASE_URL=https://veedufix.onrender.com/api`
+- `GOOGLE_MAPS_API_KEY=<restricted Google Maps browser key>`
 - `GOOGLE_SERVER_CLIENT_ID=<Google OAuth web client ID>`
 - `FIREBASE_PROJECT_ID`
 - `FIREBASE_API_KEY`
@@ -186,4 +188,6 @@ flutter run -d chrome --dart-define=API_BASE_URL=http://localhost:4000/api --dar
 ```
 
 If Firebase is enabled for a Flutter target, pass the same build-time values through `--dart-define` or your IDE run configuration.
-For Google Maps on the customer app, enable `Maps SDK for Android`, `Maps SDK for iOS`, `Places API`, and `Geocoding API` in the same Google Cloud project, then pass the API key as `GOOGLE_MAPS_API_KEY`.
+For Google Maps on the customer and partner apps, enable `Maps SDK for Android`, `Maps SDK for iOS`, `Places API`, and `Geocoding API` in the same Google Cloud project. Android release builds read `GOOGLE_MAPS_API_KEY` from the build environment; Flutter web builds can receive it through `--dart-define=GOOGLE_MAPS_API_KEY=...`. Restrict the key to the required APIs and app identities, and use separate keys for Android and web.
+
+The checked-in Docker Compose stack is for local development only. It binds its services to loopback, uses local-only database credentials, and starts the API in development mode. Use Render and Vercel configuration above for production deployments.

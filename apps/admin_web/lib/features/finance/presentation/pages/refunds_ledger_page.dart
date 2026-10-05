@@ -5,6 +5,8 @@ import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:marketplace_shared/marketplace_shared.dart';
 
+import '../../../admin/presentation/widgets/confirm_admin_action_dialog.dart';
+
 import '../../data/finance_api.dart';
 
 class RefundsLedgerPage extends ConsumerStatefulWidget {
@@ -175,26 +177,16 @@ class _RefundsLedgerPageState extends ConsumerState<RefundsLedgerPage> {
     final failedCount = _items.where((item) => item.status == 'failed').length;
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (dialogContext) {
-        return AlertDialog(
-          title: const Text('Retry failed refunds?'),
-          content: Text(
-            failedCount == 0
-                ? 'There are no failed refunds in the current list.'
-                : 'This will retry $failedCount failed refund attempts from the current queue.',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(dialogContext).pop(false),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: failedCount == 0 ? null : () => Navigator.of(dialogContext).pop(true),
-              child: const Text('Retry failed'),
-            ),
-          ],
-        );
-      },
+      barrierDismissible: false,
+      builder: (dialogContext) => ConfirmAdminActionDialog(
+        title: 'Retry failed refunds?',
+        description:
+            'This is a global action. It retries every failed refund in the '
+            'platform, regardless of the current filters or rows loaded here. '
+            'Failed refunds shown in this view: $failedCount.',
+        confirmationPhrase: 'RETRY ALL',
+        confirmButtonLabel: 'Retry all failed',
+      ),
     );
 
     if (confirmed != true) {
@@ -501,7 +493,19 @@ class _RefundsLedgerPageState extends ConsumerState<RefundsLedgerPage> {
                                     ],
                                   ),
                                 ),
-                                DataCell(Text('₹${refund.amount.toStringAsFixed(2)}')),
+                                DataCell(
+                                  Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text('₹${refund.amount.toStringAsFixed(2)}'),
+                                      Text(
+                                        'Gateway ₹${refund.gatewayAmount.toStringAsFixed(2)} · Wallet ₹${refund.walletAmount.toStringAsFixed(2)}',
+                                        style: Theme.of(context).textTheme.labelSmall,
+                                      ),
+                                    ],
+                                  ),
+                                ),
                                 DataCell(_GlowingStatusBadge(status: refund.status)),
                                 DataCell(
                                   Text(MaterialLocalizations.of(context).formatMediumDate(refund.createdAt)),
@@ -758,6 +762,13 @@ class _RefundDetailPageState extends ConsumerState<RefundDetailPage> {
               _DetailLine(label: 'Booking code', value: refund.bookingCode),
               _DetailLine(label: 'Customer', value: refund.customerName ?? 'Unknown'),
               _DetailLine(label: 'Amount', value: '₹${refund.amount.toStringAsFixed(2)}'),
+              _DetailLine(label: 'Gateway refund', value: '₹${refund.gatewayAmount.toStringAsFixed(2)}'),
+              _DetailLine(label: 'Wallet credit', value: '₹${refund.walletAmount.toStringAsFixed(2)}'),
+              if (refund.walletCreditedAt != null)
+                _DetailLine(
+                  label: 'Wallet credited',
+                  value: MaterialLocalizations.of(context).formatMediumDate(refund.walletCreditedAt!.toLocal()),
+                ),
               _DetailLine(label: 'Reason', value: refund.reason),
               _DetailLine(label: 'Created', value: MaterialLocalizations.of(context).formatMediumDate(refund.createdAt)),
               if ((refund.razorpayRefundId ?? '').trim().isNotEmpty)

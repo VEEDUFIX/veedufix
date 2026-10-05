@@ -121,14 +121,47 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
                 onRefresh: () => ref.refresh(notificationsProvider.future),
                 child: ListView.separated(
                   padding: const EdgeInsets.all(20),
-                  itemCount: notifications.length,
+                  itemCount: notifications.length + 1,
                   separatorBuilder: (_, __) => const SizedBox(height: 10),
                   itemBuilder: (context, i) {
-                    final notif = notifications[i];
+                    if (i == 0) {
+                      final unreadCount = notifications
+                          .where((notification) => !notification.isRead)
+                          .length;
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 4),
+                        child: Row(
+                          children: [
+                            Icon(
+                              unreadCount > 0
+                                  ? Icons.notifications_active_rounded
+                                  : Icons.notifications_none_rounded,
+                              color: unreadCount > 0
+                                  ? cs.primary
+                                  : cs.onSurfaceVariant,
+                              size: 19,
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              unreadCount == 0
+                                  ? 'You’re all caught up'
+                                  : '$unreadCount unread ${unreadCount == 1 ? 'update' : 'updates'}',
+                              style: tt.labelLarge?.copyWith(
+                                color: cs.onSurfaceVariant,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    }
+
+                    final notif = notifications[i - 1];
+                    final isOpening = _openingNotifications.contains(notif.id);
+                    final hasDetailDestination =
+                        _hasNotificationDestination(notif);
                     return TapScale(
-                      onTap: _openingNotifications.contains(notif.id)
-                          ? null
-                          : () => _openNotificationOnce(notif),
+                      onTap: isOpening ? null : () => _openNotificationOnce(notif),
                       child: PremiumCard(
                         child: Padding(
                           padding: const EdgeInsets.all(16),
@@ -161,18 +194,44 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
                                         Expanded(
                                           child: Text(
                                             notif.title,
+                                            maxLines: hasDetailDestination ? 2 : null,
+                                            overflow: hasDetailDestination
+                                                ? TextOverflow.ellipsis
+                                                : TextOverflow.visible,
                                             style: tt.titleSmall?.copyWith(
-                                              fontWeight: FontWeight.w700,
+                                              fontWeight: notif.isRead
+                                                  ? FontWeight.w600
+                                                  : FontWeight.w800,
                                             ),
                                           ),
                                         ),
-                                        if (!notif.isRead)
-                                          Container(
-                                            width: 8,
-                                            height: 8,
-                                            decoration: BoxDecoration(
+                                        if (isOpening)
+                                          SizedBox(
+                                            width: 16,
+                                            height: 16,
+                                            child: CircularProgressIndicator(
+                                              strokeWidth: 2,
                                               color: cs.primary,
-                                              shape: BoxShape.circle,
+                                            ),
+                                          )
+                                        else if (!notif.isRead)
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 7,
+                                              vertical: 3,
+                                            ),
+                                            decoration: BoxDecoration(
+                                              color: cs.primaryContainer,
+                                              borderRadius:
+                                                  BorderRadius.circular(999),
+                                            ),
+                                            child: Text(
+                                              'NEW',
+                                              style: tt.labelSmall?.copyWith(
+                                                color: cs.onPrimaryContainer,
+                                                fontWeight: FontWeight.w800,
+                                                letterSpacing: 0.4,
+                                              ),
                                             ),
                                           ),
                                       ],
@@ -180,6 +239,10 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
                                     const SizedBox(height: 4),
                                     Text(
                                       notif.body,
+                                      maxLines: hasDetailDestination ? 3 : null,
+                                      overflow: hasDetailDestination
+                                          ? TextOverflow.ellipsis
+                                          : TextOverflow.visible,
                                       style: tt.bodySmall?.copyWith(
                                         color: cs.onSurfaceVariant,
                                         height: 1.4,
@@ -229,11 +292,11 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
       case 'BOOKING':
         return cs.primary;
       case 'PAYMENT':
-        return const Color(0xFF10B981);
+        return AbzioTheme.successColor;
       case 'PROMO':
-        return const Color(0xFFF59E0B);
+        return AbzioTheme.warningColor;
       case 'REFERRAL':
-        return const Color(0xFF8B5CF6);
+        return cs.tertiary;
       default:
         return cs.secondary;
     }
@@ -248,6 +311,29 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
     if (diff.inDays < 7) return '${diff.inDays}d ago';
     return '${localDate.day}/${localDate.month}/${localDate.year}';
   }
+}
+
+bool _hasNotificationDestination(AppNotification notification) {
+  final bookingId = notification.data?['bookingId'];
+  if (bookingId is String && bookingId.trim().isNotEmpty) return true;
+
+  final route = notification.data?['route'];
+  const allowedRoutes = {
+    '/app',
+    '/bookings',
+    '/offers',
+    '/wallet',
+    '/referral',
+    '/support',
+    '/profile',
+  };
+  if (route is String && allowedRoutes.contains(route)) return true;
+
+  return switch (notification.type.toUpperCase()) {
+    'BOOKING' || 'JOB' || 'JOB_EXECUTION' || 'PAYMENT' || 'EARNINGS' ||
+    'PROMO' || 'REFERRAL' => true,
+    _ => false,
+  };
 }
 
 Future<void> _openNotification(

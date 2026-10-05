@@ -26,10 +26,14 @@ class _OtpPageState extends ConsumerState<OtpPage> {
   static const _errorColor = Color(0xFFD24B4B);
 
   // 6 controllers + focus nodes for the digit boxes
-  final List<TextEditingController> _controllers =
-      List.generate(_otpLength, (_) => TextEditingController());
-  final List<FocusNode> _focusNodes =
-      List.generate(_otpLength, (_) => FocusNode());
+  final List<TextEditingController> _controllers = List.generate(
+    _otpLength,
+    (_) => TextEditingController(),
+  );
+  final List<FocusNode> _focusNodes = List.generate(
+    _otpLength,
+    (_) => FocusNode(),
+  );
 
   bool _isLoading = false;
   bool _hasError = false;
@@ -79,8 +83,7 @@ class _OtpPageState extends ConsumerState<OtpPage> {
     });
   }
 
-  String get _otp =>
-      _controllers.map((c) => c.text).join();
+  String get _otp => _controllers.map((c) => c.text).join();
 
   bool get _isOtpComplete => _otp.length == _otpLength;
 
@@ -120,14 +123,16 @@ class _OtpPageState extends ConsumerState<OtpPage> {
     }
   }
 
-  void _onKeyEvent(int index, KeyEvent event) {
+  KeyEventResult _onKeyEvent(int index, KeyEvent event) {
     if (event is KeyDownEvent &&
         event.logicalKey == LogicalKeyboardKey.backspace &&
         _controllers[index].text.isEmpty &&
         index > 0) {
       _focusNodes[index - 1].requestFocus();
       _controllers[index - 1].clear();
+      return KeyEventResult.handled;
     }
+    return KeyEventResult.ignored;
   }
 
   Future<void> _resendOtp(Map<String, dynamic> args) async {
@@ -207,22 +212,27 @@ class _OtpPageState extends ConsumerState<OtpPage> {
         verificationId: verificationId,
         smsCode: _otp,
       );
-      final userCred =
-          await FirebaseAuth.instance.signInWithCredential(credential);
+      final userCred = await FirebaseAuth.instance.signInWithCredential(
+        credential,
+      );
       final idToken = await userCred.user?.getIdToken();
       if (idToken == null) {
         throw StateError('Firebase did not return a sign-in token');
       }
-      await ref.read(authControllerProvider.notifier).signInWithFirebasePhone(
+      if (!mounted) return;
+      await ref
+          .read(authControllerProvider.notifier)
+          .signInWithFirebasePhone(
             idToken: idToken,
             name: args['name'] as String?,
           );
-      ref.read(guestModeProvider.notifier).state = false;
       if (!mounted) return;
+      ref.read(guestModeProvider.notifier).state = false;
       context.go('/app');
     } catch (e) {
       if (!mounted) return;
-      final message = e is FirebaseAuthException &&
+      final message =
+          e is FirebaseAuthException &&
               (e.code == 'invalid-verification-code' ||
                   e.code == 'invalid-verification-id')
           ? 'Incorrect code. Please try again.'
@@ -245,29 +255,30 @@ class _OtpPageState extends ConsumerState<OtpPage> {
     PhoneAuthCredential credential,
     Map<String, dynamic> args,
   ) async {
-    final userCred =
-        await FirebaseAuth.instance.signInWithCredential(credential);
+    final userCred = await FirebaseAuth.instance.signInWithCredential(
+      credential,
+    );
     final idToken = await userCred.user?.getIdToken();
     if (idToken == null) {
       throw StateError('Firebase did not return a sign-in token');
     }
-    await ref.read(authControllerProvider.notifier).signInWithFirebasePhone(
+    if (!mounted) return;
+    await ref
+        .read(authControllerProvider.notifier)
+        .signInWithFirebasePhone(
           idToken: idToken,
           name: args['name'] as String?,
         );
+    if (!mounted) return;
     ref.read(guestModeProvider.notifier).state = false;
-    if (mounted) context.go('/app');
+    context.go('/app');
   }
 
   @override
   Widget build(BuildContext context) {
     final args =
         (GoRouterState.of(context).extra as Map<String, dynamic>?) ??
-            <String, dynamic>{
-              'identifier': '',
-              'name': null,
-              'verificationId': '',
-            };
+        <String, dynamic>{'identifier': '', 'name': null, 'verificationId': ''};
 
     final rawPhone = args['identifier'] as String? ?? '';
     // Format: +91 XXXXX XXXXX
@@ -276,7 +287,7 @@ class _OtpPageState extends ConsumerState<OtpPage> {
         : rawPhone;
 
     return Scaffold(
-      backgroundColor: const Color(0xFFFAFAF7),
+      backgroundColor: AbzioTheme.lightBackground,
       body: SafeArea(
         child: Column(
           children: [
@@ -331,7 +342,7 @@ class _OtpPageState extends ConsumerState<OtpPage> {
                         Text(
                           'Enter verification code',
                           textAlign: TextAlign.center,
-                          style: GoogleFonts.poppins(
+                          style: GoogleFonts.outfit(
                             fontSize: 22,
                             fontWeight: FontWeight.w700,
                             color: AbzioTheme.lightTextPrimary,
@@ -343,7 +354,7 @@ class _OtpPageState extends ConsumerState<OtpPage> {
                           textAlign: TextAlign.center,
                           text: TextSpan(
                             text: 'We sent a 6-digit code to\n',
-                            style: GoogleFonts.inter(
+                            style: GoogleFonts.outfit(
                               fontSize: 14,
                               color: AbzioTheme.lightTextSecondary,
                               fontWeight: FontWeight.w500,
@@ -352,7 +363,7 @@ class _OtpPageState extends ConsumerState<OtpPage> {
                             children: [
                               TextSpan(
                                 text: formattedPhone,
-                                style: GoogleFonts.inter(
+                                style: GoogleFonts.outfit(
                                   fontSize: 14,
                                   color: AbzioTheme.lightTextPrimary,
                                   fontWeight: FontWeight.w700,
@@ -380,14 +391,17 @@ class _OtpPageState extends ConsumerState<OtpPage> {
                           Row(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              const Icon(Icons.error_outline_rounded,
-                                  size: 15, color: _errorColor),
+                              const Icon(
+                                Icons.error_outline_rounded,
+                                size: 15,
+                                color: _errorColor,
+                              ),
                               const SizedBox(width: 6),
                               Flexible(
                                 child: Text(
                                   _errorMessage,
                                   textAlign: TextAlign.center,
-                                  style: GoogleFonts.inter(
+                                  style: GoogleFonts.outfit(
                                     fontSize: 13,
                                     color: _errorColor,
                                     fontWeight: FontWeight.w500,
@@ -426,7 +440,7 @@ class _OtpPageState extends ConsumerState<OtpPage> {
                                   )
                                 : Text(
                                     'Verify & Continue',
-                                    style: GoogleFonts.inter(
+                                    style: GoogleFonts.outfit(
                                       fontSize: 15,
                                       fontWeight: FontWeight.w600,
                                       color: (_isOtpComplete && !_isLoading)
@@ -444,7 +458,7 @@ class _OtpPageState extends ConsumerState<OtpPage> {
                           child: _resendCountdown > 0
                               ? Text(
                                   'Resend OTP in ${_resendCountdown}s',
-                                  style: GoogleFonts.inter(
+                                  style: GoogleFonts.outfit(
                                     fontSize: 13.5,
                                     color: AbzioTheme.lightTextSecondary,
                                     fontWeight: FontWeight.w500,
@@ -454,7 +468,7 @@ class _OtpPageState extends ConsumerState<OtpPage> {
                                   onTap: () => _resendOtp(args),
                                   child: Text(
                                     'Resend OTP',
-                                    style: GoogleFonts.inter(
+                                    style: GoogleFonts.outfit(
                                       fontSize: 13.5,
                                       color: _accentColor,
                                       fontWeight: FontWeight.w700,
@@ -496,7 +510,7 @@ class _OtpBoxRow extends StatelessWidget {
   final bool hasError;
   final bool isLoading;
   final void Function(int index, String value) onChanged;
-  final void Function(int index, KeyEvent event) onKeyEvent;
+  final KeyEventResult Function(int index, KeyEvent event) onKeyEvent;
 
   @override
   Widget build(BuildContext context) {
@@ -505,9 +519,8 @@ class _OtpBoxRow extends StatelessWidget {
       children: List.generate(6, (i) {
         final isFocused = focusNodes[i].hasFocus;
         final hasDigit = controllers[i].text.isNotEmpty;
-        return KeyboardListener(
-          focusNode: FocusNode(),
-          onKeyEvent: (event) => onKeyEvent(i, event),
+        return Focus(
+          onKeyEvent: (node, event) => onKeyEvent(i, event),
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 160),
             curve: Curves.easeOutCubic,
@@ -522,10 +535,10 @@ class _OtpBoxRow extends StatelessWidget {
                 color: hasError
                     ? const Color(0xFFD24B4B)
                     : isFocused
-                        ? AbzioTheme.accentColor
-                        : hasDigit
-                            ? AbzioTheme.accentColor.withValues(alpha: 0.4)
-                            : AbzioTheme.lightBorder,
+                    ? AbzioTheme.accentColor
+                    : hasDigit
+                    ? AbzioTheme.accentColor.withValues(alpha: 0.4)
+                    : AbzioTheme.lightBorder,
                 width: isFocused ? 1.8 : 1.2,
               ),
               boxShadow: isFocused
@@ -546,7 +559,7 @@ class _OtpBoxRow extends StatelessWidget {
               maxLength: 1,
               enabled: !isLoading,
               inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-              style: GoogleFonts.poppins(
+              style: GoogleFonts.outfit(
                 fontSize: 22,
                 fontWeight: FontWeight.w700,
                 color: AbzioTheme.lightTextPrimary,

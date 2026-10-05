@@ -26,11 +26,11 @@ class _LoginPageState extends ConsumerState<LoginPage> {
   bool _isFocused = false;
   String? _errorText;
 
-  static const _bg = Color(0xFFFAFAF7);
+  static const _bg = AbzioTheme.lightBackground;
   static const _ink = Color(0xFF111111);
   static const _muted = Color(0xFF888888);
   static const _border = Color(0xFFE4E4E4);
-  static const _focusBorder = Color(0xFFC6A769);
+  static const _focusBorder = AbzioTheme.accentColor;
   static const _errorColor = Color(0xFFCC4444);
 
   @override
@@ -195,7 +195,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                   const SizedBox(height: 12),
                   Text(
                     'Book trusted local professionals\nin just a few taps.',
-                    style: GoogleFonts.inter(
+                    style: GoogleFonts.outfit(
                       fontSize: 15,
                       fontWeight: FontWeight.w400,
                       color: _muted,
@@ -211,7 +211,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                   // ─── Phone label ─────────────────────────────────
                   Text(
                     'MOBILE NUMBER',
-                    style: GoogleFonts.inter(
+                    style: GoogleFonts.outfit(
                       fontSize: 10.5,
                       fontWeight: FontWeight.w700,
                       letterSpacing: 1.4,
@@ -250,7 +250,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                         const SizedBox(width: 16),
                         Text(
                           '+91',
-                          style: GoogleFonts.inter(
+                          style: GoogleFonts.outfit(
                             fontSize: 15,
                             fontWeight: FontWeight.w600,
                             color: _ink,
@@ -273,7 +273,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                               LengthLimitingTextInputFormatter(10),
                             ],
                             autofillHints: const [AutofillHints.telephoneNumber],
-                            style: GoogleFonts.inter(
+                            style: GoogleFonts.outfit(
                               fontSize: 15,
                               fontWeight: FontWeight.w500,
                               color: _ink,
@@ -283,7 +283,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                               border: InputBorder.none,
                               contentPadding: EdgeInsets.zero,
                               hintText: '98765 43210',
-                              hintStyle: GoogleFonts.inter(
+                              hintStyle: GoogleFonts.outfit(
                                 fontSize: 15,
                                 color: const Color(0xFFBBBBBB),
                                 fontWeight: FontWeight.w400,
@@ -312,7 +312,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                     const SizedBox(height: 7),
                     Text(
                       _errorText!,
-                      style: GoogleFonts.inter(
+                      style: GoogleFonts.outfit(
                         fontSize: 12,
                         color: _errorColor,
                         fontWeight: FontWeight.w500,
@@ -340,7 +340,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                             vertical: 10, horizontal: 16),
                         child: Text(
                           'Skip for now',
-                          style: GoogleFonts.inter(
+                          style: GoogleFonts.outfit(
                             fontSize: 14,
                             fontWeight: FontWeight.w500,
                             color: _muted,
@@ -359,7 +359,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                   Text.rich(
                     TextSpan(
                       text: 'By continuing, you agree to our ',
-                      style: GoogleFonts.inter(
+                      style: GoogleFonts.outfit(
                         fontSize: 11.5,
                         color: const Color(0xFFAAAAAA),
                         height: 1.5,
@@ -448,7 +448,7 @@ class _TrustItem extends StatelessWidget {
         const SizedBox(width: 10),
         Text(
           label,
-          style: GoogleFonts.inter(
+          style: GoogleFonts.outfit(
             fontSize: 13.5,
             fontWeight: FontWeight.w500,
             color: const Color(0xFF555555),
@@ -525,7 +525,7 @@ class _PrimaryButtonState extends State<_PrimaryButton> {
                   children: [
                     Text(
                       widget.label,
-                      style: GoogleFonts.inter(
+                      style: GoogleFonts.outfit(
                         fontSize: 15,
                         fontWeight: FontWeight.w600,
                         color: fg,

@@ -57,7 +57,7 @@ class _DisputesQueuePageState extends ConsumerState<DisputesQueuePage> {
 
     try {
       final data = await _api.fetchQueue(
-        status: _statusFilter == 'all' ? null : _statusFilter,
+        status: _statusFilter,
         page: 1,
         pageSize: _pageSize,
       );
@@ -95,7 +95,7 @@ class _DisputesQueuePageState extends ConsumerState<DisputesQueuePage> {
 
     try {
       final data = await _api.fetchQueue(
-        status: _statusFilter == 'all' ? null : _statusFilter,
+        status: _statusFilter,
         page: _page + 1,
         pageSize: _pageSize,
       );
@@ -194,7 +194,7 @@ class _DisputesQueuePageState extends ConsumerState<DisputesQueuePage> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Open disputes and under-review cases.',
+                        'Review customer cases from filing through resolution.',
                         style: GoogleFonts.poppins(
                           fontSize: 28,
                           fontWeight: FontWeight.w900,
@@ -240,6 +240,18 @@ class _DisputesQueuePageState extends ConsumerState<DisputesQueuePage> {
                             DropdownMenuItem(
                               value: 'under_review',
                               child: Text('Under review'),
+                            ),
+                            DropdownMenuItem(
+                              value: 'refund_pending',
+                              child: Text('Refund processing'),
+                            ),
+                            DropdownMenuItem(
+                              value: 'resolved_refund',
+                              child: Text('Resolved with refund'),
+                            ),
+                            DropdownMenuItem(
+                              value: 'resolved_rejected',
+                              child: Text('Resolved'),
                             ),
                           ],
                           onChanged: (value) {

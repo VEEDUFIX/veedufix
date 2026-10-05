@@ -47,6 +47,32 @@ class WorkerProfileRepository {
     }
   }
 
+  Future<Map<String, dynamic>?> fetchPayoutChangeRequest() async {
+    try {
+      final response = await _api.get('/worker/onboarding/payout-change-request');
+      return response['request'] as Map<String, dynamic>?;
+    } on DioException catch (e) {
+      throw _handleError(e);
+    } catch (_) {
+      throw Exception('Failed to load payout change request.');
+    }
+  }
+
+  Future<Map<String, dynamic>> submitPayoutChangeRequest(
+      Map<String, dynamic> details) async {
+    try {
+      final response = await _api.post(
+        '/worker/onboarding/payout-change-request',
+        data: details,
+      );
+      return response['request'] as Map<String, dynamic>;
+    } on DioException catch (e) {
+      throw _handleError(e);
+    } catch (_) {
+      throw Exception('Failed to submit payout change request.');
+    }
+  }
+
   Future<String?> uploadAvatar(String imagePath, String filename) async {
     try {
       final response = await _api.dio.post<Map<String, dynamic>>(

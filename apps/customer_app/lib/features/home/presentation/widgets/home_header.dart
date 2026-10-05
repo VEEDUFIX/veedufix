@@ -35,7 +35,7 @@ class HomeHeader extends StatelessWidget {
                 'Home services delivered fast',
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: GoogleFonts.inter(
+                style: GoogleFonts.outfit(
                   fontSize: 12.5,
                   fontWeight: FontWeight.w500,
                   color: secondary,
@@ -48,25 +48,29 @@ class HomeHeader extends StatelessWidget {
 
         TapScale(
           onTap: () => context.push('/profile'),
-          child: Container(
-            width: 48,
-            height: 48,
-            decoration: BoxDecoration(
-              color: bright ? Colors.white : Colors.white,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: Colors.white.withValues(alpha: 0.45)),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.05),
-                  blurRadius: 10,
-                  offset: const Offset(0, 4),
-                ),
-              ],
-            ),
-            child: const Icon(
-              Icons.person_outline_rounded,
-              size: 22,
-              color: AbzioTheme.lightTextPrimary,
+          child: Semantics(
+            button: true,
+            label: 'Open profile',
+            child: Container(
+              width: 48,
+              height: 48,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: Colors.white.withValues(alpha: 0.45)),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.05),
+                    blurRadius: 10,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: const Icon(
+                Icons.person_outline_rounded,
+                size: 22,
+                color: AbzioTheme.lightTextPrimary,
+              ),
             ),
           ),
         ),
@@ -111,41 +115,45 @@ class LocationChip extends StatelessWidget {
             );
         }
       },
-      child: Container(
-        padding: EdgeInsets.zero,
-        decoration: BoxDecoration(
-          color: Colors.transparent,
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              Icons.my_location_rounded,
-              size: 20,
-              color: bright ? Colors.white : AbzioTheme.accentColor,
-            ),
-            const SizedBox(width: 8),
-            Flexible(
-              child: Text(
-                location,
-                overflow: TextOverflow.ellipsis,
-                style: GoogleFonts.outfit(
-                  fontSize: 17,
-                  fontWeight: FontWeight.w800,
-                  color: bright ? Colors.white : AbzioTheme.lightTextPrimary,
+      child: Semantics(
+        button: true,
+        label: 'Change service location. Current location: $location',
+        child: Container(
+          padding: EdgeInsets.zero,
+          decoration: BoxDecoration(
+            color: Colors.transparent,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.my_location_rounded,
+                size: 20,
+                color: bright ? Colors.white : AbzioTheme.accentColor,
+              ),
+              const SizedBox(width: 8),
+              Flexible(
+                child: Text(
+                  location,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.outfit(
+                    fontSize: 17,
+                    fontWeight: FontWeight.w800,
+                    color: bright ? Colors.white : AbzioTheme.lightTextPrimary,
+                  ),
                 ),
               ),
-            ),
-            const SizedBox(width: 3),
-            Icon(
-              Icons.keyboard_arrow_down_rounded,
-              size: 20,
-              color: bright
-                  ? Colors.white.withValues(alpha: 0.9)
-                  : AbzioTheme.lightTextSecondary,
-            ),
-          ],
+              const SizedBox(width: 3),
+              Icon(
+                Icons.keyboard_arrow_down_rounded,
+                size: 20,
+                color: bright
+                    ? Colors.white.withValues(alpha: 0.9)
+                    : AbzioTheme.lightTextSecondary,
+              ),
+            ],
+          ),
         ),
       ),
     );
