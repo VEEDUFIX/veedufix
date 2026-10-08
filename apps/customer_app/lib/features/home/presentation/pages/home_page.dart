@@ -7,28 +7,56 @@ import '../../../../core/widgets/liquid_refresh.dart';
 import '../../../../core/widgets/shimmer_placeholder.dart';
 import '../../../profile/presentation/providers/selected_location_provider.dart';
 import '../../../search/presentation/widgets/ai_assistant_sheet.dart';
+import '../../domain/entities/home_banner.dart';
 import '../widgets/home_category_tile.dart';
+import '../widgets/category_services_sheet.dart';
 import '../widgets/home_header.dart';
 import '../widgets/home_hero_banner.dart';
-import '../widgets/home_professionals_section.dart';
 import '../widgets/home_search_bar.dart';
 import '../widgets/home_section_label.dart';
 import '../widgets/home_service_card.dart';
+import '../providers/home_banners_provider.dart';
 
-class HomePage extends ConsumerWidget {
+class HomePage extends ConsumerStatefulWidget {
   const HomePage({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<HomePage> createState() => _HomePageState();
+}
+
+class _HomePageState extends ConsumerState<HomePage> {
+  bool _locationCheckFinished = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        ref
+            .read(selectedLocationProvider.notifier)
+            .detectCurrentLocationIfMissing()
+            .whenComplete(() {
+              if (mounted) setState(() => _locationCheckFinished = true);
+            });
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final session = ref.watch(authControllerProvider).valueOrNull;
     final selectedLocation = ref.watch(selectedLocationProvider);
     final catalogAsync = ref.watch(homeCatalogProvider);
-    final professionalsAsync = ref.watch(homeProfessionalsProvider);
+    final sectionsAsync = ref.watch(homeCatalogSectionsProvider);
+    final bannersAsync = ref.watch(homeBannersProvider);
 
     final categories = catalogAsync.valueOrNull?.categories ?? const [];
-    final featured = catalogAsync.valueOrNull?.featured ?? const [];
-    final trending = catalogAsync.valueOrNull?.trending ?? const [];
-    final professionals = professionalsAsync.valueOrNull ?? const [];
+    final catalog = catalogAsync.valueOrNull;
+    final mostBooked = catalog?.popular.isNotEmpty == true
+        ? catalog!.popular
+        : catalog?.trending ?? const [];
+    final homeSections =
+        sectionsAsync.valueOrNull ?? const <HomeCatalogSection>[];
     final isLoading = catalogAsync.isLoading;
 
     return Scaffold(
@@ -36,11 +64,13 @@ class HomePage extends ConsumerWidget {
       body: LiquidRefresh(
         onRefresh: () async {
           ref.invalidate(homeCatalogProvider);
-          ref.invalidate(homeProfessionalsProvider);
+          ref.invalidate(homeCatalogSectionsProvider);
+          ref.invalidate(homeBannersProvider);
           try {
             await Future.wait([
               ref.read(homeCatalogProvider.future),
-              ref.read(homeProfessionalsProvider.future),
+              ref.read(homeCatalogSectionsProvider.future),
+              ref.read(homeBannersProvider.future),
             ]);
           } catch (_) {
             // Each section renders its own retry state from the provider error.
@@ -53,7 +83,7 @@ class HomePage extends ConsumerWidget {
           ),
           children: [
             Padding(
-              padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
+              padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
               child: Column(
                 children: [
                   HomeHeader(
@@ -61,76 +91,66 @@ class HomePage extends ConsumerWidget {
                       context,
                       session,
                       selectedLocation,
+                      _locationCheckFinished,
                     ),
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 14),
                   HomeSearchBar(
-                    hint: appText(
-                      context,
-                      'What service do you need?',
-                      'உங்களுக்கு என்ன சேவை தேவை?',
-                    ),
                     onVoiceTap: () => showAiAssistantSheet(context),
-                  ),
-                  const SizedBox(height: 20),
-                  HomeHeroBanner(
-                    onTap: (service) {
-                      if (service == null) {
-                        context.push('/search');
-                        return;
-                      }
-                      context.push(
-                        Uri(
-                          path: '/service',
-                          queryParameters: {'id': service.id},
-                        ).toString(),
-                      );
-                    },
-                    services: featured,
                   ),
                 ],
               ),
             ),
-            const SizedBox(height: 24),
-            if (catalogAsync.hasError && categories.isEmpty && trending.isEmpty)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
-                child: _CatalogErrorState(
-                  onRetry: () => ref.invalidate(homeCatalogProvider),
-                ),
-              ),
+            const SizedBox(height: 22),
             if (isLoading || categories.isNotEmpty) ...[
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
+                padding: const EdgeInsets.symmetric(horizontal: 16),
                 child: HomeSectionLabel(
-                  title: appText(
-                    context,
-                    'What do you need?',
-                    'உங்களுக்கு என்ன சேவை தேவை?',
-                  ),
+                  title: appText(context, 'Services', 'சேவைகள்'),
                   onSeeAll: () => context.push('/search'),
                 ),
               ),
-              const SizedBox(height: 14),
+              const SizedBox(height: 12),
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
+                padding: const EdgeInsets.symmetric(horizontal: 16),
                 child: isLoading
                     ? _buildCategoryShimmerGrid()
                     : _buildCategoryGrid(categories),
               ),
-              const SizedBox(height: 28),
             ],
-            const Padding(
-              padding: EdgeInsets.fromLTRB(20, 0, 20, 20),
-              child: _TrustHighlights(),
-            ),
-            if (isLoading || trending.isNotEmpty) ...[
+            if (catalogAsync.hasError &&
+                categories.isEmpty &&
+                mostBooked.isEmpty)
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 20),
+                child: _CatalogErrorState(
+                  onRetry: () => ref.invalidate(homeCatalogProvider),
+                ),
+              ),
+            if (categories.isNotEmpty || isLoading) const SizedBox(height: 22),
+            if (bannersAsync.isLoading)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: _buildBannerShimmer(),
+              )
+            else if (bannersAsync.valueOrNull?.isNotEmpty == true)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: HomeHeroBanner(
+                  banners: bannersAsync.valueOrNull!,
+                  onTap: _openBanner,
+                ),
+              ),
+            if (bannersAsync.valueOrNull?.isNotEmpty == true ||
+                bannersAsync.isLoading)
+              const SizedBox(height: 26),
+            if (isLoading || mostBooked.isNotEmpty) ...[
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
                 child: HomeSectionLabel(
                   title: appText(
                     context,
-                    'Most booked',
+                    'Most booked services',
                     'அதிகம் முன்பதிவு செய்யப்பட்டவை',
                   ),
                   onSeeAll: () => context.push('/search'),
@@ -138,62 +158,56 @@ class HomePage extends ConsumerWidget {
               ),
               const SizedBox(height: 16),
               if (isLoading)
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
-                  child: _buildServiceShimmerRail(),
-                )
+                _buildServiceShimmerRail()
               else
-                SizedBox(
-                  height: 242,
-                  child: ListView.separated(
-                    scrollDirection: Axis.horizontal,
-                    padding: const EdgeInsets.symmetric(horizontal: 20),
-                    itemCount: trending.take(8).length,
-                    separatorBuilder: (_, __) => const SizedBox(width: 14),
-                    itemBuilder: (context, i) => SizedBox(
-                      width: 168,
-                      child: HomeServiceCard(service: trending[i]),
-                    ),
-                  ),
-                ),
-              const SizedBox(height: 28),
+                _buildServiceRail(mostBooked),
+              const SizedBox(height: 24),
             ],
-            if (professionals.isNotEmpty ||
-                (professionalsAsync.isLoading && professionals.isEmpty) ||
-                (professionalsAsync.hasError && professionals.isEmpty)) ...[
+            if (sectionsAsync.isLoading) ...[
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
+                padding: const EdgeInsets.symmetric(horizontal: 16),
                 child: HomeSectionLabel(
                   title: appText(
                     context,
-                    'Available professionals',
-                    'அருகிலுள்ள நிபுணர்கள்',
+                    'More to explore',
+                    'மேலும் ஆராயுங்கள்',
                   ),
+                  onSeeAll: () => context.push('/search'),
                 ),
               ),
               const SizedBox(height: 16),
-              if (professionalsAsync.isLoading && professionals.isEmpty)
-                _buildProfessionalShimmerRail()
-              else if (professionalsAsync.hasError && professionals.isEmpty)
+              _buildServiceShimmerRail(),
+              const SizedBox(height: 24),
+            ] else if (sectionsAsync.hasError) ...[
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 4, 16, 20),
+                child: _CatalogErrorState(
+                  onRetry: () => ref.invalidate(homeCatalogSectionsProvider),
+                ),
+              ),
+            ] else ...[
+              for (final section in homeSections) ...[
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
-                  child: _ProfessionalsErrorState(
-                    onRetry: () => ref.invalidate(homeProfessionalsProvider),
-                  ),
-                )
-              else
-                SizedBox(
-                  height: 224,
-                  child: ListView.separated(
-                    scrollDirection: Axis.horizontal,
-                    padding: const EdgeInsets.symmetric(horizontal: 20),
-                    itemCount: professionals.length,
-                    separatorBuilder: (_, __) => const SizedBox(width: 12),
-                    itemBuilder: (context, i) =>
-                        ProfessionalCard(professional: professionals[i]),
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: HomeSectionLabel(
+                    title: section.title,
+                    onSeeAll: () => _openHomeSection(section),
                   ),
                 ),
-              const SizedBox(height: 28),
+                if (section.subtitle?.trim().isNotEmpty == true)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+                    child: Text(
+                      section.subtitle!,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: AbzioTheme.lightTextSecondary,
+                      ),
+                    ),
+                  ),
+                const SizedBox(height: 16),
+                _buildServiceRail(section.services),
+                const SizedBox(height: 24),
+              ],
             ],
           ],
         ),
@@ -201,103 +215,181 @@ class HomePage extends ConsumerWidget {
     );
   }
 
-  Widget _buildCategoryShimmerGrid() {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final metrics = _categoryGridMetrics(constraints.maxWidth);
-        return GridView.builder(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          itemCount: 8,
-          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: metrics.columns,
-            crossAxisSpacing: 14,
-            mainAxisSpacing: 18,
-            mainAxisExtent: metrics.itemHeight,
-          ),
-          itemBuilder: (context, _) => const Column(
-            children: [
-              ShimmerPlaceholder(
-                width: double.infinity,
-                height: 70,
-                borderRadius: 18,
-              ),
-              SizedBox(height: 9),
-              ShimmerPlaceholder(width: 58, height: 12, borderRadius: 6),
-            ],
-          ),
+  void _openBanner(HomeBanner banner) {
+    final value = banner.destinationValue.trim();
+    switch (banner.destinationType) {
+      case 'service':
+        if (value.isNotEmpty) {
+          context.push(
+            Uri(path: '/service', queryParameters: {'id': value}).toString(),
+          );
+        }
+        return;
+      case 'category':
+        if (value.isNotEmpty) {
+          context.push(
+            Uri(
+              path: '/search',
+              queryParameters: {'categorySlug': value},
+            ).toString(),
+          );
+        }
+        return;
+      case 'offer':
+        context.push('/offers');
+        return;
+      case 'search':
+        context.push(
+          Uri(path: '/search', queryParameters: {'q': value}).toString(),
         );
-      },
+        return;
+      case 'custom_route':
+        final uri = Uri.tryParse(value);
+        if (uri != null &&
+            uri.hasAuthority == false &&
+            uri.scheme.isEmpty &&
+            uri.path.startsWith('/') &&
+            !uri.path.startsWith('//')) {
+          context.push(uri.toString());
+        }
+        return;
+    }
+  }
+
+  void _openHomeSection(HomeCatalogSection section) {
+    final destination = Uri.tryParse(section.seeAllDestination);
+    if (destination == null ||
+        destination.hasAuthority ||
+        destination.scheme.isNotEmpty ||
+        !destination.path.startsWith('/') ||
+        destination.path.startsWith('//')) {
+      context.push('/search');
+      return;
+    }
+    context.push(destination.toString());
+  }
+
+  Future<void> _openCategory(CatalogCategory category) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: Colors.transparent,
+      barrierColor: Colors.black.withValues(alpha: 0.42),
+      builder: (_) => CategoryServicesSheet(
+        category: category,
+        onServiceTap: (service) {
+          if (!context.mounted) return;
+          context.push(
+            Uri(
+              path: '/service',
+              queryParameters: {'id': service.id},
+            ).toString(),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildCategoryShimmerGrid() {
+    final scaledCategoryLabelHeight = MediaQuery.textScalerOf(
+      context,
+    ).scale(12 * 1.18 * 2);
+    return GridView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      itemCount: 8,
+      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 4,
+        crossAxisSpacing: 8,
+        mainAxisSpacing: 12,
+        mainAxisExtent: 68 + scaledCategoryLabelHeight + 4,
+      ),
+      itemBuilder: (context, _) => const Column(
+        mainAxisAlignment: MainAxisAlignment.start,
+        children: [
+          ShimmerPlaceholder(width: 64, height: 64, borderRadius: 14),
+          SizedBox(height: 4),
+          ShimmerPlaceholder(width: 54, height: 12, borderRadius: 6),
+        ],
+      ),
     );
   }
 
   Widget _buildCategoryGrid(List<CatalogCategory> categories) {
-    final visible = categories.take(8).toList(growable: false);
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final metrics = _categoryGridMetrics(constraints.maxWidth);
-        return GridView.builder(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          itemCount: visible.length,
-          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: metrics.columns,
-            crossAxisSpacing: 14,
-            mainAxisSpacing: 18,
-            mainAxisExtent: metrics.itemHeight,
-          ),
-          itemBuilder: (context, i) => HomeCategoryTile(category: visible[i]),
-        );
-      },
+    final visible = categories.take(7).toList(growable: false);
+    final scaledCategoryLabelHeight = MediaQuery.textScalerOf(
+      context,
+    ).scale(12 * 1.18 * 2);
+    return GridView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      itemCount: visible.length + 1,
+      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 4,
+        crossAxisSpacing: 8,
+        mainAxisSpacing: 12,
+        mainAxisExtent: 68 + scaledCategoryLabelHeight + 4,
+      ),
+      itemBuilder: (context, i) => i < visible.length
+          ? HomeCategoryTile(
+              category: visible[i],
+              onTap: () => _openCategory(visible[i]),
+            )
+          : _AllServicesTile(onTap: () => context.push('/search')),
     );
-  }
-
-  ({int columns, double itemHeight}) _categoryGridMetrics(double width) {
-    final columns = width < 350 ? 3 : 4;
-    final tileWidth = (width - 14 * (columns - 1)) / columns;
-    return (columns: columns, itemHeight: tileWidth + 40);
   }
 
   Widget _buildServiceShimmerRail() {
-    return const Row(
-      children: [
-        Expanded(
-          child: ShimmerPlaceholder(
-            width: double.infinity,
-            height: 232,
-            borderRadius: 18,
-          ),
-        ),
-        SizedBox(width: 14),
-        Expanded(
-          child: ShimmerPlaceholder(
-            width: double.infinity,
-            height: 232,
-            borderRadius: 18,
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildProfessionalShimmerRail() {
     return SizedBox(
-      height: 224,
+      height: 272,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 20),
+        padding: const EdgeInsets.symmetric(horizontal: 16),
         itemCount: 3,
         separatorBuilder: (_, __) => const SizedBox(width: 12),
         itemBuilder: (context, _) =>
-            const ShimmerPlaceholder(width: 200, height: 224, borderRadius: 16),
+            const ShimmerPlaceholder(width: 156, height: 272, borderRadius: 18),
       ),
     );
   }
+
+  Widget _buildServiceRail(List<CatalogService> services) {
+    return SizedBox(
+      height: 272,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        itemCount: services.length,
+        separatorBuilder: (_, __) => const SizedBox(width: 12),
+        itemBuilder: (context, index) => SizedBox(
+          width: 156,
+          child: HomeServiceCard(service: services[index]),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBannerShimmer() => LayoutBuilder(
+    builder: (context, constraints) {
+      final height = constraints.maxWidth < 308
+          ? 160.0
+          : constraints.maxWidth >= 360
+          ? 176.0
+          : 172.0;
+      return ShimmerPlaceholder(
+        width: double.infinity,
+        height: height,
+        borderRadius: 20,
+      );
+    },
+  );
 
   String _locationLabel(
     BuildContext context,
     AuthSession? session,
     SelectedLocation? selectedLocation,
+    bool locationCheckFinished,
   ) {
     if (selectedLocation != null) {
       return selectedLocation.title;
@@ -306,8 +398,10 @@ class HomePage extends ConsumerWidget {
     if (cityId.isEmpty || RegExp(r'^[a-z0-9]{16,}$').hasMatch(cityId)) {
       return appText(
         context,
-        'Set your location',
-        'உங்கள் இருப்பிடத்தை அமைக்கவும்',
+        locationCheckFinished ? 'Choose your area' : 'Finding your area…',
+        locationCheckFinished
+            ? 'உங்கள் பகுதியைத் தேர்ந்தெடுக்கவும்'
+            : 'உங்கள் பகுதியைக் கண்டறிகிறது…',
       );
     }
     return cityId
@@ -316,91 +410,6 @@ class HomePage extends ConsumerWidget {
         .where((part) => part.isNotEmpty)
         .map((part) => '${part[0].toUpperCase()}${part.substring(1)}')
         .join(' ');
-  }
-}
-
-class _TrustHighlights extends StatelessWidget {
-  const _TrustHighlights();
-
-  @override
-  Widget build(BuildContext context) {
-    final textTheme = Theme.of(context).textTheme;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          appText(context, 'Why Veedufix?', 'ஏன் வீடுஃபிக்ஸ்?'),
-          style: textTheme.titleMedium?.copyWith(
-            color: const Color(0xFF13110F),
-            fontWeight: FontWeight.w800,
-          ),
-        ),
-        const SizedBox(height: 14),
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              child: _TrustPoint(
-                icon: Icons.verified_user_outlined,
-                label: appText(
-                  context,
-                  'Verified pros',
-                  'சரிபார்க்கப்பட்ட நிபுணர்கள்',
-                ),
-              ),
-            ),
-            Container(width: 1, height: 42, color: AbzioTheme.lightBorder),
-            Expanded(
-              child: _TrustPoint(
-                icon: Icons.receipt_long_outlined,
-                label: appText(context, 'Clear pricing', 'தெளிவான விலை'),
-              ),
-            ),
-            Container(width: 1, height: 42, color: AbzioTheme.lightBorder),
-            Expanded(
-              child: _TrustPoint(
-                icon: Icons.lock_outline_rounded,
-                label: appText(
-                  context,
-                  'Secure payments',
-                  'பாதுகாப்பான கட்டணங்கள்',
-                ),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 18),
-        const Divider(height: 1),
-      ],
-    );
-  }
-}
-
-class _TrustPoint extends StatelessWidget {
-  const _TrustPoint({required this.icon, required this.label});
-
-  final IconData icon;
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        const SizedBox(height: 2),
-        Icon(icon, size: 20, color: const Color(0xFFC2A15E)),
-        const SizedBox(height: 7),
-        Text(
-          label,
-          textAlign: TextAlign.center,
-          maxLines: 2,
-          overflow: TextOverflow.ellipsis,
-          style: Theme.of(context).textTheme.labelSmall?.copyWith(
-            color: const Color(0xFF514A40),
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-      ],
-    );
   }
 }
 
@@ -446,43 +455,48 @@ class _CatalogErrorState extends StatelessWidget {
   }
 }
 
-class _ProfessionalsErrorState extends StatelessWidget {
-  const _ProfessionalsErrorState({required this.onRetry});
+class _AllServicesTile extends StatelessWidget {
+  const _AllServicesTile({required this.onTap});
 
-  final VoidCallback onRetry;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-    return Container(
-      padding: const EdgeInsets.fromLTRB(14, 12, 8, 12),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: colors.outlineVariant),
-      ),
-      child: Row(
-        children: [
-          Icon(Icons.cloud_off_outlined, color: colors.onSurfaceVariant),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              appText(
-                context,
-                'Professionals could not load. Try again.',
-                'நிபுணர்களை ஏற்ற முடியவில்லை. மீண்டும் முயற்சிக்கவும்.',
+    return TapScale(
+      onTap: onTap,
+      child: Semantics(
+        button: true,
+        label: 'Browse all services',
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 64,
+              height: 64,
+              decoration: BoxDecoration(
+                color: AbzioTheme.accentColor.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(15),
               ),
-              style: Theme.of(
-                context,
-              ).textTheme.bodySmall?.copyWith(color: colors.onSurface),
+              child: const Icon(
+                Icons.grid_view_rounded,
+                size: 24,
+                color: AbzioTheme.accentColor,
+              ),
             ),
-          ),
-          IconButton(
-            tooltip: 'Try again',
-            onPressed: onRetry,
-            icon: const Icon(Icons.refresh_rounded),
-          ),
-        ],
+            const SizedBox(height: 6),
+            Text(
+              'All services',
+              textAlign: TextAlign.center,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                color: AbzioTheme.lightTextPrimary,
+                fontWeight: FontWeight.w700,
+                height: 1.18,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

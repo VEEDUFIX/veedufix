@@ -307,7 +307,15 @@ model Service {
   emergencyAvailable    Boolean               @default(false)
   homeVisit             Boolean               @default(true)
   requiresSiteVisit     Boolean               @default(false)
+  bookingEnabled        Boolean               @default(true)
+  priceType             String                @default("FROM")
+  ctaLabel              String                @default("Book service")
+  warrantyText          String?
+  requirements          String[]              @default([])
   isActive              Boolean               @default(true)
+  publicationStatus     String                @default("PUBLISHED")
+  publishStartsAt       DateTime?
+  publishEndsAt         DateTime?
   featured              Boolean               @default(false)
   popular               Boolean               @default(false)
   rating                Decimal               @default(0.0) @db.Decimal(3, 2)
@@ -331,6 +339,45 @@ model Service {
   workerServices        WorkerService[]
   bookingServices       BookingService[]
   searchKeywords        ServiceSearchKeyword[]
+  homeSectionItems      HomeServiceSectionItem[]
+  variants              ServiceVariant[]
+  addons                ServiceAddon[]
+  serviceAreaAssignments ServiceAreaService[]
+}
+
+model ServiceVariant {
+  id                    String   @id @default(cuid())
+  serviceId             String
+  service               Service  @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  name                  String   @db.VarChar(120)
+  description           String?  @db.VarChar(1000)
+  imageUrl              String?  @db.VarChar(2048)
+  price                 Decimal  @db.Decimal(12, 2)
+  originalPrice         Decimal? @db.Decimal(12, 2)
+  estimatedDurationMins Int?
+  isAvailable           Boolean  @default(true)
+  sortOrder             Int      @default(0)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  @@index([serviceId, isAvailable, sortOrder])
+}
+
+model ServiceAddon {
+  id                    String   @id @default(cuid())
+  serviceId             String
+  service               Service  @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  name                  String   @db.VarChar(120)
+  description           String?  @db.VarChar(1000)
+  imageUrl              String?  @db.VarChar(2048)
+  price                 Decimal  @db.Decimal(12, 2)
+  estimatedDurationMins Int?
+  isActive              Boolean  @default(true)
+  sortOrder             Int      @default(0)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  @@index([serviceId, isActive, sortOrder])
 }
 
 model ServiceArea {
@@ -345,9 +392,21 @@ model ServiceArea {
   isActive          Boolean  @default(true)
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
+  serviceAssignments ServiceAreaService[]
 
   @@unique([cityId, slug])
   @@index([cityId, isActive])
+}
+
+model ServiceAreaService {
+  serviceId    String
+  service      Service     @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  serviceAreaId String
+  serviceArea  ServiceArea @relation(fields: [serviceAreaId], references: [id], onDelete: Cascade)
+  createdAt    DateTime    @default(now())
+
+  @@id([serviceId, serviceAreaId])
+  @@index([serviceAreaId, serviceId])
 }
 
 model Address {
@@ -563,6 +622,7 @@ model BookingService {
   gstRate              Decimal               @default(18.00) @db.Decimal(5, 2)
   gstAmount            Decimal               @default(0.0) @db.Decimal(12, 2)
   sacCode              String                @default("PENDING")
+  configuration        Json?
   createdAt            DateTime              @default(now())
 }
 
@@ -1123,4 +1183,45 @@ model SparePartRequest {
   updatedAt       DateTime @updatedAt
 
   @@index([bookingId, status])
+}
+
+model HomeBanner {
+  id                String   @id @default(cuid())
+  imageUrl          String   @db.VarChar(2048)
+  isActive          Boolean  @default(true)
+  sortOrder         Int      @default(0)
+  destinationType   String   @db.VarChar(32)
+  destinationValue  String   @db.VarChar(512)
+  startsAt          DateTime?
+  endsAt            DateTime?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([isActive, sortOrder, startsAt, endsAt])
+}
+
+model HomeServiceSection {
+  id                 String                   @id @default(cuid())
+  title              String                   @db.VarChar(120)
+  subtitle           String?                  @db.VarChar(240)
+  sortOrder          Int                      @default(0)
+  isActive           Boolean                  @default(true)
+  seeAllDestination  String                   @default("/search") @db.VarChar(512)
+  items              HomeServiceSectionItem[]
+  createdAt          DateTime                 @default(now())
+  updatedAt          DateTime                 @updatedAt
+
+  @@index([isActive, sortOrder])
+}
+
+model HomeServiceSectionItem {
+  sectionId String
+  section   HomeServiceSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  serviceId String
+  service   Service            @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  sortOrder Int                @default(0)
+
+  @@id([sectionId, serviceId])
+  @@index([serviceId])
+  @@index([sectionId, sortOrder])
 }

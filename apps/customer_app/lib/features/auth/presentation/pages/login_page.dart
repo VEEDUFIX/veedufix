@@ -172,9 +172,9 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                   // ─── Logo ────────────────────────────────────────
                   const Center(
                     child: SizedBox(
-                      height: 36,
+                      height: 48,
                       child: CustomerLogo(
-                        height: 36,
+                        height: 48,
                         color: _ink,
                       ),
                     ),

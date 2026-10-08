@@ -48,14 +48,50 @@ const requirementSchema = z.object({
   sortOrder: z.number().int().min(0).optional()
 });
 
+const serviceVariantSchema = z.object({
+  id: id.optional(),
+  name: z.string().trim().min(2).max(120),
+  description: z.string().max(1000).nullable().optional(),
+  imageUrl: z.string().url().nullable().optional(),
+  price: z.number().nonnegative(),
+  originalPrice: z.number().nonnegative().nullable().optional(),
+  estimatedDurationMins: z.number().int().positive().nullable().optional(),
+  isAvailable: z.boolean().optional(),
+  sortOrder: z.number().int().min(0).optional()
+}).superRefine((variant, context) => {
+  if (variant.originalPrice != null && variant.originalPrice <= variant.price) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["originalPrice"],
+      message: "Original price must be greater than the current price"
+    });
+  }
+});
+
+const serviceAddonSchema = z.object({
+  id: id.optional(),
+  name: z.string().trim().min(2).max(120),
+  description: z.string().max(1000).nullable().optional(),
+  imageUrl: z.string().url().nullable().optional(),
+  price: z.number().nonnegative(),
+  estimatedDurationMins: z.number().int().positive().nullable().optional(),
+  isActive: z.boolean().optional(),
+  sortOrder: z.number().int().min(0).optional()
+});
+
+function uniqueOptionNames<T extends { name: string; id?: string }>(options: T[]) {
+  const names = options.map((option) => option.name.trim().toLocaleLowerCase());
+  const ids = options.flatMap((option) => option.id ? [option.id] : []);
+  return new Set(names).size === names.length && new Set(ids).size === ids.length;
+}
+
 export const catalogListQuerySchema = z.object({
   query: z.object({
     locale: locale.optional(),
     cityId: z.string().optional(),
     q: z.string().trim().max(120).optional(),
     page: z.coerce.number().int().min(1).default(1),
-    pageSize: z.coerce.number().int().min(1).max(100).default(20),
-    includeInactive: z.coerce.boolean().optional()
+    pageSize: z.coerce.number().int().min(1).max(100).default(20)
   })
 });
 
@@ -76,6 +112,8 @@ export const catalogSearchQuerySchema = z.object({
     cityId: z.string().optional(),
     categorySlug: z.string().trim().min(1).max(120).optional(),
     subcategorySlug: z.string().trim().min(1).max(120).optional(),
+    page: z.coerce.number().int().min(1).default(1),
+    pageSize: z.coerce.number().int().min(1).max(100).default(20),
     limit: z.coerce.number().int().min(1).max(50).default(12)
   })
 });
@@ -174,12 +212,26 @@ export const createServiceSchema = z.object({
     emergencyAvailable: z.boolean().optional(),
     homeVisit: z.boolean().optional(),
     requiresSiteVisit: z.boolean().optional(),
+    bookingEnabled: z.boolean().optional(),
+    publicationStatus: z.enum(["DRAFT", "PUBLISHED", "ARCHIVED"]).optional(),
+    publishStartsAt: z.string().datetime().nullable().optional(),
+    publishEndsAt: z.string().datetime().nullable().optional(),
+    serviceAreaIds: z.array(id).max(500).refine(
+      (ids) => new Set(ids).size === ids.length,
+      "Service areas cannot be selected more than once"
+    ).optional(),
+    priceType: z.enum(["FIXED", "FROM", "QUOTE"]).optional(),
+    ctaLabel: z.string().trim().min(2).max(40).optional(),
+    warrantyText: z.string().max(1000).nullable().optional(),
+    requirements: z.array(z.string().trim().min(1).max(300)).max(30).optional(),
     isActive: z.boolean().optional(),
     featured: z.boolean().optional(),
     popular: z.boolean().optional(),
     rating: z.number().min(0).max(5).optional(),
     reviewCount: z.number().int().min(0).optional(),
     cancellationPolicy: z.string().max(2000).optional(),
+    inclusions: z.array(z.string().trim().min(1).max(300)).max(50).optional(),
+    exclusions: z.array(z.string().trim().min(1).max(300)).max(50).optional(),
     seoTitle: z.string().max(160).optional(),
     seoDescription: z.string().max(300).optional(),
     seoKeywords: z.string().max(500).optional(),
@@ -189,7 +241,13 @@ export const createServiceSchema = z.object({
     images: z.array(imageSchema).optional(),
     requiredSkills: z.array(requirementSchema).optional(),
     requiredTools: z.array(requirementSchema).optional(),
-    requiredDocuments: z.array(requirementSchema).optional()
+    requiredDocuments: z.array(requirementSchema).optional(),
+    variants: z.array(serviceVariantSchema).max(30).refine(uniqueOptionNames, {
+      message: "Variant names must be unique"
+    }).optional(),
+    addons: z.array(serviceAddonSchema).max(50).refine(uniqueOptionNames, {
+      message: "Add-on names must be unique"
+    }).optional()
   })
 });
 

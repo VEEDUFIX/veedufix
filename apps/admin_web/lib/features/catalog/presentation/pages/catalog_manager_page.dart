@@ -9,6 +9,130 @@ import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:marketplace_shared/marketplace_shared.dart';
 
+Widget _buildPublicationControls({
+  required BuildContext context,
+  required _CatalogSnapshot snapshot,
+  required String publicationStatus,
+  required DateTime? publishStartsAt,
+  required DateTime? publishEndsAt,
+  required Set<String> serviceAreaIds,
+  required ValueChanged<String> onPublicationStatusChanged,
+  required ValueChanged<DateTime?> onPublishStartsAtChanged,
+  required ValueChanged<DateTime?> onPublishEndsAtChanged,
+  required ValueChanged<String> onServiceAreaToggled,
+  String? dateError,
+}) {
+  Future<void> pickDate({required bool isStart}) async {
+    final current = isStart ? publishStartsAt : publishEndsAt;
+    final selected = await showDatePicker(
+      context: context,
+      initialDate: current ?? DateTime.now(),
+      firstDate: DateTime(2000),
+      lastDate: DateTime(2100),
+    );
+    if (selected == null) return;
+    if (isStart) {
+      onPublishStartsAtChanged(
+        DateTime(selected.year, selected.month, selected.day),
+      );
+    } else {
+      onPublishEndsAtChanged(
+        DateTime(selected.year, selected.month, selected.day, 23, 59, 59, 999),
+      );
+    }
+  }
+
+  String dateLabel(String label, DateTime? value) => value == null
+      ? label
+      : '$label · ${MaterialLocalizations.of(context).formatMediumDate(value)}';
+
+  return Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      const SizedBox(height: 20),
+      Text('Publication & availability',
+          style: Theme.of(context).textTheme.titleSmall),
+      DropdownButtonFormField<String>(
+        initialValue: publicationStatus,
+        decoration: const InputDecoration(labelText: 'Publication status'),
+        items: const [
+          DropdownMenuItem(value: 'DRAFT', child: Text('Draft')),
+          DropdownMenuItem(value: 'PUBLISHED', child: Text('Published')),
+          DropdownMenuItem(value: 'ARCHIVED', child: Text('Archived')),
+        ],
+        onChanged: (value) {
+          if (value != null) onPublicationStatusChanged(value);
+        },
+      ),
+      const SizedBox(height: 8),
+      Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        children: [
+          OutlinedButton.icon(
+            onPressed: () => pickDate(isStart: true),
+            icon: const Icon(Icons.event_available_outlined),
+            label: Text(dateLabel('Starts', publishStartsAt)),
+          ),
+          if (publishStartsAt != null)
+            IconButton(
+              tooltip: 'Clear start date',
+              onPressed: () => onPublishStartsAtChanged(null),
+              icon: const Icon(Icons.close),
+            ),
+          OutlinedButton.icon(
+            onPressed: () => pickDate(isStart: false),
+            icon: const Icon(Icons.event_busy_outlined),
+            label: Text(dateLabel('Ends', publishEndsAt)),
+          ),
+          if (publishEndsAt != null)
+            IconButton(
+              tooltip: 'Clear end date',
+              onPressed: () => onPublishEndsAtChanged(null),
+              icon: const Icon(Icons.close),
+            ),
+        ],
+      ),
+      if (dateError != null)
+        Padding(
+          padding: const EdgeInsets.only(top: 4),
+          child: Text(
+            dateError,
+            style: TextStyle(color: Theme.of(context).colorScheme.error),
+          ),
+        ),
+      const SizedBox(height: 12),
+      Text('Service areas', style: Theme.of(context).textTheme.titleSmall),
+      const Text('Leave all areas unselected to make this service global.'),
+      if (snapshot.serviceAreas.isEmpty)
+        const Padding(
+          padding: EdgeInsets.symmetric(vertical: 8),
+          child: Text('No service areas are configured yet.'),
+        )
+      else
+        Wrap(
+          spacing: 8,
+          runSpacing: 4,
+          children: snapshot.serviceAreas
+              .where(
+                  (area) => area.isActive || serviceAreaIds.contains(area.id))
+              .map((area) {
+            final selected = serviceAreaIds.contains(area.id);
+            final city = area.cityName.isEmpty ? '' : ' · ${area.cityName}';
+            final inactive = area.isActive ? '' : ' (inactive)';
+            return FilterChip(
+              label: Text('${area.name}$city$inactive'),
+              selected: selected,
+              onSelected: area.isActive || selected
+                  ? (_) => onServiceAreaToggled(area.id)
+                  : null,
+            );
+          }).toList(growable: false),
+        ),
+    ],
+  );
+}
+
 class CatalogManagerPage extends ConsumerStatefulWidget {
   const CatalogManagerPage({super.key, this.showFeaturedOnly = false});
 
@@ -108,8 +232,10 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
     }
   }
 
-  Future<void> _editSubcategory(_CatalogSnapshot snapshot, _AdminSubcategory subcategory) async {
-    final payload = await _showSubcategoryEditor(snapshot, existing: subcategory);
+  Future<void> _editSubcategory(
+      _CatalogSnapshot snapshot, _AdminSubcategory subcategory) async {
+    final payload =
+        await _showSubcategoryEditor(snapshot, existing: subcategory);
     if (payload == null) return;
     try {
       await _api.updateSubcategory(subcategory.id, payload);
@@ -154,7 +280,8 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
     }
   }
 
-  Future<void> _editService(_CatalogSnapshot snapshot, _AdminService service) async {
+  Future<void> _editService(
+      _CatalogSnapshot snapshot, _AdminService service) async {
     final payload = await _showServiceEditor(snapshot, existing: service);
     if (payload == null) return;
     try {
@@ -215,13 +342,15 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
         isActive: isActive,
       );
       await _reload();
-      await _showMessage('${result['updatedCount'] ?? itemIds.length} $itemLabel ${isActive ? 'enabled' : 'disabled'}');
+      await _showMessage(
+          '${result['updatedCount'] ?? itemIds.length} $itemLabel ${isActive ? 'enabled' : 'disabled'}');
     } catch (error) {
       await _showMessage('Unable to $action $itemLabel: $error');
     }
   }
 
-  Future<void> _bulkUpdateCategories(Iterable<_AdminCategory> categories, {required bool isActive}) =>
+  Future<void> _bulkUpdateCategories(Iterable<_AdminCategory> categories,
+          {required bool isActive}) =>
       _confirmBulkStatus(
         entityType: 'categories',
         itemLabel: 'categories',
@@ -229,7 +358,9 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
         isActive: isActive,
       );
 
-  Future<void> _bulkUpdateSubcategories(Iterable<_AdminSubcategory> subcategories, {required bool isActive}) =>
+  Future<void> _bulkUpdateSubcategories(
+          Iterable<_AdminSubcategory> subcategories,
+          {required bool isActive}) =>
       _confirmBulkStatus(
         entityType: 'subcategories',
         itemLabel: 'subcategories',
@@ -237,7 +368,8 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
         isActive: isActive,
       );
 
-  Future<void> _bulkUpdateServices(Iterable<_AdminService> services, {required bool isActive}) =>
+  Future<void> _bulkUpdateServices(Iterable<_AdminService> services,
+          {required bool isActive}) =>
       _confirmBulkStatus(
         entityType: 'services',
         itemLabel: 'services',
@@ -256,43 +388,33 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
               title: const Text('Reorder categories'),
               content: SizedBox(
                 width: 560,
-                child: ListView.separated(
-                  shrinkWrap: true,
+                height: (ordered.length * 72).clamp(144, 480).toDouble(),
+                child: ReorderableListView.builder(
+                  buildDefaultDragHandles: false,
                   itemCount: ordered.length,
-                  separatorBuilder: (_, __) => const SizedBox(height: 8),
+                  onReorderItem: (oldIndex, newIndex) => setState(() {
+                    final item = ordered.removeAt(oldIndex);
+                    ordered.insert(newIndex, item);
+                  }),
                   itemBuilder: (context, index) {
                     final category = ordered[index];
                     return ListTile(
+                      key: ValueKey(category.id),
                       tileColor: const Color(0xFFF9FAFB),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12)),
                       leading: CircleAvatar(
                         backgroundColor: const Color(0xFFE5E7EB),
                         child: Text('${index + 1}'),
                       ),
                       title: Text(category.name),
                       subtitle: Text(category.slug),
-                      trailing: Wrap(
-                        spacing: 4,
-                        children: [
-                          IconButton(
-                            onPressed: index == 0
-                                ? null
-                                : () => setState(() {
-                                    final item = ordered.removeAt(index);
-                                    ordered.insert(index - 1, item);
-                                  }),
-                            icon: const Icon(Icons.arrow_upward_rounded),
-                          ),
-                          IconButton(
-                            onPressed: index == ordered.length - 1
-                                ? null
-                                : () => setState(() {
-                                    final item = ordered.removeAt(index);
-                                    ordered.insert(index + 1, item);
-                                  }),
-                            icon: const Icon(Icons.arrow_downward_rounded),
-                          ),
-                        ],
+                      trailing: ReorderableDragStartListener(
+                        index: index,
+                        child: const Padding(
+                          padding: EdgeInsets.all(8),
+                          child: Icon(Icons.drag_handle_rounded),
+                        ),
                       ),
                     );
                   },
@@ -319,7 +441,8 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
     }
 
     try {
-      await _api.reorderCategories(confirmed.map((category) => category.id).toList(growable: false));
+      await _api.reorderCategories(
+          confirmed.map((category) => category.id).toList(growable: false));
       await _reload();
       await _showMessage('Category order updated');
     } catch (error) {
@@ -329,16 +452,21 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
 
   Future<void> _reorderSubcategories(_CatalogSnapshot snapshot) async {
     if (snapshot.categories.isEmpty) return;
-    final selectedCategoryId = ValueNotifier<String>(snapshot.categories.first.id);
-    final ordered = ValueNotifier<List<_AdminSubcategory>>(snapshot.subcategoriesForCategory(snapshot.categories.first.id).toList(growable: true));
+    final selectedCategoryId =
+        ValueNotifier<String>(snapshot.categories.first.id);
+    final ordered = ValueNotifier<List<_AdminSubcategory>>(snapshot
+        .subcategoriesForCategory(snapshot.categories.first.id)
+        .toList(growable: true));
 
     final confirmed = await showDialog<_ReorderSelection<_AdminSubcategory>>(
       context: context,
       builder: (dialogContext) {
         return StatefulBuilder(
           builder: (context, setState) {
-            final category = snapshot.categoryById(selectedCategoryId.value) ?? snapshot.categories.first;
-            final categorySubcategories = snapshot.subcategoriesForCategory(category.id);
+            final category = snapshot.categoryById(selectedCategoryId.value) ??
+                snapshot.categories.first;
+            final categorySubcategories =
+                snapshot.subcategoriesForCategory(category.id);
             if (ordered.value.length != categorySubcategories.length) {
               ordered.value = categorySubcategories.toList(growable: true);
             }
@@ -364,7 +492,9 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
                         if (value == null) return;
                         setState(() {
                           selectedCategoryId.value = value;
-                          ordered.value = snapshot.subcategoriesForCategory(value).toList(growable: true);
+                          ordered.value = snapshot
+                              .subcategoriesForCategory(value)
+                              .toList(growable: true);
                         });
                       },
                       decoration: const InputDecoration(
@@ -375,43 +505,34 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
                     const SizedBox(height: 16),
                     SizedBox(
                       height: 420,
-                      child: ListView.separated(
-                        shrinkWrap: true,
+                      child: ReorderableListView.builder(
+                        buildDefaultDragHandles: false,
                         itemCount: ordered.value.length,
-                        separatorBuilder: (_, __) => const SizedBox(height: 8),
+                        onReorderItem: (oldIndex, newIndex) => setState(() {
+                          final items = ordered.value;
+                          final moved = items.removeAt(oldIndex);
+                          items.insert(newIndex, moved);
+                          ordered.value = [...items];
+                        }),
                         itemBuilder: (context, index) {
                           final item = ordered.value[index];
                           return ListTile(
+                            key: ValueKey(item.id),
                             tileColor: const Color(0xFFF9FAFB),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12)),
                             leading: CircleAvatar(
                               backgroundColor: const Color(0xFFE5E7EB),
                               child: Text('${index + 1}'),
                             ),
                             title: Text(item.name),
                             subtitle: Text('${item.serviceCount} services'),
-                            trailing: Wrap(
-                              spacing: 4,
-                              children: [
-                                IconButton(
-                                  onPressed: index == 0
-                                      ? null
-                                      : () => setState(() {
-                                          final moved = ordered.value.removeAt(index);
-                                          ordered.value = [...ordered.value]..insert(index - 1, moved);
-                                        }),
-                                  icon: const Icon(Icons.arrow_upward_rounded),
-                                ),
-                                IconButton(
-                                  onPressed: index == ordered.value.length - 1
-                                      ? null
-                                      : () => setState(() {
-                                          final moved = ordered.value.removeAt(index);
-                                          ordered.value = [...ordered.value]..insert(index + 1, moved);
-                                        }),
-                                  icon: const Icon(Icons.arrow_downward_rounded),
-                                ),
-                              ],
+                            trailing: ReorderableDragStartListener(
+                              index: index,
+                              child: const Padding(
+                                padding: EdgeInsets.all(8),
+                                child: Icon(Icons.drag_handle_rounded),
+                              ),
                             ),
                           );
                         },
@@ -427,7 +548,9 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
                 ),
                 FilledButton(
                   onPressed: () => Navigator.of(dialogContext).pop(
-                    _ReorderSelection<_AdminSubcategory>(parentId: selectedCategoryId.value, items: ordered.value),
+                    _ReorderSelection<_AdminSubcategory>(
+                        parentId: selectedCategoryId.value,
+                        items: ordered.value),
                   ),
                   child: const Text('Save order'),
                 ),
@@ -441,7 +564,8 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
     if (confirmed == null) return;
 
     try {
-      await _api.reorderSubcategories(confirmed.parentId, confirmed.items.map((item) => item.id).toList(growable: false));
+      await _api.reorderSubcategories(confirmed.parentId,
+          confirmed.items.map((item) => item.id).toList(growable: false));
       await _reload();
       await _showMessage('Subcategory order updated');
     } catch (error) {
@@ -451,15 +575,20 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
 
   Future<void> _reorderServices(_CatalogSnapshot snapshot) async {
     if (snapshot.subcategories.isEmpty) return;
-    final selectedSubcategoryId = ValueNotifier<String>(snapshot.subcategories.first.id);
-    final ordered = ValueNotifier<List<_AdminService>>(snapshot.servicesForSubcategory(snapshot.subcategories.first.id).toList(growable: true));
+    final selectedSubcategoryId =
+        ValueNotifier<String>(snapshot.subcategories.first.id);
+    final ordered = ValueNotifier<List<_AdminService>>(snapshot
+        .servicesForSubcategory(snapshot.subcategories.first.id)
+        .toList(growable: true));
 
     final confirmed = await showDialog<_ReorderSelection<_AdminService>>(
       context: context,
       builder: (dialogContext) {
         return StatefulBuilder(
           builder: (context, setState) {
-            final subcategory = snapshot.subcategoryById(selectedSubcategoryId.value) ?? snapshot.subcategories.first;
+            final subcategory =
+                snapshot.subcategoryById(selectedSubcategoryId.value) ??
+                    snapshot.subcategories.first;
             final services = snapshot.servicesForSubcategory(subcategory.id);
             if (ordered.value.length != services.length) {
               ordered.value = services.toList(growable: true);
@@ -478,7 +607,8 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
                           .map(
                             (item) => DropdownMenuItem(
                               value: item.id,
-                              child: Text('${snapshot.categoryById(item.categoryId)?.name ?? 'Category'} / ${item.name}'),
+                              child: Text(
+                                  '${snapshot.categoryById(item.categoryId)?.name ?? 'Category'} / ${item.name}'),
                             ),
                           )
                           .toList(growable: false),
@@ -486,7 +616,9 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
                         if (value == null) return;
                         setState(() {
                           selectedSubcategoryId.value = value;
-                          ordered.value = snapshot.servicesForSubcategory(value).toList(growable: true);
+                          ordered.value = snapshot
+                              .servicesForSubcategory(value)
+                              .toList(growable: true);
                         });
                       },
                       decoration: const InputDecoration(
@@ -497,43 +629,35 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
                     const SizedBox(height: 16),
                     SizedBox(
                       height: 420,
-                      child: ListView.separated(
-                        shrinkWrap: true,
+                      child: ReorderableListView.builder(
+                        buildDefaultDragHandles: false,
                         itemCount: ordered.value.length,
-                        separatorBuilder: (_, __) => const SizedBox(height: 8),
+                        onReorderItem: (oldIndex, newIndex) => setState(() {
+                          final items = ordered.value;
+                          final moved = items.removeAt(oldIndex);
+                          items.insert(newIndex, moved);
+                          ordered.value = [...items];
+                        }),
                         itemBuilder: (context, index) {
                           final item = ordered.value[index];
                           return ListTile(
+                            key: ValueKey(item.id),
                             tileColor: const Color(0xFFF9FAFB),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12)),
                             leading: CircleAvatar(
                               backgroundColor: const Color(0xFFE5E7EB),
                               child: Text('${index + 1}'),
                             ),
                             title: Text(item.name),
-                            subtitle: Text('₹${item.startingPrice.toStringAsFixed(0)} - ${item.estimatedDurationMins} mins'),
-                            trailing: Wrap(
-                              spacing: 4,
-                              children: [
-                                IconButton(
-                                  onPressed: index == 0
-                                      ? null
-                                      : () => setState(() {
-                                          final moved = ordered.value.removeAt(index);
-                                          ordered.value = [...ordered.value]..insert(index - 1, moved);
-                                        }),
-                                  icon: const Icon(Icons.arrow_upward_rounded),
-                                ),
-                                IconButton(
-                                  onPressed: index == ordered.value.length - 1
-                                      ? null
-                                      : () => setState(() {
-                                          final moved = ordered.value.removeAt(index);
-                                          ordered.value = [...ordered.value]..insert(index + 1, moved);
-                                        }),
-                                  icon: const Icon(Icons.arrow_downward_rounded),
-                                ),
-                              ],
+                            subtitle: Text(
+                                '₹${item.startingPrice.toStringAsFixed(0)} - ${item.estimatedDurationMins} mins'),
+                            trailing: ReorderableDragStartListener(
+                              index: index,
+                              child: const Padding(
+                                padding: EdgeInsets.all(8),
+                                child: Icon(Icons.drag_handle_rounded),
+                              ),
                             ),
                           );
                         },
@@ -549,7 +673,9 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
                 ),
                 FilledButton(
                   onPressed: () => Navigator.of(dialogContext).pop(
-                    _ReorderSelection<_AdminService>(parentId: selectedSubcategoryId.value, items: ordered.value),
+                    _ReorderSelection<_AdminService>(
+                        parentId: selectedSubcategoryId.value,
+                        items: ordered.value),
                   ),
                   child: const Text('Save order'),
                 ),
@@ -563,7 +689,8 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
     if (confirmed == null) return;
 
     try {
-      await _api.reorderServices(confirmed.parentId, confirmed.items.map((item) => item.id).toList(growable: false));
+      await _api.reorderServices(confirmed.parentId,
+          confirmed.items.map((item) => item.id).toList(growable: false));
       await _reload();
       await _showMessage('Service order updated');
     } catch (error) {
@@ -595,7 +722,8 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
             content: SizedBox(
               width: 720,
               child: SingleChildScrollView(
-                child: SelectableText(const JsonEncoder.withIndent('  ').convert(exportJson)),
+                child: SelectableText(
+                    const JsonEncoder.withIndent('  ').convert(exportJson)),
               ),
             ),
             actions: [
@@ -613,7 +741,8 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
   }
 
   Future<void> _importCatalog() async {
-    final controller = TextEditingController(text: const JsonEncoder.withIndent('  ').convert({
+    final controller = TextEditingController(
+        text: const JsonEncoder.withIndent('  ').convert({
       'categories': <Map<String, dynamic>>[],
     }));
     final imported = await showDialog<bool>(
@@ -700,12 +829,18 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
     }
   }
 
-  Future<Map<String, dynamic>?> _showCategoryEditor({_AdminCategory? existing}) {
+  Future<Map<String, dynamic>?> _showCategoryEditor(
+      {_AdminCategory? existing}) {
     final formKey = GlobalKey<FormState>();
     final nameController = TextEditingController(text: existing?.name ?? '');
     final slugController = TextEditingController(text: existing?.slug ?? '');
-    final descriptionController = TextEditingController(text: existing?.description ?? '');
-    final sortOrderController = TextEditingController(text: (existing?.sortOrder ?? 0).toString());
+    final descriptionController =
+        TextEditingController(text: existing?.description ?? '');
+    final iconUrlController =
+        TextEditingController(text: existing?.iconUrl ?? '');
+    final sortOrderController =
+        TextEditingController(text: (existing?.sortOrder ?? 0).toString());
+    bool isActive = existing?.isActive ?? true;
     bool featured = existing?.featured ?? false;
     bool popular = existing?.popular ?? false;
 
@@ -715,7 +850,8 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
         return StatefulBuilder(
           builder: (context, setState) {
             return AlertDialog(
-              title: Text(existing == null ? 'Create category' : 'Edit category'),
+              title:
+                  Text(existing == null ? 'Create category' : 'Edit category'),
               content: Form(
                 key: formKey,
                 child: SingleChildScrollView(
@@ -725,7 +861,9 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
                       TextFormField(
                         controller: nameController,
                         decoration: const InputDecoration(labelText: 'Name'),
-                        validator: (value) => (value ?? '').trim().length < 2 ? 'Enter a category name' : null,
+                        validator: (value) => (value ?? '').trim().length < 2
+                            ? 'Enter a category name'
+                            : null,
                       ),
                       TextFormField(
                         controller: slugController,
@@ -733,13 +871,28 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
                       ),
                       TextFormField(
                         controller: descriptionController,
-                        decoration: const InputDecoration(labelText: 'Description'),
+                        decoration:
+                            const InputDecoration(labelText: 'Description'),
                         maxLines: 3,
                       ),
                       TextFormField(
+                        controller: iconUrlController,
+                        decoration: const InputDecoration(
+                          labelText: 'Category image URL',
+                          hintText: 'https://…',
+                        ),
+                        keyboardType: TextInputType.url,
+                      ),
+                      TextFormField(
                         controller: sortOrderController,
-                        decoration: const InputDecoration(labelText: 'Sort order'),
+                        decoration:
+                            const InputDecoration(labelText: 'Sort order'),
                         keyboardType: TextInputType.number,
+                      ),
+                      SwitchListTile(
+                        value: isActive,
+                        onChanged: (value) => setState(() => isActive = value),
+                        title: const Text('Active'),
                       ),
                       SwitchListTile(
                         value: featured,
@@ -765,9 +918,18 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
                     if (!formKey.currentState!.validate()) return;
                     Navigator.of(dialogContext).pop({
                       'name': nameController.text.trim(),
-                      'slug': slugController.text.trim().isEmpty ? _slugify(nameController.text) : slugController.text.trim(),
-                      'description': descriptionController.text.trim().isEmpty ? null : descriptionController.text.trim(),
-                      'sortOrder': int.tryParse(sortOrderController.text.trim()) ?? 0,
+                      'slug': slugController.text.trim().isEmpty
+                          ? _slugify(nameController.text)
+                          : slugController.text.trim(),
+                      'description': descriptionController.text.trim().isEmpty
+                          ? null
+                          : descriptionController.text.trim(),
+                      'iconUrl': iconUrlController.text.trim().isEmpty
+                          ? null
+                          : iconUrlController.text.trim(),
+                      'sortOrder':
+                          int.tryParse(sortOrderController.text.trim()) ?? 0,
+                      'isActive': isActive,
                       'featured': featured,
                       'popular': popular,
                     });
@@ -783,6 +945,7 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
       nameController.dispose();
       slugController.dispose();
       descriptionController.dispose();
+      iconUrlController.dispose();
       sortOrderController.dispose();
     });
   }
@@ -797,9 +960,15 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
     );
     final nameController = TextEditingController(text: existing?.name ?? '');
     final slugController = TextEditingController(text: existing?.slug ?? '');
-    final descriptionController = TextEditingController(text: existing?.description ?? '');
-    final basePriceController = TextEditingController(text: (existing?.basePrice ?? 0).toStringAsFixed(0));
-    final sortOrderController = TextEditingController(text: (existing?.sortOrder ?? 0).toString());
+    final descriptionController =
+        TextEditingController(text: existing?.description ?? '');
+    final iconUrlController =
+        TextEditingController(text: existing?.iconUrl ?? '');
+    final basePriceController = TextEditingController(
+        text: (existing?.basePrice ?? 0).toStringAsFixed(0));
+    final sortOrderController =
+        TextEditingController(text: (existing?.sortOrder ?? 0).toString());
+    bool isActive = existing?.isActive ?? true;
 
     return showDialog<Map<String, dynamic>>(
       context: context,
@@ -807,7 +976,8 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
         return StatefulBuilder(
           builder: (context, setState) {
             return AlertDialog(
-              title: Text(existing == null ? 'Create subcategory' : 'Edit subcategory'),
+              title: Text(
+                  existing == null ? 'Create subcategory' : 'Edit subcategory'),
               content: Form(
                 key: formKey,
                 child: SingleChildScrollView(
@@ -815,8 +985,11 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       DropdownButtonFormField<String>(
-                        initialValue: categoryIdController.value.isEmpty ? null : categoryIdController.value,
-                        decoration: const InputDecoration(labelText: 'Category'),
+                        initialValue: categoryIdController.value.isEmpty
+                            ? null
+                            : categoryIdController.value,
+                        decoration:
+                            const InputDecoration(labelText: 'Category'),
                         items: snapshot.categories
                             .map(
                               (category) => DropdownMenuItem(
@@ -825,13 +998,17 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
                               ),
                             )
                             .toList(growable: false),
-                        onChanged: (value) => setState(() => categoryIdController.value = value ?? ''),
-                        validator: (value) => (value ?? '').isEmpty ? 'Select a category' : null,
+                        onChanged: (value) => setState(
+                            () => categoryIdController.value = value ?? ''),
+                        validator: (value) =>
+                            (value ?? '').isEmpty ? 'Select a category' : null,
                       ),
                       TextFormField(
                         controller: nameController,
                         decoration: const InputDecoration(labelText: 'Name'),
-                        validator: (value) => (value ?? '').trim().length < 2 ? 'Enter a subcategory name' : null,
+                        validator: (value) => (value ?? '').trim().length < 2
+                            ? 'Enter a subcategory name'
+                            : null,
                       ),
                       TextFormField(
                         controller: slugController,
@@ -839,18 +1016,35 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
                       ),
                       TextFormField(
                         controller: descriptionController,
-                        decoration: const InputDecoration(labelText: 'Description'),
+                        decoration:
+                            const InputDecoration(labelText: 'Description'),
                         maxLines: 3,
                       ),
                       TextFormField(
+                        controller: iconUrlController,
+                        decoration: const InputDecoration(
+                          labelText: 'Group image URL',
+                          hintText: 'https://…',
+                        ),
+                        keyboardType: TextInputType.url,
+                      ),
+                      TextFormField(
                         controller: basePriceController,
-                        decoration: const InputDecoration(labelText: 'Base price'),
+                        decoration:
+                            const InputDecoration(labelText: 'Base price'),
                         keyboardType: TextInputType.number,
                       ),
                       TextFormField(
                         controller: sortOrderController,
-                        decoration: const InputDecoration(labelText: 'Sort order'),
+                        decoration:
+                            const InputDecoration(labelText: 'Sort order'),
                         keyboardType: TextInputType.number,
+                      ),
+                      SwitchListTile(
+                        contentPadding: EdgeInsets.zero,
+                        value: isActive,
+                        onChanged: (value) => setState(() => isActive = value),
+                        title: const Text('Active'),
                       ),
                     ],
                   ),
@@ -867,10 +1061,20 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
                     Navigator.of(dialogContext).pop({
                       'categoryId': categoryIdController.value,
                       'name': nameController.text.trim(),
-                      'slug': slugController.text.trim().isEmpty ? _slugify(nameController.text) : slugController.text.trim(),
-                      'description': descriptionController.text.trim().isEmpty ? null : descriptionController.text.trim(),
-                      'basePrice': double.tryParse(basePriceController.text.trim()) ?? 0,
-                      'sortOrder': int.tryParse(sortOrderController.text.trim()) ?? 0,
+                      'slug': slugController.text.trim().isEmpty
+                          ? _slugify(nameController.text)
+                          : slugController.text.trim(),
+                      'description': descriptionController.text.trim().isEmpty
+                          ? null
+                          : descriptionController.text.trim(),
+                      'iconUrl': iconUrlController.text.trim().isEmpty
+                          ? null
+                          : iconUrlController.text.trim(),
+                      'basePrice':
+                          double.tryParse(basePriceController.text.trim()) ?? 0,
+                      'sortOrder':
+                          int.tryParse(sortOrderController.text.trim()) ?? 0,
+                      'isActive': isActive,
                     });
                   },
                   child: const Text('Save'),
@@ -885,6 +1089,7 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
       nameController.dispose();
       slugController.dispose();
       descriptionController.dispose();
+      iconUrlController.dispose();
       basePriceController.dispose();
       sortOrderController.dispose();
     });
@@ -899,39 +1104,93 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
       existing?.categoryId ?? snapshot.categories.firstOrNull?.id ?? '',
     );
     final selectedSubcategoryId = ValueNotifier<String>(
-      existing?.subcategoryId ?? snapshot.subcategoriesForCategory(existing?.categoryId ?? snapshot.categories.firstOrNull?.id ?? '').firstOrNull?.id ?? '',
+      existing?.subcategoryId ??
+          snapshot
+              .subcategoriesForCategory(existing?.categoryId ??
+                  snapshot.categories.firstOrNull?.id ??
+                  '')
+              .firstOrNull
+              ?.id ??
+          '',
     );
     final nameController = TextEditingController(text: existing?.name ?? '');
     final slugController = TextEditingController(text: existing?.slug ?? '');
     final codeController = TextEditingController(text: existing?.code ?? '');
-    final descriptionController = TextEditingController(text: existing?.description ?? '');
-    final shortDescriptionController = TextEditingController(text: existing?.shortDescription ?? '');
-    final startingPriceController = TextEditingController(text: (existing?.startingPrice ?? 0).toStringAsFixed(0));
-    final gstRateController = TextEditingController(text: (existing?.gstRate ?? 18).toStringAsFixed(2));
-    final sacCodeController = TextEditingController(text: existing?.sacCode ?? 'PENDING');
-    final durationController = TextEditingController(text: (existing?.estimatedDurationMins ?? 0).toString());
-    final warrantyController = TextEditingController(text: (existing?.warrantyDays ?? 0).toString());
+    final descriptionController =
+        TextEditingController(text: existing?.description ?? '');
+    final shortDescriptionController =
+        TextEditingController(text: existing?.shortDescription ?? '');
+    final inclusionsController =
+        TextEditingController(text: existing?.inclusions.join('\n') ?? '');
+    final exclusionsController =
+        TextEditingController(text: existing?.exclusions.join('\n') ?? '');
+    final requiredSkillsController =
+        TextEditingController(text: existing?.requiredSkills.join('\n') ?? '');
+    final requiredToolsController =
+        TextEditingController(text: existing?.requiredTools.join('\n') ?? '');
+    final requiredDocumentsController = TextEditingController(
+        text: existing?.requiredDocuments.join('\n') ?? '');
+    final startingPriceController = TextEditingController(
+        text: (existing?.startingPrice ?? 0).toStringAsFixed(0));
+    final gstRateController = TextEditingController(
+        text: (existing?.gstRate ?? 18).toStringAsFixed(2));
+    final sacCodeController =
+        TextEditingController(text: existing?.sacCode ?? 'PENDING');
+    final durationController = TextEditingController(
+        text: (existing?.estimatedDurationMins ?? 0).toString());
+    final warrantyController =
+        TextEditingController(text: (existing?.warrantyDays ?? 0).toString());
     final iconController = TextEditingController(text: existing?.iconUrl ?? '');
-    final seoTitleController = TextEditingController(text: existing?.seoTitle ?? '');
-    final seoDescriptionController = TextEditingController(text: existing?.seoDescription ?? '');
-    final seoKeywordsController = TextEditingController(text: existing?.seoKeywords ?? '');
-    final cancellationPolicyController = TextEditingController(text: existing?.cancellationPolicy ?? '');
-    final ratingController = TextEditingController(text: existing == null ? '0' : existing.rating.toStringAsFixed(2));
-    final reviewCountController = TextEditingController(text: existing == null ? '0' : existing.reviewCount.toString());
+    final seoTitleController =
+        TextEditingController(text: existing?.seoTitle ?? '');
+    final seoDescriptionController =
+        TextEditingController(text: existing?.seoDescription ?? '');
+    final seoKeywordsController =
+        TextEditingController(text: existing?.seoKeywords ?? '');
+    final cancellationPolicyController =
+        TextEditingController(text: existing?.cancellationPolicy ?? '');
+    final warrantyTextController =
+        TextEditingController(text: existing?.warrantyText ?? '');
+    final requirementsController =
+        TextEditingController(text: existing?.requirements.join('\n') ?? '');
+    final variantsController = TextEditingController(
+      text: _formatServiceOptions(existing?.variants ?? const []),
+    );
+    final addonsController = TextEditingController(
+      text: _formatServiceOptions(existing?.addons ?? const []),
+    );
+    final ctaLabelController =
+        TextEditingController(text: existing?.ctaLabel ?? 'Book service');
+    final ratingController = TextEditingController(
+        text: existing == null ? '0' : existing.rating.toStringAsFixed(2));
+    final reviewCountController = TextEditingController(
+        text: existing == null ? '0' : existing.reviewCount.toString());
     bool featured = existing?.featured ?? false;
     bool popular = existing?.popular ?? false;
     bool emergency = existing?.emergencyAvailable ?? false;
     bool homeVisit = existing?.homeVisit ?? true;
     bool requiresSiteVisit = existing?.requiresSiteVisit ?? false;
     bool isActive = existing?.isActive ?? true;
+    bool bookingEnabled = existing?.bookingEnabled ?? true;
+    bool gstApplicable = existing?.gstApplicable ?? true;
+    String priceType = existing?.priceType ?? 'FROM';
+    String publicationStatus = existing?.publicationStatus ?? 'DRAFT';
+    DateTime? publishStartsAt = existing?.publishStartsAt;
+    DateTime? publishEndsAt = existing?.publishEndsAt;
+    final serviceAreaIds = <String>{
+      ...(existing?.serviceAreaIds ?? const <String>[])
+    };
+    String? publicationDateError;
 
     return showDialog<Map<String, dynamic>>(
       context: context,
       builder: (dialogContext) {
         return StatefulBuilder(
           builder: (context, setState) {
-            final subcategories = snapshot.subcategoriesForCategory(selectedCategoryId.value);
-            if (selectedSubcategoryId.value.isEmpty && subcategories.isNotEmpty) {
+            final subcategories =
+                snapshot.subcategoriesForCategory(selectedCategoryId.value);
+            if (selectedSubcategoryId.value.isEmpty &&
+                subcategories.isNotEmpty) {
               selectedSubcategoryId.value = subcategories.first.id;
             }
             return AlertDialog(
@@ -943,8 +1202,11 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       DropdownButtonFormField<String>(
-                        initialValue: selectedCategoryId.value.isEmpty ? null : selectedCategoryId.value,
-                        decoration: const InputDecoration(labelText: 'Category'),
+                        initialValue: selectedCategoryId.value.isEmpty
+                            ? null
+                            : selectedCategoryId.value,
+                        decoration:
+                            const InputDecoration(labelText: 'Category'),
                         items: snapshot.categories
                             .map(
                               (category) => DropdownMenuItem(
@@ -956,15 +1218,22 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
                         onChanged: (value) {
                           setState(() {
                             selectedCategoryId.value = value ?? '';
-                            final nextSubcategories = snapshot.subcategoriesForCategory(selectedCategoryId.value);
-                            selectedSubcategoryId.value = nextSubcategories.firstOrNull?.id ?? '';
+                            final nextSubcategories =
+                                snapshot.subcategoriesForCategory(
+                                    selectedCategoryId.value);
+                            selectedSubcategoryId.value =
+                                nextSubcategories.firstOrNull?.id ?? '';
                           });
                         },
-                        validator: (value) => (value ?? '').isEmpty ? 'Select a category' : null,
+                        validator: (value) =>
+                            (value ?? '').isEmpty ? 'Select a category' : null,
                       ),
                       DropdownButtonFormField<String>(
-                        initialValue: selectedSubcategoryId.value.isEmpty ? null : selectedSubcategoryId.value,
-                        decoration: const InputDecoration(labelText: 'Subcategory'),
+                        initialValue: selectedSubcategoryId.value.isEmpty
+                            ? null
+                            : selectedSubcategoryId.value,
+                        decoration:
+                            const InputDecoration(labelText: 'Subcategory'),
                         items: subcategories
                             .map(
                               (subcategory) => DropdownMenuItem(
@@ -973,13 +1242,18 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
                               ),
                             )
                             .toList(growable: false),
-                        onChanged: (value) => setState(() => selectedSubcategoryId.value = value ?? ''),
-                        validator: (value) => (value ?? '').isEmpty ? 'Select a subcategory' : null,
+                        onChanged: (value) => setState(
+                            () => selectedSubcategoryId.value = value ?? ''),
+                        validator: (value) => (value ?? '').isEmpty
+                            ? 'Select a subcategory'
+                            : null,
                       ),
                       TextFormField(
                         controller: nameController,
                         decoration: const InputDecoration(labelText: 'Name'),
-                        validator: (value) => (value ?? '').trim().length < 2 ? 'Enter a service name' : null,
+                        validator: (value) => (value ?? '').trim().length < 2
+                            ? 'Enter a service name'
+                            : null,
                       ),
                       TextFormField(
                         controller: slugController,
@@ -991,68 +1265,208 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
                       ),
                       TextFormField(
                         controller: descriptionController,
-                        decoration: const InputDecoration(labelText: 'Description'),
+                        decoration:
+                            const InputDecoration(labelText: 'Description'),
                         maxLines: 3,
                       ),
                       TextFormField(
                         controller: shortDescriptionController,
-                        decoration: const InputDecoration(labelText: 'Short description'),
+                        decoration: const InputDecoration(
+                            labelText: 'Short description'),
                         maxLines: 2,
                       ),
                       TextFormField(
+                        controller: inclusionsController,
+                        decoration: const InputDecoration(
+                          labelText: 'What’s included',
+                          helperText: 'One item per line.',
+                        ),
+                        maxLines: 4,
+                      ),
+                      TextFormField(
+                        controller: exclusionsController,
+                        decoration: const InputDecoration(
+                          labelText: 'What’s not included',
+                          helperText: 'One item per line.',
+                        ),
+                        maxLines: 4,
+                      ),
+                      TextFormField(
+                        controller: requiredSkillsController,
+                        decoration: const InputDecoration(
+                          labelText: 'Required skills',
+                          helperText: 'One skill per line.',
+                        ),
+                        maxLines: 3,
+                      ),
+                      TextFormField(
+                        controller: requiredToolsController,
+                        decoration: const InputDecoration(
+                          labelText: 'Required tools',
+                          helperText: 'One tool per line.',
+                        ),
+                        maxLines: 3,
+                      ),
+                      TextFormField(
+                        controller: requiredDocumentsController,
+                        decoration: const InputDecoration(
+                          labelText: 'Required documents',
+                          helperText: 'One document per line.',
+                        ),
+                        maxLines: 3,
+                      ),
+                      TextFormField(
                         controller: startingPriceController,
-                        decoration: const InputDecoration(labelText: 'Starting price'),
+                        decoration:
+                            const InputDecoration(labelText: 'Starting price'),
                         keyboardType: TextInputType.number,
                       ),
                       TextFormField(
                         controller: gstRateController,
-                        decoration: const InputDecoration(labelText: 'GST rate (%)'),
+                        decoration:
+                            const InputDecoration(labelText: 'GST rate (%)'),
                         keyboardType: TextInputType.number,
+                      ),
+                      SwitchListTile(
+                        value: gstApplicable,
+                        onChanged: (value) =>
+                            setState(() => gstApplicable = value),
+                        title: const Text('GST applicable'),
                       ),
                       TextFormField(
                         controller: sacCodeController,
-                        decoration: const InputDecoration(labelText: 'SAC code'),
+                        decoration:
+                            const InputDecoration(labelText: 'SAC code'),
                       ),
                       TextFormField(
                         controller: durationController,
-                        decoration: const InputDecoration(labelText: 'Estimated duration (mins)'),
+                        decoration: const InputDecoration(
+                            labelText: 'Estimated duration (mins)'),
                         keyboardType: TextInputType.number,
                       ),
                       TextFormField(
                         controller: warrantyController,
-                        decoration: const InputDecoration(labelText: 'Warranty days'),
+                        decoration:
+                            const InputDecoration(labelText: 'Warranty days'),
                         keyboardType: TextInputType.number,
                       ),
                       TextFormField(
+                        controller: warrantyTextController,
+                        decoration: const InputDecoration(
+                            labelText: 'Warranty terms (optional)'),
+                        maxLines: 3,
+                      ),
+                      TextFormField(
+                        controller: requirementsController,
+                        decoration: const InputDecoration(
+                          labelText: 'Before booking requirements',
+                          helperText: 'One requirement per line.',
+                        ),
+                        maxLines: 4,
+                      ),
+                      TextFormField(
+                        controller: variantsController,
+                        decoration: const InputDecoration(
+                          labelText: 'Service options / variants',
+                          helperText:
+                              'One per line: name | price | duration minutes | active/inactive | description',
+                        ),
+                        maxLines: 4,
+                        validator: _validateServiceOptionLines,
+                      ),
+                      TextFormField(
+                        controller: addonsController,
+                        decoration: const InputDecoration(
+                          labelText: 'Optional add-ons',
+                          helperText:
+                              'One per line: name | price | duration minutes | active/inactive | description',
+                        ),
+                        maxLines: 4,
+                        validator: _validateServiceOptionLines,
+                      ),
+                      _buildPublicationControls(
+                        context: context,
+                        snapshot: snapshot,
+                        publicationStatus: publicationStatus,
+                        publishStartsAt: publishStartsAt,
+                        publishEndsAt: publishEndsAt,
+                        serviceAreaIds: serviceAreaIds,
+                        dateError: publicationDateError,
+                        onPublicationStatusChanged: (value) =>
+                            setState(() => publicationStatus = value),
+                        onPublishStartsAtChanged: (value) => setState(() {
+                          publishStartsAt = value;
+                          publicationDateError = null;
+                        }),
+                        onPublishEndsAtChanged: (value) => setState(() {
+                          publishEndsAt = value;
+                          publicationDateError = null;
+                        }),
+                        onServiceAreaToggled: (id) => setState(() {
+                          if (!serviceAreaIds.add(id)) {
+                            serviceAreaIds.remove(id);
+                          }
+                        }),
+                      ),
+                      DropdownButtonFormField<String>(
+                        initialValue: priceType,
+                        decoration: const InputDecoration(
+                            labelText: 'Customer price label'),
+                        items: const [
+                          DropdownMenuItem(
+                              value: 'FIXED', child: Text('Fixed price')),
+                          DropdownMenuItem(
+                              value: 'FROM', child: Text('Starting from')),
+                          DropdownMenuItem(
+                              value: 'QUOTE',
+                              child: Text('Price after assessment')),
+                        ],
+                        onChanged: (value) =>
+                            setState(() => priceType = value ?? 'FROM'),
+                      ),
+                      TextFormField(
+                        controller: ctaLabelController,
+                        decoration: const InputDecoration(
+                            labelText: 'Booking button text'),
+                        maxLength: 40,
+                      ),
+                      TextFormField(
                         controller: iconController,
-                        decoration: const InputDecoration(labelText: 'Icon URL'),
+                        decoration:
+                            const InputDecoration(labelText: 'Icon URL'),
                       ),
                       TextFormField(
                         controller: seoTitleController,
-                        decoration: const InputDecoration(labelText: 'SEO title'),
+                        decoration:
+                            const InputDecoration(labelText: 'SEO title'),
                       ),
                       TextFormField(
                         controller: seoDescriptionController,
-                        decoration: const InputDecoration(labelText: 'SEO description'),
+                        decoration:
+                            const InputDecoration(labelText: 'SEO description'),
                         maxLines: 2,
                       ),
                       TextFormField(
                         controller: seoKeywordsController,
-                        decoration: const InputDecoration(labelText: 'SEO keywords'),
+                        decoration:
+                            const InputDecoration(labelText: 'SEO keywords'),
                       ),
                       TextFormField(
                         controller: cancellationPolicyController,
-                        decoration: const InputDecoration(labelText: 'Cancellation policy'),
+                        decoration: const InputDecoration(
+                            labelText: 'Cancellation policy'),
                         maxLines: 3,
                       ),
                       TextFormField(
                         controller: ratingController,
                         decoration: const InputDecoration(labelText: 'Rating'),
-                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                        keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true),
                       ),
                       TextFormField(
                         controller: reviewCountController,
-                        decoration: const InputDecoration(labelText: 'Review count'),
+                        decoration:
+                            const InputDecoration(labelText: 'Review count'),
                         keyboardType: TextInputType.number,
                       ),
                       SwitchListTile(
@@ -1077,14 +1491,24 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
                       ),
                       SwitchListTile(
                         value: requiresSiteVisit,
-                        onChanged: (value) => setState(() => requiresSiteVisit = value),
+                        onChanged: (value) =>
+                            setState(() => requiresSiteVisit = value),
                         title: const Text('Requires site visit (Big Job)'),
-                        subtitle: const Text('Worker visits first to generate a custom quote'),
+                        subtitle: const Text(
+                            'Worker visits first to generate a custom quote'),
                       ),
                       SwitchListTile(
                         value: isActive,
                         onChanged: (value) => setState(() => isActive = value),
                         title: const Text('Active'),
+                      ),
+                      SwitchListTile(
+                        value: bookingEnabled,
+                        onChanged: (value) =>
+                            setState(() => bookingEnabled = value),
+                        title: const Text('Booking enabled'),
+                        subtitle: const Text(
+                            'Disable temporarily without hiding the service.'),
                       ),
                     ],
                   ),
@@ -1098,38 +1522,106 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
                 FilledButton(
                   onPressed: () {
                     if (!formKey.currentState!.validate()) return;
+                    if (publishStartsAt != null &&
+                        publishEndsAt != null &&
+                        !publishEndsAt!.isAfter(publishStartsAt!)) {
+                      setState(() => publicationDateError =
+                          'End date must be after the start date.');
+                      return;
+                    }
                     Navigator.of(dialogContext).pop({
                       'categoryId': selectedCategoryId.value,
                       'subcategoryId': selectedSubcategoryId.value,
                       'name': nameController.text.trim(),
-                      'slug': slugController.text.trim().isEmpty ? _slugify(nameController.text) : slugController.text.trim(),
-                      'code': codeController.text.trim().isEmpty ? null : codeController.text.trim(),
-                      'description': descriptionController.text.trim().isEmpty ? null : descriptionController.text.trim(),
-                      'shortDescription': shortDescriptionController.text.trim().isEmpty
+                      'slug': slugController.text.trim().isEmpty
+                          ? _slugify(nameController.text)
+                          : slugController.text.trim(),
+                      'code': codeController.text.trim().isEmpty
                           ? null
-                          : shortDescriptionController.text.trim(),
-                      'startingPrice': double.tryParse(startingPriceController.text.trim()) ?? 0,
-                      'gstRate': double.tryParse(gstRateController.text.trim()) ?? 18,
-                      'sacCode': sacCodeController.text.trim().isEmpty ? 'PENDING' : sacCodeController.text.trim(),
-                      'estimatedDurationMins': int.tryParse(durationController.text.trim()) ?? 0,
-                      'warrantyDays': int.tryParse(warrantyController.text.trim()) ?? 0,
-                      'iconUrl': iconController.text.trim().isEmpty ? null : iconController.text.trim(),
-                      'seoTitle': seoTitleController.text.trim().isEmpty ? null : seoTitleController.text.trim(),
-                      'seoDescription': seoDescriptionController.text.trim().isEmpty
+                          : codeController.text.trim(),
+                      'description': descriptionController.text.trim().isEmpty
                           ? null
-                          : seoDescriptionController.text.trim(),
-                      'seoKeywords': seoKeywordsController.text.trim().isEmpty ? null : seoKeywordsController.text.trim(),
-                      'cancellationPolicy': cancellationPolicyController.text.trim().isEmpty
+                          : descriptionController.text.trim(),
+                      'shortDescription':
+                          shortDescriptionController.text.trim().isEmpty
+                              ? null
+                              : shortDescriptionController.text.trim(),
+                      'startingPrice': double.tryParse(
+                              startingPriceController.text.trim()) ??
+                          0,
+                      'gstRate':
+                          double.tryParse(gstRateController.text.trim()) ?? 18,
+                      'sacCode': sacCodeController.text.trim().isEmpty
+                          ? 'PENDING'
+                          : sacCodeController.text.trim(),
+                      'estimatedDurationMins':
+                          int.tryParse(durationController.text.trim()) ?? 0,
+                      'warrantyDays':
+                          int.tryParse(warrantyController.text.trim()) ?? 0,
+                      'inclusions': _serviceLines(inclusionsController.text),
+                      'exclusions': _serviceLines(exclusionsController.text),
+                      'requiredSkills': _serviceRequirementRows(
+                          requiredSkillsController.text),
+                      'requiredTools':
+                          _serviceRequirementRows(requiredToolsController.text),
+                      'requiredDocuments': _serviceRequirementRows(
+                          requiredDocumentsController.text),
+                      'warrantyText': warrantyTextController.text.trim().isEmpty
                           ? null
-                          : cancellationPolicyController.text.trim(),
-                      'rating': double.tryParse(ratingController.text.trim()) ?? 0,
-                      'reviewCount': int.tryParse(reviewCountController.text.trim()) ?? 0,
+                          : warrantyTextController.text.trim(),
+                      'requirements': requirementsController.text
+                          .split('\n')
+                          .map((item) => item.trim())
+                          .where((item) => item.isNotEmpty)
+                          .toList(growable: false),
+                      'variants': _serviceOptionRows(
+                        variantsController.text,
+                        existing?.variants ?? const [],
+                        isVariant: true,
+                      ),
+                      'addons': _serviceOptionRows(
+                        addonsController.text,
+                        existing?.addons ?? const [],
+                        isVariant: false,
+                      ),
+                      'priceType': priceType,
+                      'ctaLabel': ctaLabelController.text.trim().isEmpty
+                          ? 'Book service'
+                          : ctaLabelController.text.trim(),
+                      'iconUrl': iconController.text.trim().isEmpty
+                          ? null
+                          : iconController.text.trim(),
+                      'seoTitle': seoTitleController.text.trim().isEmpty
+                          ? null
+                          : seoTitleController.text.trim(),
+                      'seoDescription':
+                          seoDescriptionController.text.trim().isEmpty
+                              ? null
+                              : seoDescriptionController.text.trim(),
+                      'seoKeywords': seoKeywordsController.text.trim().isEmpty
+                          ? null
+                          : seoKeywordsController.text.trim(),
+                      'cancellationPolicy':
+                          cancellationPolicyController.text.trim().isEmpty
+                              ? null
+                              : cancellationPolicyController.text.trim(),
+                      'rating':
+                          double.tryParse(ratingController.text.trim()) ?? 0,
+                      'reviewCount':
+                          int.tryParse(reviewCountController.text.trim()) ?? 0,
                       'featured': featured,
                       'popular': popular,
                       'emergencyAvailable': emergency,
+                      'gstApplicable': gstApplicable,
                       'homeVisit': homeVisit,
                       'requiresSiteVisit': requiresSiteVisit,
                       'isActive': isActive,
+                      'bookingEnabled': bookingEnabled,
+                      'publicationStatus': publicationStatus,
+                      'publishStartsAt':
+                          publishStartsAt?.toUtc().toIso8601String(),
+                      'publishEndsAt': publishEndsAt?.toUtc().toIso8601String(),
+                      'serviceAreaIds': serviceAreaIds.toList(growable: false),
                     });
                   },
                   child: const Text('Save'),
@@ -1147,6 +1639,11 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
       codeController.dispose();
       descriptionController.dispose();
       shortDescriptionController.dispose();
+      inclusionsController.dispose();
+      exclusionsController.dispose();
+      requiredSkillsController.dispose();
+      requiredToolsController.dispose();
+      requiredDocumentsController.dispose();
       startingPriceController.dispose();
       gstRateController.dispose();
       sacCodeController.dispose();
@@ -1157,6 +1654,11 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
       seoDescriptionController.dispose();
       seoKeywordsController.dispose();
       cancellationPolicyController.dispose();
+      warrantyTextController.dispose();
+      requirementsController.dispose();
+      variantsController.dispose();
+      addonsController.dispose();
+      ctaLabelController.dispose();
       ratingController.dispose();
       reviewCountController.dispose();
     });
@@ -1165,10 +1667,12 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
   Future<Map<String, dynamic>?> _showPricingRuleEditor(_AdminService service) {
     final formKey = GlobalKey<FormState>();
     final typeController = TextEditingController(text: 'BASE');
-    final titleController = TextEditingController(text: '${service.name} base price');
+    final titleController =
+        TextEditingController(text: '${service.name} base price');
     final cityIdController = TextEditingController();
     final descriptionController = TextEditingController();
-    final priceController = TextEditingController(text: service.startingPrice.toStringAsFixed(0));
+    final priceController =
+        TextEditingController(text: service.startingPrice.toStringAsFixed(0));
     final priorityController = TextEditingController(text: '0');
 
     return showDialog<Map<String, dynamic>>(
@@ -1188,8 +1692,10 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
                     items: const [
                       DropdownMenuItem(value: 'BASE', child: Text('BASE')),
                       DropdownMenuItem(value: 'CITY', child: Text('CITY')),
-                      DropdownMenuItem(value: 'SEASONAL', child: Text('SEASONAL')),
-                      DropdownMenuItem(value: 'PROMOTIONAL', child: Text('PROMOTIONAL')),
+                      DropdownMenuItem(
+                          value: 'SEASONAL', child: Text('SEASONAL')),
+                      DropdownMenuItem(
+                          value: 'PROMOTIONAL', child: Text('PROMOTIONAL')),
                       DropdownMenuItem(value: 'SURGE', child: Text('SURGE')),
                       DropdownMenuItem(value: 'WORKER', child: Text('WORKER')),
                     ],
@@ -1198,11 +1704,14 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
                   TextFormField(
                     controller: titleController,
                     decoration: const InputDecoration(labelText: 'Title'),
-                    validator: (value) => (value ?? '').trim().length < 2 ? 'Enter a title' : null,
+                    validator: (value) => (value ?? '').trim().length < 2
+                        ? 'Enter a title'
+                        : null,
                   ),
                   TextFormField(
                     controller: cityIdController,
-                    decoration: const InputDecoration(labelText: 'City ID (optional)'),
+                    decoration:
+                        const InputDecoration(labelText: 'City ID (optional)'),
                   ),
                   TextFormField(
                     controller: descriptionController,
@@ -1235,13 +1744,16 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
                   'type': typeController.text,
                   'title': titleController.text.trim(),
                   'currency': 'INR',
-                  'price': double.tryParse(priceController.text.trim()) ?? service.startingPrice,
+                  'price': double.tryParse(priceController.text.trim()) ??
+                      service.startingPrice,
                   'priority': int.tryParse(priorityController.text.trim()) ?? 0,
                 };
                 final cityId = cityIdController.text.trim();
                 final description = descriptionController.text.trim();
                 if (cityId.isNotEmpty) payload['cityId'] = cityId;
-                if (description.isNotEmpty) payload['description'] = description;
+                if (description.isNotEmpty) {
+                  payload['description'] = description;
+                }
                 Navigator.of(dialogContext).pop(payload);
               },
               child: const Text('Save'),
@@ -1261,7 +1773,6 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
 
   @override
   Widget build(BuildContext context) {
-
     return DefaultTabController(
       length: 5,
       child: Scaffold(
@@ -1270,21 +1781,27 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
           child: FutureBuilder<_CatalogSnapshot>(
             future: _snapshotFuture,
             builder: (context, snapshot) {
-              final loading = snapshot.connectionState == ConnectionState.waiting;
+              final loading =
+                  snapshot.connectionState == ConnectionState.waiting;
               final data = snapshot.data;
               final selectedCategory = data?.categoryById(_selectedCategoryId);
-              final scopedSnapshot = data == null || _selectedCategoryId.isEmpty || selectedCategory == null
+              final scopedSnapshot = data == null ||
+                      _selectedCategoryId.isEmpty ||
+                      selectedCategory == null
                   ? data
                   : _CatalogSnapshot(categories: [selectedCategory]);
               final visibleCategories = scopedSnapshot == null
                   ? const <_AdminCategory>[]
-                  : _filteredCategories(scopedSnapshot, _catalogQuery, _catalogFilter);
+                  : _filteredCategories(
+                      scopedSnapshot, _catalogQuery, _catalogFilter);
               final visibleSubcategories = scopedSnapshot == null
                   ? const <_AdminSubcategory>[]
-                  : _filteredSubcategories(scopedSnapshot, _catalogQuery, _catalogFilter);
+                  : _filteredSubcategories(
+                      scopedSnapshot, _catalogQuery, _catalogFilter);
               final visibleServices = scopedSnapshot == null
                   ? const <_AdminService>[]
-                  : _filteredServices(scopedSnapshot, _catalogQuery, _catalogFilter);
+                  : _filteredServices(
+                      scopedSnapshot, _catalogQuery, _catalogFilter);
 
               return Column(
                 children: [
@@ -1326,7 +1843,10 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
                             ),
                             const SizedBox(width: 8),
                             FilledButton.icon(
-                              onPressed: loading ? null : () => _createService(data ?? const _CatalogSnapshot.empty()),
+                              onPressed: loading
+                                  ? null
+                                  : () => _createService(
+                                      data ?? const _CatalogSnapshot.empty()),
                               icon: const Icon(Icons.add_rounded),
                               label: const Text('New service'),
                             ),
@@ -1335,11 +1855,14 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
                         const SizedBox(height: 18),
                         _SearchBar(
                           controller: _searchController,
-                          onChanged: (value) => setState(() => _catalogQuery = value.trim()),
+                          onChanged: (value) =>
+                              setState(() => _catalogQuery = value.trim()),
                         ),
                         const SizedBox(height: 10),
                         DropdownButtonFormField<String>(
-                          initialValue: selectedCategory == null ? '' : selectedCategory.id,
+                          initialValue: selectedCategory == null
+                              ? ''
+                              : selectedCategory.id,
                           isExpanded: true,
                           decoration: const InputDecoration(
                             labelText: 'Category scope',
@@ -1348,17 +1871,20 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
                             isDense: true,
                           ),
                           items: [
-                            const DropdownMenuItem(value: '', child: Text('All categories')),
+                            const DropdownMenuItem(
+                                value: '', child: Text('All categories')),
                             ...?data?.categories.map(
                               (category) => DropdownMenuItem(
                                 value: category.id,
-                                child: Text(category.name, overflow: TextOverflow.ellipsis),
+                                child: Text(category.name,
+                                    overflow: TextOverflow.ellipsis),
                               ),
                             ),
                           ],
                           onChanged: data == null
                               ? null
-                              : (value) => setState(() => _selectedCategoryId = value ?? ''),
+                              : (value) => setState(
+                                  () => _selectedCategoryId = value ?? ''),
                         ),
                         const SizedBox(height: 12),
                         Wrap(
@@ -1369,13 +1895,15 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
                                 (filter) => ChoiceChip(
                                   label: Text(filter.label),
                                   selected: _catalogFilter == filter,
-                                  onSelected: (_) => setState(() => _catalogFilter = filter),
+                                  onSelected: (_) =>
+                                      setState(() => _catalogFilter = filter),
                                 ),
                               )
                               .toList(growable: false),
                         ),
                         const SizedBox(height: 12),
-                        if (!loading && data != null) _OverviewMetrics(snapshot: data),
+                        if (!loading && data != null)
+                          _OverviewMetrics(snapshot: data),
                         const SizedBox(height: 18),
                         const TabBar(
                           isScrollable: true,
@@ -1407,8 +1935,12 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
                                     onEdit: _editCategory,
                                     onDisable: _toggleCategory,
                                     onReorder: () => _reorderCategories(data),
-                                    onBulkEnable: () => _bulkUpdateCategories(visibleCategories, isActive: true),
-                                    onBulkDisable: () => _bulkUpdateCategories(visibleCategories, isActive: false),
+                                    onBulkEnable: () => _bulkUpdateCategories(
+                                        visibleCategories,
+                                        isActive: true),
+                                    onBulkDisable: () => _bulkUpdateCategories(
+                                        visibleCategories,
+                                        isActive: false),
                                   ),
                                   _SubcategoriesTab(
                                     snapshot: scopedSnapshot ?? data,
@@ -1416,11 +1948,19 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
                                     filter: _catalogFilter,
                                     visibleCount: visibleSubcategories.length,
                                     onCreate: () => _createSubcategory(data),
-                                    onEdit: (subcategory) => _editSubcategory(data, subcategory),
+                                    onEdit: (subcategory) =>
+                                        _editSubcategory(data, subcategory),
                                     onDisable: _toggleSubcategory,
-                                    onReorder: () => _reorderSubcategories(data),
-                                    onBulkEnable: () => _bulkUpdateSubcategories(visibleSubcategories, isActive: true),
-                                    onBulkDisable: () => _bulkUpdateSubcategories(visibleSubcategories, isActive: false),
+                                    onReorder: () =>
+                                        _reorderSubcategories(data),
+                                    onBulkEnable: () =>
+                                        _bulkUpdateSubcategories(
+                                            visibleSubcategories,
+                                            isActive: true),
+                                    onBulkDisable: () =>
+                                        _bulkUpdateSubcategories(
+                                            visibleSubcategories,
+                                            isActive: false),
                                   ),
                                   _ServicesTab(
                                     snapshot: scopedSnapshot ?? data,
@@ -1428,12 +1968,17 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
                                     filter: _catalogFilter,
                                     visibleCount: visibleServices.length,
                                     onCreate: () => _createService(data),
-                                    onEdit: (service) => _editService(data, service),
+                                    onEdit: (service) =>
+                                        _editService(data, service),
                                     onDisable: _toggleService,
                                     onPricingRule: _addPricingRule,
                                     onReorder: () => _reorderServices(data),
-                                    onBulkEnable: () => _bulkUpdateServices(visibleServices, isActive: true),
-                                    onBulkDisable: () => _bulkUpdateServices(visibleServices, isActive: false),
+                                    onBulkEnable: () => _bulkUpdateServices(
+                                        visibleServices,
+                                        isActive: true),
+                                    onBulkDisable: () => _bulkUpdateServices(
+                                        visibleServices,
+                                        isActive: false),
                                   ),
                                   _PricingTab(
                                     snapshot: scopedSnapshot ?? data,
@@ -1483,7 +2028,8 @@ class _SearchBar extends StatelessWidget {
         onChanged: onChanged,
         decoration: InputDecoration(
           border: InputBorder.none,
-          prefixIcon: Icon(Icons.search_rounded, color: Theme.of(context).colorScheme.onSurfaceVariant),
+          prefixIcon: Icon(Icons.search_rounded,
+              color: Theme.of(context).colorScheme.onSurfaceVariant),
           hintText: 'Search category, subcategory, service, or slug',
         ),
         style: GoogleFonts.inter(
@@ -1505,12 +2051,29 @@ class _OverviewMetrics extends StatelessWidget {
     final totalCategories = snapshot.categories.length;
     final totalSubcategories = snapshot.subcategories.length;
     final totalServices = snapshot.services.length;
-    final activeServices = snapshot.services.where((service) => service.isActive).length;
+    final activeServices =
+        snapshot.services.where((service) => service.isActive).length;
     final metrics = <_MetricData>[
-      _MetricData(label: 'Categories', value: totalCategories.toString(), icon: Icons.category_rounded, accent: const Color(0xFF6366F1)),
-      _MetricData(label: 'Subcategories', value: totalSubcategories.toString(), icon: Icons.view_module_rounded, accent: const Color(0xFF38BDF8)),
-      _MetricData(label: 'Services', value: totalServices.toString(), icon: Icons.design_services_rounded, accent: const Color(0xFF10B981)),
-      _MetricData(label: 'Active', value: activeServices.toString(), icon: Icons.verified_rounded, accent: const Color(0xFFF59E0B)),
+      _MetricData(
+          label: 'Categories',
+          value: totalCategories.toString(),
+          icon: Icons.category_rounded,
+          accent: const Color(0xFF6366F1)),
+      _MetricData(
+          label: 'Subcategories',
+          value: totalSubcategories.toString(),
+          icon: Icons.view_module_rounded,
+          accent: const Color(0xFF38BDF8)),
+      _MetricData(
+          label: 'Services',
+          value: totalServices.toString(),
+          icon: Icons.design_services_rounded,
+          accent: const Color(0xFF10B981)),
+      _MetricData(
+          label: 'Active',
+          value: activeServices.toString(),
+          icon: Icons.verified_rounded,
+          accent: const Color(0xFFF59E0B)),
     ];
 
     return Wrap(
@@ -1610,7 +2173,8 @@ bool _matchesCatalogFilter({
   };
 }
 
-List<_AdminCategory> _filteredCategories(_CatalogSnapshot snapshot, String query, _CatalogFilter filter) {
+List<_AdminCategory> _filteredCategories(
+    _CatalogSnapshot snapshot, String query, _CatalogFilter filter) {
   return snapshot.categories.where((category) {
     return _matchesCatalogFilter(
           isActive: category.isActive,
@@ -1632,7 +2196,8 @@ List<_AdminCategory> _filteredCategories(_CatalogSnapshot snapshot, String query
   }).toList(growable: false);
 }
 
-List<_AdminSubcategory> _filteredSubcategories(_CatalogSnapshot snapshot, String query, _CatalogFilter filter) {
+List<_AdminSubcategory> _filteredSubcategories(
+    _CatalogSnapshot snapshot, String query, _CatalogFilter filter) {
   return snapshot.subcategories.where((subcategory) {
     return _matchesCatalogFilter(
           isActive: subcategory.isActive,
@@ -1649,7 +2214,8 @@ List<_AdminSubcategory> _filteredSubcategories(_CatalogSnapshot snapshot, String
   }).toList(growable: false);
 }
 
-List<_AdminService> _filteredServices(_CatalogSnapshot snapshot, String query, _CatalogFilter filter) {
+List<_AdminService> _filteredServices(
+    _CatalogSnapshot snapshot, String query, _CatalogFilter filter) {
   return snapshot.services.where((service) {
     final category = snapshot.categoryById(service.categoryId);
     final subcategory = snapshot.subcategoryById(service.subcategoryId);
@@ -1782,7 +2348,9 @@ class _CategoriesTab extends StatelessWidget {
             subtitle:
                 '${category.subcategories.length} subcategories - ${category.serviceCount} services',
             tag: category.isActive ? 'Active' : 'Disabled',
-            accent: category.featured ? const Color(0xFFC2A15E) : const Color(0xFF10B981),
+            accent: category.featured
+                ? const Color(0xFFC2A15E)
+                : const Color(0xFF10B981),
             onTap: () => context.push('/catalog/categories/${category.id}'),
             onEdit: () => onEdit(category),
             onDisable: () => onDisable(category),
@@ -1893,7 +2461,8 @@ class _SubcategoriesTab extends StatelessWidget {
                   '${category?.name ?? 'Category'} - ${subcategory.serviceCount} services - ₹${subcategory.basePrice.toStringAsFixed(0)} base',
               tag: subcategory.isActive ? 'Active' : 'Disabled',
               accent: const Color(0xFF38BDF8),
-              onTap: () => context.push('/catalog/subcategories/${subcategory.id}'),
+              onTap: () =>
+                  context.push('/catalog/subcategories/${subcategory.id}'),
               onEdit: () => onEdit(subcategory),
               onDisable: () => onDisable(subcategory),
             );
@@ -2011,7 +2580,9 @@ class _ServicesTab extends StatelessWidget {
               subtitle:
                   '${category?.name ?? 'Category'} / ${subcategory?.name ?? 'Subcategory'} - ₹${service.startingPrice.toStringAsFixed(0)} - GST ${service.gstRate.toStringAsFixed(2)}% - SAC ${service.sacCode} - ${service.estimatedDurationMins} mins',
               tag: service.isActive ? 'Active' : 'Disabled',
-              accent: service.featured ? const Color(0xFFC2A15E) : const Color(0xFF10B981),
+              accent: service.featured
+                  ? const Color(0xFFC2A15E)
+                  : const Color(0xFF10B981),
               onTap: () => context.push('/catalog/services/${service.id}'),
               onEdit: () => onEdit(service),
               onDisable: () => onDisable(service),
@@ -2231,47 +2802,47 @@ class _CatalogCard extends StatelessWidget {
           borderRadius: BorderRadius.circular(12),
           onTap: onTap,
           child: ListTile(
-          contentPadding: const EdgeInsets.all(16),
-          leading: Container(
-            height: 48,
-            width: 48,
-            decoration: BoxDecoration(
-              color: accent.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(AbzioTheme.buttonRadius),
+            contentPadding: const EdgeInsets.all(16),
+            leading: Container(
+              height: 48,
+              width: 48,
+              decoration: BoxDecoration(
+                color: accent.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(AbzioTheme.buttonRadius),
+              ),
+              child: Icon(Icons.grid_view_rounded, color: accent),
             ),
-            child: Icon(Icons.grid_view_rounded, color: accent),
-          ),
-          title: Row(
-            children: [
-              Expanded(
-                child: Text(
-                  title,
-                  style: const TextStyle(fontWeight: FontWeight.w800),
+            title: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    title,
+                    style: const TextStyle(fontWeight: FontWeight.w800),
+                  ),
                 ),
-              ),
-              _TagChip(label: tag, accent: accent),
-            ],
-          ),
-          subtitle: Padding(
-            padding: const EdgeInsets.only(top: 4),
-            child: Text(subtitle),
-          ),
-          trailing: trailing ??
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  IconButton(
-                    onPressed: onEdit,
-                    icon: const Icon(Icons.edit_rounded),
-                    tooltip: 'Edit',
-                  ),
-                  IconButton(
-                    onPressed: onDisable,
-                    icon: const Icon(Icons.visibility_off_rounded),
-                    tooltip: secondaryLabel,
-                  ),
-                ],
-              ),
+                _TagChip(label: tag, accent: accent),
+              ],
+            ),
+            subtitle: Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text(subtitle),
+            ),
+            trailing: trailing ??
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton(
+                      onPressed: onEdit,
+                      icon: const Icon(Icons.edit_rounded),
+                      tooltip: 'Edit',
+                    ),
+                    IconButton(
+                      onPressed: onDisable,
+                      icon: const Icon(Icons.visibility_off_rounded),
+                      tooltip: secondaryLabel,
+                    ),
+                  ],
+                ),
           ),
         ),
       ),
@@ -2330,7 +2901,8 @@ class _CategoryDetailPageState extends ConsumerState<CategoryDetailPage> {
     _future = _load();
   }
 
-  Future<({_CatalogSnapshot snapshot, _AdminCategory category})?> _load() async {
+  Future<({_CatalogSnapshot snapshot, _AdminCategory category})?>
+      _load() async {
     final snapshot = await _api.fetchSnapshot();
     for (final category in snapshot.categories) {
       if (category.id == widget.categoryId) {
@@ -2349,18 +2921,24 @@ class _CategoryDetailPageState extends ConsumerState<CategoryDetailPage> {
 
   Future<void> _showMessage(String message) async {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(message)));
   }
 
   Future<Map<String, dynamic>?> _showCategoryEditor(_AdminCategory existing) {
     final formKey = GlobalKey<FormState>();
     final nameController = TextEditingController(text: existing.name);
     final slugController = TextEditingController(text: existing.slug);
-    final descriptionController = TextEditingController(text: existing.description ?? '');
-    final iconUrlController = TextEditingController(text: existing.iconUrl ?? '');
-    final seoTitleController = TextEditingController(text: existing.seoTitle ?? '');
-    final seoDescriptionController = TextEditingController(text: existing.seoDescription ?? '');
-    final sortOrderController = TextEditingController(text: existing.sortOrder.toString());
+    final descriptionController =
+        TextEditingController(text: existing.description ?? '');
+    final iconUrlController =
+        TextEditingController(text: existing.iconUrl ?? '');
+    final seoTitleController =
+        TextEditingController(text: existing.seoTitle ?? '');
+    final seoDescriptionController =
+        TextEditingController(text: existing.seoDescription ?? '');
+    final sortOrderController =
+        TextEditingController(text: existing.sortOrder.toString());
     var featured = existing.featured;
     var popular = existing.popular;
     var isActive = existing.isActive;
@@ -2381,7 +2959,9 @@ class _CategoryDetailPageState extends ConsumerState<CategoryDetailPage> {
                       TextFormField(
                         controller: nameController,
                         decoration: const InputDecoration(labelText: 'Name'),
-                        validator: (value) => (value ?? '').trim().length < 2 ? 'Enter a category name' : null,
+                        validator: (value) => (value ?? '').trim().length < 2
+                            ? 'Enter a category name'
+                            : null,
                       ),
                       TextFormField(
                         controller: slugController,
@@ -2389,25 +2969,33 @@ class _CategoryDetailPageState extends ConsumerState<CategoryDetailPage> {
                       ),
                       TextFormField(
                         controller: descriptionController,
-                        decoration: const InputDecoration(labelText: 'Description'),
+                        decoration:
+                            const InputDecoration(labelText: 'Description'),
                         maxLines: 3,
                       ),
                       TextFormField(
                         controller: iconUrlController,
-                        decoration: const InputDecoration(labelText: 'Icon URL'),
+                        decoration: const InputDecoration(
+                          labelText: 'Category image URL',
+                          hintText: 'https://…',
+                        ),
+                        keyboardType: TextInputType.url,
                       ),
                       TextFormField(
                         controller: seoTitleController,
-                        decoration: const InputDecoration(labelText: 'SEO title'),
+                        decoration:
+                            const InputDecoration(labelText: 'SEO title'),
                       ),
                       TextFormField(
                         controller: seoDescriptionController,
-                        decoration: const InputDecoration(labelText: 'SEO description'),
+                        decoration:
+                            const InputDecoration(labelText: 'SEO description'),
                         maxLines: 2,
                       ),
                       TextFormField(
                         controller: sortOrderController,
-                        decoration: const InputDecoration(labelText: 'Sort order'),
+                        decoration:
+                            const InputDecoration(labelText: 'Sort order'),
                         keyboardType: TextInputType.number,
                       ),
                       SwitchListTile(
@@ -2439,12 +3027,24 @@ class _CategoryDetailPageState extends ConsumerState<CategoryDetailPage> {
                     if (!formKey.currentState!.validate()) return;
                     Navigator.of(dialogContext).pop({
                       'name': nameController.text.trim(),
-                      'slug': slugController.text.trim().isEmpty ? _slugify(nameController.text) : slugController.text.trim(),
-                      'description': descriptionController.text.trim().isEmpty ? null : descriptionController.text.trim(),
-                      'iconUrl': iconUrlController.text.trim().isEmpty ? null : iconUrlController.text.trim(),
-                      'seoTitle': seoTitleController.text.trim().isEmpty ? null : seoTitleController.text.trim(),
-                      'seoDescription': seoDescriptionController.text.trim().isEmpty ? null : seoDescriptionController.text.trim(),
-                      'sortOrder': int.tryParse(sortOrderController.text.trim()) ?? 0,
+                      'slug': slugController.text.trim().isEmpty
+                          ? _slugify(nameController.text)
+                          : slugController.text.trim(),
+                      'description': descriptionController.text.trim().isEmpty
+                          ? null
+                          : descriptionController.text.trim(),
+                      'iconUrl': iconUrlController.text.trim().isEmpty
+                          ? null
+                          : iconUrlController.text.trim(),
+                      'seoTitle': seoTitleController.text.trim().isEmpty
+                          ? null
+                          : seoTitleController.text.trim(),
+                      'seoDescription':
+                          seoDescriptionController.text.trim().isEmpty
+                              ? null
+                              : seoDescriptionController.text.trim(),
+                      'sortOrder':
+                          int.tryParse(sortOrderController.text.trim()) ?? 0,
                       'featured': featured,
                       'popular': popular,
                       'isActive': isActive,
@@ -2484,7 +3084,8 @@ class _CategoryDetailPageState extends ConsumerState<CategoryDetailPage> {
     try {
       await _api.updateCategory(category.id, {'isActive': !category.isActive});
       await _reload();
-      await _showMessage(category.isActive ? 'Category disabled' : 'Category enabled');
+      await _showMessage(
+          category.isActive ? 'Category disabled' : 'Category enabled');
     } catch (error) {
       await _showMessage('Unable to update category status: $error');
     }
@@ -2503,16 +3104,22 @@ class _CategoryDetailPageState extends ConsumerState<CategoryDetailPage> {
           icon: const Icon(Icons.arrow_back_ios_new_rounded),
           onPressed: () => context.pop(),
         ),
-        actions: [IconButton(onPressed: _reload, icon: const Icon(Icons.refresh_rounded))],
+        actions: [
+          IconButton(
+              onPressed: _reload, icon: const Icon(Icons.refresh_rounded))
+        ],
       ),
-      body: FutureBuilder<({_CatalogSnapshot snapshot, _AdminCategory category})?>(
+      body: FutureBuilder<
+          ({_CatalogSnapshot snapshot, _AdminCategory category})?>(
         future: _future,
         builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting && !snapshot.hasData) {
+          if (snapshot.connectionState == ConnectionState.waiting &&
+              !snapshot.hasData) {
             return const Center(child: CircularProgressIndicator());
           }
           if (snapshot.hasError) {
-            return Center(child: Text('Unable to load category: ${snapshot.error}'));
+            return Center(
+                child: Text('Unable to load category: ${snapshot.error}'));
           }
           final data = snapshot.data;
           if (data == null) {
@@ -2524,15 +3131,19 @@ class _CategoryDetailPageState extends ConsumerState<CategoryDetailPage> {
                   children: [
                     const Icon(Icons.search_off_rounded, size: 48),
                     const SizedBox(height: 12),
-                    Text('Category not found', style: tt.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
+                    Text('Category not found',
+                        style: tt.titleLarge
+                            ?.copyWith(fontWeight: FontWeight.w800)),
                     const SizedBox(height: 8),
                     Text(
                       'This category is not present in the current catalog snapshot.',
                       textAlign: TextAlign.center,
-                      style: tt.bodyMedium?.copyWith(color: cs.onSurfaceVariant),
+                      style:
+                          tt.bodyMedium?.copyWith(color: cs.onSurfaceVariant),
                     ),
                     const SizedBox(height: 16),
-                    FilledButton(onPressed: _reload, child: const Text('Reload')),
+                    FilledButton(
+                        onPressed: _reload, child: const Text('Reload')),
                   ],
                 ),
               ),
@@ -2552,16 +3163,21 @@ class _CategoryDetailPageState extends ConsumerState<CategoryDetailPage> {
                       color: const Color(0xFF10B981).withValues(alpha: 0.12),
                       borderRadius: BorderRadius.circular(16),
                     ),
-                    child: const Icon(Icons.category_rounded, color: Color(0xFF10B981)),
+                    child: const Icon(Icons.category_rounded,
+                        color: Color(0xFF10B981)),
                   ),
                   const SizedBox(width: 14),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(category.name, style: tt.headlineSmall?.copyWith(fontWeight: FontWeight.w900)),
+                        Text(category.name,
+                            style: tt.headlineSmall
+                                ?.copyWith(fontWeight: FontWeight.w900)),
                         const SizedBox(height: 6),
-                        Text(category.slug, style: tt.bodyMedium?.copyWith(color: cs.onSurfaceVariant)),
+                        Text(category.slug,
+                            style: tt.bodyMedium
+                                ?.copyWith(color: cs.onSurfaceVariant)),
                       ],
                     ),
                   ),
@@ -2580,7 +3196,9 @@ class _CategoryDetailPageState extends ConsumerState<CategoryDetailPage> {
                   ),
                   OutlinedButton.icon(
                     onPressed: () => _toggleCategory(category),
-                    icon: Icon(category.isActive ? Icons.visibility_off_rounded : Icons.visibility_rounded),
+                    icon: Icon(category.isActive
+                        ? Icons.visibility_off_rounded
+                        : Icons.visibility_rounded),
                     label: Text(category.isActive ? 'Disable' : 'Enable'),
                   ),
                 ],
@@ -2590,15 +3208,20 @@ class _CategoryDetailPageState extends ConsumerState<CategoryDetailPage> {
                 spacing: 8,
                 runSpacing: 8,
                 children: [
-                  _DetailChip(label: category.featured ? 'Featured' : 'Standard'),
-                  _DetailChip(label: category.popular ? 'Popular' : 'Not popular'),
-                  _DetailChip(label: '${category.subcategories.length} subcategories'),
+                  _DetailChip(
+                      label: category.featured ? 'Featured' : 'Standard'),
+                  _DetailChip(
+                      label: category.popular ? 'Popular' : 'Not popular'),
+                  _DetailChip(
+                      label: '${category.subcategories.length} subcategories'),
                   _DetailChip(label: '${category.serviceCount} services'),
                 ],
               ),
               const SizedBox(height: 18),
               if ((category.description ?? '').trim().isNotEmpty) ...[
-                Text('Description', style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
+                Text('Description',
+                    style:
+                        tt.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
                 const SizedBox(height: 6),
                 Text(category.description!.trim()),
                 const SizedBox(height: 18),
@@ -2608,30 +3231,39 @@ class _CategoryDetailPageState extends ConsumerState<CategoryDetailPage> {
                 const SizedBox(height: 8),
               ],
               if ((category.seoTitle ?? '').trim().isNotEmpty) ...[
-                _DetailLine(label: 'SEO title', value: category.seoTitle!.trim()),
+                _DetailLine(
+                    label: 'SEO title', value: category.seoTitle!.trim()),
                 const SizedBox(height: 8),
               ],
               if ((category.seoDescription ?? '').trim().isNotEmpty) ...[
-                _DetailLine(label: 'SEO description', value: category.seoDescription!.trim()),
+                _DetailLine(
+                    label: 'SEO description',
+                    value: category.seoDescription!.trim()),
                 const SizedBox(height: 8),
               ],
               _DetailLine(label: 'Category ID', value: category.id),
               _DetailLine(label: 'Slug', value: category.slug),
-              _DetailLine(label: 'Status', value: category.isActive ? 'Active' : 'Disabled'),
+              _DetailLine(
+                  label: 'Status',
+                  value: category.isActive ? 'Active' : 'Disabled'),
               _DetailLine(label: 'Sort order', value: '${category.sortOrder}'),
               const SizedBox(height: 18),
-              Text('Subcategories', style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
+              Text('Subcategories',
+                  style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
               const SizedBox(height: 12),
               ...category.subcategories.map(
                 (subcategory) => Padding(
                   padding: const EdgeInsets.only(bottom: 10),
                   child: ListTile(
                     tileColor: const Color(0xFFF8FAFC),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14)),
                     title: Text(subcategory.name),
-                    subtitle: Text('${subcategory.services.length} services - ₹${subcategory.basePrice.toStringAsFixed(0)} base'),
+                    subtitle: Text(
+                        '${subcategory.services.length} services - ₹${subcategory.basePrice.toStringAsFixed(0)} base'),
                     trailing: const Icon(Icons.chevron_right_rounded),
-                    onTap: () => context.push('/catalog/subcategories/${subcategory.id}'),
+                    onTap: () => context
+                        .push('/catalog/subcategories/${subcategory.id}'),
                   ),
                 ),
               ),
@@ -2652,12 +3284,14 @@ class SubcategoryDetailPage extends ConsumerStatefulWidget {
   final String subcategoryId;
 
   @override
-  ConsumerState<SubcategoryDetailPage> createState() => _SubcategoryDetailPageState();
+  ConsumerState<SubcategoryDetailPage> createState() =>
+      _SubcategoryDetailPageState();
 }
 
 class _SubcategoryDetailPageState extends ConsumerState<SubcategoryDetailPage> {
   late final _CatalogAdminApi _api;
-  late Future<({_CatalogSnapshot snapshot, _AdminSubcategory subcategory})?> _future;
+  late Future<({_CatalogSnapshot snapshot, _AdminSubcategory subcategory})?>
+      _future;
 
   @override
   void initState() {
@@ -2666,7 +3300,8 @@ class _SubcategoryDetailPageState extends ConsumerState<SubcategoryDetailPage> {
     _future = _load();
   }
 
-  Future<({_CatalogSnapshot snapshot, _AdminSubcategory subcategory})?> _load() async {
+  Future<({_CatalogSnapshot snapshot, _AdminSubcategory subcategory})?>
+      _load() async {
     final snapshot = await _api.fetchSnapshot();
     for (final subcategory in snapshot.subcategories) {
       if (subcategory.id == widget.subcategoryId) {
@@ -2685,22 +3320,32 @@ class _SubcategoryDetailPageState extends ConsumerState<SubcategoryDetailPage> {
 
   Future<void> _showMessage(String message) async {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(message)));
   }
 
-  Future<Map<String, dynamic>?> _showSubcategoryEditor(_CatalogSnapshot snapshot, _AdminSubcategory existing) {
+  Future<Map<String, dynamic>?> _showSubcategoryEditor(
+      _CatalogSnapshot snapshot, _AdminSubcategory existing) {
     final formKey = GlobalKey<FormState>();
     final categoryIdController = ValueNotifier<String>(existing.categoryId);
     final nameController = TextEditingController(text: existing.name);
     final slugController = TextEditingController(text: existing.slug);
-    final descriptionController = TextEditingController(text: existing.description ?? '');
-    final iconUrlController = TextEditingController(text: existing.iconUrl ?? '');
-    final seoTitleController = TextEditingController(text: existing.seoTitle ?? '');
-    final seoDescriptionController = TextEditingController(text: existing.seoDescription ?? '');
-    final basePriceController = TextEditingController(text: existing.basePrice.toStringAsFixed(0));
-    final sortOrderController = TextEditingController(text: existing.sortOrder.toString());
-    final ratingController = TextEditingController(text: existing.rating.toStringAsFixed(1));
-    final reviewCountController = TextEditingController(text: existing.reviewCount.toString());
+    final descriptionController =
+        TextEditingController(text: existing.description ?? '');
+    final iconUrlController =
+        TextEditingController(text: existing.iconUrl ?? '');
+    final seoTitleController =
+        TextEditingController(text: existing.seoTitle ?? '');
+    final seoDescriptionController =
+        TextEditingController(text: existing.seoDescription ?? '');
+    final basePriceController =
+        TextEditingController(text: existing.basePrice.toStringAsFixed(0));
+    final sortOrderController =
+        TextEditingController(text: existing.sortOrder.toString());
+    final ratingController =
+        TextEditingController(text: existing.rating.toStringAsFixed(1));
+    final reviewCountController =
+        TextEditingController(text: existing.reviewCount.toString());
     var isActive = existing.isActive;
 
     return showDialog<Map<String, dynamic>>(
@@ -2717,8 +3362,11 @@ class _SubcategoryDetailPageState extends ConsumerState<SubcategoryDetailPage> {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       DropdownButtonFormField<String>(
-                        initialValue: categoryIdController.value.isEmpty ? null : categoryIdController.value,
-                        decoration: const InputDecoration(labelText: 'Category'),
+                        initialValue: categoryIdController.value.isEmpty
+                            ? null
+                            : categoryIdController.value,
+                        decoration:
+                            const InputDecoration(labelText: 'Category'),
                         items: snapshot.categories
                             .map(
                               (category) => DropdownMenuItem(
@@ -2727,13 +3375,17 @@ class _SubcategoryDetailPageState extends ConsumerState<SubcategoryDetailPage> {
                               ),
                             )
                             .toList(growable: false),
-                        onChanged: (value) => setState(() => categoryIdController.value = value ?? ''),
-                        validator: (value) => (value ?? '').isEmpty ? 'Select a category' : null,
+                        onChanged: (value) => setState(
+                            () => categoryIdController.value = value ?? ''),
+                        validator: (value) =>
+                            (value ?? '').isEmpty ? 'Select a category' : null,
                       ),
                       TextFormField(
                         controller: nameController,
                         decoration: const InputDecoration(labelText: 'Name'),
-                        validator: (value) => (value ?? '').trim().length < 2 ? 'Enter a subcategory name' : null,
+                        validator: (value) => (value ?? '').trim().length < 2
+                            ? 'Enter a subcategory name'
+                            : null,
                       ),
                       TextFormField(
                         controller: slugController,
@@ -2741,40 +3393,48 @@ class _SubcategoryDetailPageState extends ConsumerState<SubcategoryDetailPage> {
                       ),
                       TextFormField(
                         controller: descriptionController,
-                        decoration: const InputDecoration(labelText: 'Description'),
+                        decoration:
+                            const InputDecoration(labelText: 'Description'),
                         maxLines: 3,
                       ),
                       TextFormField(
                         controller: iconUrlController,
-                        decoration: const InputDecoration(labelText: 'Icon URL'),
+                        decoration:
+                            const InputDecoration(labelText: 'Icon URL'),
                       ),
                       TextFormField(
                         controller: seoTitleController,
-                        decoration: const InputDecoration(labelText: 'SEO title'),
+                        decoration:
+                            const InputDecoration(labelText: 'SEO title'),
                       ),
                       TextFormField(
                         controller: seoDescriptionController,
-                        decoration: const InputDecoration(labelText: 'SEO description'),
+                        decoration:
+                            const InputDecoration(labelText: 'SEO description'),
                         maxLines: 2,
                       ),
                       TextFormField(
                         controller: basePriceController,
-                        decoration: const InputDecoration(labelText: 'Base price'),
+                        decoration:
+                            const InputDecoration(labelText: 'Base price'),
                         keyboardType: TextInputType.number,
                       ),
                       TextFormField(
                         controller: sortOrderController,
-                        decoration: const InputDecoration(labelText: 'Sort order'),
+                        decoration:
+                            const InputDecoration(labelText: 'Sort order'),
                         keyboardType: TextInputType.number,
                       ),
                       TextFormField(
                         controller: ratingController,
                         decoration: const InputDecoration(labelText: 'Rating'),
-                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                        keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true),
                       ),
                       TextFormField(
                         controller: reviewCountController,
-                        decoration: const InputDecoration(labelText: 'Review count'),
+                        decoration:
+                            const InputDecoration(labelText: 'Review count'),
                         keyboardType: TextInputType.number,
                       ),
                       SwitchListTile(
@@ -2797,15 +3457,30 @@ class _SubcategoryDetailPageState extends ConsumerState<SubcategoryDetailPage> {
                     Navigator.of(dialogContext).pop({
                       'categoryId': categoryIdController.value,
                       'name': nameController.text.trim(),
-                      'slug': slugController.text.trim().isEmpty ? _slugify(nameController.text) : slugController.text.trim(),
-                      'description': descriptionController.text.trim().isEmpty ? null : descriptionController.text.trim(),
-                      'iconUrl': iconUrlController.text.trim().isEmpty ? null : iconUrlController.text.trim(),
-                      'seoTitle': seoTitleController.text.trim().isEmpty ? null : seoTitleController.text.trim(),
-                      'seoDescription': seoDescriptionController.text.trim().isEmpty ? null : seoDescriptionController.text.trim(),
-                      'basePrice': double.tryParse(basePriceController.text.trim()) ?? 0,
-                      'sortOrder': int.tryParse(sortOrderController.text.trim()) ?? 0,
-                      'rating': double.tryParse(ratingController.text.trim()) ?? 0,
-                      'reviewCount': int.tryParse(reviewCountController.text.trim()) ?? 0,
+                      'slug': slugController.text.trim().isEmpty
+                          ? _slugify(nameController.text)
+                          : slugController.text.trim(),
+                      'description': descriptionController.text.trim().isEmpty
+                          ? null
+                          : descriptionController.text.trim(),
+                      'iconUrl': iconUrlController.text.trim().isEmpty
+                          ? null
+                          : iconUrlController.text.trim(),
+                      'seoTitle': seoTitleController.text.trim().isEmpty
+                          ? null
+                          : seoTitleController.text.trim(),
+                      'seoDescription':
+                          seoDescriptionController.text.trim().isEmpty
+                              ? null
+                              : seoDescriptionController.text.trim(),
+                      'basePrice':
+                          double.tryParse(basePriceController.text.trim()) ?? 0,
+                      'sortOrder':
+                          int.tryParse(sortOrderController.text.trim()) ?? 0,
+                      'rating':
+                          double.tryParse(ratingController.text.trim()) ?? 0,
+                      'reviewCount':
+                          int.tryParse(reviewCountController.text.trim()) ?? 0,
                       'isActive': isActive,
                     });
                   },
@@ -2831,7 +3506,8 @@ class _SubcategoryDetailPageState extends ConsumerState<SubcategoryDetailPage> {
     });
   }
 
-  Future<void> _editSubcategory(_CatalogSnapshot snapshot, _AdminSubcategory subcategory) async {
+  Future<void> _editSubcategory(
+      _CatalogSnapshot snapshot, _AdminSubcategory subcategory) async {
     final payload = await _showSubcategoryEditor(snapshot, subcategory);
     if (payload == null) return;
     try {
@@ -2845,9 +3521,12 @@ class _SubcategoryDetailPageState extends ConsumerState<SubcategoryDetailPage> {
 
   Future<void> _toggleSubcategory(_AdminSubcategory subcategory) async {
     try {
-      await _api.updateSubcategory(subcategory.id, {'isActive': !subcategory.isActive});
+      await _api.updateSubcategory(
+          subcategory.id, {'isActive': !subcategory.isActive});
       await _reload();
-      await _showMessage(subcategory.isActive ? 'Subcategory disabled' : 'Subcategory enabled');
+      await _showMessage(subcategory.isActive
+          ? 'Subcategory disabled'
+          : 'Subcategory enabled');
     } catch (error) {
       await _showMessage('Unable to update subcategory status: $error');
     }
@@ -2867,17 +3546,21 @@ class _SubcategoryDetailPageState extends ConsumerState<SubcategoryDetailPage> {
           onPressed: () => context.pop(),
         ),
         actions: [
-          IconButton(onPressed: _reload, icon: const Icon(Icons.refresh_rounded)),
+          IconButton(
+              onPressed: _reload, icon: const Icon(Icons.refresh_rounded)),
         ],
       ),
-      body: FutureBuilder<({_CatalogSnapshot snapshot, _AdminSubcategory subcategory})?>(
+      body: FutureBuilder<
+          ({_CatalogSnapshot snapshot, _AdminSubcategory subcategory})?>(
         future: _future,
         builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting && !snapshot.hasData) {
+          if (snapshot.connectionState == ConnectionState.waiting &&
+              !snapshot.hasData) {
             return const Center(child: CircularProgressIndicator());
           }
           if (snapshot.hasError) {
-            return Center(child: Text('Unable to load subcategory: ${snapshot.error}'));
+            return Center(
+                child: Text('Unable to load subcategory: ${snapshot.error}'));
           }
           final data = snapshot.data;
           if (data == null) {
@@ -2889,15 +3572,19 @@ class _SubcategoryDetailPageState extends ConsumerState<SubcategoryDetailPage> {
                   children: [
                     const Icon(Icons.search_off_rounded, size: 48),
                     const SizedBox(height: 12),
-                    Text('Subcategory not found', style: tt.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
+                    Text('Subcategory not found',
+                        style: tt.titleLarge
+                            ?.copyWith(fontWeight: FontWeight.w800)),
                     const SizedBox(height: 8),
                     Text(
                       'This subcategory is not present in the current catalog snapshot.',
                       textAlign: TextAlign.center,
-                      style: tt.bodyMedium?.copyWith(color: cs.onSurfaceVariant),
+                      style:
+                          tt.bodyMedium?.copyWith(color: cs.onSurfaceVariant),
                     ),
                     const SizedBox(height: 16),
-                    FilledButton(onPressed: _reload, child: const Text('Reload')),
+                    FilledButton(
+                        onPressed: _reload, child: const Text('Reload')),
                   ],
                 ),
               ),
@@ -2918,20 +3605,26 @@ class _SubcategoryDetailPageState extends ConsumerState<SubcategoryDetailPage> {
                       color: const Color(0xFF38BDF8).withValues(alpha: 0.12),
                       borderRadius: BorderRadius.circular(16),
                     ),
-                    child: const Icon(Icons.layers_rounded, color: Color(0xFF38BDF8)),
+                    child: const Icon(Icons.layers_rounded,
+                        color: Color(0xFF38BDF8)),
                   ),
                   const SizedBox(width: 14),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(subcategory.name, style: tt.headlineSmall?.copyWith(fontWeight: FontWeight.w900)),
+                        Text(subcategory.name,
+                            style: tt.headlineSmall
+                                ?.copyWith(fontWeight: FontWeight.w900)),
                         const SizedBox(height: 6),
-                        Text(category?.name ?? 'Category', style: tt.bodyMedium?.copyWith(color: cs.onSurfaceVariant)),
+                        Text(category?.name ?? 'Category',
+                            style: tt.bodyMedium
+                                ?.copyWith(color: cs.onSurfaceVariant)),
                       ],
                     ),
                   ),
-                  if (!subcategory.isActive) const _DetailBadge(label: 'Disabled'),
+                  if (!subcategory.isActive)
+                    const _DetailBadge(label: 'Disabled'),
                 ],
               ),
               const SizedBox(height: 16),
@@ -2940,13 +3633,16 @@ class _SubcategoryDetailPageState extends ConsumerState<SubcategoryDetailPage> {
                 runSpacing: 12,
                 children: [
                   FilledButton.icon(
-                    onPressed: () => _editSubcategory(data.snapshot, subcategory),
+                    onPressed: () =>
+                        _editSubcategory(data.snapshot, subcategory),
                     icon: const Icon(Icons.edit_rounded),
                     label: const Text('Edit subcategory'),
                   ),
                   OutlinedButton.icon(
                     onPressed: () => _toggleSubcategory(subcategory),
-                    icon: Icon(subcategory.isActive ? Icons.visibility_off_rounded : Icons.visibility_rounded),
+                    icon: Icon(subcategory.isActive
+                        ? Icons.visibility_off_rounded
+                        : Icons.visibility_rounded),
                     label: Text(subcategory.isActive ? 'Disable' : 'Enable'),
                   ),
                 ],
@@ -2957,52 +3653,75 @@ class _SubcategoryDetailPageState extends ConsumerState<SubcategoryDetailPage> {
                 runSpacing: 8,
                 children: [
                   _DetailChip(label: '${subcategory.services.length} services'),
-                  _DetailChip(label: '₹${subcategory.basePrice.toStringAsFixed(0)} base'),
-                  _DetailChip(label: 'Rating ${subcategory.rating.toStringAsFixed(1)}'),
+                  _DetailChip(
+                      label:
+                          '₹${subcategory.basePrice.toStringAsFixed(0)} base'),
+                  _DetailChip(
+                      label: 'Rating ${subcategory.rating.toStringAsFixed(1)}'),
                   _DetailChip(label: '${subcategory.reviewCount} reviews'),
-                  _DetailChip(label: subcategory.isActive ? 'Active' : 'Disabled'),
+                  _DetailChip(
+                      label: subcategory.isActive ? 'Active' : 'Disabled'),
                 ],
               ),
               const SizedBox(height: 18),
               if ((subcategory.description ?? '').trim().isNotEmpty) ...[
-                Text('Description', style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
+                Text('Description',
+                    style:
+                        tt.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
                 const SizedBox(height: 6),
                 Text(subcategory.description!.trim()),
                 const SizedBox(height: 18),
               ],
               if ((subcategory.iconUrl ?? '').trim().isNotEmpty) ...[
-                _DetailLine(label: 'Icon URL', value: subcategory.iconUrl!.trim()),
+                _DetailLine(
+                    label: 'Icon URL', value: subcategory.iconUrl!.trim()),
                 const SizedBox(height: 8),
               ],
               if ((subcategory.seoTitle ?? '').trim().isNotEmpty) ...[
-                _DetailLine(label: 'SEO title', value: subcategory.seoTitle!.trim()),
+                _DetailLine(
+                    label: 'SEO title', value: subcategory.seoTitle!.trim()),
                 const SizedBox(height: 8),
               ],
               if ((subcategory.seoDescription ?? '').trim().isNotEmpty) ...[
-                _DetailLine(label: 'SEO description', value: subcategory.seoDescription!.trim()),
+                _DetailLine(
+                    label: 'SEO description',
+                    value: subcategory.seoDescription!.trim()),
                 const SizedBox(height: 8),
               ],
-              _DetailLine(label: 'Rating', value: subcategory.rating.toStringAsFixed(1)),
-              _DetailLine(label: 'Review count', value: '${subcategory.reviewCount}'),
+              _DetailLine(
+                  label: 'Rating',
+                  value: subcategory.rating.toStringAsFixed(1)),
+              _DetailLine(
+                  label: 'Review count', value: '${subcategory.reviewCount}'),
               _DetailLine(label: 'Subcategory ID', value: subcategory.id),
-              _DetailLine(label: 'Category', value: category?.name ?? 'Unknown'),
+              _DetailLine(
+                  label: 'Category', value: category?.name ?? 'Unknown'),
               _DetailLine(label: 'Slug', value: subcategory.slug),
-              _DetailLine(label: 'Base price', value: '₹${subcategory.basePrice.toStringAsFixed(0)}'),
-              _DetailLine(label: 'Status', value: subcategory.isActive ? 'Active' : 'Disabled'),
-              _DetailLine(label: 'Sort order', value: '${subcategory.sortOrder}'),
+              _DetailLine(
+                  label: 'Base price',
+                  value: '₹${subcategory.basePrice.toStringAsFixed(0)}'),
+              _DetailLine(
+                  label: 'Status',
+                  value: subcategory.isActive ? 'Active' : 'Disabled'),
+              _DetailLine(
+                  label: 'Sort order', value: '${subcategory.sortOrder}'),
               const SizedBox(height: 18),
-              Text('Services', style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
+              Text('Services',
+                  style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
               const SizedBox(height: 12),
               ...subcategory.services.map(
                 (service) => Padding(
                   padding: const EdgeInsets.only(bottom: 10),
                   child: ListTile(
                     tileColor: const Color(0xFFF8FAFC),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14)),
                     title: Text(service.name),
-                    subtitle: Text('₹${service.startingPrice.toStringAsFixed(0)} - ${service.estimatedDurationMins} mins'),
+                    subtitle: Text(
+                        '₹${service.startingPrice.toStringAsFixed(0)} - ${service.estimatedDurationMins} mins'),
                     trailing: const Icon(Icons.chevron_right_rounded),
-                    onTap: () => context.push('/catalog/services/${service.id}'),
+                    onTap: () =>
+                        context.push('/catalog/services/${service.id}'),
                   ),
                 ),
               ),
@@ -3056,7 +3775,8 @@ class _ServiceDetailPageState extends ConsumerState<ServiceDetailPage> {
 
   Future<void> _showMessage(String message) async {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(message)));
   }
 
   Future<void> _addServiceImage(_AdminService service) async {
@@ -3119,41 +3839,86 @@ class _ServiceDetailPageState extends ConsumerState<ServiceDetailPage> {
     }
   }
 
-  Future<Map<String, dynamic>?> _showServiceEditor(_CatalogSnapshot snapshot, _AdminService existing) {
+  Future<Map<String, dynamic>?> _showServiceEditor(
+      _CatalogSnapshot snapshot, _AdminService existing) {
     final formKey = GlobalKey<FormState>();
     final selectedCategoryId = ValueNotifier<String>(existing.categoryId);
     final selectedSubcategoryId = ValueNotifier<String>(existing.subcategoryId);
     final nameController = TextEditingController(text: existing.name);
     final slugController = TextEditingController(text: existing.slug);
     final codeController = TextEditingController(text: existing.code ?? '');
-    final descriptionController = TextEditingController(text: existing.description ?? '');
-    final shortDescriptionController = TextEditingController(text: existing.shortDescription ?? '');
-    final startingPriceController = TextEditingController(text: existing.startingPrice.toStringAsFixed(0));
-    final gstRateController = TextEditingController(text: existing.gstRate.toStringAsFixed(2));
+    final descriptionController =
+        TextEditingController(text: existing.description ?? '');
+    final shortDescriptionController =
+        TextEditingController(text: existing.shortDescription ?? '');
+    final inclusionsController =
+        TextEditingController(text: existing.inclusions.join('\n'));
+    final exclusionsController =
+        TextEditingController(text: existing.exclusions.join('\n'));
+    final requiredSkillsController =
+        TextEditingController(text: existing.requiredSkills.join('\n'));
+    final requiredToolsController =
+        TextEditingController(text: existing.requiredTools.join('\n'));
+    final requiredDocumentsController =
+        TextEditingController(text: existing.requiredDocuments.join('\n'));
+    final startingPriceController =
+        TextEditingController(text: existing.startingPrice.toStringAsFixed(0));
+    final gstRateController =
+        TextEditingController(text: existing.gstRate.toStringAsFixed(2));
     final sacCodeController = TextEditingController(text: existing.sacCode);
-    final durationController = TextEditingController(text: existing.estimatedDurationMins.toString());
-    final warrantyController = TextEditingController(text: existing.warrantyDays.toString());
+    final durationController =
+        TextEditingController(text: existing.estimatedDurationMins.toString());
+    final warrantyController =
+        TextEditingController(text: existing.warrantyDays.toString());
     final iconController = TextEditingController(text: existing.iconUrl ?? '');
-    final seoTitleController = TextEditingController(text: existing.seoTitle ?? '');
-    final seoDescriptionController = TextEditingController(text: existing.seoDescription ?? '');
-    final seoKeywordsController = TextEditingController(text: existing.seoKeywords ?? '');
-    final cancellationPolicyController = TextEditingController(text: existing.cancellationPolicy ?? '');
-    final ratingController = TextEditingController(text: existing.rating.toStringAsFixed(2));
-    final reviewCountController = TextEditingController(text: existing.reviewCount.toString());
+    final seoTitleController =
+        TextEditingController(text: existing.seoTitle ?? '');
+    final seoDescriptionController =
+        TextEditingController(text: existing.seoDescription ?? '');
+    final seoKeywordsController =
+        TextEditingController(text: existing.seoKeywords ?? '');
+    final cancellationPolicyController =
+        TextEditingController(text: existing.cancellationPolicy ?? '');
+    final warrantyTextController =
+        TextEditingController(text: existing.warrantyText ?? '');
+    final requirementsController =
+        TextEditingController(text: existing.requirements.join('\n'));
+    final variantsController = TextEditingController(
+      text: _formatServiceOptions(existing.variants),
+    );
+    final addonsController = TextEditingController(
+      text: _formatServiceOptions(existing.addons),
+    );
+    final ctaLabelController = TextEditingController(text: existing.ctaLabel);
+    final ratingController =
+        TextEditingController(text: existing.rating.toStringAsFixed(2));
+    final reviewCountController =
+        TextEditingController(text: existing.reviewCount.toString());
     var featured = existing.featured;
     var popular = existing.popular;
     var emergency = existing.emergencyAvailable;
     var homeVisit = existing.homeVisit;
     var requiresSiteVisit = existing.requiresSiteVisit;
     var isActive = existing.isActive;
+    var bookingEnabled = existing.bookingEnabled;
+    var gstApplicable = existing.gstApplicable;
+    var priceType = existing.priceType;
+    var publicationStatus = existing.publicationStatus;
+    DateTime? publishStartsAt = existing.publishStartsAt;
+    DateTime? publishEndsAt = existing.publishEndsAt;
+    final serviceAreaIds = <String>{...existing.serviceAreaIds};
+    String? publicationDateError;
 
     return showDialog<Map<String, dynamic>>(
       context: context,
       builder: (dialogContext) {
         return StatefulBuilder(
           builder: (context, setState) {
-            final subcategories = snapshot.subcategoriesForCategory(selectedCategoryId.value);
-            if (subcategories.isNotEmpty && !subcategories.any((item) => item.id == selectedSubcategoryId.value)) {
+            final subcategories =
+                snapshot.subcategoriesForCategory(selectedCategoryId.value);
+            if (subcategories.isNotEmpty &&
+                !subcategories
+                    .any((item) => item.id == selectedSubcategoryId.value)) {
               selectedSubcategoryId.value = subcategories.first.id;
             }
 
@@ -3166,8 +3931,11 @@ class _ServiceDetailPageState extends ConsumerState<ServiceDetailPage> {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       DropdownButtonFormField<String>(
-                        initialValue: selectedCategoryId.value.isEmpty ? null : selectedCategoryId.value,
-                        decoration: const InputDecoration(labelText: 'Category'),
+                        initialValue: selectedCategoryId.value.isEmpty
+                            ? null
+                            : selectedCategoryId.value,
+                        decoration:
+                            const InputDecoration(labelText: 'Category'),
                         items: snapshot.categories
                             .map(
                               (category) => DropdownMenuItem(
@@ -3179,15 +3947,21 @@ class _ServiceDetailPageState extends ConsumerState<ServiceDetailPage> {
                         onChanged: (value) {
                           setState(() {
                             selectedCategoryId.value = value ?? '';
-                            final next = snapshot.subcategoriesForCategory(selectedCategoryId.value);
-                            selectedSubcategoryId.value = next.firstOrNull?.id ?? '';
+                            final next = snapshot.subcategoriesForCategory(
+                                selectedCategoryId.value);
+                            selectedSubcategoryId.value =
+                                next.firstOrNull?.id ?? '';
                           });
                         },
-                        validator: (value) => (value ?? '').isEmpty ? 'Select a category' : null,
+                        validator: (value) =>
+                            (value ?? '').isEmpty ? 'Select a category' : null,
                       ),
                       DropdownButtonFormField<String>(
-                        initialValue: selectedSubcategoryId.value.isEmpty ? null : selectedSubcategoryId.value,
-                        decoration: const InputDecoration(labelText: 'Subcategory'),
+                        initialValue: selectedSubcategoryId.value.isEmpty
+                            ? null
+                            : selectedSubcategoryId.value,
+                        decoration:
+                            const InputDecoration(labelText: 'Subcategory'),
                         items: subcategories
                             .map(
                               (subcategory) => DropdownMenuItem(
@@ -3196,13 +3970,18 @@ class _ServiceDetailPageState extends ConsumerState<ServiceDetailPage> {
                               ),
                             )
                             .toList(growable: false),
-                        onChanged: (value) => setState(() => selectedSubcategoryId.value = value ?? ''),
-                        validator: (value) => (value ?? '').isEmpty ? 'Select a subcategory' : null,
+                        onChanged: (value) => setState(
+                            () => selectedSubcategoryId.value = value ?? ''),
+                        validator: (value) => (value ?? '').isEmpty
+                            ? 'Select a subcategory'
+                            : null,
                       ),
                       TextFormField(
                         controller: nameController,
                         decoration: const InputDecoration(labelText: 'Name'),
-                        validator: (value) => (value ?? '').trim().length < 2 ? 'Enter a service name' : null,
+                        validator: (value) => (value ?? '').trim().length < 2
+                            ? 'Enter a service name'
+                            : null,
                       ),
                       TextFormField(
                         controller: slugController,
@@ -3214,68 +3993,208 @@ class _ServiceDetailPageState extends ConsumerState<ServiceDetailPage> {
                       ),
                       TextFormField(
                         controller: descriptionController,
-                        decoration: const InputDecoration(labelText: 'Description'),
+                        decoration:
+                            const InputDecoration(labelText: 'Description'),
                         maxLines: 3,
                       ),
                       TextFormField(
                         controller: shortDescriptionController,
-                        decoration: const InputDecoration(labelText: 'Short description'),
+                        decoration: const InputDecoration(
+                            labelText: 'Short description'),
                         maxLines: 2,
                       ),
                       TextFormField(
+                        controller: inclusionsController,
+                        decoration: const InputDecoration(
+                          labelText: 'What’s included',
+                          helperText: 'One item per line.',
+                        ),
+                        maxLines: 4,
+                      ),
+                      TextFormField(
+                        controller: exclusionsController,
+                        decoration: const InputDecoration(
+                          labelText: 'What’s not included',
+                          helperText: 'One item per line.',
+                        ),
+                        maxLines: 4,
+                      ),
+                      TextFormField(
+                        controller: requiredSkillsController,
+                        decoration: const InputDecoration(
+                          labelText: 'Required skills',
+                          helperText: 'One skill per line.',
+                        ),
+                        maxLines: 3,
+                      ),
+                      TextFormField(
+                        controller: requiredToolsController,
+                        decoration: const InputDecoration(
+                          labelText: 'Required tools',
+                          helperText: 'One tool per line.',
+                        ),
+                        maxLines: 3,
+                      ),
+                      TextFormField(
+                        controller: requiredDocumentsController,
+                        decoration: const InputDecoration(
+                          labelText: 'Required documents',
+                          helperText: 'One document per line.',
+                        ),
+                        maxLines: 3,
+                      ),
+                      TextFormField(
                         controller: startingPriceController,
-                        decoration: const InputDecoration(labelText: 'Starting price'),
+                        decoration:
+                            const InputDecoration(labelText: 'Starting price'),
                         keyboardType: TextInputType.number,
                       ),
                       TextFormField(
                         controller: gstRateController,
-                        decoration: const InputDecoration(labelText: 'GST rate'),
+                        decoration:
+                            const InputDecoration(labelText: 'GST rate'),
                         keyboardType: TextInputType.number,
+                      ),
+                      SwitchListTile(
+                        value: gstApplicable,
+                        onChanged: (value) =>
+                            setState(() => gstApplicable = value),
+                        title: const Text('GST applicable'),
                       ),
                       TextFormField(
                         controller: sacCodeController,
-                        decoration: const InputDecoration(labelText: 'SAC code'),
+                        decoration:
+                            const InputDecoration(labelText: 'SAC code'),
                       ),
                       TextFormField(
                         controller: durationController,
-                        decoration: const InputDecoration(labelText: 'Duration (mins)'),
+                        decoration:
+                            const InputDecoration(labelText: 'Duration (mins)'),
                         keyboardType: TextInputType.number,
                       ),
                       TextFormField(
                         controller: warrantyController,
-                        decoration: const InputDecoration(labelText: 'Warranty days'),
+                        decoration:
+                            const InputDecoration(labelText: 'Warranty days'),
                         keyboardType: TextInputType.number,
                       ),
                       TextFormField(
+                        controller: warrantyTextController,
+                        decoration: const InputDecoration(
+                            labelText: 'Warranty terms (optional)'),
+                        maxLines: 3,
+                      ),
+                      TextFormField(
+                        controller: requirementsController,
+                        decoration: const InputDecoration(
+                          labelText: 'Before booking requirements',
+                          helperText: 'One requirement per line.',
+                        ),
+                        maxLines: 4,
+                      ),
+                      TextFormField(
+                        controller: variantsController,
+                        decoration: const InputDecoration(
+                          labelText: 'Service options / variants',
+                          helperText:
+                              'One per line: name | price | duration minutes | active/inactive | description',
+                        ),
+                        maxLines: 4,
+                        validator: _validateServiceOptionLines,
+                      ),
+                      TextFormField(
+                        controller: addonsController,
+                        decoration: const InputDecoration(
+                          labelText: 'Optional add-ons',
+                          helperText:
+                              'One per line: name | price | duration minutes | active/inactive | description',
+                        ),
+                        maxLines: 4,
+                        validator: _validateServiceOptionLines,
+                      ),
+                      _buildPublicationControls(
+                        context: context,
+                        snapshot: snapshot,
+                        publicationStatus: publicationStatus,
+                        publishStartsAt: publishStartsAt,
+                        publishEndsAt: publishEndsAt,
+                        serviceAreaIds: serviceAreaIds,
+                        dateError: publicationDateError,
+                        onPublicationStatusChanged: (value) =>
+                            setState(() => publicationStatus = value),
+                        onPublishStartsAtChanged: (value) => setState(() {
+                          publishStartsAt = value;
+                          publicationDateError = null;
+                        }),
+                        onPublishEndsAtChanged: (value) => setState(() {
+                          publishEndsAt = value;
+                          publicationDateError = null;
+                        }),
+                        onServiceAreaToggled: (id) => setState(() {
+                          if (!serviceAreaIds.add(id)) {
+                            serviceAreaIds.remove(id);
+                          }
+                        }),
+                      ),
+                      DropdownButtonFormField<String>(
+                        initialValue: priceType,
+                        decoration: const InputDecoration(
+                            labelText: 'Customer price label'),
+                        items: const [
+                          DropdownMenuItem(
+                              value: 'FIXED', child: Text('Fixed price')),
+                          DropdownMenuItem(
+                              value: 'FROM', child: Text('Starting from')),
+                          DropdownMenuItem(
+                              value: 'QUOTE',
+                              child: Text('Price after assessment')),
+                        ],
+                        onChanged: (value) =>
+                            setState(() => priceType = value ?? 'FROM'),
+                      ),
+                      TextFormField(
+                        controller: ctaLabelController,
+                        decoration: const InputDecoration(
+                            labelText: 'Booking button text'),
+                        maxLength: 40,
+                      ),
+                      TextFormField(
                         controller: iconController,
-                        decoration: const InputDecoration(labelText: 'Icon URL'),
+                        decoration:
+                            const InputDecoration(labelText: 'Icon URL'),
                       ),
                       TextFormField(
                         controller: seoTitleController,
-                        decoration: const InputDecoration(labelText: 'SEO title'),
+                        decoration:
+                            const InputDecoration(labelText: 'SEO title'),
                       ),
                       TextFormField(
                         controller: seoDescriptionController,
-                        decoration: const InputDecoration(labelText: 'SEO description'),
+                        decoration:
+                            const InputDecoration(labelText: 'SEO description'),
                         maxLines: 2,
                       ),
                       TextFormField(
                         controller: seoKeywordsController,
-                        decoration: const InputDecoration(labelText: 'SEO keywords'),
+                        decoration:
+                            const InputDecoration(labelText: 'SEO keywords'),
                       ),
                       TextFormField(
                         controller: cancellationPolicyController,
-                        decoration: const InputDecoration(labelText: 'Cancellation policy'),
+                        decoration: const InputDecoration(
+                            labelText: 'Cancellation policy'),
                         maxLines: 3,
                       ),
                       TextFormField(
                         controller: ratingController,
                         decoration: const InputDecoration(labelText: 'Rating'),
-                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                        keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true),
                       ),
                       TextFormField(
                         controller: reviewCountController,
-                        decoration: const InputDecoration(labelText: 'Review count'),
+                        decoration:
+                            const InputDecoration(labelText: 'Review count'),
                         keyboardType: TextInputType.number,
                       ),
                       SwitchListTile(
@@ -3300,14 +4219,24 @@ class _ServiceDetailPageState extends ConsumerState<ServiceDetailPage> {
                       ),
                       SwitchListTile(
                         value: requiresSiteVisit,
-                        onChanged: (value) => setState(() => requiresSiteVisit = value),
+                        onChanged: (value) =>
+                            setState(() => requiresSiteVisit = value),
                         title: const Text('Requires site visit (Big Job)'),
-                        subtitle: const Text('Worker visits first to generate a custom quote'),
+                        subtitle: const Text(
+                            'Worker visits first to generate a custom quote'),
                       ),
                       SwitchListTile(
                         value: isActive,
                         onChanged: (value) => setState(() => isActive = value),
                         title: const Text('Active'),
+                      ),
+                      SwitchListTile(
+                        value: bookingEnabled,
+                        onChanged: (value) =>
+                            setState(() => bookingEnabled = value),
+                        title: const Text('Booking enabled'),
+                        subtitle: const Text(
+                            'Disable temporarily without hiding the service.'),
                       ),
                     ],
                   ),
@@ -3321,36 +4250,106 @@ class _ServiceDetailPageState extends ConsumerState<ServiceDetailPage> {
                 FilledButton(
                   onPressed: () {
                     if (!formKey.currentState!.validate()) return;
+                    if (publishStartsAt != null &&
+                        publishEndsAt != null &&
+                        !publishEndsAt!.isAfter(publishStartsAt!)) {
+                      setState(() => publicationDateError =
+                          'End date must be after the start date.');
+                      return;
+                    }
                     Navigator.of(dialogContext).pop({
                       'categoryId': selectedCategoryId.value,
                       'subcategoryId': selectedSubcategoryId.value,
                       'name': nameController.text.trim(),
-                      'slug': slugController.text.trim().isEmpty ? _slugify(nameController.text) : slugController.text.trim(),
-                      'code': codeController.text.trim().isEmpty ? null : codeController.text.trim(),
-                      'description': descriptionController.text.trim().isEmpty ? null : descriptionController.text.trim(),
-                      'shortDescription': shortDescriptionController.text.trim().isEmpty ? null : shortDescriptionController.text.trim(),
-                      'startingPrice': double.tryParse(startingPriceController.text.trim()) ?? 0,
-                      'gstRate': double.tryParse(gstRateController.text.trim()) ?? 0,
-                      'sacCode': sacCodeController.text.trim().isEmpty ? null : sacCodeController.text.trim(),
-                      'estimatedDurationMins': int.tryParse(durationController.text.trim()) ?? 0,
-                      'warrantyDays': int.tryParse(warrantyController.text.trim()) ?? 0,
-                      'iconUrl': iconController.text.trim().isEmpty ? null : iconController.text.trim(),
-                      'seoTitle': seoTitleController.text.trim().isEmpty ? null : seoTitleController.text.trim(),
-                      'seoDescription': seoDescriptionController.text.trim().isEmpty
+                      'slug': slugController.text.trim().isEmpty
+                          ? _slugify(nameController.text)
+                          : slugController.text.trim(),
+                      'code': codeController.text.trim().isEmpty
                           ? null
-                          : seoDescriptionController.text.trim(),
-                      'seoKeywords': seoKeywordsController.text.trim().isEmpty ? null : seoKeywordsController.text.trim(),
-                      'cancellationPolicy': cancellationPolicyController.text.trim().isEmpty
+                          : codeController.text.trim(),
+                      'description': descriptionController.text.trim().isEmpty
                           ? null
-                          : cancellationPolicyController.text.trim(),
-                      'rating': double.tryParse(ratingController.text.trim()) ?? 0,
-                      'reviewCount': int.tryParse(reviewCountController.text.trim()) ?? 0,
+                          : descriptionController.text.trim(),
+                      'shortDescription':
+                          shortDescriptionController.text.trim().isEmpty
+                              ? null
+                              : shortDescriptionController.text.trim(),
+                      'startingPrice': double.tryParse(
+                              startingPriceController.text.trim()) ??
+                          0,
+                      'gstRate':
+                          double.tryParse(gstRateController.text.trim()) ?? 18,
+                      'sacCode': sacCodeController.text.trim().isEmpty
+                          ? 'PENDING'
+                          : sacCodeController.text.trim(),
+                      'estimatedDurationMins':
+                          int.tryParse(durationController.text.trim()) ?? 0,
+                      'warrantyDays':
+                          int.tryParse(warrantyController.text.trim()) ?? 0,
+                      'inclusions': _serviceLines(inclusionsController.text),
+                      'exclusions': _serviceLines(exclusionsController.text),
+                      'requiredSkills': _serviceRequirementRows(
+                          requiredSkillsController.text),
+                      'requiredTools':
+                          _serviceRequirementRows(requiredToolsController.text),
+                      'requiredDocuments': _serviceRequirementRows(
+                          requiredDocumentsController.text),
+                      'warrantyText': warrantyTextController.text.trim().isEmpty
+                          ? null
+                          : warrantyTextController.text.trim(),
+                      'requirements': requirementsController.text
+                          .split('\n')
+                          .map((item) => item.trim())
+                          .where((item) => item.isNotEmpty)
+                          .toList(growable: false),
+                      'variants': _serviceOptionRows(
+                        variantsController.text,
+                        existing.variants,
+                        isVariant: true,
+                      ),
+                      'addons': _serviceOptionRows(
+                        addonsController.text,
+                        existing.addons,
+                        isVariant: false,
+                      ),
+                      'priceType': priceType,
+                      'ctaLabel': ctaLabelController.text.trim().isEmpty
+                          ? 'Book service'
+                          : ctaLabelController.text.trim(),
+                      'iconUrl': iconController.text.trim().isEmpty
+                          ? null
+                          : iconController.text.trim(),
+                      'seoTitle': seoTitleController.text.trim().isEmpty
+                          ? null
+                          : seoTitleController.text.trim(),
+                      'seoDescription':
+                          seoDescriptionController.text.trim().isEmpty
+                              ? null
+                              : seoDescriptionController.text.trim(),
+                      'seoKeywords': seoKeywordsController.text.trim().isEmpty
+                          ? null
+                          : seoKeywordsController.text.trim(),
+                      'cancellationPolicy':
+                          cancellationPolicyController.text.trim().isEmpty
+                              ? null
+                              : cancellationPolicyController.text.trim(),
+                      'rating':
+                          double.tryParse(ratingController.text.trim()) ?? 0,
+                      'reviewCount':
+                          int.tryParse(reviewCountController.text.trim()) ?? 0,
                       'featured': featured,
                       'popular': popular,
                       'emergencyAvailable': emergency,
+                      'gstApplicable': gstApplicable,
                       'homeVisit': homeVisit,
                       'requiresSiteVisit': requiresSiteVisit,
                       'isActive': isActive,
+                      'bookingEnabled': bookingEnabled,
+                      'publicationStatus': publicationStatus,
+                      'publishStartsAt':
+                          publishStartsAt?.toUtc().toIso8601String(),
+                      'publishEndsAt': publishEndsAt?.toUtc().toIso8601String(),
+                      'serviceAreaIds': serviceAreaIds.toList(growable: false),
                     });
                   },
                   child: const Text('Save'),
@@ -3368,6 +4367,11 @@ class _ServiceDetailPageState extends ConsumerState<ServiceDetailPage> {
       codeController.dispose();
       descriptionController.dispose();
       shortDescriptionController.dispose();
+      inclusionsController.dispose();
+      exclusionsController.dispose();
+      requiredSkillsController.dispose();
+      requiredToolsController.dispose();
+      requiredDocumentsController.dispose();
       startingPriceController.dispose();
       gstRateController.dispose();
       sacCodeController.dispose();
@@ -3378,12 +4382,18 @@ class _ServiceDetailPageState extends ConsumerState<ServiceDetailPage> {
       seoDescriptionController.dispose();
       seoKeywordsController.dispose();
       cancellationPolicyController.dispose();
+      warrantyTextController.dispose();
+      requirementsController.dispose();
+      variantsController.dispose();
+      addonsController.dispose();
+      ctaLabelController.dispose();
       ratingController.dispose();
       reviewCountController.dispose();
     });
   }
 
-  Future<void> _editService(_CatalogSnapshot snapshot, _AdminService service) async {
+  Future<void> _editService(
+      _CatalogSnapshot snapshot, _AdminService service) async {
     final payload = await _showServiceEditor(snapshot, service);
     if (payload == null) return;
     try {
@@ -3399,7 +4409,8 @@ class _ServiceDetailPageState extends ConsumerState<ServiceDetailPage> {
     try {
       await _api.updateService(service.id, {'isActive': !service.isActive});
       await _reload();
-      await _showMessage(service.isActive ? 'Service disabled' : 'Service enabled');
+      await _showMessage(
+          service.isActive ? 'Service disabled' : 'Service enabled');
     } catch (error) {
       await _showMessage('Unable to update service status: $error');
     }
@@ -3419,17 +4430,21 @@ class _ServiceDetailPageState extends ConsumerState<ServiceDetailPage> {
           onPressed: () => context.pop(),
         ),
         actions: [
-          IconButton(onPressed: _reload, icon: const Icon(Icons.refresh_rounded)),
+          IconButton(
+              onPressed: _reload, icon: const Icon(Icons.refresh_rounded)),
         ],
       ),
-      body: FutureBuilder<({_CatalogSnapshot snapshot, _AdminService service})?>(
+      body:
+          FutureBuilder<({_CatalogSnapshot snapshot, _AdminService service})?>(
         future: _future,
         builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting && !snapshot.hasData) {
+          if (snapshot.connectionState == ConnectionState.waiting &&
+              !snapshot.hasData) {
             return const Center(child: CircularProgressIndicator());
           }
           if (snapshot.hasError) {
-            return Center(child: Text('Unable to load service: ${snapshot.error}'));
+            return Center(
+                child: Text('Unable to load service: ${snapshot.error}'));
           }
           final data = snapshot.data;
           if (data == null) {
@@ -3441,15 +4456,19 @@ class _ServiceDetailPageState extends ConsumerState<ServiceDetailPage> {
                   children: [
                     const Icon(Icons.search_off_rounded, size: 48),
                     const SizedBox(height: 12),
-                    Text('Service not found', style: tt.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
+                    Text('Service not found',
+                        style: tt.titleLarge
+                            ?.copyWith(fontWeight: FontWeight.w800)),
                     const SizedBox(height: 8),
                     Text(
                       'This service is not present in the current catalog snapshot.',
                       textAlign: TextAlign.center,
-                      style: tt.bodyMedium?.copyWith(color: cs.onSurfaceVariant),
+                      style:
+                          tt.bodyMedium?.copyWith(color: cs.onSurfaceVariant),
                     ),
                     const SizedBox(height: 16),
-                    FilledButton(onPressed: _reload, child: const Text('Reload')),
+                    FilledButton(
+                        onPressed: _reload, child: const Text('Reload')),
                   ],
                 ),
               ),
@@ -3458,7 +4477,8 @@ class _ServiceDetailPageState extends ConsumerState<ServiceDetailPage> {
 
           final service = data.service;
           final category = data.snapshot.categoryById(service.categoryId);
-          final subcategory = data.snapshot.subcategoryById(service.subcategoryId);
+          final subcategory =
+              data.snapshot.subcategoryById(service.subcategoryId);
           return ListView(
             padding: const EdgeInsets.all(24),
             children: [
@@ -3468,12 +4488,16 @@ class _ServiceDetailPageState extends ConsumerState<ServiceDetailPage> {
                     width: 52,
                     height: 52,
                     decoration: BoxDecoration(
-                      color: service.featured ? const Color(0xFFC2A15E).withValues(alpha: 0.12) : const Color(0xFF10B981).withValues(alpha: 0.12),
+                      color: service.featured
+                          ? const Color(0xFFC2A15E).withValues(alpha: 0.12)
+                          : const Color(0xFF10B981).withValues(alpha: 0.12),
                       borderRadius: BorderRadius.circular(16),
                     ),
                     child: Icon(
                       Icons.design_services_rounded,
-                      color: service.featured ? const Color(0xFFC2A15E) : const Color(0xFF10B981),
+                      color: service.featured
+                          ? const Color(0xFFC2A15E)
+                          : const Color(0xFF10B981),
                     ),
                   ),
                   const SizedBox(width: 14),
@@ -3481,9 +4505,14 @@ class _ServiceDetailPageState extends ConsumerState<ServiceDetailPage> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(service.name, style: tt.headlineSmall?.copyWith(fontWeight: FontWeight.w900)),
+                        Text(service.name,
+                            style: tt.headlineSmall
+                                ?.copyWith(fontWeight: FontWeight.w900)),
                         const SizedBox(height: 6),
-                        Text('${category?.name ?? 'Category'} / ${subcategory?.name ?? 'Subcategory'}', style: tt.bodyMedium?.copyWith(color: cs.onSurfaceVariant)),
+                        Text(
+                            '${category?.name ?? 'Category'} / ${subcategory?.name ?? 'Subcategory'}',
+                            style: tt.bodyMedium
+                                ?.copyWith(color: cs.onSurfaceVariant)),
                       ],
                     ),
                   ),
@@ -3495,11 +4524,14 @@ class _ServiceDetailPageState extends ConsumerState<ServiceDetailPage> {
                 spacing: 8,
                 runSpacing: 8,
                 children: [
-                  _DetailChip(label: '₹${service.startingPrice.toStringAsFixed(0)}'),
+                  _DetailChip(
+                      label: '₹${service.startingPrice.toStringAsFixed(0)}'),
                   _DetailChip(label: '${service.estimatedDurationMins} mins'),
-                  _DetailChip(label: 'GST ${service.gstRate.toStringAsFixed(2)}%'),
+                  _DetailChip(
+                      label: 'GST ${service.gstRate.toStringAsFixed(2)}%'),
                   _DetailChip(label: 'SAC ${service.sacCode}'),
-                  _DetailChip(label: 'Rating ${service.rating.toStringAsFixed(1)}'),
+                  _DetailChip(
+                      label: 'Rating ${service.rating.toStringAsFixed(1)}'),
                   _DetailChip(label: '${service.reviewCount} reviews'),
                   _DetailChip(label: service.isActive ? 'Active' : 'Disabled'),
                 ],
@@ -3516,7 +4548,9 @@ class _ServiceDetailPageState extends ConsumerState<ServiceDetailPage> {
                   ),
                   OutlinedButton.icon(
                     onPressed: () => _toggleService(service),
-                    icon: Icon(service.isActive ? Icons.visibility_off_rounded : Icons.visibility_rounded),
+                    icon: Icon(service.isActive
+                        ? Icons.visibility_off_rounded
+                        : Icons.visibility_rounded),
                     label: Text(service.isActive ? 'Disable' : 'Enable'),
                   ),
                   OutlinedButton.icon(
@@ -3528,13 +4562,17 @@ class _ServiceDetailPageState extends ConsumerState<ServiceDetailPage> {
               ),
               const SizedBox(height: 18),
               if ((service.description ?? '').trim().isNotEmpty) ...[
-                Text('Description', style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
+                Text('Description',
+                    style:
+                        tt.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
                 const SizedBox(height: 6),
                 Text(service.description!.trim()),
                 const SizedBox(height: 18),
               ],
               if ((service.shortDescription ?? '').trim().isNotEmpty) ...[
-                Text('Short Description', style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
+                Text('Short Description',
+                    style:
+                        tt.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
                 const SizedBox(height: 6),
                 Text(service.shortDescription!.trim()),
                 const SizedBox(height: 18),
@@ -3544,37 +4582,55 @@ class _ServiceDetailPageState extends ConsumerState<ServiceDetailPage> {
                 const SizedBox(height: 8),
               ],
               if ((service.seoTitle ?? '').trim().isNotEmpty) ...[
-                _DetailLine(label: 'SEO title', value: service.seoTitle!.trim()),
+                _DetailLine(
+                    label: 'SEO title', value: service.seoTitle!.trim()),
                 const SizedBox(height: 8),
               ],
               if ((service.seoDescription ?? '').trim().isNotEmpty) ...[
-                _DetailLine(label: 'SEO description', value: service.seoDescription!.trim()),
+                _DetailLine(
+                    label: 'SEO description',
+                    value: service.seoDescription!.trim()),
                 const SizedBox(height: 8),
               ],
               if ((service.seoKeywords ?? '').trim().isNotEmpty) ...[
-                _DetailLine(label: 'SEO keywords', value: service.seoKeywords!.trim()),
+                _DetailLine(
+                    label: 'SEO keywords', value: service.seoKeywords!.trim()),
                 const SizedBox(height: 8),
               ],
               if ((service.cancellationPolicy ?? '').trim().isNotEmpty) ...[
-                _DetailLine(label: 'Cancellation policy', value: service.cancellationPolicy!.trim()),
+                _DetailLine(
+                    label: 'Cancellation policy',
+                    value: service.cancellationPolicy!.trim()),
                 const SizedBox(height: 8),
               ],
-              _DetailLine(label: 'Rating', value: service.rating.toStringAsFixed(1)),
-              _DetailLine(label: 'Review count', value: '${service.reviewCount}'),
+              _DetailLine(
+                  label: 'Rating', value: service.rating.toStringAsFixed(1)),
+              _DetailLine(
+                  label: 'Review count', value: '${service.reviewCount}'),
               _DetailLine(label: 'Service ID', value: service.id),
-              _DetailLine(label: 'Category', value: category?.name ?? 'Unknown'),
-              _DetailLine(label: 'Subcategory', value: subcategory?.name ?? 'Unknown'),
+              _DetailLine(
+                  label: 'Category', value: category?.name ?? 'Unknown'),
+              _DetailLine(
+                  label: 'Subcategory', value: subcategory?.name ?? 'Unknown'),
               _DetailLine(label: 'Slug', value: service.slug),
               _DetailLine(label: 'Code', value: service.code ?? 'None'),
-              _DetailLine(label: 'Duration', value: '${service.estimatedDurationMins} mins'),
-              _DetailLine(label: 'Home visit', value: service.homeVisit ? 'Yes' : 'No'),
-              _DetailLine(label: 'Featured', value: service.featured ? 'Yes' : 'No'),
-              _DetailLine(label: 'Status', value: service.isActive ? 'Active' : 'Disabled'),
+              _DetailLine(
+                  label: 'Duration',
+                  value: '${service.estimatedDurationMins} mins'),
+              _DetailLine(
+                  label: 'Home visit', value: service.homeVisit ? 'Yes' : 'No'),
+              _DetailLine(
+                  label: 'Featured', value: service.featured ? 'Yes' : 'No'),
+              _DetailLine(
+                  label: 'Status',
+                  value: service.isActive ? 'Active' : 'Disabled'),
               const SizedBox(height: 18),
-              Text('Pricing Rules', style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
+              Text('Pricing Rules',
+                  style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
               const SizedBox(height: 12),
               if (service.pricingRules.isEmpty)
-                Text('No pricing rules configured yet.', style: tt.bodyMedium?.copyWith(color: cs.onSurfaceVariant))
+                Text('No pricing rules configured yet.',
+                    style: tt.bodyMedium?.copyWith(color: cs.onSurfaceVariant))
               else
                 ...service.pricingRules.map(
                   (rule) => Padding(
@@ -3592,7 +4648,9 @@ class _ServiceDetailPageState extends ConsumerState<ServiceDetailPage> {
                           Row(
                             children: [
                               Expanded(
-                                child: Text(rule.title, style: tt.titleSmall?.copyWith(fontWeight: FontWeight.w800)),
+                                child: Text(rule.title,
+                                    style: tt.titleSmall?.copyWith(
+                                        fontWeight: FontWeight.w800)),
                               ),
                               _DetailChip(label: rule.type),
                             ],
@@ -3635,11 +4693,13 @@ class _DetailLine extends StatelessWidget {
             width: 120,
             child: Text(
               label,
-              style: tt.bodyMedium?.copyWith(color: cs.onSurfaceVariant, fontWeight: FontWeight.w700),
+              style: tt.bodyMedium?.copyWith(
+                  color: cs.onSurfaceVariant, fontWeight: FontWeight.w700),
             ),
           ),
           Expanded(
-            child: Text(value, style: tt.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
+            child: Text(value,
+                style: tt.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
           ),
         ],
       ),
@@ -3661,7 +4721,8 @@ class _DetailChip extends StatelessWidget {
         borderRadius: BorderRadius.circular(999),
         border: Border.all(color: const Color(0xFFE2E8F0)),
       ),
-      child: Text(label, style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700)),
+      child: Text(label,
+          style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700)),
     );
   }
 }
@@ -3679,7 +4740,8 @@ class _DetailBadge extends StatelessWidget {
         color: const Color(0xFF94A3B8).withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(999),
       ),
-      child: Text(label, style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700)),
+      child: Text(label,
+          style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700)),
     );
   }
 }
@@ -3701,7 +4763,10 @@ class _ErrorState extends StatelessWidget {
             const SizedBox(height: 12),
             Text(
               'Unable to load catalog',
-              style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
+              style: Theme.of(context)
+                  .textTheme
+                  .titleLarge
+                  ?.copyWith(fontWeight: FontWeight.w800),
             ),
             const SizedBox(height: 8),
             const Text('Check the API connection and try again.'),
@@ -3729,7 +4794,11 @@ class _CatalogAdminApi {
         .whereType<Map<String, dynamic>>()
         .map(_AdminCategory.fromDetail)
         .toList(growable: false);
-    return _CatalogSnapshot(categories: categories);
+    final serviceAreas = (response['serviceAreas'] as List? ?? const [])
+        .whereType<Map<String, dynamic>>()
+        .map(_AdminCatalogServiceArea.fromJson)
+        .toList(growable: false);
+    return _CatalogSnapshot(categories: categories, serviceAreas: serviceAreas);
   }
 
   Future<void> createCategory(Map<String, dynamic> data) async {
@@ -3768,7 +4837,8 @@ class _CatalogAdminApi {
   }
 
   Future<Map<String, dynamic>> createService(Map<String, dynamic> data) async {
-    final response = await _dio.post<Map<String, dynamic>>('/admin/catalog/services', data: data);
+    final response = await _dio
+        .post<Map<String, dynamic>>('/admin/catalog/services', data: data);
     return response.data ?? <String, dynamic>{};
   }
 
@@ -3787,15 +4857,20 @@ class _CatalogAdminApi {
     });
   }
 
-  Future<void> addPricingRule(String serviceId, Map<String, dynamic> data) async {
-    await _dio.post('/admin/catalog/services/$serviceId/pricing-rules', data: data);
+  Future<void> addPricingRule(
+      String serviceId, Map<String, dynamic> data) async {
+    await _dio.post('/admin/catalog/services/$serviceId/pricing-rules',
+        data: data);
   }
 
-  Future<void> addServiceImages(String serviceId, List<Map<String, dynamic>> images) async {
-    await _dio.post('/admin/catalog/services/$serviceId/images', data: {'images': images});
+  Future<void> addServiceImages(
+      String serviceId, List<Map<String, dynamic>> images) async {
+    await _dio.post('/admin/catalog/services/$serviceId/images',
+        data: {'images': images});
   }
 
-  Future<Map<String, dynamic>> uploadCatalogImage(Uint8List bytes, String fileName) async {
+  Future<Map<String, dynamic>> uploadCatalogImage(
+      Uint8List bytes, String fileName) async {
     final response = await _dio.post<Map<String, dynamic>>(
       '/media/catalog',
       data: FormData.fromMap({
@@ -3806,7 +4881,8 @@ class _CatalogAdminApi {
   }
 
   Future<Map<String, dynamic>> exportCatalog() async {
-    final response = await _dio.get<Map<String, dynamic>>('/admin/catalog/export');
+    final response =
+        await _dio.get<Map<String, dynamic>>('/admin/catalog/export');
     return response.data ?? <String, dynamic>{};
   }
 
@@ -3827,21 +4903,30 @@ class _CatalogAdminApi {
   }
 
   Future<Map<String, dynamic>> addStarterCatalog() async {
-    final response = await _dio.post<Map<String, dynamic>>('/admin/catalog/starter');
+    final response =
+        await _dio.post<Map<String, dynamic>>('/admin/catalog/starter');
     return response.data ?? <String, dynamic>{};
   }
 }
 
 class _CatalogSnapshot {
-  const _CatalogSnapshot({required this.categories});
+  const _CatalogSnapshot(
+      {required this.categories, this.serviceAreas = const []});
 
-  const _CatalogSnapshot.empty() : categories = const [];
+  const _CatalogSnapshot.empty()
+      : categories = const [],
+        serviceAreas = const [];
 
   final List<_AdminCategory> categories;
+  final List<_AdminCatalogServiceArea> serviceAreas;
 
-  List<_AdminSubcategory> get subcategories => categories.expand((category) => category.subcategories).toList(growable: false);
+  List<_AdminSubcategory> get subcategories => categories
+      .expand((category) => category.subcategories)
+      .toList(growable: false);
 
-  List<_AdminService> get services => subcategories.expand((subcategory) => subcategory.services).toList(growable: false);
+  List<_AdminService> get services => subcategories
+      .expand((subcategory) => subcategory.services)
+      .toList(growable: false);
 
   _AdminCategory? categoryById(String id) {
     for (final category in categories) {
@@ -3865,6 +4950,32 @@ class _CatalogSnapshot {
 
   List<_AdminService> servicesForSubcategory(String subcategoryId) {
     return subcategoryById(subcategoryId)?.services ?? const [];
+  }
+}
+
+class _AdminCatalogServiceArea {
+  const _AdminCatalogServiceArea({
+    required this.id,
+    required this.name,
+    required this.cityName,
+    required this.isActive,
+  });
+
+  final String id;
+  final String name;
+  final String cityName;
+  final bool isActive;
+
+  factory _AdminCatalogServiceArea.fromJson(Map<String, dynamic> json) {
+    final city = json['city'] is Map<String, dynamic>
+        ? json['city'] as Map<String, dynamic>
+        : const <String, dynamic>{};
+    return _AdminCatalogServiceArea(
+      id: json['id'] as String? ?? '',
+      name: json['name'] as String? ?? '',
+      cityName: city['name'] as String? ?? '',
+      isActive: json['isActive'] as bool? ?? true,
+    );
   }
 }
 
@@ -3907,9 +5018,11 @@ class _AdminCategory {
   final String? seoDescription;
   final List<_AdminSubcategory> subcategories;
 
-  int get serviceCount => subcategories.fold<int>(0, (sum, subcategory) => sum + subcategory.serviceCount);
+  int get serviceCount => subcategories.fold<int>(
+      0, (sum, subcategory) => sum + subcategory.serviceCount);
 
-  factory _AdminCategory.fromDetail(Map<String, dynamic> json, {_AdminCategory? fallback}) {
+  factory _AdminCategory.fromDetail(Map<String, dynamic> json,
+      {_AdminCategory? fallback}) {
     final subcategories = (json['subcategories'] as List? ?? const [])
         .whereType<Map<String, dynamic>>()
         .map(_AdminSubcategory.fromJson)
@@ -3921,11 +5034,13 @@ class _AdminCategory {
       isActive: json['isActive'] as bool? ?? fallback?.isActive ?? true,
       featured: json['featured'] as bool? ?? fallback?.featured ?? false,
       popular: json['popular'] as bool? ?? fallback?.popular ?? false,
-      sortOrder: (json['sortOrder'] as num?)?.toInt() ?? fallback?.sortOrder ?? 0,
+      sortOrder:
+          (json['sortOrder'] as num?)?.toInt() ?? fallback?.sortOrder ?? 0,
       description: json['description'] as String? ?? fallback?.description,
       iconUrl: json['iconUrl'] as String? ?? fallback?.iconUrl,
       seoTitle: json['seoTitle'] as String? ?? fallback?.seoTitle,
-      seoDescription: json['seoDescription'] as String? ?? fallback?.seoDescription,
+      seoDescription:
+          json['seoDescription'] as String? ?? fallback?.seoDescription,
       subcategories: subcategories,
     );
   }
@@ -3967,7 +5082,9 @@ class _AdminSubcategory {
   int get serviceCount => services.length;
 
   factory _AdminSubcategory.fromJson(Map<String, dynamic> json) {
-    final servicesJson = (json['catalogServices'] as List? ?? json['services'] as List? ?? const []);
+    final servicesJson = (json['catalogServices'] as List? ??
+        json['services'] as List? ??
+        const []);
     return _AdminSubcategory(
       id: json['id'] as String? ?? '',
       categoryId: json['categoryId'] as String? ?? '',
@@ -3982,7 +5099,10 @@ class _AdminSubcategory {
       seoDescription: json['seoDescription'] as String?,
       rating: _toDouble(json['rating']),
       reviewCount: (json['reviewCount'] as num?)?.toInt() ?? 0,
-      services: servicesJson.whereType<Map<String, dynamic>>().map(_AdminService.fromJson).toList(growable: false),
+      services: servicesJson
+          .whereType<Map<String, dynamic>>()
+          .map(_AdminService.fromJson)
+          .toList(growable: false),
     );
   }
 }
@@ -3997,14 +5117,29 @@ class _AdminService {
     required this.code,
     required this.startingPrice,
     required this.gstRate,
+    required this.gstApplicable,
     required this.sacCode,
     required this.estimatedDurationMins,
     required this.isActive,
+    required this.publicationStatus,
+    required this.publishStartsAt,
+    required this.publishEndsAt,
+    required this.serviceAreaIds,
     required this.featured,
     required this.popular,
     required this.emergencyAvailable,
     required this.homeVisit,
     required this.requiresSiteVisit,
+    required this.bookingEnabled,
+    required this.priceType,
+    required this.ctaLabel,
+    required this.warrantyText,
+    required this.requirements,
+    required this.inclusions,
+    required this.exclusions,
+    required this.requiredSkills,
+    required this.requiredTools,
+    required this.requiredDocuments,
     required this.warrantyDays,
     required this.description,
     required this.shortDescription,
@@ -4016,6 +5151,8 @@ class _AdminService {
     required this.rating,
     required this.reviewCount,
     required this.pricingRules,
+    required this.variants,
+    required this.addons,
   });
 
   final String id;
@@ -4026,14 +5163,29 @@ class _AdminService {
   final String? code;
   final double startingPrice;
   final double gstRate;
+  final bool gstApplicable;
   final String sacCode;
   final int estimatedDurationMins;
   final bool isActive;
+  final String publicationStatus;
+  final DateTime? publishStartsAt;
+  final DateTime? publishEndsAt;
+  final List<String> serviceAreaIds;
   final bool featured;
   final bool popular;
   final bool emergencyAvailable;
   final bool homeVisit;
   final bool requiresSiteVisit;
+  final bool bookingEnabled;
+  final String priceType;
+  final String ctaLabel;
+  final String? warrantyText;
+  final List<String> requirements;
+  final List<String> inclusions;
+  final List<String> exclusions;
+  final List<String> requiredSkills;
+  final List<String> requiredTools;
+  final List<String> requiredDocuments;
   final int warrantyDays;
   final String? description;
   final String? shortDescription;
@@ -4045,6 +5197,8 @@ class _AdminService {
   final double rating;
   final int reviewCount;
   final List<_AdminPricingRule> pricingRules;
+  final List<_AdminServiceOption> variants;
+  final List<_AdminServiceOption> addons;
 
   factory _AdminService.fromJson(Map<String, dynamic> json) {
     return _AdminService(
@@ -4056,14 +5210,41 @@ class _AdminService {
       code: json['code'] as String?,
       startingPrice: _toDouble(json['startingPrice']),
       gstRate: json['gstRate'] == null ? 18 : _toDouble(json['gstRate']),
-      sacCode: (json['sacCode'] as String?)?.trim().isNotEmpty == true ? json['sacCode'] as String : 'PENDING',
-      estimatedDurationMins: (json['estimatedDurationMins'] as num?)?.toInt() ?? 0,
+      gstApplicable: json['gstApplicable'] as bool? ?? true,
+      sacCode: (json['sacCode'] as String?)?.trim().isNotEmpty == true
+          ? json['sacCode'] as String
+          : 'PENDING',
+      estimatedDurationMins:
+          (json['estimatedDurationMins'] as num?)?.toInt() ?? 0,
       isActive: json['isActive'] as bool? ?? true,
+      publicationStatus: json['publicationStatus'] as String? ?? 'PUBLISHED',
+      publishStartsAt:
+          DateTime.tryParse(json['publishStartsAt'] as String? ?? '')
+              ?.toLocal(),
+      publishEndsAt:
+          DateTime.tryParse(json['publishEndsAt'] as String? ?? '')?.toLocal(),
+      serviceAreaIds: (json['serviceAreaAssignments'] as List? ?? const [])
+          .whereType<Map<String, dynamic>>()
+          .map((assignment) => assignment['serviceAreaId'] as String? ?? '')
+          .where((id) => id.isNotEmpty)
+          .toList(growable: false),
       featured: json['featured'] as bool? ?? false,
       popular: json['popular'] as bool? ?? false,
       emergencyAvailable: json['emergencyAvailable'] as bool? ?? false,
       homeVisit: json['homeVisit'] as bool? ?? true,
       requiresSiteVisit: json['requiresSiteVisit'] as bool? ?? false,
+      bookingEnabled: json['bookingEnabled'] as bool? ?? true,
+      priceType: json['priceType'] as String? ?? 'FROM',
+      ctaLabel: json['ctaLabel'] as String? ?? 'Book service',
+      warrantyText: json['warrantyText'] as String?,
+      requirements: (json['requirements'] as List? ?? const [])
+          .whereType<String>()
+          .toList(growable: false),
+      inclusions: _serviceLinesFromJson(json['inclusions']),
+      exclusions: _serviceLinesFromJson(json['exclusions']),
+      requiredSkills: _serviceRequirementNames(json['requiredSkills']),
+      requiredTools: _serviceRequirementNames(json['requiredTools']),
+      requiredDocuments: _serviceRequirementNames(json['requiredDocuments']),
       warrantyDays: (json['warrantyDays'] as num?)?.toInt() ?? 0,
       description: json['description'] as String?,
       shortDescription: json['shortDescription'] as String?,
@@ -4078,8 +5259,57 @@ class _AdminService {
           .whereType<Map<String, dynamic>>()
           .map(_AdminPricingRule.fromJson)
           .toList(growable: false),
+      variants: (json['variants'] as List? ?? const [])
+          .whereType<Map<String, dynamic>>()
+          .map((item) => _AdminServiceOption.fromJson(item, isVariant: true))
+          .toList(growable: false),
+      addons: (json['addons'] as List? ?? const [])
+          .whereType<Map<String, dynamic>>()
+          .map((item) => _AdminServiceOption.fromJson(item, isVariant: false))
+          .toList(growable: false),
     );
   }
+}
+
+class _AdminServiceOption {
+  const _AdminServiceOption({
+    required this.id,
+    required this.name,
+    required this.price,
+    this.description,
+    this.imageUrl,
+    this.originalPrice,
+    this.durationMins,
+    this.isActive = true,
+  });
+
+  final String id;
+  final String name;
+  final double price;
+  final String? description;
+  final String? imageUrl;
+  final double? originalPrice;
+  final int? durationMins;
+  final bool isActive;
+
+  factory _AdminServiceOption.fromJson(
+    Map<String, dynamic> json, {
+    required bool isVariant,
+  }) =>
+      _AdminServiceOption(
+        id: json['id'] as String? ?? '',
+        name: json['name'] as String? ?? '',
+        price: _toDouble(json['price']),
+        description: json['description'] as String?,
+        imageUrl: json['imageUrl'] as String?,
+        originalPrice: json['originalPrice'] == null
+            ? null
+            : _toDouble(json['originalPrice']),
+        durationMins: (json['estimatedDurationMins'] as num?)?.toInt(),
+        isActive: isVariant
+            ? json['isAvailable'] as bool? ?? true
+            : json['isActive'] as bool? ?? true,
+      );
 }
 
 class _AdminPricingRule {
@@ -4114,10 +5344,143 @@ class _AdminPricingRule {
   }
 }
 
+String _formatServiceOptions(List<_AdminServiceOption> options) => options
+    .map((option) => [
+          option.name,
+          option.price.toStringAsFixed(2),
+          option.durationMins?.toString() ?? '',
+          option.isActive ? 'active' : 'inactive',
+          option.description ?? '',
+        ].join(' | '))
+    .join('\n');
+
+String? _validateServiceOptionLines(String? value) {
+  final lines = (value ?? '')
+      .split('\n')
+      .map((line) => line.trim())
+      .where((line) => line.isNotEmpty)
+      .toList(growable: false);
+  if (lines.length > 50) return 'Enter no more than 50 options';
+
+  final names = <String>{};
+  for (var index = 0; index < lines.length; index += 1) {
+    final parts = lines[index].split('|').map((part) => part.trim()).toList();
+    if (parts.length < 2 || parts[0].length < 2) {
+      return 'Line ${index + 1}: use name | price | duration | status | description';
+    }
+    final price = double.tryParse(parts[1]);
+    if (price == null || !price.isFinite || price < 0) {
+      return 'Line ${index + 1}: enter a valid non-negative price';
+    }
+    if (parts.length > 2 &&
+        parts[2].isNotEmpty &&
+        (int.tryParse(parts[2]) == null || int.parse(parts[2]) <= 0)) {
+      return 'Line ${index + 1}: duration must be a positive whole number';
+    }
+    if (parts.length > 3 &&
+        parts[3].isNotEmpty &&
+        !const {'active', 'inactive'}.contains(parts[3].toLowerCase())) {
+      return 'Line ${index + 1}: status must be active or inactive';
+    }
+    if (!names.add(parts[0].toLowerCase())) {
+      return 'Option names must be unique';
+    }
+  }
+  return null;
+}
+
+List<Map<String, dynamic>> _serviceOptionRows(
+  String value,
+  List<_AdminServiceOption> existing, {
+  required bool isVariant,
+}) {
+  final existingByName = {
+    for (final option in existing) option.name.trim().toLowerCase(): option,
+  };
+  return value
+      .split('\n')
+      .map((line) => line.trim())
+      .where((line) => line.isNotEmpty)
+      .toList(growable: false)
+      .asMap()
+      .entries
+      .map((entry) {
+    final parts = entry.value.split('|').map((part) => part.trim()).toList();
+    final name = parts[0];
+    final previous = existingByName[name.toLowerCase()];
+    final duration = parts.length > 2 && parts[2].isNotEmpty
+        ? int.tryParse(parts[2])
+        : previous?.durationMins;
+    final status = parts.length > 3 && parts[3].isNotEmpty
+        ? parts[3].toLowerCase() == 'active'
+        : previous?.isActive ?? true;
+    final description = parts.length > 4 && parts[4].isNotEmpty
+        ? parts.skip(4).join(' | ')
+        : previous?.description;
+    return <String, dynamic>{
+      if (previous?.id.isNotEmpty == true) 'id': previous!.id,
+      'name': name,
+      'price': double.parse(parts[1]),
+      'description': description,
+      'imageUrl': previous?.imageUrl,
+      if (duration != null) 'estimatedDurationMins': duration,
+      'sortOrder': entry.key,
+      if (isVariant) ...{
+        'originalPrice': previous?.originalPrice,
+        'isAvailable': status,
+      } else
+        'isActive': status,
+    };
+  }).toList(growable: false);
+}
+
 double _toDouble(dynamic value) {
   if (value is num) return value.toDouble();
   if (value is String) return double.tryParse(value) ?? 0;
   return 0;
+}
+
+List<String> _serviceLines(String value) => value
+    .split('\n')
+    .map((line) => line.trim())
+    .where((line) => line.isNotEmpty)
+    .toList(growable: false);
+
+List<Map<String, dynamic>> _serviceRequirementRows(String value) =>
+    _serviceLines(value)
+        .asMap()
+        .entries
+        .map(
+          (entry) => {
+            'name': entry.value,
+            'slug': _slugify(entry.value),
+            'isMandatory': true,
+            'sortOrder': entry.key,
+          },
+        )
+        .toList(growable: false);
+
+List<String> _serviceLinesFromJson(dynamic value) {
+  if (value is! List) return const [];
+  return value
+      .map((item) => item is String ? item : null)
+      .whereType<String>()
+      .toList(growable: false);
+}
+
+List<String> _serviceRequirementNames(dynamic value) {
+  if (value is! List) return const [];
+  return value
+      .map((item) {
+        if (item is! Map) return null;
+        final linked = item['skill'] ?? item['tool'];
+        if (linked is Map && linked['name'] is String) {
+          return linked['name'] as String;
+        }
+        return item['name'] is String ? item['name'] as String : null;
+      })
+      .whereType<String>()
+      .toList(growable: false);
 }
 
 String _slugify(String value) {

@@ -19,7 +19,8 @@ import { getCustomerScheduleSlots } from "../availability/availability.service.j
 type BookingItemInput = {
   serviceId: string;
   quantity?: number;
-  variantSelections?: Record<string, unknown>;
+  variantId?: string;
+  addonIds?: string[];
 };
 
 type CreatePaymentOrderInput = {
@@ -79,12 +80,32 @@ type ServicePricingRecord = {
   gstRate: Prisma.Decimal;
   sacCode: string | null;
   gstApplicable: boolean;
+  bookingEnabled: boolean;
+  publicationStatus: string;
+  publishStartsAt: Date | null;
+  publishEndsAt: Date | null;
   requiresSiteVisit: boolean;
   subcategory: {
     id: string;
     name: string;
   };
   pricingRules: ServicePricingRule[];
+  variants: Array<{
+    id: string;
+    name: string;
+    description: string | null;
+    price: Prisma.Decimal;
+    originalPrice: Prisma.Decimal | null;
+    estimatedDurationMins: number | null;
+  }>;
+  addons: Array<{
+    id: string;
+    name: string;
+    description: string | null;
+    price: Prisma.Decimal;
+    estimatedDurationMins: number | null;
+  }>;
+  serviceAreaAssignments: Array<{ serviceAreaId: string }>;
 };
 
 type ResolvedBookingItem = {
@@ -96,7 +117,7 @@ type ResolvedBookingItem = {
   totalPrice: Prisma.Decimal;
   gstRate: Prisma.Decimal;
   sacCode: string;
-  variantSelections?: Record<string, unknown>;
+  configuration: Record<string, unknown>;
 };
 
 const MINIMUM_ORDER_AMOUNT_PAISE = 100;
@@ -246,6 +267,7 @@ async function resolveCustomerContext(
   };
   cityId: string;
   addressId: string;
+  serviceAreaId: string;
 }> {
   const user = await prisma.user.findUnique({
     where: { id: userId },
@@ -320,7 +342,7 @@ async function resolveCustomerContext(
     throw AppError.badRequest("Please add a valid saved address before placing a booking");
   }
 
-  await assertServiceablePincode({
+  const serviceArea = await assertServiceablePincode({
     pincode: address.pincode,
     cityId: bookingCity.id
   });
@@ -340,12 +362,14 @@ async function resolveCustomerContext(
       phone: user.phone
     },
     cityId: bookingCity.id,
-    addressId: bookingAddressId
+    addressId: bookingAddressId,
+    serviceAreaId: serviceArea.id
   };
 }
 
 async function resolveBookingItems(input: {
   cityId: string;
+  serviceAreaId: string;
   items: BookingItemInput[];
 }): Promise<{
   items: ResolvedBookingItem[];
@@ -360,7 +384,12 @@ async function resolveBookingItems(input: {
   const services = (await prisma.service.findMany({
     where: {
       id: { in: uniqueServiceIds },
-      isActive: true
+      isActive: true,
+      publicationStatus: "PUBLISHED",
+      AND: [
+        { OR: [{ publishStartsAt: null }, { publishStartsAt: { lte: now() } }] },
+        { OR: [{ publishEndsAt: null }, { publishEndsAt: { gte: now() } }] }
+      ]
     },
     include: {
       subcategory: {
@@ -375,7 +404,16 @@ async function resolveBookingItems(input: {
           OR: [{ cityId: null }, { cityId: input.cityId }]
         },
         orderBy: [{ priority: "desc" as const }, { createdAt: "desc" as const }]
-      }
+      },
+      variants: {
+        where: { isAvailable: true },
+        orderBy: [{ sortOrder: "asc" as const }, { createdAt: "asc" as const }]
+      },
+      addons: {
+        where: { isActive: true },
+        orderBy: [{ sortOrder: "asc" as const }, { createdAt: "asc" as const }]
+      },
+      serviceAreaAssignments: { select: { serviceAreaId: true } }
     }
   })) as ServicePricingRecord[];
 
@@ -392,18 +430,72 @@ async function resolveBookingItems(input: {
     if (!service) {
       throw AppError.notFound("One or more selected services were not found");
     }
+    if (!service.bookingEnabled) {
+      throw AppError.conflict("One or more selected services are not accepting bookings");
+    }
+    if (
+      service.serviceAreaAssignments.length > 0 &&
+      !service.serviceAreaAssignments.some(
+        (assignment) => assignment.serviceAreaId === input.serviceAreaId
+      )
+    ) {
+      throw AppError.conflict("This service is not available at the selected address");
+    }
 
     const quantity = item.quantity ?? 1;
     if (!Number.isInteger(quantity) || quantity <= 0) {
       throw AppError.badRequest("Quantity must be a positive integer");
     }
 
-    const resolvedUnitPrice = resolveServiceUnitPrice(service, input.cityId, at);
+    const baseUnitPrice = resolveServiceUnitPrice(service, input.cityId, at);
+    const selectedVariant = item.variantId
+      ? service.variants.find((variant) => variant.id === item.variantId)
+      : undefined;
 
-    // Site visit: Admin controls whether this is ₹0 or has a charge via startingPrice
-    const effectiveUnitPrice = resolvedUnitPrice;
+    if (item.variantId && !selectedVariant) {
+      throw AppError.badRequest("The selected service option is no longer available");
+    }
+    if (service.variants.length > 0 && !selectedVariant) {
+      throw AppError.badRequest("Choose a service option before continuing");
+    }
+
+    const selectedAddonIds = item.addonIds ?? [];
+    const selectedAddonIdSet = new Set(selectedAddonIds);
+    const selectedAddons = service.addons.filter((addon) => selectedAddonIdSet.has(addon.id));
+    if (selectedAddons.length !== selectedAddonIdSet.size) {
+      throw AppError.badRequest("One or more selected add-ons are no longer available");
+    }
+
+    // Option prices are read from the catalog here; client-supplied prices are ignored.
+    const selectedUnitPrice = selectedVariant?.price ?? baseUnitPrice;
+    const addonUnitPrice = selectedAddons.reduce(
+      (total, addon) => total.add(addon.price),
+      new Prisma.Decimal(0)
+    );
+    const effectiveUnitPrice = roundMoney(selectedUnitPrice.add(addonUnitPrice));
 
     const totalPrice = roundMoney(effectiveUnitPrice.mul(quantity));
+
+    const configuration = {
+      baseUnitPrice: roundMoney(baseUnitPrice).toString(),
+      variant: selectedVariant
+        ? {
+            id: selectedVariant.id,
+            name: selectedVariant.name,
+            description: selectedVariant.description,
+            unitPrice: roundMoney(selectedVariant.price).toString(),
+            estimatedDurationMins: selectedVariant.estimatedDurationMins
+          }
+        : null,
+      addons: selectedAddons.map((addon) => ({
+        id: addon.id,
+        name: addon.name,
+        description: addon.description,
+        unitPrice: roundMoney(addon.price).toString(),
+        estimatedDurationMins: addon.estimatedDurationMins
+      })),
+      unitPrice: effectiveUnitPrice.toString()
+    };
 
     return {
       serviceId: service.id,
@@ -414,7 +506,7 @@ async function resolveBookingItems(input: {
       totalPrice,
       gstRate: service.gstApplicable ? roundMoney(service.gstRate) : new Prisma.Decimal(0),
       sacCode: service.sacCode?.trim() || "PENDING",
-      ...(item.variantSelections ? { variantSelections: item.variantSelections } : {})
+      configuration
     };
   });
 
@@ -624,6 +716,7 @@ export async function createPaymentOrder(
 
   const { items, subtotalAmount } = await resolveBookingItems({
     cityId: context.cityId,
+    serviceAreaId: context.serviceAreaId,
     items: input.items
   });
 
@@ -740,7 +833,8 @@ export async function createPaymentOrder(
         totalPrice: item.totalPrice,
         gstRate: item.gstRate,
         gstAmount: item.gstAmount,
-        sacCode: item.sacCode
+        sacCode: item.sacCode,
+        configuration: asJsonRecord(item.configuration)
       }))
     });
 
@@ -765,7 +859,8 @@ export async function createPaymentOrder(
             unitPricePaise: toPaise(item.unitPrice),
             totalPricePaise: toPaise(item.totalPrice),
             gstRate: item.gstRate.toString(),
-            sacCode: item.sacCode
+            sacCode: item.sacCode,
+            configuration: asJsonRecord(item.configuration)
           }))
         }
       }

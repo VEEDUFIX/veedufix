@@ -9,6 +9,9 @@ class HomeServiceCard extends StatelessWidget {
   final CatalogService service;
 
   String? get _imageUrl {
+    for (final image in service.images) {
+      if (image.isPrimary) return image.url;
+    }
     if (service.images.isNotEmpty) return service.images.first.url;
     if (service.iconUrl != null && service.iconUrl!.isNotEmpty) {
       return service.iconUrl;

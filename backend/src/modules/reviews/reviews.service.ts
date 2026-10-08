@@ -107,6 +107,63 @@ export async function getWorkerReviews(workerId: string, page: number = 1, limit
   return { reviews, total, page, limit };
 }
 
+export async function getServiceReviews(serviceId: string) {
+  const where = {
+    moderationStatus: "published",
+    booking: { services: { some: { serviceId } } }
+  };
+  const [total, average, breakdown, recent] = await Promise.all([
+    db.review.count({ where }),
+    db.review.aggregate({ where, _avg: { rating: true } }),
+    db.review.groupBy({
+      by: ["rating"],
+      where,
+      _count: { _all: true }
+    }),
+    db.review.findMany({
+      where,
+      select: {
+        id: true,
+        rating: true,
+        comment: true,
+        createdAt: true,
+        reviewer: { select: { name: true } }
+      },
+      orderBy: { createdAt: "desc" },
+      take: 3
+    })
+  ]);
+  const ratingBreakdown = breakdown as Array<{
+    rating: number;
+    _count: { _all: number };
+  }>;
+  const recentReviews = recent as Array<{
+    id: string;
+    rating: number;
+    comment: string | null;
+    createdAt: Date;
+    reviewer: { name: string | null };
+  }>;
+
+  return {
+    total,
+    averageRating: average._avg.rating,
+    breakdown: Object.fromEntries(
+      [1, 2, 3, 4, 5].map((rating) => [
+        rating,
+        ratingBreakdown.find((item) => item.rating === rating)?._count._all ?? 0
+      ])
+    ),
+    reviews: recentReviews.map((review) => ({
+      id: review.id,
+      rating: review.rating,
+      comment: review.comment,
+      createdAt: review.createdAt,
+      reviewerName: review.reviewer.name?.trim().split(/\s+/)[0] || "Customer"
+    }))
+  };
+}
+
 export async function reportReview(reviewId: string, reporterId: string, reason: string) {
   const review = await db.review.findUnique({
     where: { id: reviewId },

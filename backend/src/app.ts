@@ -13,6 +13,7 @@ import { errorHandler, notFoundHandler } from "./middleware/error-handler.js";
 import { logger } from "./lib/logger.js";
 import { authRouter } from "./modules/auth/auth.routes.js";
 import { catalogRouter, adminCatalogRouter } from "./modules/catalog/catalog.routes.js";
+import { homeBannersRouter, adminHomeBannersRouter } from "./modules/catalog/home-banners.routes.js";
 import { disputeRouter } from "./modules/dispute/dispute.routes.js";
 import { cancellationRouter } from "./modules/matching/cancellation.routes.js";
 import { opsRouter, adminAlertsRouter } from "./modules/ops/ops.routes.js";
@@ -158,6 +159,8 @@ export function createApp() {
   app.use("/api/auth", authRouter);
   app.use("/api/catalog", catalogRouter);
   app.use("/api/admin/catalog", adminCatalogRouter);
+  app.use("/api/catalog", homeBannersRouter);
+  app.use("/api/admin/catalog", adminHomeBannersRouter);
   app.use("/api", disputeRouter);
   app.use("/api", cancellationRouter);
   app.use("/api/worker/onboarding", workerOnboardingRouter);

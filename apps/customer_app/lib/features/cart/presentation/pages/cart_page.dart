@@ -13,6 +13,9 @@ class CartPage extends ConsumerWidget {
     final cs = Theme.of(context).colorScheme;
     final tt = Theme.of(context).textTheme;
     final total = ref.read(cartProvider.notifier).totalPrice;
+    final optionsConfigured = cartItems.every(
+      (item) => item.hasRequiredVariant,
+    );
     final itemCount = cartItems.fold<int>(
       0,
       (count, item) => count + item.quantity,
@@ -153,7 +156,9 @@ class CartPage extends ConsumerWidget {
                 child: SizedBox(
                   height: 54,
                   child: FilledButton(
-                    onPressed: () => context.push('/checkout'),
+                    onPressed: optionsConfigured
+                        ? () => context.push('/checkout')
+                        : null,
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
@@ -163,7 +168,9 @@ class CartPage extends ConsumerWidget {
                           child: FittedBox(
                             fit: BoxFit.scaleDown,
                             child: Text(
-                              'Continue · ₹${total.toStringAsFixed(2)}',
+                              optionsConfigured
+                                  ? 'Continue · ₹${total.toStringAsFixed(2)}'
+                                  : 'Choose an option to continue',
                               style: tt.titleSmall?.copyWith(
                                 color: cs.onPrimary,
                                 fontWeight: FontWeight.bold,
@@ -235,10 +242,8 @@ class _CartItemTile extends ConsumerWidget {
                     ),
                     const SizedBox(height: 5),
                     Text(
-                      '₹${item.service.startingPrice.toStringAsFixed(2)} each',
-                      style: tt.bodySmall?.copyWith(
-                        color: cs.onSurfaceVariant,
-                      ),
+                      '₹${item.unitPrice.toStringAsFixed(2)} each',
+                      style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant),
                     ),
                   ],
                 ),
@@ -246,6 +251,72 @@ class _CartItemTile extends ConsumerWidget {
             ],
           ),
           const SizedBox(height: 14),
+          if (item.service.variants.isNotEmpty) ...[
+            DropdownButtonFormField<String>(
+              key: ValueKey(
+                'cart-variant-${item.service.id}-${item.variantId ?? 'unselected'}',
+              ),
+              initialValue: item.variantId,
+              decoration: const InputDecoration(
+                labelText: 'Choose an option',
+                border: OutlineInputBorder(),
+                isDense: true,
+              ),
+              items: item.service.variants
+                  .map(
+                    (variant) => DropdownMenuItem<String>(
+                      value: variant.id,
+                      child: Text(
+                        '${variant.name} · ₹${variant.price.toStringAsFixed(2)}',
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  )
+                  .toList(growable: false),
+              onChanged: (variantId) => ref
+                  .read(cartProvider.notifier)
+                  .configureService(item.service.id, variantId: variantId),
+            ),
+            const SizedBox(height: 10),
+          ],
+          if (item.service.addons.isNotEmpty) ...[
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                'Optional add-ons',
+                style: tt.labelLarge?.copyWith(fontWeight: FontWeight.w700),
+              ),
+            ),
+            ...item.service.addons.map(
+              (addon) => CheckboxListTile(
+                contentPadding: EdgeInsets.zero,
+                dense: true,
+                controlAffinity: ListTileControlAffinity.leading,
+                value: item.addonIds.contains(addon.id),
+                title: Text(addon.name),
+                subtitle: (addon.description ?? '').trim().isEmpty
+                    ? null
+                    : Text(addon.description!.trim()),
+                secondary: Text('+ ₹${addon.price.toStringAsFixed(2)}'),
+                onChanged: (selected) {
+                  final nextIds = List<String>.from(item.addonIds);
+                  if (selected ?? false) {
+                    if (!nextIds.contains(addon.id)) nextIds.add(addon.id);
+                  } else {
+                    nextIds.remove(addon.id);
+                  }
+                  ref
+                      .read(cartProvider.notifier)
+                      .configureService(
+                        item.service.id,
+                        variantId: item.variantId,
+                        addonIds: nextIds,
+                      );
+                },
+              ),
+            ),
+            const SizedBox(height: 8),
+          ],
           Row(
             children: [
               Expanded(
@@ -254,13 +325,11 @@ class _CartItemTile extends ConsumerWidget {
                   children: [
                     Text(
                       'Item total',
-                      style: tt.bodySmall?.copyWith(
-                        color: cs.onSurfaceVariant,
-                      ),
+                      style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant),
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      '₹${(item.service.startingPrice * item.quantity).toStringAsFixed(2)}',
+                      '₹${(item.unitPrice * item.quantity).toStringAsFixed(2)}',
                       style: tt.titleSmall?.copyWith(
                         color: cs.primary,
                         fontWeight: FontWeight.w800,

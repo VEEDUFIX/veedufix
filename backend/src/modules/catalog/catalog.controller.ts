@@ -1,5 +1,7 @@
 import { Request, Response } from "express";
+import { prisma } from "../../lib/prisma.js";
 import { catalogService } from "./catalog.service.js";
+import { getServiceReviews } from "../reviews/reviews.service.js";
 
 type AuthRequest = Request & {
   auth?: {
@@ -9,17 +11,12 @@ type AuthRequest = Request & {
 };
 
 export async function listCategoriesHandler(request: Request, response: Response): Promise<void> {
-  const { locale, cityId, includeInactive } = request.query as {
+  const { locale, cityId } = request.query as {
     locale?: string;
     cityId?: string;
-    includeInactive?: string | boolean;
   };
 
-  const categories = await catalogService.resolveCatalogTree(
-    cityId,
-    locale,
-    includeInactive === "true" || includeInactive === true
-  );
+  const categories = await catalogService.resolveCatalogTree(cityId, locale);
 
   response.status(200).json({ categories });
 }
@@ -58,8 +55,18 @@ export async function getServiceHandler(request: Request, response: Response): P
   });
 }
 
+export async function getServiceReviewsHandler(request: Request, response: Response): Promise<void> {
+  const service = await catalogService.resolveServiceBySlug(String(request.params.slug));
+  if (!service || !service.isActive) {
+    response.status(404).json({ message: "Service not found" });
+    return;
+  }
+
+  response.status(200).json({ reviews: await getServiceReviews(service.id) });
+}
+
 export async function searchCatalogHandler(request: Request, response: Response): Promise<void> {
-  const { q, locale, cityId, categorySlug, subcategorySlug, page, pageSize, includeInactive } = request.query as {
+  const { q, locale, cityId, categorySlug, subcategorySlug, page, pageSize } = request.query as {
     q?: string;
     locale?: string;
     cityId?: string;
@@ -67,7 +74,6 @@ export async function searchCatalogHandler(request: Request, response: Response)
     subcategorySlug?: string;
     page?: string | number;
     pageSize?: string | number;
-    includeInactive?: string | boolean;
   };
 
   const result = await catalogService.searchCatalog({
@@ -77,8 +83,7 @@ export async function searchCatalogHandler(request: Request, response: Response)
     categorySlug,
     subcategorySlug,
     page: typeof page === "string" ? Number(page) : page,
-    pageSize: typeof pageSize === "string" ? Number(pageSize) : pageSize,
-    includeInactive: includeInactive === "true" || includeInactive === true
+    pageSize: typeof pageSize === "string" ? Number(pageSize) : pageSize
   });
 
   response.status(200).json(result);
@@ -208,8 +213,14 @@ export async function importCatalogHandler(request: Request, response: Response)
 }
 
 export async function exportCatalogHandler(_request: Request, response: Response): Promise<void> {
-  const categories = await catalogService.resolveAdminCatalogTree();
-  response.status(200).json({ categories });
+  const [categories, serviceAreas] = await Promise.all([
+    catalogService.resolveAdminCatalogTree(),
+    prisma.serviceArea.findMany({
+      include: { city: { select: { id: true, name: true } } },
+      orderBy: [{ cityId: "asc" }, { name: "asc" }]
+    })
+  ]);
+  response.status(200).json({ categories, serviceAreas });
 }
 
 export async function addStarterCatalogHandler(_request: Request, response: Response): Promise<void> {

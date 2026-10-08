@@ -11,12 +11,17 @@ export const createPaymentOrderSchema = z.object({
           z
             .object({
               serviceId: z.string().min(1),
-              quantity: z.coerce.number().int().min(1).default(1),
-              variantSelections: z.record(z.unknown()).optional()
+              quantity: z.coerce.number().int().min(1).max(20).default(1),
+              variantId: z.string().min(1).optional(),
+              addonIds: z.array(z.string().min(1)).max(50).refine(
+                (ids) => new Set(ids).size === ids.length,
+                "Add-ons cannot be selected more than once"
+              ).optional()
             })
             .strict()
         )
-        .min(1),
+        .min(1)
+        .max(20),
       bookingType: z.enum(["instant", "scheduled"]).default("instant"),
       scheduledFor: z.coerce.date().optional()
     })

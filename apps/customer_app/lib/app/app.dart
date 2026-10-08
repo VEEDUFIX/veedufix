@@ -346,7 +346,7 @@ class _AppBootstrapState extends ConsumerState<AppBootstrap>
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             const NetworkStatusBanner(),
-            Expanded(child: child ?? const SplashPage(mode: AppMode.customer)),
+            Expanded(child: child ?? const SizedBox.shrink()),
           ],
         ),
       ),

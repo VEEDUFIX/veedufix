@@ -40,6 +40,7 @@ import {
   listCategoriesHandler,
   getCategoryHandler,
   getServiceHandler,
+  getServiceReviewsHandler,
   getSubcategoryHandler,
   popularCatalogHandler,
   recommendedCatalogHandler,
@@ -147,6 +148,7 @@ catalogRouter.get("/recently-booked", recentlyBookedCatalogHandler);
 catalogRouter.get("/categories/:slug", validate(catalogSlugParamsSchema), getCategoryHandler);
 catalogRouter.get("/subcategories/:slug", validate(catalogSlugParamsSchema), getSubcategoryHandler);
 catalogRouter.get("/services/:slug", validate(catalogSlugParamsSchema), getServiceHandler);
+catalogRouter.get("/services/:slug/reviews", validate(catalogSlugParamsSchema), getServiceReviewsHandler);
 
 adminCatalogRouter.use(requireAuth, requireRole("ADMIN"));
 adminCatalogRouter.post("/starter", addStarterCatalogHandler);

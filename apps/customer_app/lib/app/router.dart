@@ -39,7 +39,7 @@ final routerProvider = Provider<GoRouter>((ref) {
   final refresh = _RouterRefreshNotifier(ref);
 
   return GoRouter(
-    initialLocation: '/splash',
+    initialLocation: '/login',
     refreshListenable: refresh,
     redirect: (context, state) {
       final authState = ref.read(authControllerProvider);
@@ -93,7 +93,7 @@ final routerProvider = Provider<GoRouter>((ref) {
         return null;
       }
 
-      if (location == '/login' || location == '/otp' || location == '/splash') {
+      if (location == '/login' || location == '/otp') {
         return homeRoute;
       }
 
@@ -104,18 +104,8 @@ final routerProvider = Provider<GoRouter>((ref) {
       return null;
     },
     routes: [
-      GoRoute(
-        path: '/splash',
-        builder: (context, state) => const SplashPage(mode: AppMode.customer),
-      ),
-      GoRoute(
-        path: '/login',
-        builder: (context, state) => const LoginPage(),
-      ),
-      GoRoute(
-        path: '/otp',
-        builder: (context, state) => const OtpPage(),
-      ),
+      GoRoute(path: '/login', builder: (context, state) => const LoginPage()),
+      GoRoute(path: '/otp', builder: (context, state) => const OtpPage()),
       GoRoute(
         path: '/arrival-otp',
         builder: (context, state) {
@@ -157,9 +147,8 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/bookings/:bookingId/custom-quote',
-        builder: (context, state) => CustomQuotePage(
-          bookingId: state.pathParameters['bookingId']!,
-        ),
+        builder: (context, state) =>
+            CustomQuotePage(bookingId: state.pathParameters['bookingId']!),
       ),
       GoRoute(
         path: '/service',
@@ -175,10 +164,7 @@ final routerProvider = Provider<GoRouter>((ref) {
           return ProfessionalProfilePage(professionalId: proId);
         },
       ),
-      GoRoute(
-        path: '/cart',
-        builder: (context, state) => const CartPage(),
-      ),
+      GoRoute(path: '/cart', builder: (context, state) => const CartPage()),
       GoRoute(
         path: '/checkout',
         builder: (context, state) {
@@ -202,8 +188,11 @@ final routerProvider = Provider<GoRouter>((ref) {
                 (item) => CheckoutItem(
                   serviceId: item.service.id,
                   serviceName: item.service.name,
-                  price: item.service.startingPrice,
+                  price: item.unitPrice,
                   quantity: item.quantity,
+                  variantId: item.variantId,
+                  addonIds: item.addonIds,
+                  configurationLabel: item.configurationLabel,
                 ),
               )
               .toList(growable: false);
@@ -229,22 +218,17 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/notifications',
         builder: (context, state) => const NotificationsPage(),
       ),
-      GoRoute(
-        path: '/offers',
-        builder: (context, state) => const OffersPage(),
-      ),
+      GoRoute(path: '/offers', builder: (context, state) => const OffersPage()),
       GoRoute(
         path: '/referral',
         builder: (context, state) => const ReferralPage(),
       ),
-      GoRoute(
-        path: '/wallet',
-        builder: (context, state) => const WalletPage(),
-      ),
+      GoRoute(path: '/wallet', builder: (context, state) => const WalletPage()),
       GoRoute(
         path: '/support',
         builder: (context, state) {
-          final autoCompose = state.uri.queryParameters['autoCompose'] == 'true';
+          final autoCompose =
+              state.uri.queryParameters['autoCompose'] == 'true';
           final bookingId = state.uri.queryParameters['bookingId'];
           final bookingCode = state.uri.queryParameters['bookingCode'];
           final serviceName = state.uri.queryParameters['serviceName'];
@@ -253,12 +237,24 @@ final routerProvider = Provider<GoRouter>((ref) {
           final initialMessage = state.uri.queryParameters['message'];
           return SupportPage(
             autoCompose: autoCompose,
-            bookingId: bookingId?.trim().isNotEmpty == true ? bookingId!.trim() : null,
-            bookingCode: bookingCode?.trim().isNotEmpty == true ? bookingCode!.trim() : null,
-            serviceName: serviceName?.trim().isNotEmpty == true ? serviceName!.trim() : null,
-            initialCategory: initialCategory?.trim().isNotEmpty == true ? initialCategory!.trim() : null,
-            initialSubject: initialSubject?.trim().isNotEmpty == true ? initialSubject!.trim() : null,
-            initialMessage: initialMessage?.trim().isNotEmpty == true ? initialMessage!.trim() : null,
+            bookingId: bookingId?.trim().isNotEmpty == true
+                ? bookingId!.trim()
+                : null,
+            bookingCode: bookingCode?.trim().isNotEmpty == true
+                ? bookingCode!.trim()
+                : null,
+            serviceName: serviceName?.trim().isNotEmpty == true
+                ? serviceName!.trim()
+                : null,
+            initialCategory: initialCategory?.trim().isNotEmpty == true
+                ? initialCategory!.trim()
+                : null,
+            initialSubject: initialSubject?.trim().isNotEmpty == true
+                ? initialSubject!.trim()
+                : null,
+            initialMessage: initialMessage?.trim().isNotEmpty == true
+                ? initialMessage!.trim()
+                : null,
           );
         },
       ),
@@ -279,17 +275,16 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (context, state) {
           final lat = double.tryParse(state.uri.queryParameters['lat'] ?? '');
           final lng = double.tryParse(state.uri.queryParameters['lng'] ?? '');
-          final initialPosition = (lat != null && lng != null) ? LatLng(lat, lng) : null;
+          final initialPosition = (lat != null && lng != null)
+              ? LatLng(lat, lng)
+              : null;
           return MapLocationPickerPage(initialPosition: initialPosition);
         },
       ),
       ShellRoute(
         builder: (context, state, child) => AppShellPage(child: child),
         routes: [
-          GoRoute(
-            path: '/app',
-            builder: (context, state) => const HomePage(),
-          ),
+          GoRoute(path: '/app', builder: (context, state) => const HomePage()),
           GoRoute(
             path: '/search',
             builder: (context, state) {
@@ -329,6 +324,7 @@ class _RouterRefreshNotifier extends ChangeNotifier {
 
 bool _isAllowedLocation(AppMode mode, String location) {
   final allowedRoutes = allowedRoutesForMode(mode);
-  return allowedRoutes
-      .any((route) => location == route || location.startsWith('$route/'));
+  return allowedRoutes.any(
+    (route) => location == route || location.startsWith('$route/'),
+  );
 }

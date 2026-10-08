@@ -169,7 +169,8 @@ class _JobsTabLabel extends StatelessWidget {
             constraints: const BoxConstraints(minWidth: 18),
             padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
             decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.12),
+              color:
+                  Theme.of(context).colorScheme.primary.withValues(alpha: 0.12),
               borderRadius: BorderRadius.circular(999),
             ),
             child: Text(
@@ -243,9 +244,7 @@ class _JobsOverviewCard extends StatelessWidget {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        appText(
-                            context,
-                            'Live counts across each stage.',
+                        appText(context, 'Live counts across each stage.',
                             'ஒவ்வொரு நிலையிலும் உள்ள வேலை எண்ணிக்கை.'),
                         style: tt.bodyMedium?.copyWith(
                           color: cs.onSurfaceVariant,
@@ -392,7 +391,11 @@ class _JobTabContent extends ConsumerWidget {
             itemCount: jobs.length,
             separatorBuilder: (_, __) => const SizedBox(height: 12),
             itemBuilder: (context, index) {
-              return _JobCard(job: jobs[index], tab: tab);
+              return _JobCard(
+                key: ValueKey(jobs[index].bookingId),
+                job: jobs[index],
+                tab: tab,
+              );
             },
           );
         },
@@ -451,10 +454,88 @@ class _JobTabContent extends ConsumerWidget {
   }
 }
 
-class _JobCard extends ConsumerWidget {
-  const _JobCard({required this.job, required this.tab});
+class _JobCard extends ConsumerStatefulWidget {
+  const _JobCard({super.key, required this.job, required this.tab});
   final WorkerJob job;
   final String tab;
+
+  @override
+  ConsumerState<_JobCard> createState() => _JobCardState();
+}
+
+class _JobCardState extends ConsumerState<_JobCard> {
+  bool _actionPending = false;
+
+  WorkerJob get job => widget.job;
+  String get tab => widget.tab;
+
+  Future<void> _handleIncomingAction(
+    BuildContext feedbackContext, {
+    required bool accept,
+  }) async {
+    if (_actionPending || !mounted) return;
+    final messenger = ScaffoldMessenger.of(feedbackContext);
+    final providerContainer =
+        ProviderScope.containerOf(feedbackContext, listen: false);
+    final repository = providerContainer.read(workerJobRepositoryProvider);
+    final jobId = job.bookingId;
+    final offerId = job.offerId;
+    final unavailableMessage = appText(
+      feedbackContext,
+      'This offer is no longer available.',
+      'இந்த வேலை வாய்ப்பு இனி கிடைக்காது.',
+    );
+    final staleOfferMessage = appText(
+      feedbackContext,
+      'This job offer is no longer available. Refresh the list to see current jobs.',
+      'இந்த வேலை வாய்ப்பு இனி கிடைக்காது. புதுப்பித்து தற்போதைய வேலைகளைப் பாருங்கள்.',
+    );
+    final fallbackErrorMessage = appText(
+      feedbackContext,
+      'Could not complete that action. Please try again.',
+      'செயலை முடிக்க முடியவில்லை. மீண்டும் முயற்சிக்கவும்.',
+    );
+    setState(() => _actionPending = true);
+    try {
+      if (accept) {
+        await repository.acceptJob(jobId);
+      } else {
+        if (offerId == null) {
+          messenger.showSnackBar(SnackBar(content: Text(unavailableMessage)));
+          return;
+        }
+        await repository.declineJob(offerId);
+      }
+
+      providerContainer.invalidate(workerJobsProvider('incoming'));
+      if (accept) {
+        providerContainer.invalidate(workerJobsProvider('accepted'));
+      }
+      providerContainer.invalidate(workerDashboardStatsProvider);
+      messenger.showSnackBar(
+        SnackBar(content: Text(accept ? 'Job accepted' : 'Job declined')),
+      );
+    } catch (error) {
+      providerContainer.invalidate(workerJobsProvider('incoming'));
+      if (accept) {
+        providerContainer.invalidate(workerJobsProvider('accepted'));
+      }
+      providerContainer.invalidate(workerDashboardStatsProvider);
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            _actionErrorMessage(
+              error,
+              staleOfferMessage: staleOfferMessage,
+              fallbackMessage: fallbackErrorMessage,
+            ),
+          ),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _actionPending = false);
+    }
+  }
 
   Future<void> _openNavigation(BuildContext context, WorkerJob job) async {
     final lat = job.destinationLatitude;
@@ -538,8 +619,7 @@ class _JobCard extends ConsumerWidget {
     }
   }
 
-  Future<void> _showJobDetails(
-      BuildContext context, WidgetRef ref, Color accent) {
+  Future<void> _showJobDetails(BuildContext context, Color accent) {
     final formatCurrency = NumberFormat.simpleCurrency(
         locale: 'en_IN', name: 'INR', decimalDigits: 0);
     return showModalBottomSheet<void>(
@@ -551,60 +631,6 @@ class _JobCard extends ConsumerWidget {
         final cs = Theme.of(sheetContext).colorScheme;
         final isIncoming = tab == 'incoming';
         final canOpenExecution = tab == 'accepted' || tab == 'active';
-
-        Future<void> acceptJob() async {
-          try {
-            await ref
-                .read(workerJobRepositoryProvider)
-                .acceptJob(job.bookingId);
-            ref.invalidate(workerJobsProvider('incoming'));
-            ref.invalidate(workerJobsProvider('accepted'));
-            ref.invalidate(workerDashboardStatsProvider);
-            if (context.mounted) {
-              ScaffoldMessenger.of(context)
-                  .showSnackBar(const SnackBar(content: Text('Job accepted')));
-            }
-          } catch (error) {
-            ref.invalidate(workerJobsProvider('incoming'));
-            ref.invalidate(workerJobsProvider('accepted'));
-            ref.invalidate(workerDashboardStatsProvider);
-            if (context.mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text(_actionErrorMessage(context, error))));
-            }
-          }
-        }
-
-        Future<void> declineJob() async {
-          try {
-            if (job.offerId == null) {
-              if (context.mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('This offer is no longer available.'),
-                  ),
-                );
-              }
-              return;
-            }
-            await ref
-                .read(workerJobRepositoryProvider)
-                .declineJob(job.offerId!);
-            ref.invalidate(workerJobsProvider('incoming'));
-            ref.invalidate(workerDashboardStatsProvider);
-            if (context.mounted) {
-              ScaffoldMessenger.of(context)
-                  .showSnackBar(const SnackBar(content: Text('Job declined')));
-            }
-          } catch (error) {
-            ref.invalidate(workerJobsProvider('incoming'));
-            ref.invalidate(workerDashboardStatsProvider);
-            if (context.mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text(_actionErrorMessage(context, error))));
-            }
-          }
-        }
 
         return SafeArea(
           child: Padding(
@@ -663,20 +689,30 @@ class _JobCard extends ConsumerWidget {
                     children: [
                       Expanded(
                         child: FilledButton(
-                          onPressed: () {
-                            Navigator.of(sheetContext).pop();
-                            acceptJob();
-                          },
+                          onPressed: _actionPending
+                              ? null
+                              : () {
+                                  _handleIncomingAction(
+                                    context,
+                                    accept: true,
+                                  );
+                                  Navigator.of(sheetContext).pop();
+                                },
                           child: const Text('Accept Job'),
                         ),
                       ),
                       const SizedBox(width: 12),
                       Expanded(
                         child: OutlinedButton(
-                          onPressed: () {
-                            Navigator.of(sheetContext).pop();
-                            declineJob();
-                          },
+                          onPressed: _actionPending
+                              ? null
+                              : () {
+                                  _handleIncomingAction(
+                                    context,
+                                    accept: false,
+                                  );
+                                  Navigator.of(sheetContext).pop();
+                                },
                           child: const Text('Decline'),
                         ),
                       ),
@@ -744,19 +780,19 @@ class _JobCard extends ConsumerWidget {
     );
   }
 
-  String _actionErrorMessage(BuildContext context, Object error) => error
-          is WorkerJobActionError
-      ? error.statusCode == 409 || error.statusCode == 410
-          ? appText(
-              context,
-              'This job offer is no longer available. Refresh the list to see current jobs.',
-              'இந்த வேலை வாய்ப்பு இனி கிடைக்காது. புதுப்பித்து தற்போதைய வேலைகளைப் பாருங்கள்.')
-          : error.message
-      : appText(context, 'Could not complete that action. Please try again.',
-          'செயலை முடிக்க முடியவில்லை. மீண்டும் முயற்சிக்கவும்.');
+  String _actionErrorMessage(
+    Object error, {
+    required String staleOfferMessage,
+    required String fallbackMessage,
+  }) =>
+      error is WorkerJobActionError
+          ? error.statusCode == 409 || error.statusCode == 410
+              ? staleOfferMessage
+              : error.message
+          : fallbackMessage;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     final formatCurrency = NumberFormat.simpleCurrency(
         locale: 'en_IN', name: 'INR', decimalDigits: 0);
@@ -769,7 +805,7 @@ class _JobCard extends ConsumerWidget {
     };
 
     return TapScale(
-      onTap: () => _showJobDetails(context, ref, accent),
+      onTap: () => _showJobDetails(context, accent),
       child: PremiumGlassCard(
         child: Padding(
           padding: const EdgeInsets.all(16),
@@ -876,70 +912,37 @@ class _JobCard extends ConsumerWidget {
                   children: [
                     Expanded(
                       child: FilledButton(
-                        onPressed: () async {
-                          try {
-                            await ref
-                                .read(workerJobRepositoryProvider)
-                                .acceptJob(job.bookingId);
-                            ref.invalidate(workerJobsProvider('incoming'));
-                            if (context.mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                      content: Text('Job accepted')));
-                            }
-                          } catch (error) {
-                            ref.invalidate(workerJobsProvider('incoming'));
-                            if (context.mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content:
-                                      Text(_actionErrorMessage(context, error)),
+                        onPressed: _actionPending
+                            ? null
+                            : () => _handleIncomingAction(
+                                  context,
+                                  accept: true,
                                 ),
-                              );
-                            }
-                          }
-                        },
-                        child: const Text('Accept'),
+                        child: _actionPending
+                            ? const SizedBox.square(
+                                dimension: 18,
+                                child:
+                                    CircularProgressIndicator(strokeWidth: 2),
+                              )
+                            : const Text('Accept'),
                       ),
                     ),
                     const SizedBox(width: 12),
                     Expanded(
                       child: OutlinedButton(
-                        onPressed: () async {
-                          try {
-                            if (job.offerId == null) {
-                              if (context.mounted) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text(
-                                        'This offer is no longer available.'),
-                                  ),
-                                );
-                              }
-                              return;
-                            }
-                            await ref
-                                .read(workerJobRepositoryProvider)
-                                .declineJob(job.offerId!);
-                            ref.invalidate(workerJobsProvider('incoming'));
-                            if (context.mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                      content: Text('Job declined')));
-                            }
-                          } catch (error) {
-                            ref.invalidate(workerJobsProvider('incoming'));
-                            if (context.mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content:
-                                      Text(_actionErrorMessage(context, error)),
+                        onPressed: _actionPending
+                            ? null
+                            : () => _handleIncomingAction(
+                                  context,
+                                  accept: false,
                                 ),
-                              );
-                            }
-                          }
-                        },
-                        child: const Text('Decline'),
+                        child: _actionPending
+                            ? const SizedBox.square(
+                                dimension: 18,
+                                child:
+                                    CircularProgressIndicator(strokeWidth: 2),
+                              )
+                            : const Text('Decline'),
                       ),
                     ),
                   ],

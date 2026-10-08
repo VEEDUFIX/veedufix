@@ -134,6 +134,7 @@ class CatalogSubcategory {
     this.reviewCount = 0,
     this.isActive = true,
     this.services = const [],
+    this.serviceCountOverride,
     this.translations = const [],
   });
 
@@ -151,9 +152,15 @@ class CatalogSubcategory {
   final int reviewCount;
   final bool isActive;
   final List<CatalogService> services;
+  final int? serviceCountOverride;
   final List<CatalogTranslation> translations;
 
   factory CatalogSubcategory.fromJson(Map<String, dynamic> json) {
+    final services = _decodeList(
+      json['catalogServices'] ?? json['services'],
+      CatalogService.fromJson,
+    );
+    final counts = json['_count'];
     return CatalogSubcategory(
       id: json['id'] as String? ?? '',
       categoryId: json['categoryId'] as String? ?? '',
@@ -168,8 +175,12 @@ class CatalogSubcategory {
       rating: _toDouble(json['rating']),
       reviewCount: (json['reviewCount'] as num?)?.toInt() ?? 0,
       isActive: json['isActive'] as bool? ?? true,
-      services: _decodeList(
-          json['catalogServices'] ?? json['services'], CatalogService.fromJson),
+      services: services,
+      serviceCountOverride: json['serviceCount'] is num
+          ? (json['serviceCount'] as num).toInt()
+          : counts is Map<String, dynamic> && counts['catalogServices'] is num
+              ? (counts['catalogServices'] as num).toInt()
+              : null,
       translations:
           _decodeList(json['translations'], CatalogTranslation.fromJson),
     );
@@ -191,12 +202,13 @@ class CatalogSubcategory {
       'reviewCount': reviewCount,
       'isActive': isActive,
       'services': services.map((item) => item.toJson()).toList(growable: false),
+      'serviceCount': serviceCount,
       'translations':
           translations.map((item) => item.toJson()).toList(growable: false),
     };
   }
 
-  int get serviceCount => services.length;
+  int get serviceCount => serviceCountOverride ?? services.length;
 }
 
 class CatalogServiceImage {
@@ -334,6 +346,102 @@ class CatalogPriceRule {
   }
 }
 
+class CatalogServiceVariant {
+  const CatalogServiceVariant({
+    required this.id,
+    required this.name,
+    required this.price,
+    this.description,
+    this.imageUrl,
+    this.originalPrice,
+    this.estimatedDurationMins,
+    this.isAvailable = true,
+    this.sortOrder = 0,
+  });
+
+  final String id;
+  final String name;
+  final String? description;
+  final String? imageUrl;
+  final double price;
+  final double? originalPrice;
+  final int? estimatedDurationMins;
+  final bool isAvailable;
+  final int sortOrder;
+
+  factory CatalogServiceVariant.fromJson(Map<String, dynamic> json) =>
+      CatalogServiceVariant(
+        id: json['id'] as String? ?? '',
+        name: json['name'] as String? ?? '',
+        description: json['description'] as String?,
+        imageUrl: json['imageUrl'] as String?,
+        price: _toDouble(json['price']),
+        originalPrice: json['originalPrice'] == null
+            ? null
+            : _toDouble(json['originalPrice']),
+        estimatedDurationMins: (json['estimatedDurationMins'] as num?)?.toInt(),
+        isAvailable: json['isAvailable'] as bool? ?? true,
+        sortOrder: (json['sortOrder'] as num?)?.toInt() ?? 0,
+      );
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'name': name,
+        'description': description,
+        'imageUrl': imageUrl,
+        'price': price,
+        'originalPrice': originalPrice,
+        'estimatedDurationMins': estimatedDurationMins,
+        'isAvailable': isAvailable,
+        'sortOrder': sortOrder,
+      };
+}
+
+class CatalogServiceAddon {
+  const CatalogServiceAddon({
+    required this.id,
+    required this.name,
+    required this.price,
+    this.description,
+    this.imageUrl,
+    this.estimatedDurationMins,
+    this.isActive = true,
+    this.sortOrder = 0,
+  });
+
+  final String id;
+  final String name;
+  final String? description;
+  final String? imageUrl;
+  final double price;
+  final int? estimatedDurationMins;
+  final bool isActive;
+  final int sortOrder;
+
+  factory CatalogServiceAddon.fromJson(Map<String, dynamic> json) =>
+      CatalogServiceAddon(
+        id: json['id'] as String? ?? '',
+        name: json['name'] as String? ?? '',
+        description: json['description'] as String?,
+        imageUrl: json['imageUrl'] as String?,
+        price: _toDouble(json['price']),
+        estimatedDurationMins: (json['estimatedDurationMins'] as num?)?.toInt(),
+        isActive: json['isActive'] as bool? ?? true,
+        sortOrder: (json['sortOrder'] as num?)?.toInt() ?? 0,
+      );
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'name': name,
+        'description': description,
+        'imageUrl': imageUrl,
+        'price': price,
+        'estimatedDurationMins': estimatedDurationMins,
+        'isActive': isActive,
+        'sortOrder': sortOrder,
+      };
+}
+
 class CatalogService {
   const CatalogService({
     required this.id,
@@ -351,6 +459,11 @@ class CatalogService {
     this.emergencyAvailable = false,
     this.homeVisit = true,
     this.requiresSiteVisit = false,
+    this.bookingEnabled = true,
+    this.priceType = 'FROM',
+    this.ctaLabel = 'Book service',
+    this.warrantyText,
+    this.requirements = const [],
     this.isActive = true,
     this.featured = false,
     this.popular = false,
@@ -370,6 +483,8 @@ class CatalogService {
     this.requiredTools = const [],
     this.requiredDocuments = const [],
     this.pricingRules = const [],
+    this.variants = const [],
+    this.addons = const [],
     this.inclusions = const [],
     this.exclusions = const [],
   });
@@ -389,6 +504,11 @@ class CatalogService {
   final bool emergencyAvailable;
   final bool homeVisit;
   final bool requiresSiteVisit;
+  final bool bookingEnabled;
+  final String priceType;
+  final String ctaLabel;
+  final String? warrantyText;
+  final List<String> requirements;
   final bool isActive;
   final bool featured;
   final bool popular;
@@ -408,6 +528,8 @@ class CatalogService {
   final List<CatalogServiceRequirement> requiredTools;
   final List<CatalogServiceRequirement> requiredDocuments;
   final List<CatalogPriceRule> pricingRules;
+  final List<CatalogServiceVariant> variants;
+  final List<CatalogServiceAddon> addons;
   final List<String> inclusions;
   final List<String> exclusions;
 
@@ -429,6 +551,13 @@ class CatalogService {
       emergencyAvailable: json['emergencyAvailable'] as bool? ?? false,
       homeVisit: json['homeVisit'] as bool? ?? true,
       requiresSiteVisit: json['requiresSiteVisit'] as bool? ?? false,
+      bookingEnabled: json['bookingEnabled'] as bool? ?? true,
+      priceType: json['priceType'] as String? ?? 'FROM',
+      ctaLabel: json['ctaLabel'] as String? ?? 'Book service',
+      warrantyText: json['warrantyText'] as String?,
+      requirements: (json['requirements'] as List<dynamic>? ?? const [])
+          .whereType<String>()
+          .toList(growable: false),
       isActive: json['isActive'] as bool? ?? true,
       featured: json['featured'] as bool? ?? false,
       popular: json['popular'] as bool? ?? false,
@@ -458,6 +587,8 @@ class CatalogService {
           json['requiredDocuments'], CatalogServiceRequirement.fromJson),
       pricingRules:
           _decodeList(json['pricingRules'], CatalogPriceRule.fromJson),
+      variants: _decodeList(json['variants'], CatalogServiceVariant.fromJson),
+      addons: _decodeList(json['addons'], CatalogServiceAddon.fromJson),
       inclusions: (json['inclusions'] as List<dynamic>? ?? [])
           .map((e) => e as String)
           .toList(),
@@ -484,6 +615,11 @@ class CatalogService {
       'emergencyAvailable': emergencyAvailable,
       'homeVisit': homeVisit,
       'requiresSiteVisit': requiresSiteVisit,
+      'bookingEnabled': bookingEnabled,
+      'priceType': priceType,
+      'ctaLabel': ctaLabel,
+      'warrantyText': warrantyText,
+      'requirements': requirements,
       'isActive': isActive,
       'featured': featured,
       'popular': popular,
@@ -509,6 +645,8 @@ class CatalogService {
           .toList(growable: false),
       'pricingRules':
           pricingRules.map((item) => item.toJson()).toList(growable: false),
+      'variants': variants.map((item) => item.toJson()).toList(growable: false),
+      'addons': addons.map((item) => item.toJson()).toList(growable: false),
       'inclusions': inclusions,
       'exclusions': exclusions,
     };
@@ -523,6 +661,35 @@ class CatalogService {
         subcategoryName,
     ];
     return parts.isEmpty ? '' : parts.join(' · ');
+  }
+}
+
+class HomeCatalogSection {
+  const HomeCatalogSection({
+    required this.id,
+    required this.title,
+    required this.sortOrder,
+    required this.seeAllDestination,
+    this.subtitle,
+    this.services = const [],
+  });
+
+  final String id;
+  final String title;
+  final String? subtitle;
+  final int sortOrder;
+  final String seeAllDestination;
+  final List<CatalogService> services;
+
+  factory HomeCatalogSection.fromJson(Map<String, dynamic> json) {
+    return HomeCatalogSection(
+      id: json['id'] as String? ?? '',
+      title: json['title'] as String? ?? '',
+      subtitle: json['subtitle'] as String?,
+      sortOrder: (json['sortOrder'] as num?)?.toInt() ?? 0,
+      seeAllDestination: json['seeAllDestination'] as String? ?? '/search',
+      services: _decodeList(json['services'], CatalogService.fromJson),
+    );
   }
 }
 

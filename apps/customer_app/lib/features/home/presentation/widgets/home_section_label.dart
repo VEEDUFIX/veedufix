@@ -52,14 +52,28 @@ class HomeSectionLabel extends StatelessWidget {
         if (onSeeAll != null)
           TapScale(
             onTap: onSeeAll!,
-            child: Padding(
-              padding: const EdgeInsets.only(left: 8),
-              child: Text(
-                'See all',
-                style: GoogleFonts.outfit(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  color: AbzioTheme.accentColor,
+            child: SizedBox(
+              height: 44,
+              child: Padding(
+                padding: const EdgeInsets.only(left: 8),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'See all',
+                      style: GoogleFonts.outfit(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: AbzioTheme.accentColor,
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    const Icon(
+                      Icons.arrow_forward_rounded,
+                      size: 14,
+                      color: AbzioTheme.accentColor,
+                    ),
+                  ],
                 ),
               ),
             ),

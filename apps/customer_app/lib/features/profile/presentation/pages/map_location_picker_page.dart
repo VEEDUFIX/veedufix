@@ -56,6 +56,11 @@ class _MapLocationPickerPageState extends State<MapLocationPickerPage>
       end: -12,
     ).animate(CurvedAnimation(parent: _pinBounce, curve: Curves.easeOut));
     _refreshLocationLabel(debounced: false);
+    if (widget.initialPosition == null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) unawaited(_centerOnCurrentLocation());
+      });
+    }
   }
 
   @override

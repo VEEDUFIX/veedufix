@@ -21,6 +21,8 @@ class CatalogRepositoryImpl implements CatalogRepository {
       recommended: _decodeList(
           data['recommendedServices'] ?? data['recommended'],
           CatalogService.fromJson),
+      popular: _decodeList(
+          data['popularServices'] ?? data['popular'], CatalogService.fromJson),
     );
   }
 

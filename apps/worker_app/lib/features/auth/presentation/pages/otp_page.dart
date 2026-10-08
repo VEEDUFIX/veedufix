@@ -68,7 +68,8 @@ class _OtpPageState extends ConsumerState<OtpPage> {
     if (!_canResend || _isResending) return;
     final phone = args['identifier'] as String? ?? '';
     if (phone.isEmpty) {
-      setState(() => _resendError = 'Return to sign in and request a new code.');
+      setState(
+          () => _resendError = 'Return to sign in and request a new code.');
       return;
     }
 
@@ -83,7 +84,8 @@ class _OtpPageState extends ConsumerState<OtpPage> {
         verificationCompleted: (_) {},
         verificationFailed: (error) {
           if (mounted) {
-            setState(() => _resendError = error.message ?? 'Could not resend the code.');
+            setState(() =>
+                _resendError = error.message ?? 'Could not resend the code.');
           }
         },
         codeSent: (verificationId, resendToken) {
@@ -104,7 +106,10 @@ class _OtpPageState extends ConsumerState<OtpPage> {
         codeAutoRetrievalTimeout: (_) {},
       );
     } catch (error) {
-      if (mounted) setState(() => _resendError = 'Could not resend the code. Please try again.');
+      if (mounted) {
+        setState(() =>
+            _resendError = 'Could not resend the code. Please try again.');
+      }
     } finally {
       if (mounted) setState(() => _isResending = false);
     }
@@ -125,7 +130,8 @@ class _OtpPageState extends ConsumerState<OtpPage> {
         verificationId: _verificationId ?? args['verificationId'] as String,
         smsCode: _otpValue,
       );
-      final result = await FirebaseAuth.instance.signInWithCredential(credential);
+      final result =
+          await FirebaseAuth.instance.signInWithCredential(credential);
       final idToken = await result.user?.getIdToken();
       if (idToken == null) throw StateError('No Firebase sign-in token');
       await ref.read(authControllerProvider.notifier).signInWithFirebasePhone(
@@ -186,56 +192,84 @@ class _OtpPageState extends ConsumerState<OtpPage> {
               ),
               const SizedBox(height: 36),
               // PIN Boxes
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: List.generate(6, (i) {
-                  return SizedBox(
-                    width: 50,
-                    height: 60,
-                    child: TextField(
-                      controller: _controllers[i],
-                      focusNode: _focusNodes[i],
-                      textAlign: TextAlign.center,
-                      keyboardType: TextInputType.number,
-                      maxLength: 1,
-                      style: tt.headlineSmall?.copyWith(
-                        fontWeight: FontWeight.w800,
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  const minimumFieldWidth = 48.0;
+                  const fieldGap = 6.0;
+                  const minimumRowWidth = minimumFieldWidth * 6 + fieldGap * 5;
+                  final rowWidth = constraints.maxWidth < minimumRowWidth
+                      ? minimumRowWidth
+                      : constraints.maxWidth;
+                  return SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: SizedBox(
+                      width: rowWidth,
+                      child: Row(
+                        children: [
+                          for (var i = 0; i < 6; i++) ...[
+                            if (i > 0) const SizedBox(width: fieldGap),
+                            Expanded(
+                              child: ConstrainedBox(
+                                constraints: const BoxConstraints(
+                                  minWidth: minimumFieldWidth,
+                                  minHeight: 58,
+                                ),
+                                child: TextField(
+                                  controller: _controllers[i],
+                                  focusNode: _focusNodes[i],
+                                  textAlign: TextAlign.center,
+                                  keyboardType: TextInputType.number,
+                                  maxLength: 1,
+                                  style: tt.headlineSmall?.copyWith(
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                  decoration: InputDecoration(
+                                    counterText: '',
+                                    filled: true,
+                                    fillColor: cs.surfaceContainerHighest
+                                        .withValues(alpha: 0.3),
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(
+                                          AbzioTheme.buttonRadius),
+                                      borderSide: BorderSide(
+                                        color: cs.outlineVariant
+                                            .withValues(alpha: 0.5),
+                                      ),
+                                    ),
+                                    focusedBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(
+                                          AbzioTheme.buttonRadius),
+                                      borderSide: BorderSide(
+                                        color: cs.primary,
+                                        width: 2,
+                                      ),
+                                    ),
+                                    enabledBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(
+                                          AbzioTheme.buttonRadius),
+                                      borderSide: BorderSide(
+                                        color: cs.outlineVariant
+                                            .withValues(alpha: 0.5),
+                                      ),
+                                    ),
+                                  ),
+                                  onChanged: (value) {
+                                    if (value.isNotEmpty && i < 5) {
+                                      _focusNodes[i + 1].requestFocus();
+                                    }
+                                    if (value.isEmpty && i > 0) {
+                                      _focusNodes[i - 1].requestFocus();
+                                    }
+                                  },
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
                       ),
-                      decoration: InputDecoration(
-                        counterText: '',
-                        filled: true,
-                        fillColor: cs.surfaceContainerHighest.withValues(alpha: 0.3),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(AbzioTheme.buttonRadius),
-                          borderSide: BorderSide(
-                            color: cs.outlineVariant.withValues(alpha: 0.5),
-                          ),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(AbzioTheme.buttonRadius),
-                          borderSide: BorderSide(
-                            color: cs.primary,
-                            width: 2,
-                          ),
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(AbzioTheme.buttonRadius),
-                          borderSide: BorderSide(
-                            color: cs.outlineVariant.withValues(alpha: 0.5),
-                          ),
-                        ),
-                      ),
-                      onChanged: (value) {
-                        if (value.isNotEmpty && i < 5) {
-                          _focusNodes[i + 1].requestFocus();
-                        }
-                        if (value.isEmpty && i > 0) {
-                          _focusNodes[i - 1].requestFocus();
-                        }
-                      },
                     ),
                   );
-                }),
+                },
               ),
               const SizedBox(height: 32),
               PrimaryActionButton(

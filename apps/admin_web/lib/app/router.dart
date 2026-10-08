@@ -10,6 +10,8 @@ import '../features/admin/presentation/pages/action_inbox_page.dart';
 import '../features/admin/presentation/pages/admin_quick_actions_page.dart';
 import '../features/admin/presentation/pages/analytics_page.dart';
 import '../features/catalog/presentation/pages/catalog_manager_page.dart';
+import '../features/admin/presentation/pages/home_banner_manager_page.dart';
+import '../features/admin/presentation/pages/home_service_sections_manager_page.dart';
 import '../features/service_areas/presentation/pages/service_area_manager_page.dart';
 import '../features/finance/presentation/pages/finance_home_page.dart';
 import '../features/finance/presentation/pages/payouts_ledger_page.dart';
@@ -124,7 +126,11 @@ final routerProvider = Provider<GoRouter>((ref) {
           ),
           GoRoute(
             path: '/marketing/hero-carousel',
-            builder: (context, state) => const CatalogManagerPage(showFeaturedOnly: true),
+            builder: (context, state) => const HomeBannerManagerPage(),
+          ),
+          GoRoute(
+            path: '/marketing/home-sections',
+            builder: (context, state) => const HomeServiceSectionsManagerPage(),
           ),
           GoRoute(
             path: '/marketing/advertisements',
@@ -174,7 +180,9 @@ final routerProvider = Provider<GoRouter>((ref) {
             path: '/finance/payouts/:payoutId',
             builder: (context, state) {
               final payoutId = state.pathParameters['payoutId'] ?? '';
-              final initialPayout = state.extra is FinancePayoutItem ? state.extra as FinancePayoutItem : null;
+              final initialPayout = state.extra is FinancePayoutItem
+                  ? state.extra as FinancePayoutItem
+                  : null;
               return PayoutDetailPage(
                 payoutId: payoutId,
                 initialPayout: initialPayout,
@@ -193,7 +201,9 @@ final routerProvider = Provider<GoRouter>((ref) {
             path: '/finance/refunds/:refundId',
             builder: (context, state) {
               final refundId = state.pathParameters['refundId'] ?? '';
-              final initialRefund = state.extra is FinanceRefundItem ? state.extra as FinanceRefundItem : null;
+              final initialRefund = state.extra is FinanceRefundItem
+                  ? state.extra as FinanceRefundItem
+                  : null;
               return RefundDetailPage(
                 refundId: refundId,
                 initialRefund: initialRefund,
@@ -239,7 +249,8 @@ final routerProvider = Provider<GoRouter>((ref) {
             path: '/ops/live-jobs/:bookingId',
             builder: (context, state) {
               final bookingId = state.pathParameters['bookingId'] ?? '';
-              final initialJob = state.extra is OpsLiveJob ? state.extra as OpsLiveJob : null;
+              final initialJob =
+                  state.extra is OpsLiveJob ? state.extra as OpsLiveJob : null;
               return OpsLiveJobDetailPage(
                 bookingId: bookingId,
                 initialJob: initialJob,
@@ -254,7 +265,8 @@ final routerProvider = Provider<GoRouter>((ref) {
             path: '/ops/alerts/:alertId',
             builder: (context, state) {
               final alertId = state.pathParameters['alertId'] ?? '';
-              final initialAlert = state.extra is OpsAlert ? state.extra as OpsAlert : null;
+              final initialAlert =
+                  state.extra is OpsAlert ? state.extra as OpsAlert : null;
               return OpsAlertDetailPage(
                 alertId: alertId,
                 initialAlert: initialAlert,
@@ -346,7 +358,9 @@ final routerProvider = Provider<GoRouter>((ref) {
             path: '/coupons/:couponId',
             builder: (context, state) {
               final couponId = state.pathParameters['couponId'] ?? '';
-              final initialCoupon = state.extra is AdminCoupon ? state.extra as AdminCoupon : null;
+              final initialCoupon = state.extra is AdminCoupon
+                  ? state.extra as AdminCoupon
+                  : null;
               return CouponDetailPage(
                 couponId: couponId,
                 initialCoupon: initialCoupon,
@@ -406,7 +420,9 @@ final routerProvider = Provider<GoRouter>((ref) {
             path: '/audit-logs/:logId',
             builder: (context, state) {
               final logId = state.pathParameters['logId'] ?? '';
-              final initialLog = state.extra is AdminAuditLogEntry ? state.extra as AdminAuditLogEntry : null;
+              final initialLog = state.extra is AdminAuditLogEntry
+                  ? state.extra as AdminAuditLogEntry
+                  : null;
               return AuditLogDetailPage(
                 logId: logId,
                 initialLog: initialLog,

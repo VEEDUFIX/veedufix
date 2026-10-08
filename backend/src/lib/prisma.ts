@@ -5,6 +5,7 @@ type PrismaModelDelegate = {
   findMany(args?: any): Promise<Array<Record<string, any>>>;
   findFirst(args?: any): Promise<any>;
   findUnique(args?: any): Promise<any>;
+  findUniqueOrThrow(args?: any): Promise<any>;
   create(args?: any): Promise<any>;
   createMany(args?: any): Promise<any>;
   update(args?: any): Promise<any>;

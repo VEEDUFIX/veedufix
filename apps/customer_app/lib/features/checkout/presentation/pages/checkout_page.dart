@@ -67,18 +67,26 @@ class CheckoutItem {
     required this.serviceName,
     required this.price,
     this.quantity = 1,
+    this.variantId,
+    this.addonIds = const [],
+    this.configurationLabel,
   });
 
   final String serviceId;
   final String serviceName;
   final double price;
   final int quantity;
+  final String? variantId;
+  final List<String> addonIds;
+  final String? configurationLabel;
 
   double get total => price * quantity;
 
   Map<String, dynamic> toJson() => {
     'serviceId': serviceId,
     'quantity': quantity,
+    if (variantId != null) 'variantId': variantId,
+    if (addonIds.isNotEmpty) 'addonIds': addonIds,
   };
 }
 
@@ -211,6 +219,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
   final _couponController = TextEditingController();
   final _razorpay = Razorpay();
   bool _couponApplied = false;
+  bool _promoExpanded = false;
   bool _isLaunchingPayment = false;
   bool _isVerifyingPayment = false;
   bool _paymentAttemptFailed = false;
@@ -344,10 +353,10 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
               ),
             )
           : ListView(
-              padding: const EdgeInsets.fromLTRB(20, 8, 20, 120),
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
               children: [
                 // ── Order summary ───────────────────────────────────────────────
-                const _SectionHeader(title: 'Order Summary'),
+                const _SectionHeader(title: 'Order summary'),
                 const SizedBox(height: 10),
                 PremiumGlassCard(
                   child: Padding(
@@ -371,6 +380,22 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
                                           fontWeight: FontWeight.w700,
                                         ),
                                       ),
+                                      if ((item.configurationLabel ?? '')
+                                          .trim()
+                                          .isNotEmpty) ...[
+                                        const SizedBox(height: 3),
+                                        Text(
+                                          item.configurationLabel!,
+                                          style: Theme.of(context)
+                                              .textTheme
+                                              .bodySmall
+                                              ?.copyWith(
+                                                color: Theme.of(
+                                                  context,
+                                                ).colorScheme.onSurfaceVariant,
+                                              ),
+                                        ),
+                                      ],
                                       Text(
                                         '× ${item.quantity}',
                                         style: tt.bodySmall?.copyWith(
@@ -441,20 +466,34 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
                     child: addressesState.isLoading
                         ? const Center(child: CircularProgressIndicator())
                         : addressesState.hasError
-                        ? Row(
+                        ? Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              const Expanded(
-                                child: Text('Could not load addresses.'),
+                              Text(
+                                "Couldn't load your saved addresses.",
+                                style: tt.bodyMedium?.copyWith(
+                                  fontWeight: FontWeight.w700,
+                                ),
                               ),
-                              TextButton.icon(
-                                onPressed: () => ref.invalidate(
-                                  cartCheckoutAddressesProvider,
+                              const SizedBox(height: 4),
+                              Text(
+                                'Check your connection and try again.',
+                                style: tt.bodySmall?.copyWith(
+                                  color: cs.onSurfaceVariant,
                                 ),
-                                icon: const Icon(
-                                  Icons.refresh_rounded,
-                                  size: 18,
+                              ),
+                              Align(
+                                alignment: Alignment.centerRight,
+                                child: TextButton.icon(
+                                  onPressed: () => ref.invalidate(
+                                    cartCheckoutAddressesProvider,
+                                  ),
+                                  icon: const Icon(
+                                    Icons.refresh_rounded,
+                                    size: 18,
+                                  ),
+                                  label: const Text('Retry'),
                                 ),
-                                label: const Text('Retry'),
                               ),
                             ],
                           )
@@ -462,13 +501,20 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
                         ? Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              const Text(
-                                'Add a service address before booking.',
+                              Text(
+                                'Where should we provide the service?',
+                                style: tt.titleSmall?.copyWith(
+                                  fontWeight: FontWeight.w800,
+                                ),
                               ),
+                              const SizedBox(height: 6),
+                              const Text('No saved address yet.'),
                               Align(
-                                alignment: Alignment.centerRight,
+                                alignment: Alignment.centerLeft,
                                 child: TextButton.icon(
-                                  onPressed: orderLocked ? null : _openAddresses,
+                                  onPressed: orderLocked
+                                      ? null
+                                      : _openAddresses,
                                   icon: const Icon(
                                     Icons.add_location_alt_outlined,
                                   ),
@@ -519,7 +565,9 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
                               Align(
                                 alignment: Alignment.centerRight,
                                 child: TextButton.icon(
-                                  onPressed: orderLocked ? null : _openAddresses,
+                                  onPressed: orderLocked
+                                      ? null
+                                      : _openAddresses,
                                   icon: const Icon(
                                     Icons.edit_location_alt_outlined,
                                   ),
@@ -547,6 +595,13 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
                           _selectedScheduleSlot = null;
                         }),
                 ),
+                if (!_scheduleForLater) ...[
+                  const SizedBox(height: 10),
+                  Text(
+                    'Available as soon as a professional accepts your request.',
+                    style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+                  ),
+                ],
                 if (_scheduleForLater) ...[
                   const SizedBox(height: 14),
                   SizedBox(
@@ -636,133 +691,144 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
                 ],
                 const SizedBox(height: 20),
 
-                // ── Coupon code ─────────────────────────────────────────────────
-                const _SectionHeader(title: 'Promo Code'),
-                const SizedBox(height: 10),
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextField(
-                        controller: _couponController,
-                        textCapitalization: TextCapitalization.characters,
-                        decoration: InputDecoration(
-                          hintText: 'Enter coupon code',
-                          prefixIcon: const Icon(
-                            Icons.discount_rounded,
-                            size: 18,
-                          ),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(14),
-                            borderSide: BorderSide.none,
-                          ),
-                          filled: true,
-                          fillColor: cs.surfaceContainerHighest.withValues(
-                            alpha: 0.5,
-                          ),
+                // ── Promo code ──────────────────────────────────────────────────
+                Container(
+                  decoration: BoxDecoration(
+                    color: cs.surface,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: cs.outlineVariant),
+                  ),
+                  child: Column(
+                    children: [
+                      ListTile(
+                        dense: true,
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 14,
                         ),
-                        enabled: !_couponApplied && !orderLocked,
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    TapScale(
-                      onTap: orderLocked
-                          ? null
-                          : _couponApplied
-                          ? () => setState(() {
-                              _couponApplied = false;
-                              _couponController.clear();
-                            })
-                          : _applyCoupon,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 14,
+                        leading: Icon(
+                          _couponApplied
+                              ? Icons.check_circle_outline_rounded
+                              : Icons.local_offer_outlined,
+                          color: _couponApplied ? Colors.green : cs.primary,
                         ),
-                        decoration: BoxDecoration(
-                          color: _couponApplied
-                              ? cs.errorContainer
-                              : cs.primaryContainer,
-                          borderRadius: BorderRadius.circular(14),
-                        ),
-                        child: Text(
-                          _couponApplied ? 'Remove' : 'Apply',
-                          style: tt.labelLarge?.copyWith(
-                            color: _couponApplied
-                                ? cs.onErrorContainer
-                                : cs.onPrimaryContainer,
+                        title: Text(
+                          _couponApplied
+                              ? '${_couponController.text} added'
+                              : 'Have a promo code?',
+                          style: tt.bodyMedium?.copyWith(
                             fontWeight: FontWeight.w700,
                           ),
                         ),
-                      ),
-                    ),
-                  ],
-                ),
-                if (_couponApplied) ...[
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      Icon(
-                        Icons.info_outline_rounded,
-                        size: 16,
-                        color: cs.onSurfaceVariant,
-                      ),
-                      const SizedBox(width: 6),
-                      Text(
-                        'The code will be validated before payment.',
-                        style: tt.bodySmall?.copyWith(
-                          color: cs.onSurfaceVariant,
-                          fontWeight: FontWeight.w600,
+                        trailing: Icon(
+                          _promoExpanded
+                              ? Icons.keyboard_arrow_up_rounded
+                              : Icons.chevron_right_rounded,
                         ),
+                        onTap: orderLocked
+                            ? null
+                            : () => setState(
+                                () => _promoExpanded = !_promoExpanded,
+                              ),
                       ),
+                      if (_promoExpanded)
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: TextField(
+                                  controller: _couponController,
+                                  textCapitalization:
+                                      TextCapitalization.characters,
+                                  enabled: !_couponApplied && !orderLocked,
+                                  decoration: InputDecoration(
+                                    hintText: 'Enter coupon code',
+                                    isDense: true,
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              OutlinedButton(
+                                onPressed: orderLocked
+                                    ? null
+                                    : _couponApplied
+                                    ? () => setState(() {
+                                        _couponApplied = false;
+                                        _couponController.clear();
+                                      })
+                                    : _applyCoupon,
+                                child: Text(
+                                  _couponApplied ? 'Remove' : 'Apply',
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      if (_couponApplied)
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(14, 0, 14, 12),
+                          child: Align(
+                            alignment: Alignment.centerLeft,
+                            child: Text(
+                              'Discount is confirmed when the order is prepared.',
+                              style: tt.bodySmall?.copyWith(
+                                color: cs.onSurfaceVariant,
+                              ),
+                            ),
+                          ),
+                        ),
                     ],
                   ),
-                ],
+                ),
                 const SizedBox(height: 20),
 
-                // ── Total ───────────────────────────────────────────────────────
+                // ── Price summary ──────────────────────────────────────────────
                 Container(
-                  padding: const EdgeInsets.all(20),
+                  padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color: cs.surfaceContainerHighest.withValues(alpha: 0.42),
-                    borderRadius: BorderRadius.circular(AbzioTheme.cardRadius),
-                    border: Border.all(
-                      color: cs.outlineVariant.withValues(alpha: 0.55),
-                    ),
+                    color: cs.surface,
+                    borderRadius: BorderRadius.circular(18),
+                    border: Border.all(color: cs.outlineVariant),
                   ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Estimated service amount',
-                            style: tt.labelMedium?.copyWith(
-                              color: cs.onSurfaceVariant,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            '₹${_subtotal.toStringAsFixed(2)}',
-                            style: tt.headlineSmall?.copyWith(
-                              fontWeight: FontWeight.w900,
-                              color: cs.onSurface,
-                            ),
-                          ),
-                          const SizedBox(height: 3),
-                          Text(
-                            'Final amount confirmed before payment',
-                            style: tt.bodySmall?.copyWith(
-                              color: cs.onSurfaceVariant,
-                            ),
-                          ),
-                        ],
+                      Text(
+                        'Price summary',
+                        style: tt.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w800,
+                        ),
                       ),
-                      Icon(
-                        Icons.lock_rounded,
-                        color: cs.primary.withValues(alpha: 0.5),
-                        size: 28,
+                      const SizedBox(height: 14),
+                      _PriceRow(
+                        label: widget.items.length == 1
+                            ? 'Service'
+                            : 'Services',
+                        value: _formatCheckoutMoney(_subtotal),
                       ),
+                      if (_activeOrder != null) ...[
+                        const SizedBox(height: 10),
+                        Divider(color: cs.outlineVariant),
+                        _PriceRow(
+                          label: 'Total',
+                          value: _formatCheckoutMoney(
+                            _activeOrder!.amountRupees,
+                          ),
+                          emphasized: true,
+                        ),
+                      ] else ...[
+                        const SizedBox(height: 10),
+                        Text(
+                          'Taxes and any applicable discount are confirmed before payment.',
+                          style: tt.bodySmall?.copyWith(
+                            color: cs.onSurfaceVariant,
+                            height: 1.4,
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ),
@@ -842,69 +908,132 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
                     ),
                   ),
                 ],
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Icon(
+                      Icons.lock_outline_rounded,
+                      size: 17,
+                      color: cs.primary,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Secure payment · Your payment information is securely processed.',
+                        style: tt.bodySmall?.copyWith(
+                          color: cs.onSurfaceVariant,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ],
             ),
 
       // ── Pay button ─────────────────────────────────────────────────────
       bottomNavigationBar: widget.items.isEmpty
           ? null
-          : SafeArea(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
-                child: SizedBox(
-                  width: double.infinity,
-                  child: FilledButton(
-                    onPressed:
-                        isLoading ||
-                            _isLaunchingPayment ||
-                            _paymentVerificationFailed ||
-                            (needsNewOrder &&
-                                (addressesState.isLoading ||
-                                    selectedAddress == null ||
-                                    (_scheduleForLater &&
-                                        ((slotsState?.isLoading ?? true) ||
-                                            selectedSlotIso == null))))
-                        ? null
-                        : () => _pay(
-                            selectedAddress?.id ?? '',
-                            scheduledFor: needsNewOrder && _scheduleForLater
-                                ? DateTime.parse(selectedSlotIso!).toUtc()
-                                : null,
-                          ),
-                    style: FilledButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 18),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(
-                          AbzioTheme.buttonRadius,
+          : Container(
+              decoration: BoxDecoration(
+                color: cs.surface,
+                border: Border(top: BorderSide(color: cs.outlineVariant)),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.06),
+                    blurRadius: 16,
+                    offset: const Offset(0, -4),
+                  ),
+                ],
+              ),
+              child: SafeArea(
+                top: false,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        flex: 2,
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Total',
+                              style: tt.labelSmall?.copyWith(
+                                color: cs.onSurfaceVariant,
+                              ),
+                            ),
+                            const SizedBox(height: 3),
+                            Text(
+                              _formatCheckoutMoney(
+                                _activeOrder?.amountRupees ?? _subtotal,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: tt.titleLarge?.copyWith(
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
-                    ),
-                    child: isLoading
-                        ? const SizedBox(
-                            width: 22,
-                            height: 22,
-                            child: CircularProgressIndicator(
-                              color: Colors.white,
-                              strokeWidth: 2.5,
-                            ),
-                          )
-                        : Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              const Icon(Icons.payment_rounded, size: 20),
-                              const SizedBox(width: 10),
-                              Text(
-                                _paymentAttemptFailed
-                                    ? 'Retry payment'
-                                    : 'Continue to secure payment',
-                                style: Theme.of(context).textTheme.titleSmall
-                                    ?.copyWith(
-                                      color: Colors.white,
-                                      fontWeight: FontWeight.w800,
-                                    ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        flex: 3,
+                        child: SizedBox(
+                          height: 56,
+                          child: FilledButton(
+                            onPressed:
+                                isLoading ||
+                                    _isLaunchingPayment ||
+                                    _isVerifyingPayment ||
+                                    _paymentVerificationFailed ||
+                                    (needsNewOrder &&
+                                        (addressesState.isLoading ||
+                                            selectedAddress == null ||
+                                            (_scheduleForLater &&
+                                                ((slotsState?.isLoading ??
+                                                        true) ||
+                                                    selectedSlotIso == null))))
+                                ? null
+                                : () => _pay(
+                                    selectedAddress?.id ?? '',
+                                    scheduledFor:
+                                        needsNewOrder && _scheduleForLater
+                                        ? DateTime.parse(
+                                            selectedSlotIso!,
+                                          ).toUtc()
+                                        : null,
+                                  ),
+                            style: FilledButton.styleFrom(
+                              backgroundColor: const Color(0xFFC2A15E),
+                              foregroundColor: const Color(0xFF29251F),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
                               ),
-                            ],
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(16),
+                              ),
+                            ),
+                            child: isLoading || _isLaunchingPayment
+                                ? const Text('Continuing...')
+                                : _isVerifyingPayment
+                                ? const Text('Confirming payment...')
+                                : FittedBox(
+                                    fit: BoxFit.scaleDown,
+                                    child: Text(
+                                      _paymentAttemptFailed
+                                          ? 'Retry payment'
+                                          : 'Continue to payment  →',
+                                      style: tt.labelLarge?.copyWith(
+                                        fontWeight: FontWeight.w800,
+                                      ),
+                                    ),
+                                  ),
                           ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),
@@ -925,7 +1054,10 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
       text: code,
       selection: TextSelection.collapsed(offset: code.length),
     );
-    setState(() => _couponApplied = true);
+    setState(() {
+      _couponApplied = true;
+      _promoExpanded = false;
+    });
   }
 
   SavedAddressItem? _resolveSelectedAddress(List<SavedAddressItem> addresses) {
@@ -1208,4 +1340,49 @@ class _SectionHeader extends StatelessWidget {
       ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800),
     );
   }
+}
+
+class _PriceRow extends StatelessWidget {
+  const _PriceRow({
+    required this.label,
+    required this.value,
+    this.emphasized = false,
+  });
+
+  final String label;
+  final String value;
+  final bool emphasized;
+
+  @override
+  Widget build(BuildContext context) {
+    final textTheme = Theme.of(context).textTheme;
+    final color = Theme.of(context).colorScheme.onSurface;
+    return Row(
+      children: [
+        Expanded(
+          child: Text(
+            label,
+            style: (emphasized ? textTheme.titleSmall : textTheme.bodyMedium)
+                ?.copyWith(
+                  color: emphasized ? color : color.withValues(alpha: 0.78),
+                  fontWeight: emphasized ? FontWeight.w800 : FontWeight.w500,
+                ),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Text(
+          value,
+          style: (emphasized ? textTheme.titleSmall : textTheme.bodyMedium)
+              ?.copyWith(color: color, fontWeight: FontWeight.w800),
+        ),
+      ],
+    );
+  }
+}
+
+String _formatCheckoutMoney(double amount) {
+  final formatted = amount == amount.truncateToDouble()
+      ? amount.toStringAsFixed(0)
+      : amount.toStringAsFixed(2);
+  return '₹$formatted';
 }

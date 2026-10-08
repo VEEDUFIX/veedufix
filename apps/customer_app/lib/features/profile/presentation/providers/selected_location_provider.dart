@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'package:dio/dio.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:marketplace_shared/marketplace_shared.dart';
@@ -44,11 +46,7 @@ final selectedLocationProvider =
 
 class SelectedLocationController extends StateNotifier<SelectedLocation?> {
   SelectedLocationController(this.ref) : super(null) {
-    final userId = ref
-        .read(authControllerProvider)
-        .valueOrNull
-        ?.user
-        .id;
+    final userId = ref.read(authControllerProvider).valueOrNull?.user.id;
     _storageScope = _scopeFor(userId);
     ref.listen(
       authControllerProvider.select((auth) => auth.valueOrNull?.user.id),
@@ -59,20 +57,20 @@ class SelectedLocationController extends StateNotifier<SelectedLocation?> {
           if (mounted) {
             state = null;
           }
-          unawaited(_load(nextScope));
+          _loadFuture = _load(nextScope);
         }
       },
     );
-    unawaited(_load(_storageScope));
+    _loadFuture = _load(_storageScope);
   }
 
   final Ref ref;
   String _storageScope = 'guest';
   int _loadGeneration = 0;
+  Future<void> _loadFuture = Future<void>.value();
 
-  static String _scopeFor(String? userId) => userId == null
-      ? 'guest'
-      : Uri.encodeComponent(userId);
+  static String _scopeFor(String? userId) =>
+      userId == null ? 'guest' : Uri.encodeComponent(userId);
 
   static String _key(String scope, String field) =>
       'customer_selected_location_${scope}_$field';
@@ -81,9 +79,7 @@ class SelectedLocationController extends StateNotifier<SelectedLocation?> {
     final generation = ++_loadGeneration;
     try {
       final prefs = await SharedPreferences.getInstance();
-      if (!mounted ||
-          generation != _loadGeneration ||
-          scope != _storageScope) {
+      if (!mounted || generation != _loadGeneration || scope != _storageScope) {
         return;
       }
       final lat = prefs.getDouble(_key(scope, 'lat'));
@@ -158,6 +154,72 @@ class SelectedLocationController extends StateNotifier<SelectedLocation?> {
     if (mounted && scope == _storageScope) {
       state = next;
     }
+  }
+
+  Future<void> detectCurrentLocationIfMissing({
+    bool requestPermission = false,
+  }) async {
+    await _loadFuture;
+    if (!mounted || state != null) return;
+
+    try {
+      if (!await Geolocator.isLocationServiceEnabled()) return;
+      var permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied && requestPermission) {
+        permission = await Geolocator.requestPermission();
+      }
+      if (permission == LocationPermission.denied ||
+          permission == LocationPermission.deniedForever ||
+          !mounted ||
+          state != null) {
+        return;
+      }
+
+      final position = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.high,
+        ),
+      );
+      if (!mounted || state != null) return;
+
+      final label = await _reverseGeocode(
+        position.latitude,
+        position.longitude,
+      );
+      if (!mounted || state != null) return;
+      await setLocation(
+        latitude: position.latitude,
+        longitude: position.longitude,
+        label: label ?? 'Current location',
+      );
+    } catch (_) {
+      // Location is optional; home remains usable with manual selection.
+    }
+  }
+
+  Future<String?> _reverseGeocode(double latitude, double longitude) async {
+    final apiKey = AppEnvironment.fromDartDefines().googleMapsApiKey;
+    if (apiKey.isEmpty) return null;
+    try {
+      final response = await Dio().get<Map<String, dynamic>>(
+        'https://maps.googleapis.com/maps/api/geocode/json',
+        queryParameters: {'latlng': '$latitude,$longitude', 'key': apiKey},
+      );
+      final results = response.data?['results'];
+      if (response.data?['status'] != 'OK' ||
+          results is! List ||
+          results.isEmpty) {
+        return null;
+      }
+      final first = results.first;
+      if (first is Map) {
+        final address = first['formatted_address']?.toString().trim();
+        if (address != null && address.isNotEmpty) return address;
+      }
+    } catch (_) {
+      // Coordinates remain useful if reverse geocoding is unavailable.
+    }
+    return null;
   }
 
   Future<void> clearLocation() async {

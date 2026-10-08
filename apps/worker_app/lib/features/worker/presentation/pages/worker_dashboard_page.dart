@@ -13,7 +13,8 @@ class WorkerDashboardPage extends ConsumerStatefulWidget {
   const WorkerDashboardPage({super.key});
 
   @override
-  ConsumerState<WorkerDashboardPage> createState() => _WorkerDashboardPageState();
+  ConsumerState<WorkerDashboardPage> createState() =>
+      _WorkerDashboardPageState();
 }
 
 class _WorkerDashboardPageState extends ConsumerState<WorkerDashboardPage> {
@@ -39,7 +40,9 @@ class _WorkerDashboardPageState extends ConsumerState<WorkerDashboardPage> {
 
   Future<void> _connectSocket() async {
     final session = ref.read(authControllerProvider).valueOrNull;
-    if (session == null || _connecting || _notificationSubscription != null) return;
+    if (session == null || _connecting || _notificationSubscription != null) {
+      return;
+    }
 
     _connecting = true;
     final service = ref.read(realtimeServiceProvider);
@@ -47,40 +50,40 @@ class _WorkerDashboardPageState extends ConsumerState<WorkerDashboardPage> {
       await service.connectNotifications();
 
       _notificationSubscription = service.notificationStream.listen(
-      (payload) {
-        final title = payload['title'] as String? ??
-            payload['bookingCode'] as String? ??
-            'Live update';
-        final body = payload['body'] as String? ??
-            payload['message'] as String? ??
-            'Something changed on your account.';
-        final channel = payload['channel'] as String? ?? 'live';
+        (payload) {
+          final title = payload['title'] as String? ??
+              payload['bookingCode'] as String? ??
+              'Live update';
+          final body = payload['body'] as String? ??
+              payload['message'] as String? ??
+              'Something changed on your account.';
+          final channel = payload['channel'] as String? ?? 'live';
 
-        if (!mounted) return;
-        setState(() {
-          _connected = true;
-          _liveUpdates.insert(
-            0,
-            _LiveUpdateItem(
-              channel: channel,
-              title: title,
-              body: body,
-              timestamp: DateTime.now(),
-            ),
-          );
-          if (_liveUpdates.length > 5) {
-            _liveUpdates.removeRange(5, _liveUpdates.length);
-          }
-        });
-      },
-      onError: (_) {
-        if (!mounted) return;
-        setState(() => _connected = false);
-      },
-      onDone: () {
-        if (!mounted) return;
-        setState(() => _connected = false);
-      },
+          if (!mounted) return;
+          setState(() {
+            _connected = true;
+            _liveUpdates.insert(
+              0,
+              _LiveUpdateItem(
+                channel: channel,
+                title: title,
+                body: body,
+                timestamp: DateTime.now(),
+              ),
+            );
+            if (_liveUpdates.length > 5) {
+              _liveUpdates.removeRange(5, _liveUpdates.length);
+            }
+          });
+        },
+        onError: (_) {
+          if (!mounted) return;
+          setState(() => _connected = false);
+        },
+        onDone: () {
+          if (!mounted) return;
+          setState(() => _connected = false);
+        },
       );
 
       if (mounted) setState(() => _connected = true);
@@ -134,10 +137,13 @@ class _WorkerDashboardPageState extends ConsumerState<WorkerDashboardPage> {
       }
     });
 
-    final isSignedIn = ref.watch(authControllerProvider.select((s) => s.valueOrNull?.user.id)) != null;
+    final isSignedIn = ref.watch(
+            authControllerProvider.select((s) => s.valueOrNull?.user.id)) !=
+        null;
     final session = ref.watch(authControllerProvider).valueOrNull;
     final statsAsync = ref.watch(workerDashboardStatsProvider);
-    final unreadNotifications = ref.watch(notificationsUnreadCountProvider).valueOrNull ?? 0;
+    final unreadNotifications =
+        ref.watch(notificationsUnreadCountProvider).valueOrNull ?? 0;
     final displayName = _firstName(session?.user.name);
     return Scaffold(
       appBar: AppBar(
@@ -147,7 +153,10 @@ class _WorkerDashboardPageState extends ConsumerState<WorkerDashboardPage> {
             const SizedBox(width: 8),
             Text(
               'Dashboard',
-              style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
+              style: Theme.of(context)
+                  .textTheme
+                  .titleLarge
+                  ?.copyWith(fontWeight: FontWeight.w800),
             ),
           ],
         ),
@@ -163,14 +172,17 @@ class _WorkerDashboardPageState extends ConsumerState<WorkerDashboardPage> {
                     right: -2,
                     top: -2,
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 4, vertical: 1),
                       decoration: BoxDecoration(
                         color: Theme.of(context).colorScheme.error,
                         borderRadius: BorderRadius.circular(999),
                       ),
                       constraints: const BoxConstraints(minWidth: 16),
                       child: Text(
-                        unreadNotifications > 99 ? '99+' : '$unreadNotifications',
+                        unreadNotifications > 99
+                            ? '99+'
+                            : '$unreadNotifications',
                         textAlign: TextAlign.center,
                         style: const TextStyle(
                           color: Colors.white,
@@ -225,7 +237,9 @@ class _WorkerDashboardPageState extends ConsumerState<WorkerDashboardPage> {
               ),
               const SizedBox(width: 7),
               Text(
-                _connected ? 'Live updates connected' : 'Waiting for live updates',
+                _connected
+                    ? 'Live updates connected'
+                    : 'Waiting for live updates',
                 style: Theme.of(context).textTheme.labelMedium?.copyWith(
                       color: _connected
                           ? AbzioTheme.workerPrimary
@@ -256,7 +270,8 @@ class _WorkerDashboardPageState extends ConsumerState<WorkerDashboardPage> {
                               width: 50,
                               height: 50,
                               decoration: BoxDecoration(
-                                color: AbzioTheme.workerPrimary.withValues(alpha: 0.12),
+                                color: AbzioTheme.workerPrimary
+                                    .withValues(alpha: 0.12),
                                 borderRadius: BorderRadius.circular(16),
                               ),
                               child: const Icon(
@@ -271,15 +286,23 @@ class _WorkerDashboardPageState extends ConsumerState<WorkerDashboardPage> {
                                 children: [
                                   Text(
                                     'No jobs scheduled today',
-                                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .titleMedium
+                                        ?.copyWith(
                                           fontWeight: FontWeight.w800,
                                         ),
                                   ),
                                   const SizedBox(height: 4),
                                   Text(
                                     'Stay available and keep notifications on. New jobs will appear here as soon as they are assigned.',
-                                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .bodyMedium
+                                        ?.copyWith(
+                                          color: Theme.of(context)
+                                              .colorScheme
+                                              .onSurfaceVariant,
                                           height: 1.45,
                                         ),
                                   ),
@@ -295,12 +318,14 @@ class _WorkerDashboardPageState extends ConsumerState<WorkerDashboardPage> {
                           children: [
                             FilledButton.icon(
                               onPressed: () => context.go('/jobs'),
-                              icon: const Icon(Icons.work_history_rounded, size: 18),
+                              icon: const Icon(Icons.work_history_rounded,
+                                  size: 18),
                               label: const Text('Open jobs'),
                             ),
                             OutlinedButton.icon(
                               onPressed: () => context.go('/schedule'),
-                              icon: const Icon(Icons.calendar_month_rounded, size: 18),
+                              icon: const Icon(Icons.calendar_month_rounded,
+                                  size: 18),
                               label: const Text('Check schedule'),
                             ),
                           ],
@@ -312,7 +337,9 @@ class _WorkerDashboardPageState extends ConsumerState<WorkerDashboardPage> {
               }
               return Column(
                 children: stats.todayJobs.map((job) {
-                  final route = job.bookingId.isNotEmpty ? '/job-execution?bookingId=${job.bookingId}' : '/jobs';
+                  final route = job.bookingId.isNotEmpty
+                      ? '/job-execution?bookingId=${job.bookingId}'
+                      : '/jobs';
                   return Padding(
                     padding: const EdgeInsets.only(bottom: 12),
                     child: _JobCard(
@@ -343,7 +370,8 @@ class _WorkerDashboardPageState extends ConsumerState<WorkerDashboardPage> {
                     Text(
                       'We could not fetch your route just now. Try refreshing the dashboard.',
                       style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                            color: Theme.of(context).colorScheme.onSurfaceVariant,
+                            color:
+                                Theme.of(context).colorScheme.onSurfaceVariant,
                             height: 1.45,
                           ),
                     ),
@@ -409,13 +437,15 @@ class _WorkerDashboardPageState extends ConsumerState<WorkerDashboardPage> {
                     Text(
                       'Please try again. Your jobs and live updates are still available below.',
                       style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                            color: Theme.of(context).colorScheme.onSurfaceVariant,
+                            color:
+                                Theme.of(context).colorScheme.onSurfaceVariant,
                             height: 1.45,
                           ),
                     ),
                     const SizedBox(height: 14),
                     FilledButton.icon(
-                      onPressed: () => ref.refresh(workerDashboardStatsProvider.future),
+                      onPressed: () =>
+                          ref.refresh(workerDashboardStatsProvider.future),
                       icon: const Icon(Icons.refresh_rounded, size: 18),
                       label: const Text('Retry'),
                     ),
@@ -433,7 +463,8 @@ class _WorkerDashboardPageState extends ConsumerState<WorkerDashboardPage> {
           if (_liveUpdates.isEmpty)
             PremiumGlassCard(
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                 child: Row(
                   children: [
                     Icon(
@@ -446,8 +477,13 @@ class _WorkerDashboardPageState extends ConsumerState<WorkerDashboardPage> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            isSignedIn ? 'You\'re all caught up' : 'Sign in for live updates',
-                            style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                            isSignedIn
+                                ? 'You\'re all caught up'
+                                : 'Sign in for live updates',
+                            style: Theme.of(context)
+                                .textTheme
+                                .titleSmall
+                                ?.copyWith(
                                   fontWeight: FontWeight.w800,
                                 ),
                           ),
@@ -456,9 +492,12 @@ class _WorkerDashboardPageState extends ConsumerState<WorkerDashboardPage> {
                             isSignedIn
                                 ? 'New booking changes will appear here.'
                                 : 'Booking changes will appear here after sign-in.',
-                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                                ),
+                            style:
+                                Theme.of(context).textTheme.bodySmall?.copyWith(
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .onSurfaceVariant,
+                                    ),
                           ),
                         ],
                       ),
@@ -542,9 +581,8 @@ class _LiveUpdateCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isTracking = item.channel == 'tracking';
-    final accent = isTracking
-        ? AbzioTheme.workerPrimary
-        : AbzioTheme.workerAccent;
+    final accent =
+        isTracking ? AbzioTheme.workerPrimary : AbzioTheme.workerAccent;
 
     return PremiumGlassCard(
       child: Padding(
@@ -560,7 +598,9 @@ class _LiveUpdateCard extends StatelessWidget {
                 borderRadius: BorderRadius.circular(14),
               ),
               child: Icon(
-                isTracking ? Icons.route_rounded : Icons.notifications_active_rounded,
+                isTracking
+                    ? Icons.route_rounded
+                    : Icons.notifications_active_rounded,
                 color: accent,
               ),
             ),
@@ -574,16 +614,19 @@ class _LiveUpdateCard extends StatelessWidget {
                       Expanded(
                         child: Text(
                           item.title,
-                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                fontWeight: FontWeight.w800,
-                              ),
+                          style:
+                              Theme.of(context).textTheme.titleMedium?.copyWith(
+                                    fontWeight: FontWeight.w800,
+                                  ),
                         ),
                       ),
                       const SizedBox(width: 8),
                       Text(
                         relativeLabel,
                         style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                              color: Theme.of(context).colorScheme.onSurfaceVariant,
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .onSurfaceVariant,
                             ),
                       ),
                     ],
@@ -620,38 +663,43 @@ class _JobCard extends StatelessWidget {
   final WorkerJob job;
   final VoidCallback? onTap;
 
-  Future<void> _openNavigation() async {
-    final lat = job.destinationLatitude;
-    final lng = job.destinationLongitude;
-    if (lat != null && lng != null) {
+  Future<void> _openNavigation(BuildContext context) async {
+    void showNavigationError() {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not open navigation.')),
+      );
+    }
+
+    try {
+      final lat = job.destinationLatitude;
+      final lng = job.destinationLongitude;
+      final query = [
+        job.addressLabel?.trim(),
+        job.cityName?.trim(),
+        job.destinationQuery?.trim(),
+      ]
+          .where((part) => part != null && part.isNotEmpty)
+          .cast<String>()
+          .join(', ');
+      if ((lat == null || lng == null) && query.isEmpty) {
+        showNavigationError();
+        return;
+      }
+
       final uri = Uri.https('www.google.com', '/maps/dir/', {
         'api': '1',
         'origin': 'Current+Location',
-        'destination': '$lat,$lng',
+        'destination': lat != null && lng != null ? '$lat,$lng' : query,
         'travelmode': 'driving',
         'dir_action': 'navigate',
       });
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
-      return;
+      if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
+        showNavigationError();
+      }
+    } catch (_) {
+      showNavigationError();
     }
-
-    final query = [
-      job.addressLabel?.trim(),
-      job.cityName?.trim(),
-      job.destinationQuery?.trim(),
-    ].where((part) => part != null && part.isNotEmpty).cast<String>().join(', ');
-    if (query.isEmpty) {
-      return;
-    }
-
-    final uri = Uri.https('www.google.com', '/maps/dir/', {
-      'api': '1',
-      'origin': 'Current+Location',
-      'destination': query,
-      'travelmode': 'driving',
-      'dir_action': 'navigate',
-    });
-    await launchUrl(uri, mode: LaunchMode.externalApplication);
   }
 
   @override
@@ -686,10 +734,12 @@ class _JobCard extends StatelessWidget {
                   ConstrainedBox(
                     constraints: const BoxConstraints(maxWidth: 112),
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 6),
                       decoration: BoxDecoration(
                         color: accent.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(AbzioTheme.cardRadius),
+                        borderRadius:
+                            BorderRadius.circular(AbzioTheme.cardRadius),
                       ),
                       child: Text(
                         status,
@@ -708,7 +758,8 @@ class _JobCard extends StatelessWidget {
               const SizedBox(height: 8),
               Row(
                 children: [
-                  Icon(Icons.schedule_rounded, size: 16, color: cs.onSurfaceVariant),
+                  Icon(Icons.schedule_rounded,
+                      size: 16, color: cs.onSurfaceVariant),
                   const SizedBox(width: 6),
                   Expanded(
                     child: Text(
@@ -722,7 +773,7 @@ class _JobCard extends StatelessWidget {
                   IconButton(
                     tooltip: 'Navigate',
                     visualDensity: VisualDensity.compact,
-                    onPressed: _openNavigation,
+                    onPressed: () => _openNavigation(context),
                     icon: Icon(Icons.navigation_rounded, color: accent),
                   ),
                 ],
@@ -756,12 +807,16 @@ class _AvailabilityToggleCard extends ConsumerWidget {
           ? null
           : (value) async {
               try {
-                await ref.read(availabilityToggleProvider.notifier).toggle(value);
+                await ref
+                    .read(availabilityToggleProvider.notifier)
+                    .toggle(value);
               } catch (_) {
                 if (!context.mounted) return;
                 ScaffoldMessenger.of(context)
                   ..hideCurrentSnackBar()
-                  ..showSnackBar(const SnackBar(content: Text('Could not update availability. Please try again.')));
+                  ..showSnackBar(const SnackBar(
+                      content: Text(
+                          'Could not update availability. Please try again.')));
               }
             },
     );
@@ -769,7 +824,12 @@ class _AvailabilityToggleCard extends ConsumerWidget {
 }
 
 class _OnlineToggle extends StatelessWidget {
-  const _OnlineToggle({required this.isOnline, required this.onChanged, this.isLoading = false, this.hasError = false, this.onRetry});
+  const _OnlineToggle(
+      {required this.isOnline,
+      required this.onChanged,
+      this.isLoading = false,
+      this.hasError = false,
+      this.onRetry});
   final bool isOnline;
   final bool isLoading;
   final bool hasError;

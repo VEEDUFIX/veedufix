@@ -15,7 +15,6 @@ type PublicCatalogFilter = LocaleInput & {
   subcategorySlug?: string;
   page?: number;
   pageSize?: number;
-  includeInactive?: boolean;
 };
 
 type CatalogNode = {
@@ -39,8 +38,22 @@ type CatalogNode = {
   }>;
 };
 
-const CATALOG_CACHE_TTL_SECONDS = 600;
+// Keep publication-window transitions visible promptly. A short TTL also
+// covers upcoming start times that are absent from the currently eligible
+// query result and therefore cannot contribute an exact expiry boundary.
+const CATALOG_CACHE_TTL_SECONDS = 15;
 const CATALOG_CACHE_VERSION_KEY = "cache:catalog:version";
+
+export function publicServiceEligibility(at = new Date()): Prisma.ServiceWhereInput {
+  return {
+    isActive: true,
+    publicationStatus: "PUBLISHED",
+    AND: [
+      { OR: [{ publishStartsAt: null }, { publishStartsAt: { lte: at } }] },
+      { OR: [{ publishEndsAt: null }, { publishEndsAt: { gte: at } }] }
+    ]
+  };
+}
 
 async function getCatalogCacheVersion(): Promise<number> {
   // Redis is a performance optimization only - any Redis failure must degrade to direct DB access, never fail the request.
@@ -155,14 +168,18 @@ function normalizeSacCode(value?: string | null): string {
   return trimmed && trimmed.length > 0 ? trimmed : "PENDING";
 }
 
-async function resolveSkillId(name: string, slug?: string) {
+async function resolveSkillId(
+  name: string,
+  slug?: string,
+  client: Prisma.TransactionClient = prisma
+) {
   const skillSlug = slug ? slugify(slug) : slugify(name);
-  const existing = await prisma.skill.findUnique({ where: { slug: skillSlug } });
+  const existing = await client.skill.findUnique({ where: { slug: skillSlug } });
   if (existing) {
     return existing.id;
   }
 
-  const skill = await prisma.skill.create({
+  const skill = await client.skill.create({
     data: {
       name,
       slug: skillSlug
@@ -172,14 +189,18 @@ async function resolveSkillId(name: string, slug?: string) {
   return skill.id;
 }
 
-async function resolveToolId(name: string, slug?: string) {
+async function resolveToolId(
+  name: string,
+  slug?: string,
+  client: Prisma.TransactionClient = prisma
+) {
   const toolSlug = slug ? slugify(slug) : slugify(name);
-  const existing = await prisma.tool.findUnique({ where: { slug: toolSlug } });
+  const existing = await client.tool.findUnique({ where: { slug: toolSlug } });
   if (existing) {
     return existing.id;
   }
 
-  const tool = await prisma.tool.create({
+  const tool = await client.tool.create({
     data: {
       name,
       slug: toolSlug
@@ -202,25 +223,25 @@ async function ensureUniqueSlug(
   return candidate;
 }
 
-function catalogInclude(cityId?: string, includeInactive = false) {
+function catalogInclude(cityId?: string) {
   return {
     translations: true,
     subcategories: {
-      where: includeInactive ? undefined : { isActive: true },
+      where: { isActive: true },
       orderBy: [{ sortOrder: "asc" as const }, { name: "asc" as const }],
       include: {
         translations: true,
         _count: {
           select: {
-            catalogServices: true
+            catalogServices: { where: publicServiceEligibility() }
           }
         }
       }
     },
     _count: {
       select: {
-        services: true,
-        subcategories: true
+        services: { where: publicServiceEligibility() },
+        subcategories: { where: { isActive: true } }
       }
     }
   } satisfies Prisma.ServiceCategoryInclude;
@@ -252,6 +273,14 @@ function serviceInclude(cityId?: string) {
         : { isActive: true },
       orderBy: [{ priority: "desc" as const }, { createdAt: "desc" as const }]
     },
+    variants: {
+      where: { isAvailable: true },
+      orderBy: [{ sortOrder: "asc" as const }, { createdAt: "asc" as const }]
+    },
+    addons: {
+      where: { isActive: true },
+      orderBy: [{ sortOrder: "asc" as const }, { createdAt: "asc" as const }]
+    },
     category: {
       include: { translations: true }
     },
@@ -280,14 +309,14 @@ function pickBaseServicePrice(service: {
   return directRule ? directRule.price : service.startingPrice;
 }
 
-async function resolveCatalogTree(cityId?: string, locale?: string, includeInactive = false) {
-  const where = includeInactive ? {} : { isActive: true };
-  return readCatalogCache("tree", [cityId, locale, includeInactive ? "inactive" : "active"], async () =>
+async function resolveCatalogTree(cityId?: string, locale?: string) {
+  const where = { isActive: true };
+  return readCatalogCache("tree", [cityId, locale, "active"], async () =>
     prisma.serviceCategory.findMany({
       where,
       orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
       include: {
-        ...catalogInclude(cityId, includeInactive)
+        ...catalogInclude(cityId)
       }
     })
   );
@@ -310,7 +339,13 @@ async function resolveAdminCatalogTree() {
               pricingRules: { orderBy: [{ priority: "desc" }, { createdAt: "desc" }] },
               requiredSkills: { include: { skill: true }, orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }] },
               requiredTools: { include: { tool: true }, orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }] },
-              requiredDocuments: { orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }] }
+              requiredDocuments: { orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }] },
+              variants: { orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }] },
+              addons: { orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }] },
+              serviceAreaAssignments: {
+                include: { serviceArea: { select: { id: true, name: true, isActive: true, cityId: true } } },
+                orderBy: [{ serviceAreaId: "asc" }]
+              }
             }
           }
         }
@@ -323,6 +358,7 @@ async function resolveServiceBySlug(slug: string, cityId?: string) {
   return readCatalogCache("service", [slug, cityId], async () =>
     prisma.service.findFirst({
       where: {
+        ...publicServiceEligibility(),
         OR: [{ slug }, { id: slug }]
       },
       include: serviceInclude(cityId)
@@ -332,23 +368,29 @@ async function resolveServiceBySlug(slug: string, cityId?: string) {
 
 async function resolveCategoryBySlug(slug: string) {
   return readCatalogCache("category", [slug], async () =>
-    prisma.serviceCategory.findUnique({
-      where: { slug },
+    prisma.serviceCategory.findFirst({
+      where: { slug, isActive: true },
       include: {
         translations: true,
         subcategories: {
-          where: { isActive: true },
+          where: {
+            isActive: true,
+            catalogServices: { some: publicServiceEligibility() }
+          },
           orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
-          include: {
+          select: {
+            id: true,
+            categoryId: true,
+            name: true,
+            slug: true,
+            description: true,
+            iconUrl: true,
+            sortOrder: true,
+            isActive: true,
             translations: true,
-            catalogServices: {
-              where: { isActive: true },
-              orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
-              include: {
-                translations: true,
-                images: {
-                  orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }]
-                }
+            _count: {
+              select: {
+                catalogServices: { where: publicServiceEligibility() }
               }
             }
           }
@@ -361,12 +403,12 @@ async function resolveCategoryBySlug(slug: string) {
 async function resolveSubcategoryBySlug(slug: string) {
   return readCatalogCache("subcategory", [slug], async () =>
     prisma.serviceSubcategory.findUnique({
-      where: { slug },
+      where: { slug, isActive: true, category: { isActive: true } },
       include: {
         translations: true,
         category: { include: { translations: true } },
         catalogServices: {
-          where: { isActive: true },
+          where: publicServiceEligibility(),
           orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
           include: {
             translations: true,
@@ -382,7 +424,7 @@ async function resolveSubcategoryBySlug(slug: string) {
 
 async function searchCatalog(input: PublicCatalogFilter) {
   const where: Prisma.ServiceWhereInput = {
-    isActive: input.includeInactive ? undefined : true,
+    ...publicServiceEligibility(),
     ...(input.categorySlug
       ? {
           category: {
@@ -440,7 +482,9 @@ async function searchCatalog(input: PublicCatalogFilter) {
       where,
       take: input.pageSize ?? 20,
       skip: ((input.page ?? 1) - 1) * (input.pageSize ?? 20),
-      orderBy: [{ featured: "desc" }, { popular: "desc" }, { reviewCount: "desc" }, { sortOrder: "asc" }],
+      orderBy: input.subcategorySlug
+        ? [{ sortOrder: "asc" }, { name: "asc" }]
+        : [{ featured: "desc" }, { popular: "desc" }, { reviewCount: "desc" }, { sortOrder: "asc" }],
       include: serviceInclude(input.cityId)
     }),
     prisma.service.count({ where })
@@ -454,7 +498,7 @@ async function getAutocompleteSuggestions(query: string, limit: number, cityId?:
     Promise.all([
       prisma.service.findMany({
         where: {
-          isActive: true,
+          ...publicServiceEligibility(),
           OR: [
             { name: { contains: query, mode: "insensitive" } },
             { code: { contains: query, mode: "insensitive" } },
@@ -525,27 +569,51 @@ async function getAutocompleteSuggestions(query: string, limit: number, cityId?:
 
 async function getHomeCatalogSections(cityId?: string) {
   return readCatalogCache("home-sections", [cityId], async () => {
-    const [featuredServices, popularServices, trendingServices, recommendedServices] = await Promise.all([
+    const [categories, featuredServices, popularServices, trendingServices, recommendedServices] = await Promise.all([
+      prisma.serviceCategory.findMany({
+        where: {
+          isActive: true,
+          subcategories: {
+            some: {
+              isActive: true,
+              catalogServices: { some: publicServiceEligibility() }
+            }
+          }
+        },
+        take: 7,
+        orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+        select: {
+          id: true,
+          name: true,
+          slug: true,
+          description: true,
+          iconUrl: true,
+          sortOrder: true,
+          isActive: true,
+          featured: true,
+          popular: true
+        }
+      }),
       prisma.service.findMany({
-        where: { isActive: true, featured: true },
+        where: { ...publicServiceEligibility(), featured: true },
         take: 8,
         orderBy: [{ sortOrder: "asc" }, { reviewCount: "desc" }],
         include: serviceInclude(cityId)
       }),
       prisma.service.findMany({
-        where: { isActive: true, popular: true },
+        where: { ...publicServiceEligibility(), popular: true },
         take: 8,
         orderBy: [{ reviewCount: "desc" }, { rating: "desc" }],
         include: serviceInclude(cityId)
       }),
       prisma.service.findMany({
-        where: { isActive: true },
+        where: publicServiceEligibility(),
         take: 8,
         orderBy: [{ reviewCount: "desc" }, { updatedAt: "desc" }],
         include: serviceInclude(cityId)
       }),
       prisma.service.findMany({
-        where: { isActive: true, OR: [{ featured: true }, { popular: true }] },
+        where: { ...publicServiceEligibility(), OR: [{ featured: true }, { popular: true }] },
         take: 8,
         orderBy: [{ rating: "desc" }, { reviewCount: "desc" }],
         include: serviceInclude(cityId)
@@ -553,6 +621,7 @@ async function getHomeCatalogSections(cityId?: string) {
     ]);
 
     return {
+      categories,
       featuredServices,
       popularServices,
       trendingServices,
@@ -585,6 +654,43 @@ async function getHomeCatalog(cityId?: string, userId?: string) {
     ...sections,
     recentBookings
   };
+}
+
+async function resolveHomeServiceSections(cityId?: string) {
+  const sections = await prisma.homeServiceSection.findMany({
+    where: {
+      isActive: true,
+      items: { some: { service: publicServiceEligibility() } },
+    },
+    orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+    include: {
+      items: {
+        where: { service: publicServiceEligibility() },
+        orderBy: [{ sortOrder: "asc" }],
+        include: { service: { include: serviceInclude(cityId) } },
+      },
+    },
+  });
+
+  return sections.map((section) => ({
+    id: section.id,
+    title: section.title,
+    subtitle: section.subtitle,
+    sortOrder: section.sortOrder,
+    seeAllDestination: section.seeAllDestination,
+    services: section.items.map(
+      (item: {
+        service: Parameters<typeof pickBaseServicePrice>[0] &
+          Record<string, unknown>;
+      }) => {
+        const service = item.service;
+        return {
+          ...service,
+          startingPrice: pickBaseServicePrice(service),
+        };
+      },
+    ),
+  }));
 }
 
 async function createCategory(data: {
@@ -827,12 +933,24 @@ async function createService(data: {
   gstApplicable?: boolean;
   emergencyAvailable?: boolean;
   homeVisit?: boolean;
+  requiresSiteVisit?: boolean;
+  bookingEnabled?: boolean;
+  publicationStatus?: "DRAFT" | "PUBLISHED" | "ARCHIVED";
+  publishStartsAt?: string | null;
+  publishEndsAt?: string | null;
+  serviceAreaIds?: string[];
+  priceType?: string;
+  ctaLabel?: string;
+  warrantyText?: string | null;
+  requirements?: string[];
   isActive?: boolean;
   featured?: boolean;
   popular?: boolean;
   rating?: number;
   reviewCount?: number;
   cancellationPolicy?: string;
+  inclusions?: string[];
+  exclusions?: string[];
   seoTitle?: string;
   seoDescription?: string;
   seoKeywords?: string;
@@ -843,10 +961,27 @@ async function createService(data: {
   requiredSkills?: Array<Record<string, unknown>>;
   requiredTools?: Array<Record<string, unknown>>;
   requiredDocuments?: Array<Record<string, unknown>>;
+  variants?: Array<Record<string, unknown>>;
+  addons?: Array<Record<string, unknown>>;
 }) {
   const rawSlug = data.slug ?? slugify(data.name);
   const slug = await ensureUniqueSlug((candidate) => prisma.service.findUnique({ where: { slug: candidate } }), rawSlug);
   const code = data.code ?? uniqueCode("SRV", data.name);
+  const publishStartsAt = data.publishStartsAt ? new Date(data.publishStartsAt) : null;
+  const publishEndsAt = data.publishEndsAt ? new Date(data.publishEndsAt) : null;
+
+  if (publishStartsAt && publishEndsAt && publishEndsAt <= publishStartsAt) {
+    throw AppError.badRequest("Publish end time must be later than publish start time");
+  }
+
+  if (data.serviceAreaIds?.length) {
+    const areaCount = await prisma.serviceArea.count({
+      where: { id: { in: data.serviceAreaIds } }
+    });
+    if (areaCount !== data.serviceAreaIds.length) {
+      throw AppError.badRequest("One or more selected service areas do not exist");
+    }
+  }
 
   const created = await prisma.service.create({
     data: {
@@ -865,12 +1000,23 @@ async function createService(data: {
       gstApplicable: data.gstApplicable ?? true,
       emergencyAvailable: data.emergencyAvailable ?? false,
       homeVisit: data.homeVisit ?? true,
+      requiresSiteVisit: data.requiresSiteVisit ?? false,
+      bookingEnabled: data.bookingEnabled ?? true,
+      publicationStatus: data.publicationStatus ?? "PUBLISHED",
+      publishStartsAt: publishStartsAt ?? undefined,
+      publishEndsAt: publishEndsAt ?? undefined,
+      priceType: data.priceType ?? "FROM",
+      ctaLabel: data.ctaLabel ?? "Book service",
+      warrantyText: data.warrantyText,
+      requirements: data.requirements ?? [],
       isActive: data.isActive ?? true,
       featured: data.featured ?? false,
       popular: data.popular ?? false,
       rating: new Prisma.Decimal(data.rating ?? 0),
       reviewCount: data.reviewCount ?? 0,
       cancellationPolicy: data.cancellationPolicy,
+      inclusions: data.inclusions ?? [],
+      exclusions: data.exclusions ?? [],
       seoTitle: data.seoTitle,
       seoDescription: data.seoDescription,
       seoKeywords: data.seoKeywords,
@@ -930,7 +1076,38 @@ async function createService(data: {
             }))
           }
         : undefined,
-      
+      variants: data.variants
+        ? {
+            create: data.variants.map((item, index) => ({
+              name: String(item.name),
+              description: typeof item.description === "string" ? item.description : undefined,
+              imageUrl: typeof item.imageUrl === "string" ? item.imageUrl : undefined,
+              price: new Prisma.Decimal(Number(item.price)),
+              originalPrice: typeof item.originalPrice === "number" ? new Prisma.Decimal(item.originalPrice) : undefined,
+              estimatedDurationMins: typeof item.estimatedDurationMins === "number" ? item.estimatedDurationMins : undefined,
+              isAvailable: typeof item.isAvailable === "boolean" ? item.isAvailable : true,
+              sortOrder: typeof item.sortOrder === "number" ? item.sortOrder : index
+            }))
+          }
+        : undefined,
+      addons: data.addons
+        ? {
+            create: data.addons.map((item, index) => ({
+              name: String(item.name),
+              description: typeof item.description === "string" ? item.description : undefined,
+              imageUrl: typeof item.imageUrl === "string" ? item.imageUrl : undefined,
+              price: new Prisma.Decimal(Number(item.price)),
+              estimatedDurationMins: typeof item.estimatedDurationMins === "number" ? item.estimatedDurationMins : undefined,
+              isActive: typeof item.isActive === "boolean" ? item.isActive : true,
+              sortOrder: typeof item.sortOrder === "number" ? item.sortOrder : index
+            }))
+          }
+        : undefined,
+      serviceAreaAssignments: data.serviceAreaIds?.length
+        ? {
+            create: data.serviceAreaIds.map((serviceAreaId) => ({ serviceAreaId }))
+          }
+        : undefined
     },
     include: serviceInclude()
   });
@@ -947,105 +1124,250 @@ async function updateService(id: string, data: Record<string, unknown>) {
 
   const nextSlug = typeof data.slug === "string" ? await ensureUniqueSlug((candidate) => prisma.service.findFirst({ where: { slug: candidate, NOT: { id } } }), data.slug) : existing.slug;
   const nextCode = typeof data.code === "string" ? data.code : existing.code;
+  const nextPublishStartsAt = data.publishStartsAt === null
+    ? null
+    : typeof data.publishStartsAt === "string"
+      ? new Date(data.publishStartsAt)
+      : existing.publishStartsAt;
+  const nextPublishEndsAt = data.publishEndsAt === null
+    ? null
+    : typeof data.publishEndsAt === "string"
+      ? new Date(data.publishEndsAt)
+      : existing.publishEndsAt;
+  if (nextPublishStartsAt && nextPublishEndsAt && nextPublishEndsAt <= nextPublishStartsAt) {
+    throw AppError.badRequest("Publish end time must be later than publish start time");
+  }
 
-  await prisma.service.update({
-    where: { id },
-    data: {
-      categoryId: typeof data.categoryId === "string" ? data.categoryId : undefined,
-      subcategoryId: typeof data.subcategoryId === "string" ? data.subcategoryId : undefined,
-      name: typeof data.name === "string" ? data.name : undefined,
-      slug: nextSlug,
-      code: nextCode,
-      description: typeof data.description === "string" ? data.description : undefined,
-      shortDescription: typeof data.shortDescription === "string" ? data.shortDescription : undefined,
-      startingPrice: typeof data.startingPrice === "number" ? new Prisma.Decimal(data.startingPrice) : undefined,
-      gstRate: typeof data.gstRate === "number" ? new Prisma.Decimal(data.gstRate) : undefined,
-      sacCode: typeof data.sacCode === "string" ? normalizeSacCode(data.sacCode) : undefined,
-      estimatedDurationMins: typeof data.estimatedDurationMins === "number" ? data.estimatedDurationMins : undefined,
-      warrantyDays: typeof data.warrantyDays === "number" ? data.warrantyDays : undefined,
-      gstApplicable: typeof data.gstApplicable === "boolean" ? data.gstApplicable : undefined,
-      emergencyAvailable: typeof data.emergencyAvailable === "boolean" ? data.emergencyAvailable : undefined,
-      homeVisit: typeof data.homeVisit === "boolean" ? data.homeVisit : undefined,
-      isActive: typeof data.isActive === "boolean" ? data.isActive : undefined,
-      featured: typeof data.featured === "boolean" ? data.featured : undefined,
-      popular: typeof data.popular === "boolean" ? data.popular : undefined,
-      rating: typeof data.rating === "number" ? new Prisma.Decimal(data.rating) : undefined,
-      reviewCount: typeof data.reviewCount === "number" ? data.reviewCount : undefined,
-      cancellationPolicy: typeof data.cancellationPolicy === "string" ? data.cancellationPolicy : undefined,
-      seoTitle: typeof data.seoTitle === "string" ? data.seoTitle : undefined,
-      seoDescription: typeof data.seoDescription === "string" ? data.seoDescription : undefined,
-      seoKeywords: typeof data.seoKeywords === "string" ? data.seoKeywords : undefined,
-      iconUrl: typeof data.iconUrl === "string" ? data.iconUrl : undefined,
-      sortOrder: typeof data.sortOrder === "number" ? data.sortOrder : undefined
+  if (Array.isArray(data.serviceAreaIds)) {
+    const areaIds = data.serviceAreaIds.filter((item): item is string => typeof item === "string");
+    const areaCount = areaIds.length
+      ? await prisma.serviceArea.count({ where: { id: { in: areaIds } } })
+      : 0;
+    if (areaCount !== areaIds.length) {
+      throw AppError.badRequest("One or more selected service areas do not exist");
+    }
+  }
+
+  await prisma.$transaction(async (tx) => {
+    await tx.service.update({
+      where: { id },
+      data: {
+        categoryId: typeof data.categoryId === "string" ? data.categoryId : undefined,
+        subcategoryId: typeof data.subcategoryId === "string" ? data.subcategoryId : undefined,
+        name: typeof data.name === "string" ? data.name : undefined,
+        slug: nextSlug,
+        code: nextCode,
+        description: typeof data.description === "string" ? data.description : undefined,
+        shortDescription: typeof data.shortDescription === "string" ? data.shortDescription : undefined,
+        startingPrice: typeof data.startingPrice === "number" ? new Prisma.Decimal(data.startingPrice) : undefined,
+        gstRate: typeof data.gstRate === "number" ? new Prisma.Decimal(data.gstRate) : undefined,
+        sacCode: typeof data.sacCode === "string" ? normalizeSacCode(data.sacCode) : undefined,
+        estimatedDurationMins: typeof data.estimatedDurationMins === "number" ? data.estimatedDurationMins : undefined,
+        warrantyDays: typeof data.warrantyDays === "number" ? data.warrantyDays : undefined,
+        gstApplicable: typeof data.gstApplicable === "boolean" ? data.gstApplicable : undefined,
+        emergencyAvailable: typeof data.emergencyAvailable === "boolean" ? data.emergencyAvailable : undefined,
+        homeVisit: typeof data.homeVisit === "boolean" ? data.homeVisit : undefined,
+        requiresSiteVisit: typeof data.requiresSiteVisit === "boolean" ? data.requiresSiteVisit : undefined,
+        bookingEnabled: typeof data.bookingEnabled === "boolean" ? data.bookingEnabled : undefined,
+        publicationStatus: typeof data.publicationStatus === "string" ? data.publicationStatus : undefined,
+        publishStartsAt: data.publishStartsAt === null
+          ? null
+          : typeof data.publishStartsAt === "string"
+            ? new Date(data.publishStartsAt)
+            : undefined,
+        publishEndsAt: data.publishEndsAt === null
+          ? null
+          : typeof data.publishEndsAt === "string"
+            ? new Date(data.publishEndsAt)
+            : undefined,
+        priceType: typeof data.priceType === "string" ? data.priceType : undefined,
+        ctaLabel: typeof data.ctaLabel === "string" ? data.ctaLabel : undefined,
+        warrantyText: data.warrantyText === null
+          ? null
+          : typeof data.warrantyText === "string"
+            ? data.warrantyText
+            : undefined,
+        requirements: Array.isArray(data.requirements)
+          ? data.requirements.filter((item): item is string => typeof item === "string")
+          : undefined,
+        isActive: typeof data.isActive === "boolean" ? data.isActive : undefined,
+        featured: typeof data.featured === "boolean" ? data.featured : undefined,
+        popular: typeof data.popular === "boolean" ? data.popular : undefined,
+        rating: typeof data.rating === "number" ? new Prisma.Decimal(data.rating) : undefined,
+        reviewCount: typeof data.reviewCount === "number" ? data.reviewCount : undefined,
+        cancellationPolicy: typeof data.cancellationPolicy === "string" ? data.cancellationPolicy : undefined,
+        inclusions: Array.isArray(data.inclusions)
+          ? data.inclusions.filter((item): item is string => typeof item === "string")
+          : undefined,
+        exclusions: Array.isArray(data.exclusions)
+          ? data.exclusions.filter((item): item is string => typeof item === "string")
+          : undefined,
+        seoTitle: typeof data.seoTitle === "string" ? data.seoTitle : undefined,
+        seoDescription: typeof data.seoDescription === "string" ? data.seoDescription : undefined,
+        seoKeywords: typeof data.seoKeywords === "string" ? data.seoKeywords : undefined,
+        iconUrl: typeof data.iconUrl === "string" ? data.iconUrl : undefined,
+        sortOrder: typeof data.sortOrder === "number" ? data.sortOrder : undefined
+      }
+    });
+
+    if (Array.isArray(data.images)) {
+      await tx.serviceImage.deleteMany({ where: { serviceId: id } });
+      await tx.serviceImage.createMany({
+        data: data.images.map((image, index) => ({
+          serviceId: id,
+          url: String(image.url),
+          altText: image.altText ? String(image.altText) : undefined,
+          sortOrder: typeof image.sortOrder === "number" ? image.sortOrder : index,
+          isPrimary: typeof image.isPrimary === "boolean" ? image.isPrimary : index === 0
+        }))
+      });
+    }
+
+    if (Array.isArray(data.requiredSkills)) {
+      await tx.serviceRequiredSkill.deleteMany({ where: { serviceId: id } });
+      const skillRows = [];
+      for (const [index, item] of data.requiredSkills.entries()) {
+        skillRows.push({
+          serviceId: id,
+          skillId: await resolveSkillId(String(item.name), String(item.slug), tx),
+          isMandatory: typeof item.isMandatory === "boolean" ? item.isMandatory : true,
+          sortOrder: typeof item.sortOrder === "number" ? item.sortOrder : index
+        });
+      }
+      await tx.serviceRequiredSkill.createMany({ data: skillRows });
+    }
+
+    if (Array.isArray(data.requiredTools)) {
+      await tx.serviceRequiredTool.deleteMany({ where: { serviceId: id } });
+      const toolRows = [];
+      for (const [index, item] of data.requiredTools.entries()) {
+        toolRows.push({
+          serviceId: id,
+          toolId: await resolveToolId(String(item.name), String(item.slug), tx),
+          isMandatory: typeof item.isMandatory === "boolean" ? item.isMandatory : true,
+          sortOrder: typeof item.sortOrder === "number" ? item.sortOrder : index
+        });
+      }
+      await tx.serviceRequiredTool.createMany({ data: toolRows });
+    }
+
+    if (Array.isArray(data.requiredDocuments)) {
+      await tx.serviceRequiredDocument.deleteMany({ where: { serviceId: id } });
+      await tx.serviceRequiredDocument.createMany({
+        data: data.requiredDocuments.map((item, index) => ({
+          serviceId: id,
+          name: String(item.name),
+          slug: String(item.slug),
+          isMandatory: typeof item.isMandatory === "boolean" ? item.isMandatory : true,
+          sortOrder: typeof item.sortOrder === "number" ? item.sortOrder : index
+        }))
+      });
+    }
+
+    if (Array.isArray(data.translations)) {
+      await tx.serviceTranslation.deleteMany({ where: { serviceId: id } });
+      await tx.serviceTranslation.createMany({
+        data: data.translations.map((translation) => ({
+          serviceId: id,
+          locale: String(translation.locale ?? "en"),
+          name: String(translation.name ?? existing.name),
+          shortDescription: translation.shortDescription ? String(translation.shortDescription) : undefined,
+          description: translation.description ? String(translation.description) : undefined,
+          seoTitle: translation.seoTitle ? String(translation.seoTitle) : undefined,
+          seoDescription: translation.seoDescription ? String(translation.seoDescription) : undefined
+        }))
+      });
+    }
+
+    if (Array.isArray(data.variants)) {
+      const variants = data.variants as Array<Record<string, unknown>>;
+      const retainedIds = variants
+        .map((item) => item.id)
+        .filter((optionId): optionId is string => typeof optionId === "string");
+      const ownedIds = retainedIds.length
+        ? await tx.serviceVariant.findMany({
+            where: { serviceId: id, id: { in: retainedIds } },
+            select: { id: true }
+          })
+        : [];
+      if (ownedIds.length !== retainedIds.length) {
+        throw AppError.badRequest("A selected variant does not belong to this service");
+      }
+
+      await tx.serviceVariant.deleteMany({
+          where: {
+            serviceId: id,
+            ...(retainedIds.length ? { id: { notIn: retainedIds } } : {})
+          }
+      });
+      for (const [index, item] of variants.entries()) {
+          const optionData = {
+            name: String(item.name),
+            description: typeof item.description === "string" ? item.description : null,
+            imageUrl: typeof item.imageUrl === "string" ? item.imageUrl : null,
+            price: new Prisma.Decimal(Number(item.price)),
+            originalPrice: typeof item.originalPrice === "number" ? new Prisma.Decimal(item.originalPrice) : null,
+            estimatedDurationMins: typeof item.estimatedDurationMins === "number" ? item.estimatedDurationMins : null,
+            isAvailable: typeof item.isAvailable === "boolean" ? item.isAvailable : true,
+            sortOrder: typeof item.sortOrder === "number" ? item.sortOrder : index
+          };
+          if (typeof item.id === "string") {
+            await tx.serviceVariant.update({ where: { id: item.id }, data: optionData });
+          } else {
+            await tx.serviceVariant.create({ data: { serviceId: id, ...optionData } });
+          }
+      }
+    }
+
+    if (Array.isArray(data.addons)) {
+      const addons = data.addons as Array<Record<string, unknown>>;
+      const retainedIds = addons
+        .map((item) => item.id)
+        .filter((optionId): optionId is string => typeof optionId === "string");
+      const ownedIds = retainedIds.length
+        ? await tx.serviceAddon.findMany({
+            where: { serviceId: id, id: { in: retainedIds } },
+            select: { id: true }
+          })
+        : [];
+      if (ownedIds.length !== retainedIds.length) {
+        throw AppError.badRequest("A selected add-on does not belong to this service");
+      }
+
+      await tx.serviceAddon.deleteMany({
+          where: {
+            serviceId: id,
+            ...(retainedIds.length ? { id: { notIn: retainedIds } } : {})
+          }
+      });
+      for (const [index, item] of addons.entries()) {
+          const optionData = {
+            name: String(item.name),
+            description: typeof item.description === "string" ? item.description : null,
+            imageUrl: typeof item.imageUrl === "string" ? item.imageUrl : null,
+            price: new Prisma.Decimal(Number(item.price)),
+            estimatedDurationMins: typeof item.estimatedDurationMins === "number" ? item.estimatedDurationMins : null,
+            isActive: typeof item.isActive === "boolean" ? item.isActive : true,
+            sortOrder: typeof item.sortOrder === "number" ? item.sortOrder : index
+          };
+          if (typeof item.id === "string") {
+            await tx.serviceAddon.update({ where: { id: item.id }, data: optionData });
+          } else {
+            await tx.serviceAddon.create({ data: { serviceId: id, ...optionData } });
+          }
+      }
+    }
+
+    if (Array.isArray(data.serviceAreaIds)) {
+      const areaIds = data.serviceAreaIds.filter((item): item is string => typeof item === "string");
+      await tx.serviceAreaService.deleteMany({ where: { serviceId: id } });
+      if (areaIds.length) {
+        await tx.serviceAreaService.createMany({
+          data: areaIds.map((serviceAreaId) => ({ serviceId: id, serviceAreaId }))
+        });
+      }
     }
   });
-
-  if (Array.isArray(data.images)) {
-    await prisma.serviceImage.deleteMany({ where: { serviceId: id } });
-    await prisma.serviceImage.createMany({
-      data: data.images.map((image, index) => ({
-        serviceId: id,
-        url: String(image.url),
-        altText: image.altText ? String(image.altText) : undefined,
-        sortOrder: typeof image.sortOrder === "number" ? image.sortOrder : index,
-        isPrimary: typeof image.isPrimary === "boolean" ? image.isPrimary : index === 0
-      }))
-    });
-  }
-
-  if (Array.isArray(data.requiredSkills)) {
-    await prisma.serviceRequiredSkill.deleteMany({ where: { serviceId: id } });
-    const skillRows = await Promise.all(
-      data.requiredSkills.map(async (item, index) => ({
-        serviceId: id,
-        skillId: await resolveSkillId(String(item.name), String(item.slug)),
-        isMandatory: typeof item.isMandatory === "boolean" ? item.isMandatory : true,
-        sortOrder: typeof item.sortOrder === "number" ? item.sortOrder : index
-      }))
-    );
-    await prisma.serviceRequiredSkill.createMany({ data: skillRows });
-  }
-
-  if (Array.isArray(data.requiredTools)) {
-    await prisma.serviceRequiredTool.deleteMany({ where: { serviceId: id } });
-    const toolRows = await Promise.all(
-      data.requiredTools.map(async (item, index) => ({
-        serviceId: id,
-        toolId: await resolveToolId(String(item.name), String(item.slug)),
-        isMandatory: typeof item.isMandatory === "boolean" ? item.isMandatory : true,
-        sortOrder: typeof item.sortOrder === "number" ? item.sortOrder : index
-      }))
-    );
-    await prisma.serviceRequiredTool.createMany({ data: toolRows });
-  }
-
-  if (Array.isArray(data.requiredDocuments)) {
-    await prisma.serviceRequiredDocument.deleteMany({ where: { serviceId: id } });
-    await prisma.serviceRequiredDocument.createMany({
-      data: data.requiredDocuments.map((item, index) => ({
-        serviceId: id,
-        name: String(item.name),
-        slug: String(item.slug),
-        isMandatory: typeof item.isMandatory === "boolean" ? item.isMandatory : true,
-        sortOrder: typeof item.sortOrder === "number" ? item.sortOrder : index
-      }))
-    });
-  }
-
-  if (Array.isArray(data.translations)) {
-    await prisma.serviceTranslation.deleteMany({ where: { serviceId: id } });
-    await prisma.serviceTranslation.createMany({
-      data: data.translations.map((translation) => ({
-        serviceId: id,
-        locale: String(translation.locale ?? "en"),
-        name: String(translation.name ?? existing.name),
-        shortDescription: translation.shortDescription ? String(translation.shortDescription) : undefined,
-        description: translation.description ? String(translation.description) : undefined,
-        seoTitle: translation.seoTitle ? String(translation.seoTitle) : undefined,
-        seoDescription: translation.seoDescription ? String(translation.seoDescription) : undefined
-      }))
-    });
-  }
 
   await invalidateCatalogCache();
 
@@ -1352,6 +1674,7 @@ export const catalogService = {
   searchCatalog,
   getAutocompleteSuggestions,
   getHomeCatalog,
+  resolveHomeServiceSections,
   createCategory,
   updateCategory,
   reorderCategories,

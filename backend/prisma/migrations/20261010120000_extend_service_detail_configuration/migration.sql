@@ -1,0 +1,6 @@
+ALTER TABLE "Service"
+ADD COLUMN "bookingEnabled" BOOLEAN NOT NULL DEFAULT true,
+ADD COLUMN "priceType" TEXT NOT NULL DEFAULT 'FROM',
+ADD COLUMN "ctaLabel" TEXT NOT NULL DEFAULT 'Book service',
+ADD COLUMN "warrantyText" TEXT,
+ADD COLUMN "requirements" TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[];
