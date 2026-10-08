@@ -53,7 +53,8 @@ class _OpsOverviewPageState extends ConsumerState<OpsOverviewPage> {
                 child: PremiumEmptyState(
                   icon: Icons.cloud_off_rounded,
                   title: 'Could not load operations overview',
-                  subtitle: 'The ops summary is unavailable right now. Please retry.',
+                  subtitle:
+                      'The ops summary is unavailable right now. Please retry.',
                   actionLabel: 'Retry',
                   onAction: _reload,
                 ),
@@ -79,7 +80,7 @@ class _OpsOverviewPageState extends ConsumerState<OpsOverviewPage> {
                         children: [
                           Text(
                             'Operations Overview',
-                            style: GoogleFonts.poppins(
+                            style: GoogleFonts.outfit(
                               fontSize: 32,
                               fontWeight: FontWeight.w800,
                               color: Colors.black87,
@@ -89,7 +90,7 @@ class _OpsOverviewPageState extends ConsumerState<OpsOverviewPage> {
                           const SizedBox(height: 8),
                           Text(
                             'Track dispatches, active jobs, refunds, payouts, disputes, and worker reviews.',
-                            style: GoogleFonts.inter(
+                            style: GoogleFonts.outfit(
                               color: Colors.black54,
                               fontSize: 16,
                             ),
@@ -103,7 +104,8 @@ class _OpsOverviewPageState extends ConsumerState<OpsOverviewPage> {
                         style: FilledButton.styleFrom(
                           backgroundColor: Colors.white,
                           foregroundColor: Colors.black87,
-                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 20, vertical: 16),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(8),
                             side: const BorderSide(color: Color(0xFFE5E7EB)),
@@ -128,7 +130,8 @@ class _OpsOverviewPageState extends ConsumerState<OpsOverviewPage> {
                         icon: Icons.work_history_rounded,
                         color: const Color(0xFF2563EB),
                         title: 'Live Jobs',
-                        subtitle: 'Inspect active bookings, photos, and checklist state.',
+                        subtitle:
+                            'Inspect active bookings, photos, and checklist state.',
                         actionLabel: 'Open',
                         onPressed: () => context.go('/ops/live-jobs'),
                       ),
@@ -136,7 +139,8 @@ class _OpsOverviewPageState extends ConsumerState<OpsOverviewPage> {
                         icon: Icons.priority_high_rounded,
                         color: const Color(0xFFEF4444),
                         title: 'Alerts',
-                        subtitle: 'Retry failed payouts, refunds, and dispatches.',
+                        subtitle:
+                            'Retry failed payouts, refunds, and dispatches.',
                         actionLabel: 'Open',
                         onPressed: () => context.go('/ops/alerts'),
                       ),
@@ -152,7 +156,8 @@ class _OpsOverviewPageState extends ConsumerState<OpsOverviewPage> {
                         icon: Icons.gavel_rounded,
                         color: const Color(0xFFB45309),
                         title: 'Disputes',
-                        subtitle: 'Review customer complaints and resolve refund decisions.',
+                        subtitle:
+                            'Review customer complaints and resolve refund decisions.',
                         actionLabel: 'Open',
                         onPressed: () => context.go('/ops/disputes'),
                       ),
@@ -220,7 +225,8 @@ class _OpsOverviewPageState extends ConsumerState<OpsOverviewPage> {
                           children: [
                             const _SectionTitle(
                               title: 'Recent Live Jobs',
-                              subtitle: 'The most recently updated active jobs.',
+                              subtitle:
+                                  'The most recently updated active jobs.',
                             ),
                             const SizedBox(height: 16),
                             if (data.liveJobs.isEmpty)
@@ -231,7 +237,8 @@ class _OpsOverviewPageState extends ConsumerState<OpsOverviewPage> {
                                     child: PremiumEmptyState(
                                       icon: Icons.work_off_rounded,
                                       title: 'No active jobs',
-                                      subtitle: 'Live jobs will appear here when active.',
+                                      subtitle:
+                                          'Live jobs will appear here when active.',
                                     ),
                                   ),
                                 ),
@@ -239,19 +246,29 @@ class _OpsOverviewPageState extends ConsumerState<OpsOverviewPage> {
                             else
                               ...data.liveJobs.take(5).map(
                                     (job) => Padding(
-                                      padding: const EdgeInsets.only(bottom: 12),
+                                      padding:
+                                          const EdgeInsets.only(bottom: 12),
                                       child: _SurfacePanel(
                                         child: ListTile(
-                                          contentPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                                          leading: _StatusMark(status: job.status),
+                                          contentPadding:
+                                              const EdgeInsets.symmetric(
+                                                  horizontal: 24, vertical: 12),
+                                          leading:
+                                              _StatusMark(status: job.status),
                                           title: Text(
                                             '${job.bookingCode} - ${job.customerName}',
-                                            style: GoogleFonts.poppins(fontWeight: FontWeight.w700),
+                                            style: GoogleFonts.outfit(
+                                                fontWeight: FontWeight.w700),
                                           ),
-                                          subtitle: Text('${job.serviceLabel}\n${job.statusLabel} - ${job.elapsedLabel} active'),
+                                          subtitle: Text(
+                                              '${job.serviceLabel}\n${job.statusLabel} - ${job.elapsedLabel} active'),
                                           isThreeLine: true,
-                                          trailing: const Icon(Icons.chevron_right_rounded, color: Colors.black26),
-                                          onTap: () => context.push('/ops/live-jobs/${job.bookingId}', extra: job),
+                                          trailing: const Icon(
+                                              Icons.chevron_right_rounded,
+                                              color: Colors.black26),
+                                          onTap: () => context.push(
+                                              '/ops/live-jobs/${job.bookingId}',
+                                              extra: job),
                                         ),
                                       ),
                                     ),
@@ -277,7 +294,8 @@ class _OpsOverviewPageState extends ConsumerState<OpsOverviewPage> {
                                     child: PremiumEmptyState(
                                       icon: Icons.check_circle_outline_rounded,
                                       title: 'No alerts',
-                                      subtitle: 'Failed payouts, refunds, and dispatches will appear here.',
+                                      subtitle:
+                                          'Failed payouts, refunds, and dispatches will appear here.',
                                     ),
                                   ),
                                 ),
@@ -285,24 +303,31 @@ class _OpsOverviewPageState extends ConsumerState<OpsOverviewPage> {
                             else
                               ...data.alerts.take(5).map(
                                     (alert) => Padding(
-                                      padding: const EdgeInsets.only(bottom: 12),
+                                      padding:
+                                          const EdgeInsets.only(bottom: 12),
                                       child: _SurfacePanel(
                                         child: ListTile(
-                                          contentPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                                          contentPadding:
+                                              const EdgeInsets.symmetric(
+                                                  horizontal: 24, vertical: 12),
                                           leading: _AlertMark(kind: alert.kind),
                                           title: Text(
                                             alert.title,
-                                            style: GoogleFonts.poppins(fontWeight: FontWeight.w700),
+                                            style: GoogleFonts.outfit(
+                                                fontWeight: FontWeight.w700),
                                           ),
                                           subtitle: Text(
                                             [
                                               alert.message,
-                                              if (alert.bookingCode != null) 'Booking ${alert.bookingCode}',
+                                              if (alert.bookingCode != null)
+                                                'Booking ${alert.bookingCode}',
                                             ].join('\n'),
                                           ),
                                           isThreeLine: true,
                                           trailing: TextButton(
-                                            onPressed: () => context.push('/ops/alerts/${alert.id}', extra: alert),
+                                            onPressed: () => context.push(
+                                                '/ops/alerts/${alert.id}',
+                                                extra: alert),
                                             child: const Text('Open'),
                                           ),
                                         ),
@@ -356,7 +381,7 @@ class _StatCard extends StatelessWidget {
             children: [
               Text(
                 label,
-                style: GoogleFonts.inter(
+                style: GoogleFonts.outfit(
                   color: Colors.black54,
                   fontWeight: FontWeight.w600,
                   fontSize: 14,
@@ -375,7 +400,7 @@ class _StatCard extends StatelessWidget {
           const SizedBox(height: 16),
           Text(
             value,
-            style: GoogleFonts.poppins(
+            style: GoogleFonts.outfit(
               fontSize: 32,
               fontWeight: FontWeight.w700,
               color: Colors.black87,
@@ -430,7 +455,7 @@ class _QuickActionCard extends StatelessWidget {
           const SizedBox(height: 16),
           Text(
             title,
-            style: GoogleFonts.poppins(
+            style: GoogleFonts.outfit(
               fontSize: 18,
               fontWeight: FontWeight.w700,
               color: Colors.black87,
@@ -439,7 +464,7 @@ class _QuickActionCard extends StatelessWidget {
           const SizedBox(height: 8),
           Text(
             subtitle,
-            style: GoogleFonts.inter(
+            style: GoogleFonts.outfit(
               color: Colors.black54,
               fontSize: 14,
               height: 1.4,
@@ -453,9 +478,11 @@ class _QuickActionCard extends StatelessWidget {
               style: FilledButton.styleFrom(
                 backgroundColor: color,
                 padding: const EdgeInsets.symmetric(vertical: 16),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8)),
               ),
-              child: Text(actionLabel, style: const TextStyle(fontWeight: FontWeight.w600)),
+              child: Text(actionLabel,
+                  style: const TextStyle(fontWeight: FontWeight.w600)),
             ),
           ),
         ],
@@ -596,7 +623,7 @@ class _SectionTitle extends StatelessWidget {
       children: [
         Text(
           title,
-          style: GoogleFonts.poppins(
+          style: GoogleFonts.outfit(
             fontSize: 20,
             fontWeight: FontWeight.w700,
             color: Colors.black87,
@@ -605,7 +632,7 @@ class _SectionTitle extends StatelessWidget {
         const SizedBox(height: 4),
         Text(
           subtitle,
-          style: GoogleFonts.inter(color: Colors.black54, fontSize: 14),
+          style: GoogleFonts.outfit(color: Colors.black54, fontSize: 14),
         ),
       ],
     );

@@ -13,12 +13,12 @@ import '../../../../core/widgets/worker_logo.dart';
 import '../../../profile/presentation/providers/worker_profile_providers.dart';
 import '../providers/onboarding_provider.dart';
 
-const _ink = Color(0xFF17120D);
-const _muted = Color(0xFF756B5D);
-const _gold = Color(0xFFC8A75A);
-const _cream = Color(0xFFFBF7EF);
-const _card = Color(0xFFFFFFFF);
-const _line = Color(0xFFE8DDC9);
+const _ink = VeeduFixDesignSystem.ink;
+const _muted = VeeduFixDesignSystem.mutedInk;
+const _gold = VeeduFixDesignSystem.gold;
+const _cream = VeeduFixDesignSystem.ivory;
+const _card = VeeduFixDesignSystem.surface;
+const _line = VeeduFixDesignSystem.border;
 
 class OnboardingFlowPage extends ConsumerStatefulWidget {
   const OnboardingFlowPage({super.key});
@@ -1272,7 +1272,11 @@ class _OnboardingFlowPageState extends ConsumerState<OnboardingFlowPage> {
     if (required.isEmpty) {
       return const _Panel(
           child: Column(children: [
-        Icon(Icons.check_circle_rounded, color: Color(0xFF16A34A), size: 42),
+        Icon(
+          Icons.check_circle_rounded,
+          color: VeeduFixDesignSystem.success,
+          size: 42,
+        ),
         SizedBox(height: 10),
         Text('Nothing required for your selected services.'),
         Text('You can skip for now.')
@@ -1632,20 +1636,30 @@ class _SaveBadge extends StatelessWidget {
     return Container(
       padding: EdgeInsets.symmetric(horizontal: compact ? 8 : 12, vertical: 6),
       decoration: BoxDecoration(
-          color: (busy ? Colors.blue : Colors.green).withValues(alpha: 0.10),
+          color: (busy
+                  ? VeeduFixDesignSystem.mutedInk
+                  : VeeduFixDesignSystem.success)
+              .withValues(alpha: 0.10),
           borderRadius: BorderRadius.circular(999)),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(busy ? Icons.sync_rounded : Icons.cloud_done_outlined,
-              size: 14, color: busy ? Colors.blue : Colors.green),
+          Icon(
+            busy ? Icons.sync_rounded : Icons.cloud_done_outlined,
+            size: 14,
+            color: busy
+                ? VeeduFixDesignSystem.mutedInk
+                : VeeduFixDesignSystem.success,
+          ),
           if (!compact) ...[
             const SizedBox(width: 6),
             Text(busy ? 'Saving...' : 'Saved',
-                style: TextStyle(
-                    color: busy ? Colors.blue : Colors.green,
-                    fontWeight: FontWeight.w800,
-                    fontSize: 12)),
+                style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                  color: busy
+                      ? VeeduFixDesignSystem.mutedInk
+                      : VeeduFixDesignSystem.success,
+                  fontWeight: FontWeight.w700,
+                )),
           ],
         ],
       ),
@@ -1774,7 +1788,7 @@ class _Timeline extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color = done
-        ? const Color(0xFF16A34A)
+        ? VeeduFixDesignSystem.success
         : active
             ? _gold
             : Colors.grey;

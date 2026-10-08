@@ -21,7 +21,7 @@ class ProfilePage extends ConsumerWidget {
             // Header
             Text(
               'Account Profile',
-              style: GoogleFonts.poppins(
+              style: GoogleFonts.outfit(
                 fontSize: 32,
                 fontWeight: FontWeight.w800,
                 color: Colors.black87,
@@ -31,7 +31,7 @@ class ProfilePage extends ConsumerWidget {
             const SizedBox(height: 8),
             Text(
               'Manage your admin identity and system preferences.',
-              style: GoogleFonts.inter(
+              style: GoogleFonts.outfit(
                 color: Colors.black54,
                 fontSize: 16,
               ),
@@ -55,10 +55,11 @@ class ProfilePage extends ConsumerWidget {
                       children: [
                         CircleAvatar(
                           radius: 32,
-                          backgroundColor: const Color(0xFF0F766E).withValues(alpha: 0.1),
+                          backgroundColor:
+                              const Color(0xFF0F766E).withValues(alpha: 0.1),
                           child: Text(
                             _initial(auth?.user.name),
-                            style: GoogleFonts.poppins(
+                            style: GoogleFonts.outfit(
                               fontSize: 24,
                               fontWeight: FontWeight.w700,
                               color: const Color(0xFF0F766E),
@@ -72,7 +73,7 @@ class ProfilePage extends ConsumerWidget {
                             children: [
                               Text(
                                 auth?.user.name ?? 'Admin User',
-                                style: GoogleFonts.poppins(
+                                style: GoogleFonts.outfit(
                                   fontSize: 20,
                                   fontWeight: FontWeight.w700,
                                   color: Colors.black87,
@@ -81,7 +82,7 @@ class ProfilePage extends ConsumerWidget {
                               const SizedBox(height: 4),
                               Text(
                                 auth?.user.role ?? 'ADMIN',
-                                style: GoogleFonts.inter(
+                                style: GoogleFonts.outfit(
                                   color: Colors.black54,
                                   fontWeight: FontWeight.w500,
                                 ),
@@ -117,14 +118,18 @@ class ProfilePage extends ConsumerWidget {
 
             // Logout Button
             FilledButton.icon(
-              onPressed: () => ref.read(authControllerProvider.notifier).signOut(),
+              onPressed: () =>
+                  ref.read(authControllerProvider.notifier).signOut(),
               icon: const Icon(Icons.logout_rounded),
               label: const Text('Sign out of Admin Panel'),
               style: FilledButton.styleFrom(
-                backgroundColor: const Color(0xFFEF4444), // Red for destructive action
+                backgroundColor:
+                    const Color(0xFFEF4444), // Red for destructive action
                 foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8)),
               ),
             ),
           ],
@@ -201,7 +206,7 @@ class _ProfileSettingRow extends StatelessWidget {
                 children: [
                   Text(
                     title,
-                    style: GoogleFonts.poppins(
+                    style: GoogleFonts.outfit(
                       fontWeight: FontWeight.w600,
                       color: Colors.black87,
                       fontSize: 15,
@@ -210,7 +215,7 @@ class _ProfileSettingRow extends StatelessWidget {
                   const SizedBox(height: 4),
                   Text(
                     subtitle,
-                    style: GoogleFonts.inter(
+                    style: GoogleFonts.outfit(
                       color: Colors.black54,
                       fontSize: 13,
                     ),

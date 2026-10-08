@@ -226,8 +226,9 @@ class _SearchPageState extends ConsumerState<SearchPage> {
             .map((category) => category.name),
       if (_selectedSubcategorySlug != null)
         ...catalogSubcategories
-            .where((subcategory) =>
-                subcategory.slug == _selectedSubcategorySlug)
+            .where(
+              (subcategory) => subcategory.slug == _selectedSubcategorySlug,
+            )
             .map((subcategory) => subcategory.name),
     ];
     final showResults = _inputQuery.trim().isNotEmpty || _hasBrowseSelection;
@@ -567,6 +568,8 @@ class _SearchHome extends StatelessWidget {
           LayoutBuilder(
             builder: (context, constraints) {
               final columns = constraints.maxWidth < 400 ? 2 : 3;
+              final itemWidth =
+                  (constraints.maxWidth - (columns - 1) * 12) / columns;
               return GridView.builder(
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
@@ -574,7 +577,7 @@ class _SearchHome extends StatelessWidget {
                   crossAxisCount: columns,
                   mainAxisSpacing: 12,
                   crossAxisSpacing: 12,
-                  childAspectRatio: columns == 2 ? 1.1 : 0.82,
+                  childAspectRatio: itemWidth / 180,
                 ),
                 itemCount: trending.length,
                 itemBuilder: (context, i) {
@@ -777,10 +780,11 @@ class _SearchResults extends StatelessWidget {
                             ),
                             child: Text(
                               filter,
-                              style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                                color: cs.onSurfaceVariant,
-                                fontWeight: FontWeight.w700,
-                              ),
+                              style: Theme.of(context).textTheme.labelSmall
+                                  ?.copyWith(
+                                    color: cs.onSurfaceVariant,
+                                    fontWeight: FontWeight.w700,
+                                  ),
                             ),
                           ),
                         )
@@ -865,9 +869,7 @@ class _SearchResults extends StatelessWidget {
                                     'From ₹${item.startingPrice.toInt()}',
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
-                                    style: Theme.of(context)
-                                        .textTheme
-                                        .bodySmall
+                                    style: Theme.of(context).textTheme.bodySmall
                                         ?.copyWith(
                                           color: cs.primary,
                                           fontWeight: FontWeight.w700,
@@ -880,14 +882,12 @@ class _SearchResults extends StatelessWidget {
                                 const Icon(
                                   Icons.star_rounded,
                                   size: 15,
-                                  color: Color(0xFFF59E0B),
+                                  color: AbzioTheme.accentColor,
                                 ),
                                 const SizedBox(width: 3),
                                 Text(
                                   item.rating.toStringAsFixed(1),
-                                  style: Theme.of(context)
-                                      .textTheme
-                                      .bodySmall
+                                  style: Theme.of(context).textTheme.bodySmall
                                       ?.copyWith(
                                         color: cs.onSurfaceVariant,
                                         fontWeight: FontWeight.w700,

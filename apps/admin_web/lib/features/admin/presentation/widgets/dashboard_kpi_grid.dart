@@ -20,7 +20,8 @@ class DashboardKpiGrid extends StatelessWidget {
     this.onRetry,
   });
 
-  Widget _metricBox(BuildContext context, bool isCompact, {required Widget child}) {
+  Widget _metricBox(BuildContext context, bool isCompact,
+      {required Widget child}) {
     final width = isCompact ? MediaQuery.of(context).size.width - 40 : 320.0;
     return SizedBox(width: width, child: child);
   }
@@ -46,7 +47,8 @@ class DashboardKpiGrid extends StatelessWidget {
       return PremiumEmptyState(
         icon: Icons.cloud_off_rounded,
         title: 'Could not load overview',
-        subtitle: 'The dashboard overview could not be fetched. Please try again.',
+        subtitle:
+            'The dashboard overview could not be fetched. Please try again.',
         actionLabel: 'Retry',
         onAction: onRetry,
       );
@@ -60,7 +62,9 @@ class DashboardKpiGrid extends StatelessWidget {
       spacing: 24,
       runSpacing: 24,
       children: [
-        _metricBox(context, isCompact,
+        _metricBox(
+          context,
+          isCompact,
           child: MetricCard(
             title: 'Revenue',
             value: '₹${snapshot!.summary.totalRevenue.toStringAsFixed(0)}',
@@ -68,7 +72,9 @@ class DashboardKpiGrid extends StatelessWidget {
             color: const Color(0xFF0F766E),
           ),
         ),
-        _metricBox(context, isCompact,
+        _metricBox(
+          context,
+          isCompact,
           child: MetricCard(
             title: 'Bookings',
             value: '${snapshot!.summary.totalBookings}',
@@ -76,7 +82,9 @@ class DashboardKpiGrid extends StatelessWidget {
             color: const Color(0xFF2563EB),
           ),
         ),
-        _metricBox(context, isCompact,
+        _metricBox(
+          context,
+          isCompact,
           child: MetricCard(
             title: 'Cancellations',
             value: '${snapshot!.summary.cancelledBookingsCount}',
@@ -85,7 +93,9 @@ class DashboardKpiGrid extends StatelessWidget {
             subtitle: 'Cancelled or refunded',
           ),
         ),
-        _metricBox(context, isCompact,
+        _metricBox(
+          context,
+          isCompact,
           child: MetricCard(
             title: 'Workers',
             value: '${snapshot!.summary.activeWorkersCount}',
@@ -94,7 +104,9 @@ class DashboardKpiGrid extends StatelessWidget {
             subtitle: 'Verified and approved',
           ),
         ),
-        _metricBox(context, isCompact,
+        _metricBox(
+          context,
+          isCompact,
           child: MetricCard(
             title: 'Support Load',
             value: '${snapshot!.summary.openSupportTicketsCount}',
@@ -103,7 +115,9 @@ class DashboardKpiGrid extends StatelessWidget {
             subtitle: 'Open tickets',
           ),
         ),
-        _metricBox(context, isCompact,
+        _metricBox(
+          context,
+          isCompact,
           child: MetricCard(
             title: 'Worker Approvals',
             value: '${snapshot!.summary.pendingWorkerReviewsCount}',
@@ -170,7 +184,7 @@ class MetricCard extends StatelessWidget {
             children: [
               Text(
                 title,
-                style: GoogleFonts.inter(
+                style: GoogleFonts.outfit(
                   color: Colors.black54,
                   fontWeight: FontWeight.w600,
                   fontSize: 14,
@@ -189,7 +203,7 @@ class MetricCard extends StatelessWidget {
           const SizedBox(height: 16),
           Text(
             value,
-            style: GoogleFonts.poppins(
+            style: GoogleFonts.outfit(
               fontSize: 32,
               fontWeight: FontWeight.w700,
               color: Colors.black87,
@@ -200,7 +214,7 @@ class MetricCard extends StatelessWidget {
             const SizedBox(height: 4),
             Text(
               subtitle!,
-              style: GoogleFonts.inter(
+              style: GoogleFonts.outfit(
                 color: Colors.black45,
                 fontWeight: FontWeight.w500,
                 fontSize: 13,

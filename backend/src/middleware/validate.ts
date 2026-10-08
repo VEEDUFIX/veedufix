@@ -11,7 +11,10 @@ export function validate(schema: z.ZodTypeAny) {
   return (request: Request, response: Response, next: NextFunction): void => {
     try {
       const parsed = schema.parse({
-        body: request.body,
+        // Express 5 leaves `request.body` undefined when a request has no
+        // body (typical for GET/DELETE). Validation schemas still model an
+        // empty body as `{}`, so normalize before parsing.
+        body: request.body ?? {},
         query: request.query,
         params: request.params
       }) as ValidatedRequestShape;

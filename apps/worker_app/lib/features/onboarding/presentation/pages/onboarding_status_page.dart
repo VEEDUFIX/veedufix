@@ -13,28 +13,9 @@ class OnboardingStatusPage extends ConsumerWidget {
     final statusAsync = ref.watch(workerOnboardingStatusProvider);
 
     return Scaffold(
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            colors: [Color(0xFFFFFBF5), Color(0xFFF6F1E8), Color(0xFFFAF9F6)],
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-          ),
-        ),
-        child: Stack(
-          children: [
-            Positioned(
-              top: -56,
-              right: -40,
-              child: _StatusGlow(color: const Color(0xFFF59E0B).withValues(alpha: 0.15)),
-            ),
-            Positioned(
-              bottom: 120,
-              left: -48,
-              child: _StatusGlow(color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.12), size: 150),
-            ),
-            SafeArea(
-              child: statusAsync.when(
+      backgroundColor: VeeduFixDesignSystem.ivory,
+      body: SafeArea(
+        child: statusAsync.when(
                 loading: () => const Center(child: CircularProgressIndicator()),
                 error: (error, _) => _OnboardingStatusShell(
                   title: 'Could not load your onboarding status',
@@ -62,7 +43,7 @@ class OnboardingStatusPage extends ConsumerWidget {
                       subtitle:
                           'Thanks for submitting your details. We will notify you when the review is complete.',
                       icon: Icons.hourglass_top_rounded,
-                      accent: const Color(0xFFF59E0B),
+                      accent: VeeduFixDesignSystem.warning,
                       chips: const [
                         _StatusChip(icon: Icons.schedule_rounded, label: 'Review in progress'),
                         _StatusChip(icon: Icons.verified_user_outlined, label: 'Identity checked'),
@@ -98,7 +79,7 @@ class OnboardingStatusPage extends ConsumerWidget {
                       title: 'Your application needs a few fixes',
                       subtitle: profile.rejectionReason ?? 'Please review the feedback and resubmit your details.',
                       icon: Icons.warning_amber_rounded,
-                      accent: const Color(0xFFEF4444),
+                      accent: VeeduFixDesignSystem.error,
                       chips: const [
                         _StatusChip(icon: Icons.edit_note_rounded, label: 'Can be updated'),
                         _StatusChip(icon: Icons.verified_user_outlined, label: 'Feedback provided'),
@@ -139,7 +120,7 @@ class OnboardingStatusPage extends ConsumerWidget {
                       title: 'Your account is currently suspended',
                       subtitle: 'Please contact support to continue using the worker app.',
                       icon: Icons.pause_circle_outline_rounded,
-                      accent: Color(0xFF64748B),
+                      accent: VeeduFixDesignSystem.mutedInk,
                       chips: [
                         _StatusChip(icon: Icons.headset_mic_rounded, label: 'Contact support'),
                         _StatusChip(icon: Icons.lock_outline_rounded, label: 'Account paused'),
@@ -151,16 +132,13 @@ class OnboardingStatusPage extends ConsumerWidget {
                     title: 'Your onboarding is in progress',
                     subtitle: 'Please continue setting up your profile to get approved.',
                     icon: Icons.person_search_rounded,
-                    accent: Color(0xFFC2A15E),
+                    accent: VeeduFixDesignSystem.gold,
                     chips: [
                       _StatusChip(icon: Icons.save_outlined, label: 'Draft saved'),
                       _StatusChip(icon: Icons.badge_rounded, label: 'Profile incomplete'),
                     ],
                   );
                 },
-              ),
-            ),
-          ],
         ),
       ),
     );
@@ -195,7 +173,7 @@ class _OnboardingStatusShell extends StatelessWidget {
     required this.title,
     required this.subtitle,
     required this.icon,
-    this.accent = const Color(0xFFC2A15E),
+    this.accent = VeeduFixDesignSystem.gold,
     this.chips = const <Widget>[],
     this.extra,
   });
@@ -212,11 +190,11 @@ class _OnboardingStatusShell extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
 
     return ListView(
-      padding: const EdgeInsets.fromLTRB(20, 20, 20, 28),
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
       children: [
         PremiumGlassCard(
           child: Padding(
-            padding: const EdgeInsets.all(22),
+            padding: const EdgeInsets.all(VeeduFixDesignSystem.space20),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -228,7 +206,9 @@ class _OnboardingStatusShell extends StatelessWidget {
                       width: 72,
                       decoration: BoxDecoration(
                         color: accent.withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(AbzioTheme.cardRadius),
+                        borderRadius: BorderRadius.circular(
+                          VeeduFixDesignSystem.radiusLarge,
+                        ),
                       ),
                       child: Icon(icon, size: 34, color: accent),
                     ),
@@ -302,7 +282,7 @@ class _StatusChip extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.75),
-        borderRadius: BorderRadius.circular(999),
+        borderRadius: BorderRadius.circular(VeeduFixDesignSystem.radiusMedium),
         border: Border.all(color: Theme.of(context).colorScheme.outlineVariant.withValues(alpha: 0.45)),
       ),
       child: Row(
@@ -322,24 +302,3 @@ class _StatusChip extends StatelessWidget {
   }
 }
 
-class _StatusGlow extends StatelessWidget {
-  const _StatusGlow({
-    required this.color,
-    this.size = 170,
-  });
-
-  final Color color;
-  final double size;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      height: size,
-      width: size,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        color: color,
-      ),
-    );
-  }
-}

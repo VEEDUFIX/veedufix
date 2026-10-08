@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
@@ -43,7 +43,8 @@ class _TaxSummaryPageState extends ConsumerState<TaxSummaryPage> {
 
     try {
       if (_selectedPreset == _TaxPreset.financialYear) {
-        final annual = await _api.fetchTaxAnnualSummary(_financialYearLabelForRange(_selectedRange));
+        final annual = await _api
+            .fetchTaxAnnualSummary(_financialYearLabelForRange(_selectedRange));
         if (!mounted) {
           return;
         }
@@ -151,7 +152,8 @@ class _TaxSummaryPageState extends ConsumerState<TaxSummaryPage> {
         startDate: _selectedRange.start,
         endDate: _selectedRange.end,
       );
-      final saved = await _api.downloadCsv(url, 'veedufix-financial-reconciliation.csv');
+      final saved =
+          await _api.downloadCsv(url, 'veedufix-financial-reconciliation.csv');
       if (!mounted) return;
       if (saved) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -263,22 +265,29 @@ class _TaxSummaryPageState extends ConsumerState<TaxSummaryPage> {
                                 children: [
                                   _RangeChip(
                                     label: 'This month',
-                                    selected: _selectedPreset == _TaxPreset.thisMonth,
-                                    onTap: () => _applyPreset(_TaxPreset.thisMonth),
+                                    selected:
+                                        _selectedPreset == _TaxPreset.thisMonth,
+                                    onTap: () =>
+                                        _applyPreset(_TaxPreset.thisMonth),
                                   ),
                                   _RangeChip(
                                     label: 'This quarter',
-                                    selected: _selectedPreset == _TaxPreset.thisQuarter,
-                                    onTap: () => _applyPreset(_TaxPreset.thisQuarter),
+                                    selected: _selectedPreset ==
+                                        _TaxPreset.thisQuarter,
+                                    onTap: () =>
+                                        _applyPreset(_TaxPreset.thisQuarter),
                                   ),
                                   _RangeChip(
                                     label: 'Financial year',
-                                    selected: _selectedPreset == _TaxPreset.financialYear,
-                                    onTap: () => _applyPreset(_TaxPreset.financialYear),
+                                    selected: _selectedPreset ==
+                                        _TaxPreset.financialYear,
+                                    onTap: () =>
+                                        _applyPreset(_TaxPreset.financialYear),
                                   ),
                                   OutlinedButton.icon(
                                     onPressed: _pickDateRange,
-                                    icon: const Icon(Icons.date_range_rounded, size: 18),
+                                    icon: const Icon(Icons.date_range_rounded,
+                                        size: 18),
                                     label: const Text('Custom range'),
                                   ),
                                 ],
@@ -306,24 +315,30 @@ class _TaxSummaryPageState extends ConsumerState<TaxSummaryPage> {
                                   width: 46,
                                   height: 46,
                                   decoration: BoxDecoration(
-                                    color: const Color(0xFF0F766E).withValues(alpha: 0.12),
+                                    color: const Color(0xFF0F766E)
+                                        .withValues(alpha: 0.12),
                                     borderRadius: BorderRadius.circular(14),
                                   ),
-                                  child: const Icon(Icons.calendar_month_rounded, color: Color(0xFF0F766E)),
+                                  child: const Icon(
+                                      Icons.calendar_month_rounded,
+                                      color: Color(0xFF0F766E)),
                                 ),
                                 const SizedBox(width: 14),
                                 Expanded(
                                   child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: [
                                       Text(
                                         'Annual window ${_annualSummary!.financialYear}',
-                                        style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+                                        style: tt.titleMedium?.copyWith(
+                                            fontWeight: FontWeight.w800),
                                       ),
                                       const SizedBox(height: 4),
                                       Text(
                                         'Period ${_annualSummary!.periodStart != null ? DateFormat('dd MMM yyyy').format(_annualSummary!.periodStart!.toLocal()) : ''} to ${_annualSummary!.periodEnd != null ? DateFormat('dd MMM yyyy').format(_annualSummary!.periodEnd!.toLocal()) : ''}',
-                                        style: tt.bodyMedium?.copyWith(color: cs.onSurfaceVariant),
+                                        style: tt.bodyMedium?.copyWith(
+                                            color: cs.onSurfaceVariant),
                                       ),
                                     ],
                                   ),
@@ -342,14 +357,19 @@ class _TaxSummaryPageState extends ConsumerState<TaxSummaryPage> {
                             title: 'GST summary',
                             accent: const Color(0xFF0F766E),
                             children: [
-                              _MetricRow(label: 'Invoices', value: gstSummary?.invoiceCount.toString() ?? '0'),
+                              _MetricRow(
+                                  label: 'Invoices',
+                                  value: gstSummary?.invoiceCount.toString() ??
+                                      '0'),
                               _MetricRow(
                                 label: 'Taxable value',
-                                value: _formatCurrency(gstSummary?.totalTaxableValue ?? 0),
+                                value: _formatCurrency(
+                                    gstSummary?.totalTaxableValue ?? 0),
                               ),
                               _MetricRow(
                                 label: 'GST collected',
-                                value: _formatCurrency(gstSummary?.totalGstCollected ?? 0),
+                                value: _formatCurrency(
+                                    gstSummary?.totalGstCollected ?? 0),
                               ),
                             ],
                           ),
@@ -359,15 +379,19 @@ class _TaxSummaryPageState extends ConsumerState<TaxSummaryPage> {
                             children: [
                               _MetricRow(
                                 label: 'Platform commission earned',
-                                value: _formatCurrency(revenueSummary?.platformCommissionEarned ?? 0),
+                                value: _formatCurrency(
+                                    revenueSummary?.platformCommissionEarned ??
+                                        0),
                               ),
                               _MetricRow(
                                 label: 'GST liability',
-                                value: _formatCurrency(revenueSummary?.totalGstLiability ?? 0),
+                                value: _formatCurrency(
+                                    revenueSummary?.totalGstLiability ?? 0),
                               ),
                               _MetricRow(
                                 label: 'Worker payouts',
-                                value: _formatCurrency(revenueSummary?.totalWorkerPayouts ?? 0),
+                                value: _formatCurrency(
+                                    revenueSummary?.totalWorkerPayouts ?? 0),
                               ),
                             ],
                           ),
@@ -382,11 +406,13 @@ class _TaxSummaryPageState extends ConsumerState<TaxSummaryPage> {
                             children: [
                               Row(
                                 children: [
-                                  const Icon(Icons.account_tree_rounded, color: Color(0xFF0F766E)),
+                                  const Icon(Icons.account_tree_rounded,
+                                      color: Color(0xFF0F766E)),
                                   const SizedBox(width: 8),
                                   Text(
                                     'SAC breakdown',
-                                    style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+                                    style: tt.titleMedium
+                                        ?.copyWith(fontWeight: FontWeight.w800),
                                   ),
                                 ],
                               ),
@@ -394,7 +420,8 @@ class _TaxSummaryPageState extends ConsumerState<TaxSummaryPage> {
                               if ((gstSummary?.breakdown ?? const []).isEmpty)
                                 Text(
                                   'No invoice line items found for the selected period.',
-                                  style: tt.bodyMedium?.copyWith(color: cs.onSurfaceVariant),
+                                  style: tt.bodyMedium
+                                      ?.copyWith(color: cs.onSurfaceVariant),
                                 )
                               else
                                 LayoutBuilder(
@@ -402,10 +429,13 @@ class _TaxSummaryPageState extends ConsumerState<TaxSummaryPage> {
                                     return SingleChildScrollView(
                                       scrollDirection: Axis.horizontal,
                                       child: ConstrainedBox(
-                                        constraints: BoxConstraints(minWidth: constraints.maxWidth),
+                                        constraints: BoxConstraints(
+                                            minWidth: constraints.maxWidth),
                                         child: DataTable(
-                                          headingRowColor: const WidgetStatePropertyAll(Color(0xFFF8FAFC)),
-                                          headingTextStyle: GoogleFonts.inter(
+                                          headingRowColor:
+                                              const WidgetStatePropertyAll(
+                                                  Color(0xFFF8FAFC)),
+                                          headingTextStyle: GoogleFonts.outfit(
                                             fontWeight: FontWeight.w700,
                                             fontSize: 12,
                                             color: const Color(0xFF64748B),
@@ -414,17 +444,26 @@ class _TaxSummaryPageState extends ConsumerState<TaxSummaryPage> {
                                           columns: const [
                                             DataColumn(label: Text('SAC CODE')),
                                             DataColumn(label: Text('INVOICES')),
-                                            DataColumn(label: Text('TAXABLE VALUE')),
+                                            DataColumn(
+                                                label: Text('TAXABLE VALUE')),
                                             DataColumn(label: Text('GST')),
                                           ],
-                                          rows: (gstSummary?.breakdown ?? const [])
+                                          rows: (gstSummary?.breakdown ??
+                                                  const [])
                                               .map(
                                                 (item) => DataRow(
                                                   cells: [
-                                                    DataCell(Text(item.sacCode)),
-                                                    DataCell(Text(item.invoiceCount.toString())),
-                                                    DataCell(Text(_formatCurrency(item.taxableValue))),
-                                                    DataCell(Text(_formatCurrency(item.gstAmount))),
+                                                    DataCell(
+                                                        Text(item.sacCode)),
+                                                    DataCell(Text(item
+                                                        .invoiceCount
+                                                        .toString())),
+                                                    DataCell(Text(
+                                                        _formatCurrency(item
+                                                            .taxableValue))),
+                                                    DataCell(Text(
+                                                        _formatCurrency(
+                                                            item.gstAmount))),
                                                   ],
                                                 ),
                                               )
@@ -512,10 +551,12 @@ class _RangeChip extends StatelessWidget {
       onSelected: (_) => onTap(),
       selectedColor: selectedColor.withValues(alpha: 0.12),
       labelStyle: TextStyle(
-        color: selected ? selectedColor : Theme.of(context).colorScheme.onSurface,
+        color:
+            selected ? selectedColor : Theme.of(context).colorScheme.onSurface,
         fontWeight: FontWeight.w700,
       ),
-      side: BorderSide(color: selected ? selectedColor : const Color(0xFFD1D5DB)),
+      side:
+          BorderSide(color: selected ? selectedColor : const Color(0xFFD1D5DB)),
     );
   }
 }
@@ -551,10 +592,13 @@ class _SummaryCard extends StatelessWidget {
                       color: accent.withValues(alpha: 0.12),
                       borderRadius: BorderRadius.circular(12),
                     ),
-                    child: Icon(Icons.pie_chart_rounded, color: accent, size: 20),
+                    child:
+                        Icon(Icons.pie_chart_rounded, color: accent, size: 20),
                   ),
                   const SizedBox(width: 10),
-                  Text(title, style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
+                  Text(title,
+                      style: tt.titleMedium
+                          ?.copyWith(fontWeight: FontWeight.w800)),
                 ],
               ),
               const SizedBox(height: 14),
@@ -612,7 +656,9 @@ DateTimeRange _presetRange(String preset) {
     final quarterStartMonth = ((now.month - 1) ~/ 3) * 3 + 1;
     final start = DateTime(now.year, quarterStartMonth, 1);
     final nextQuarter = quarterStartMonth + 3;
-    final end = nextQuarter > 12 ? DateTime(now.year + 1, 1, 1).subtract(const Duration(days: 1)) : DateTime(now.year, nextQuarter, 1).subtract(const Duration(days: 1));
+    final end = nextQuarter > 12
+        ? DateTime(now.year + 1, 1, 1).subtract(const Duration(days: 1))
+        : DateTime(now.year, nextQuarter, 1).subtract(const Duration(days: 1));
     return DateTimeRange(start: start, end: end);
   }
 
@@ -629,7 +675,8 @@ DateTimeRange _presetRange(String preset) {
 }
 
 String _financialYearLabelForRange(DateTimeRange range) {
-  final startYear = range.start.month >= 4 ? range.start.year : range.start.year - 1;
+  final startYear =
+      range.start.month >= 4 ? range.start.year : range.start.year - 1;
   return '$startYear-${(startYear + 1).toString().substring(2)}';
 }
 
@@ -639,6 +686,7 @@ String _formatRange(DateTimeRange range) {
 }
 
 String _formatCurrency(double value) {
-  return NumberFormat.currency(locale: 'en_IN', symbol: '\u20B9', decimalDigits: 2).format(value);
+  return NumberFormat.currency(
+          locale: 'en_IN', symbol: '\u20B9', decimalDigits: 2)
+      .format(value);
 }
-

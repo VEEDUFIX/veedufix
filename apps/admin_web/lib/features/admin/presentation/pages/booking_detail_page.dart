@@ -837,19 +837,19 @@ class _CustomQuoteCard extends ConsumerWidget {
 
     switch (status) {
       case 'REQUESTED':
-        badgeColor = Colors.orange;
+        badgeColor = VeeduFixDesignSystem.warning;
         badgeText = 'Quote Requested by Customer';
         break;
       case 'SUBMITTED':
-        badgeColor = Colors.blue;
+        badgeColor = VeeduFixDesignSystem.mutedInk;
         badgeText = 'Quote Submitted — Awaiting Customer Response';
         break;
       case 'ACCEPTED':
-        badgeColor = Colors.green;
+        badgeColor = VeeduFixDesignSystem.success;
         badgeText = 'Quote Accepted ✅';
         break;
       case 'DECLINED':
-        badgeColor = Colors.red;
+        badgeColor = VeeduFixDesignSystem.error;
         badgeText = 'Quote Declined';
         break;
       default:

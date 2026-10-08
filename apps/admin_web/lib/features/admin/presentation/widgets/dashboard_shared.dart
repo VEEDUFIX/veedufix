@@ -18,7 +18,8 @@ class GlassCard extends StatelessWidget {
           decoration: BoxDecoration(
             color: Colors.white.withValues(alpha: 0.6),
             borderRadius: BorderRadius.circular(AbzioTheme.cardRadius),
-            border: Border.all(color: Colors.white.withValues(alpha: 0.8), width: 1.5),
+            border: Border.all(
+                color: Colors.white.withValues(alpha: 0.8), width: 1.5),
             boxShadow: AbzioTheme.eliteShadow,
           ),
           child: child,
@@ -38,7 +39,7 @@ class SectionTitle extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: 16),
       child: Text(
         title,
-        style: GoogleFonts.poppins(
+        style: GoogleFonts.outfit(
           fontSize: 16,
           fontWeight: FontWeight.w600,
           color: Colors.black54,

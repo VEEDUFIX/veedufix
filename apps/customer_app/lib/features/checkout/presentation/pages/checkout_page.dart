@@ -477,23 +477,36 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
                               ),
                               const SizedBox(height: 4),
                               Text(
-                                'Check your connection and try again.',
+                                _checkoutAddressErrorMessage(
+                                  addressesState.error,
+                                ),
                                 style: tt.bodySmall?.copyWith(
                                   color: cs.onSurfaceVariant,
                                 ),
                               ),
-                              Align(
-                                alignment: Alignment.centerRight,
-                                child: TextButton.icon(
-                                  onPressed: () => ref.invalidate(
-                                    cartCheckoutAddressesProvider,
+                              const SizedBox(height: 8),
+                              Wrap(
+                                alignment: WrapAlignment.end,
+                                spacing: 8,
+                                runSpacing: 0,
+                                children: [
+                                  TextButton(
+                                    onPressed: orderLocked
+                                        ? null
+                                        : _openAddresses,
+                                    child: const Text('Manage addresses'),
                                   ),
-                                  icon: const Icon(
-                                    Icons.refresh_rounded,
-                                    size: 18,
+                                  TextButton.icon(
+                                    onPressed: () => ref.invalidate(
+                                      cartCheckoutAddressesProvider,
+                                    ),
+                                    icon: const Icon(
+                                      Icons.refresh_rounded,
+                                      size: 18,
+                                    ),
+                                    label: const Text('Retry'),
                                   ),
-                                  label: const Text('Retry'),
-                                ),
+                                ],
                               ),
                             ],
                           )
@@ -709,7 +722,9 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
                           _couponApplied
                               ? Icons.check_circle_outline_rounded
                               : Icons.local_offer_outlined,
-                          color: _couponApplied ? Colors.green : cs.primary,
+                          color: _couponApplied
+                              ? VeeduFixDesignSystem.success
+                              : cs.primary,
                         ),
                         title: Text(
                           _couponApplied
@@ -939,7 +954,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
                 border: Border(top: BorderSide(color: cs.outlineVariant)),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.06),
+                    color: VeeduFixDesignSystem.ink.withValues(alpha: 0.06),
                     blurRadius: 16,
                     offset: const Offset(0, -4),
                   ),
@@ -981,7 +996,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
                       Expanded(
                         flex: 3,
                         child: SizedBox(
-                          height: 56,
+                          height: VeeduFixDesignSystem.buttonHeight,
                           child: FilledButton(
                             onPressed:
                                 isLoading ||
@@ -1006,13 +1021,15 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
                                         : null,
                                   ),
                             style: FilledButton.styleFrom(
-                              backgroundColor: const Color(0xFFC2A15E),
-                              foregroundColor: const Color(0xFF29251F),
+                              backgroundColor: VeeduFixDesignSystem.gold,
+                              foregroundColor: VeeduFixDesignSystem.ink,
                               padding: const EdgeInsets.symmetric(
                                 horizontal: 12,
                               ),
                               shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(16),
+                                borderRadius: BorderRadius.circular(
+                                  VeeduFixDesignSystem.radiusMedium,
+                                ),
                               ),
                             ),
                             child: isLoading || _isLaunchingPayment
@@ -1200,7 +1217,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
           content: Text(
             'Payment details could not be confirmed. Contact support before trying again.',
           ),
-          backgroundColor: Colors.orange,
+          backgroundColor: VeeduFixDesignSystem.warning,
         ),
       );
       return;
@@ -1259,7 +1276,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
               Text('Booking confirmed! #${order.bookingCode}'),
             ],
           ),
-          backgroundColor: const Color(0xFF10B981),
+          backgroundColor: VeeduFixDesignSystem.success,
           behavior: SnackBarBehavior.floating,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
@@ -1277,7 +1294,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
           content: Text(
             'Payment captured but verification failed. Contact support.',
           ),
-          backgroundColor: Colors.orange,
+          backgroundColor: VeeduFixDesignSystem.warning,
         ),
       );
     }
@@ -1385,4 +1402,38 @@ String _formatCheckoutMoney(double amount) {
       ? amount.toStringAsFixed(0)
       : amount.toStringAsFixed(2);
   return '₹$formatted';
+}
+
+String _checkoutAddressErrorMessage(Object? error) {
+  if (error is! DioException) {
+    return 'An unexpected error occurred while loading addresses. Please retry.';
+  }
+
+  final statusCode = error.response?.statusCode;
+  if (statusCode == 401) {
+    return 'Your session may have expired. Sign in again, then retry.';
+  }
+  if (statusCode == 403) {
+    return 'This account is not allowed to access customer addresses.';
+  }
+  if (statusCode == 404) {
+    return 'The address service could not be found. Please retry shortly.';
+  }
+  if (statusCode != null && statusCode >= 500) {
+    return 'The address service is temporarily unavailable. Please retry.';
+  }
+  if (statusCode == 429) {
+    return 'Too many requests. Wait a moment, then retry.';
+  }
+
+  if (error.type == DioExceptionType.connectionTimeout ||
+      error.type == DioExceptionType.receiveTimeout ||
+      error.type == DioExceptionType.sendTimeout ||
+      error.type == DioExceptionType.connectionError) {
+    return 'Could not reach VeeduFix. Check your internet connection and retry.';
+  }
+
+  return statusCode == null
+      ? 'Could not reach VeeduFix. Check your internet connection and retry.'
+      : 'Address request failed (HTTP $statusCode). Please retry.';
 }

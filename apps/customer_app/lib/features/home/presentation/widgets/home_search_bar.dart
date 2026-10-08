@@ -2,14 +2,10 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:marketplace_shared/marketplace_shared.dart';
 
 class HomeSearchBar extends StatefulWidget {
-  const HomeSearchBar({
-    super.key,
-    required this.onVoiceTap,
-  });
+  const HomeSearchBar({super.key, required this.onVoiceTap});
 
   final VoidCallback onVoiceTap;
 
@@ -38,13 +34,10 @@ class _HomeSearchBarState extends State<HomeSearchBar> {
   }
 
   void _startPlaceholderTimer() {
-    _placeholderTimer = Timer.periodic(
-      const Duration(milliseconds: 2500),
-      (_) {
-        if (!mounted || _searchTapped) return;
-        setState(() => _exampleIndex = (_exampleIndex + 1) % _examples.length);
-      },
-    );
+    _placeholderTimer = Timer.periodic(const Duration(milliseconds: 2500), (_) {
+      if (!mounted || _searchTapped) return;
+      setState(() => _exampleIndex = (_exampleIndex + 1) % _examples.length);
+    });
   }
 
   Future<void> _openSearch() async {
@@ -64,7 +57,7 @@ class _HomeSearchBarState extends State<HomeSearchBar> {
 
   @override
   Widget build(BuildContext context) {
-    final placeholderStyle = GoogleFonts.outfit(
+    final placeholderStyle = Theme.of(context).textTheme.bodyMedium?.copyWith(
       fontSize: 15,
       fontWeight: FontWeight.w500,
       color: AbzioTheme.lightTextSecondary,
@@ -77,19 +70,12 @@ class _HomeSearchBarState extends State<HomeSearchBar> {
         label: 'Search services',
         explicitChildNodes: true,
         child: Container(
-          height: 50,
+          height: VeeduFixDesignSystem.inputHeight,
           padding: const EdgeInsets.symmetric(horizontal: 16),
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(16),
             border: Border.all(color: AbzioTheme.lightBorder, width: 1.2),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.05),
-                blurRadius: 12,
-                offset: const Offset(0, 4),
-              ),
-            ],
           ),
           child: Row(
             children: [
@@ -128,7 +114,9 @@ class _HomeSearchBarState extends State<HomeSearchBar> {
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           text: TextSpan(
-                            style: placeholderStyle,
+                            style:
+                                placeholderStyle ??
+                                const TextStyle(fontSize: 15),
                             children: [
                               const TextSpan(text: 'Search for '),
                               TextSpan(text: '“${_examples[_exampleIndex]}”'),
@@ -146,8 +134,8 @@ class _HomeSearchBarState extends State<HomeSearchBar> {
                 child: GestureDetector(
                   onTap: widget.onVoiceTap,
                   child: Container(
-                  width: 44,
-                  height: 44,
+                    width: 44,
+                    height: 44,
                     decoration: BoxDecoration(
                       color: AbzioTheme.accentColor.withValues(alpha: 0.10),
                       borderRadius: BorderRadius.circular(10),

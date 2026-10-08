@@ -171,11 +171,25 @@ class _OtpPageState extends ConsumerState<OtpPage> {
           style: tt.titleLarge?.copyWith(fontWeight: FontWeight.w800),
         ),
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Form(
-          key: _formKey,
-          child: Column(
+      body: SafeArea(
+        child: LayoutBuilder(
+          builder: (context, constraints) => SingleChildScrollView(
+            padding: EdgeInsets.fromLTRB(
+              VeeduFixDesignSystem.pageMargin,
+              VeeduFixDesignSystem.space16,
+              VeeduFixDesignSystem.pageMargin,
+              MediaQuery.viewInsetsOf(context).bottom +
+                  VeeduFixDesignSystem.space24,
+            ),
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                minHeight: (constraints.maxHeight - 40)
+                    .clamp(0.0, double.infinity)
+                    .toDouble(),
+              ),
+              child: Form(
+                key: _formKey,
+                child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
@@ -190,7 +204,7 @@ class _OtpPageState extends ConsumerState<OtpPage> {
                   height: 1.4,
                 ),
               ),
-              const SizedBox(height: 36),
+              const SizedBox(height: VeeduFixDesignSystem.space32),
               // PIN Boxes
               LayoutBuilder(
                 builder: (context, constraints) {
@@ -226,11 +240,11 @@ class _OtpPageState extends ConsumerState<OtpPage> {
                                   decoration: InputDecoration(
                                     counterText: '',
                                     filled: true,
-                                    fillColor: cs.surfaceContainerHighest
-                                        .withValues(alpha: 0.3),
+                                    fillColor: VeeduFixDesignSystem.ivory,
                                     border: OutlineInputBorder(
                                       borderRadius: BorderRadius.circular(
-                                          AbzioTheme.buttonRadius),
+                                        VeeduFixDesignSystem.radiusMedium,
+                                      ),
                                       borderSide: BorderSide(
                                         color: cs.outlineVariant
                                             .withValues(alpha: 0.5),
@@ -238,15 +252,17 @@ class _OtpPageState extends ConsumerState<OtpPage> {
                                     ),
                                     focusedBorder: OutlineInputBorder(
                                       borderRadius: BorderRadius.circular(
-                                          AbzioTheme.buttonRadius),
-                                      borderSide: BorderSide(
-                                        color: cs.primary,
-                                        width: 2,
+                                        VeeduFixDesignSystem.radiusMedium,
+                                      ),
+                                      borderSide: const BorderSide(
+                                        color: VeeduFixDesignSystem.gold,
+                                        width: 1.5,
                                       ),
                                     ),
                                     enabledBorder: OutlineInputBorder(
                                       borderRadius: BorderRadius.circular(
-                                          AbzioTheme.buttonRadius),
+                                        VeeduFixDesignSystem.radiusMedium,
+                                      ),
                                       borderSide: BorderSide(
                                         color: cs.outlineVariant
                                             .withValues(alpha: 0.5),
@@ -272,8 +288,9 @@ class _OtpPageState extends ConsumerState<OtpPage> {
                 },
               ),
               const SizedBox(height: 32),
-              PrimaryActionButton(
-                label: _isLoading ? 'Verifying...' : 'Verify and Continue',
+              VeeduFixButton(
+                label: 'Verify and continue',
+                isLoading: _isLoading,
                 onPressed: _isLoading ? null : () => _verifyOtp(args),
               ),
               const SizedBox(height: 24),
@@ -313,6 +330,9 @@ class _OtpPageState extends ConsumerState<OtpPage> {
                 Text(_resendError!, style: TextStyle(color: cs.error)),
               ],
             ],
+                ),
+              ),
+            ),
           ),
         ),
       ),

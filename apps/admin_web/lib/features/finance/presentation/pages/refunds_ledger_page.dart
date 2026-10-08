@@ -301,7 +301,7 @@ class _RefundsLedgerPageState extends ConsumerState<RefundsLedgerPage> {
                     children: [
                       Text(
                         'Refunds ledger',
-                        style: GoogleFonts.poppins(
+                        style: GoogleFonts.outfit(
                           fontSize: 28,
                           fontWeight: FontWeight.w900,
                           letterSpacing: -0.4,
@@ -311,7 +311,7 @@ class _RefundsLedgerPageState extends ConsumerState<RefundsLedgerPage> {
                       const SizedBox(height: 8),
                       Text(
                         'Track customer refunds, review failure reasons, and retry failed refunds when required.',
-                        style: GoogleFonts.inter(
+                        style: GoogleFonts.outfit(
                           color: Colors.black54,
                           height: 1.45,
                         ),
@@ -329,19 +329,23 @@ class _RefundsLedgerPageState extends ConsumerState<RefundsLedgerPage> {
                           ),
                           PremiumStatCard(
                             label: 'Status filter',
-                            value: _selectedStatus == 'all' ? 'All' : _selectedStatus,
+                            value: _selectedStatus == 'all'
+                                ? 'All'
+                                : _selectedStatus,
                             icon: Icons.filter_alt_rounded,
                             accentColor: const Color(0xFF0F766E),
                           ),
                           PremiumStatCard(
                             label: 'Failed',
-                            value: '${_items.where((item) => item.status == 'failed').length}',
+                            value:
+                                '${_items.where((item) => item.status == 'failed').length}',
                             icon: Icons.warning_rounded,
                             accentColor: const Color(0xFFEF4444),
                           ),
                           PremiumStatCard(
                             label: 'Processed',
-                            value: '${_items.where((item) => item.status == 'processed').length}',
+                            value:
+                                '${_items.where((item) => item.status == 'processed').length}',
                             icon: Icons.check_circle_rounded,
                             accentColor: const Color(0xFF10B981),
                           ),
@@ -427,10 +431,13 @@ class _RefundsLedgerPageState extends ConsumerState<RefundsLedgerPage> {
                     return SingleChildScrollView(
                       scrollDirection: Axis.horizontal,
                       child: SizedBox(
-                        width: constraints.maxWidth > 800 ? constraints.maxWidth : 800,
+                        width: constraints.maxWidth > 800
+                            ? constraints.maxWidth
+                            : 800,
                         child: DataTable(
-                          headingRowColor: const WidgetStatePropertyAll(Color(0xFFF8FAFC)),
-                          headingTextStyle: GoogleFonts.inter(
+                          headingRowColor:
+                              const WidgetStatePropertyAll(Color(0xFFF8FAFC)),
+                          headingTextStyle: GoogleFonts.outfit(
                             fontWeight: FontWeight.w700,
                             fontSize: 12,
                             color: const Color(0xFF64748B),
@@ -457,18 +464,24 @@ class _RefundsLedgerPageState extends ConsumerState<RefundsLedgerPage> {
                                     children: [
                                       Expanded(
                                         child: Text(
-                                          refund.bookingCode.isNotEmpty ? refund.bookingCode : refund.bookingId,
-                                          style: const TextStyle(fontWeight: FontWeight.w600),
+                                          refund.bookingCode.isNotEmpty
+                                              ? refund.bookingCode
+                                              : refund.bookingId,
+                                          style: const TextStyle(
+                                              fontWeight: FontWeight.w600),
                                         ),
                                       ),
                                       IconButton(
                                         tooltip: 'Copy reference',
                                         visualDensity: VisualDensity.compact,
                                         onPressed: () => _copyToClipboard(
-                                          refund.bookingCode.isNotEmpty ? refund.bookingCode : refund.bookingId,
+                                          refund.bookingCode.isNotEmpty
+                                              ? refund.bookingCode
+                                              : refund.bookingId,
                                           'Reference',
                                         ),
-                                        icon: const Icon(Icons.copy_rounded, size: 16),
+                                        icon: const Icon(Icons.copy_rounded,
+                                            size: 16),
                                       ),
                                     ],
                                   ),
@@ -485,7 +498,9 @@ class _RefundsLedgerPageState extends ConsumerState<RefundsLedgerPage> {
                                         child: Icon(
                                           Icons.person_rounded,
                                           size: 16,
-                                          color: Theme.of(context).colorScheme.primary,
+                                          color: Theme.of(context)
+                                              .colorScheme
+                                              .primary,
                                         ),
                                       ),
                                       const SizedBox(width: 8),
@@ -496,19 +511,25 @@ class _RefundsLedgerPageState extends ConsumerState<RefundsLedgerPage> {
                                 DataCell(
                                   Column(
                                     mainAxisAlignment: MainAxisAlignment.center,
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: [
-                                      Text('₹${refund.amount.toStringAsFixed(2)}'),
+                                      Text(
+                                          '₹${refund.amount.toStringAsFixed(2)}'),
                                       Text(
                                         'Gateway ₹${refund.gatewayAmount.toStringAsFixed(2)} · Wallet ₹${refund.walletAmount.toStringAsFixed(2)}',
-                                        style: Theme.of(context).textTheme.labelSmall,
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .labelSmall,
                                       ),
                                     ],
                                   ),
                                 ),
-                                DataCell(_GlowingStatusBadge(status: refund.status)),
                                 DataCell(
-                                  Text(MaterialLocalizations.of(context).formatMediumDate(refund.createdAt)),
+                                    _GlowingStatusBadge(status: refund.status)),
+                                DataCell(
+                                  Text(MaterialLocalizations.of(context)
+                                      .formatMediumDate(refund.createdAt)),
                                 ),
                                 DataCell(
                                   SizedBox(
@@ -527,18 +548,25 @@ class _RefundsLedgerPageState extends ConsumerState<RefundsLedgerPage> {
                                     children: [
                                       TextButton.icon(
                                         onPressed: () => _openDetails(refund),
-                                        icon: const Icon(Icons.open_in_new_rounded, size: 16),
+                                        icon: const Icon(
+                                            Icons.open_in_new_rounded,
+                                            size: 16),
                                         label: const Text('Open'),
                                       ),
                                       TextButton.icon(
-                                        onPressed: () => context.push('/audit-logs?search=${Uri.encodeComponent(refund.id)}'),
-                                        icon: const Icon(Icons.manage_search_rounded, size: 16),
+                                        onPressed: () => context.push(
+                                            '/audit-logs?search=${Uri.encodeComponent(refund.id)}'),
+                                        icon: const Icon(
+                                            Icons.manage_search_rounded,
+                                            size: 16),
                                         label: const Text('Audit'),
                                       ),
                                       if (refund.status == 'failed')
                                         TextButton.icon(
                                           onPressed: () => _retry(refund.id),
-                                          icon: const Icon(Icons.refresh_rounded, size: 16),
+                                          icon: const Icon(
+                                              Icons.refresh_rounded,
+                                              size: 16),
                                           label: const Text('Retry'),
                                         ),
                                     ],
@@ -557,13 +585,16 @@ class _RefundsLedgerPageState extends ConsumerState<RefundsLedgerPage> {
               const SizedBox(height: 12),
               _SurfacePanel(
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                   child: Row(
                     children: [
                       Text(
                         'Showing ${_items.length} of $_total',
                         style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                              color: Theme.of(context).colorScheme.onSurfaceVariant,
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .onSurfaceVariant,
                             ),
                       ),
                       const Spacer(),
@@ -576,16 +607,22 @@ class _RefundsLedgerPageState extends ConsumerState<RefundsLedgerPage> {
                       else if (_hasMore)
                         Text(
                           'Scroll to load more',
-                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                color: Theme.of(context).colorScheme.onSurfaceVariant,
-                              ),
+                          style:
+                              Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .onSurfaceVariant,
+                                  ),
                         )
                       else
                         Text(
                           'End of results',
-                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                color: Theme.of(context).colorScheme.onSurfaceVariant,
-                              ),
+                          style:
+                              Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .onSurfaceVariant,
+                                  ),
                         ),
                     ],
                   ),
@@ -634,7 +671,8 @@ class _RefundDetailPageState extends ConsumerState<RefundDetailPage> {
   }
 
   Future<FinanceRefundItem?> _loadRefund() async {
-    if (widget.initialRefund != null && widget.initialRefund!.id == widget.refundId) {
+    if (widget.initialRefund != null &&
+        widget.initialRefund!.id == widget.refundId) {
       return widget.initialRefund;
     }
 
@@ -676,11 +714,13 @@ class _RefundDetailPageState extends ConsumerState<RefundDetailPage> {
       body: FutureBuilder<FinanceRefundItem?>(
         future: _refundFuture,
         builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting && !snapshot.hasData) {
+          if (snapshot.connectionState == ConnectionState.waiting &&
+              !snapshot.hasData) {
             return const Center(child: CircularProgressIndicator());
           }
           if (snapshot.hasError) {
-            return Center(child: Text('Unable to load refund: ${snapshot.error}'));
+            return Center(
+                child: Text('Unable to load refund: ${snapshot.error}'));
           }
           final refund = snapshot.data;
           if (refund == null) {
@@ -692,27 +732,35 @@ class _RefundDetailPageState extends ConsumerState<RefundDetailPage> {
                   children: [
                     const Icon(Icons.search_off_rounded, size: 48),
                     const SizedBox(height: 12),
-                    Text('Refund not found', style: tt.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
+                    Text('Refund not found',
+                        style: tt.titleLarge
+                            ?.copyWith(fontWeight: FontWeight.w800)),
                     const SizedBox(height: 8),
                     Text(
                       'This refund is not present in the current ledger snapshot.',
                       textAlign: TextAlign.center,
-                      style: tt.bodyMedium?.copyWith(color: cs.onSurfaceVariant),
+                      style:
+                          tt.bodyMedium?.copyWith(color: cs.onSurfaceVariant),
                     ),
                     const SizedBox(height: 16),
-                    FilledButton(onPressed: _reload, child: const Text('Reload')),
+                    FilledButton(
+                        onPressed: _reload, child: const Text('Reload')),
                   ],
                 ),
               ),
             );
           }
 
-          final bookingLookup = refund.bookingCode.trim().isNotEmpty ? refund.bookingCode.trim() : refund.bookingId;
+          final bookingLookup = refund.bookingCode.trim().isNotEmpty
+              ? refund.bookingCode.trim()
+              : refund.bookingId;
 
           return ListView(
             padding: const EdgeInsets.all(24),
             children: [
-              Text(refund.bookingCode, style: tt.headlineSmall?.copyWith(fontWeight: FontWeight.w800)),
+              Text(refund.bookingCode,
+                  style:
+                      tt.headlineSmall?.copyWith(fontWeight: FontWeight.w800)),
               const SizedBox(height: 12),
               Wrap(
                 spacing: 8,
@@ -721,7 +769,9 @@ class _RefundDetailPageState extends ConsumerState<RefundDetailPage> {
                   _DetailChip(label: refund.status),
                   _DetailChip(label: refund.customerName ?? 'Unknown customer'),
                   _DetailChip(label: '₹${refund.amount.toStringAsFixed(2)}'),
-                  _DetailChip(label: MaterialLocalizations.of(context).formatMediumDate(refund.createdAt)),
+                  _DetailChip(
+                      label: MaterialLocalizations.of(context)
+                          .formatMediumDate(refund.createdAt)),
                 ],
               ),
               const SizedBox(height: 12),
@@ -735,22 +785,26 @@ class _RefundDetailPageState extends ConsumerState<RefundDetailPage> {
                     label: const Text('Copy refund ID'),
                   ),
                   OutlinedButton.icon(
-                    onPressed: () => _copyToClipboard(refund.bookingId, 'Booking ID'),
+                    onPressed: () =>
+                        _copyToClipboard(refund.bookingId, 'Booking ID'),
                     icon: const Icon(Icons.copy_rounded),
                     label: const Text('Copy booking ID'),
                   ),
                   OutlinedButton.icon(
-                    onPressed: () => context.push('/admin-bookings/${refund.bookingId}'),
+                    onPressed: () =>
+                        context.push('/admin-bookings/${refund.bookingId}'),
                     icon: const Icon(Icons.receipt_long_rounded),
                     label: const Text('Open booking'),
                   ),
                   OutlinedButton.icon(
-                    onPressed: () => context.push('/admin-bookings?search=${Uri.encodeComponent(bookingLookup)}'),
+                    onPressed: () => context.push(
+                        '/admin-bookings?search=${Uri.encodeComponent(bookingLookup)}'),
                     icon: const Icon(Icons.search_rounded),
                     label: const Text('Booking search'),
                   ),
                   OutlinedButton.icon(
-                    onPressed: () => context.push('/audit-logs?search=${Uri.encodeComponent(refund.id)}'),
+                    onPressed: () => context.push(
+                        '/audit-logs?search=${Uri.encodeComponent(refund.id)}'),
                     icon: const Icon(Icons.history_rounded),
                     label: const Text('Audit trail'),
                   ),
@@ -760,22 +814,36 @@ class _RefundDetailPageState extends ConsumerState<RefundDetailPage> {
               _DetailLine(label: 'Refund ID', value: refund.id),
               _DetailLine(label: 'Booking ID', value: refund.bookingId),
               _DetailLine(label: 'Booking code', value: refund.bookingCode),
-              _DetailLine(label: 'Customer', value: refund.customerName ?? 'Unknown'),
-              _DetailLine(label: 'Amount', value: '₹${refund.amount.toStringAsFixed(2)}'),
-              _DetailLine(label: 'Gateway refund', value: '₹${refund.gatewayAmount.toStringAsFixed(2)}'),
-              _DetailLine(label: 'Wallet credit', value: '₹${refund.walletAmount.toStringAsFixed(2)}'),
+              _DetailLine(
+                  label: 'Customer', value: refund.customerName ?? 'Unknown'),
+              _DetailLine(
+                  label: 'Amount',
+                  value: '₹${refund.amount.toStringAsFixed(2)}'),
+              _DetailLine(
+                  label: 'Gateway refund',
+                  value: '₹${refund.gatewayAmount.toStringAsFixed(2)}'),
+              _DetailLine(
+                  label: 'Wallet credit',
+                  value: '₹${refund.walletAmount.toStringAsFixed(2)}'),
               if (refund.walletCreditedAt != null)
                 _DetailLine(
                   label: 'Wallet credited',
-                  value: MaterialLocalizations.of(context).formatMediumDate(refund.walletCreditedAt!.toLocal()),
+                  value: MaterialLocalizations.of(context)
+                      .formatMediumDate(refund.walletCreditedAt!.toLocal()),
                 ),
               _DetailLine(label: 'Reason', value: refund.reason),
-              _DetailLine(label: 'Created', value: MaterialLocalizations.of(context).formatMediumDate(refund.createdAt)),
+              _DetailLine(
+                  label: 'Created',
+                  value: MaterialLocalizations.of(context)
+                      .formatMediumDate(refund.createdAt)),
               if ((refund.razorpayRefundId ?? '').trim().isNotEmpty)
-                _DetailLine(label: 'Razorpay ID', value: refund.razorpayRefundId!),
+                _DetailLine(
+                    label: 'Razorpay ID', value: refund.razorpayRefundId!),
               if ((refund.failureReason ?? '').trim().isNotEmpty) ...[
                 const SizedBox(height: 8),
-                Text('Failure reason', style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
+                Text('Failure reason',
+                    style:
+                        tt.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
                 const SizedBox(height: 6),
                 Text(refund.failureReason!),
               ],
@@ -828,12 +896,18 @@ class _DetailChip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.7),
+        color: Theme.of(context)
+            .colorScheme
+            .surfaceContainerHighest
+            .withValues(alpha: 0.7),
         borderRadius: BorderRadius.circular(999),
       ),
       child: Text(
         label,
-        style: Theme.of(context).textTheme.labelSmall?.copyWith(fontWeight: FontWeight.w700),
+        style: Theme.of(context)
+            .textTheme
+            .labelSmall
+            ?.copyWith(fontWeight: FontWeight.w700),
       ),
     );
   }
@@ -858,11 +932,13 @@ class _DetailLine extends StatelessWidget {
             width: 110,
             child: Text(
               label,
-              style: tt.bodyMedium?.copyWith(color: cs.onSurfaceVariant, fontWeight: FontWeight.w700),
+              style: tt.bodyMedium?.copyWith(
+                  color: cs.onSurfaceVariant, fontWeight: FontWeight.w700),
             ),
           ),
           Expanded(
-            child: Text(value, style: tt.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
+            child: Text(value,
+                style: tt.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
           ),
         ],
       ),
@@ -879,9 +955,18 @@ class _GlowingStatusBadge extends StatelessWidget {
   Widget build(BuildContext context) {
     final normalized = status.toLowerCase();
     final (color, bgColor) = switch (normalized) {
-      'approved' || 'success' || 'processed' => (const Color(0xFF10B981), const Color(0xFFD1FAE5)),
-      'suspended' || 'pending' || 'under_review' => (const Color(0xFFF59E0B), const Color(0xFFFEF3C7)),
-      'rejected' || 'failed' => (const Color(0xFFEF4444), const Color(0xFFFEE2E2)),
+      'approved' || 'success' || 'processed' => (
+          const Color(0xFF10B981),
+          const Color(0xFFD1FAE5)
+        ),
+      'suspended' || 'pending' || 'under_review' => (
+          const Color(0xFFF59E0B),
+          const Color(0xFFFEF3C7)
+        ),
+      'rejected' || 'failed' => (
+          const Color(0xFFEF4444),
+          const Color(0xFFFEE2E2)
+        ),
       'disputed' => (const Color(0xFF8B5CF6), const Color(0xFFEDE9FE)),
       _ => (const Color(0xFF64748B), const Color(0xFFF1F5F9)),
     };

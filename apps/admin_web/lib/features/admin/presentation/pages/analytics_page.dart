@@ -69,7 +69,7 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
                   children: [
                     Text(
                       'Analytics',
-                      style: GoogleFonts.poppins(
+                      style: GoogleFonts.outfit(
                         fontSize: 32,
                         fontWeight: FontWeight.w800,
                         color: Colors.black87,
@@ -79,7 +79,7 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
                     const SizedBox(height: 8),
                     Text(
                       'Track bookings, worker supply, revenue, and support trends over the last 30 days.',
-                      style: GoogleFonts.inter(
+                      style: GoogleFonts.outfit(
                         color: Colors.black54,
                         fontSize: 16,
                       ),
@@ -93,7 +93,8 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
                   style: FilledButton.styleFrom(
                     backgroundColor: Colors.white,
                     foregroundColor: Colors.black87,
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 20, vertical: 16),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(8),
                       side: const BorderSide(color: Color(0xFFE5E7EB)),
@@ -109,7 +110,8 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
               children: [
                 OutlinedButton.icon(
                   onPressed: () => context.go('/finance'),
-                  icon: const Icon(Icons.account_balance_wallet_rounded, size: 18),
+                  icon: const Icon(Icons.account_balance_wallet_rounded,
+                      size: 18),
                   label: const Text('Finance'),
                 ),
                 OutlinedButton.icon(
@@ -174,17 +176,18 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
                   child: PremiumEmptyState(
                     icon: Icons.cloud_off_rounded,
                     title: 'Could not load analytics',
-                    subtitle: 'The analytics dashboard is unavailable right now. Please retry.',
+                    subtitle:
+                        'The analytics dashboard is unavailable right now. Please retry.',
                     actionLabel: 'Retry',
                     onAction: _loadData,
                   ),
                 ),
               )
             else if (_payload != null) ...[
-            _AnalyticsSummaryRow(
-              trends: _payload!.trends,
-              activeBookings: _payload!.activeBookings,
-            ),
+              _AnalyticsSummaryRow(
+                trends: _payload!.trends,
+                activeBookings: _payload!.activeBookings,
+              ),
               const SizedBox(height: 24),
               // Charts row 1 — GMV + Bookings
               Row(
@@ -203,8 +206,11 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
                 builder: (context, constraints) {
                   final compact = constraints.maxWidth < 900;
                   final items = [
-                    _BreakdownCard(title: 'Top cities', items: _payload!.insights.byCity),
-                    _BreakdownCard(title: 'Top categories', items: _payload!.insights.byCategory),
+                    _BreakdownCard(
+                        title: 'Top cities', items: _payload!.insights.byCity),
+                    _BreakdownCard(
+                        title: 'Top categories',
+                        items: _payload!.insights.byCategory),
                   ];
 
                   if (compact) {
@@ -267,8 +273,7 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
                 interval: maxY > 0 ? (maxY / 4) : 500,
                 getTitlesWidget: (value, _) => Text(
                   NumberFormat.compact().format(value),
-                  style:
-                      const TextStyle(color: Colors.black54, fontSize: 12),
+                  style: const TextStyle(color: Colors.black54, fontSize: 12),
                 ),
               ),
             ),
@@ -287,8 +292,8 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
                     padding: const EdgeInsets.only(top: 8.0),
                     child: Text(
                       DateFormat('MMM d').format(date),
-                      style: const TextStyle(
-                          color: Colors.black54, fontSize: 12),
+                      style:
+                          const TextStyle(color: Colors.black54, fontSize: 12),
                     ),
                   );
                 },
@@ -305,8 +310,7 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
               spots: trends
                   .asMap()
                   .entries
-                  .map((e) =>
-                      FlSpot(e.key.toDouble(), e.value.commission))
+                  .map((e) => FlSpot(e.key.toDouble(), e.value.commission))
                   .toList(),
               isCurved: true,
               color: const Color(0xFF059669),
@@ -327,8 +331,9 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
   Widget _buildRevenueChart(List<DailyTrendPoint> trends) {
     if (trends.isEmpty) return const SizedBox();
 
-    final maxY = trends.map((t) => t.revenue).fold<double>(0, (m, v) => v > m ? v : m);
-    
+    final maxY =
+        trends.map((t) => t.revenue).fold<double>(0, (m, v) => v > m ? v : m);
+
     return _ChartCard(
       title: 'Revenue Trend (₹)',
       chart: LineChart(
@@ -346,8 +351,10 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
           ),
           titlesData: FlTitlesData(
             show: true,
-            rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-            topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+            rightTitles:
+                const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+            topTitles:
+                const AxisTitles(sideTitles: SideTitles(showTitles: false)),
             leftTitles: AxisTitles(
               sideTitles: SideTitles(
                 showTitles: true,
@@ -368,13 +375,16 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
                 interval: 7,
                 getTitlesWidget: (value, meta) {
                   final index = value.toInt();
-                  if (index < 0 || index >= trends.length) return const SizedBox();
+                  if (index < 0 || index >= trends.length) {
+                    return const SizedBox();
+                  }
                   final date = DateTime.parse(trends[index].date);
                   return Padding(
                     padding: const EdgeInsets.only(top: 8.0),
                     child: Text(
                       DateFormat('MMM d').format(date),
-                      style: const TextStyle(color: Colors.black54, fontSize: 12),
+                      style:
+                          const TextStyle(color: Colors.black54, fontSize: 12),
                     ),
                   );
                 },
@@ -388,7 +398,11 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
           maxY: maxY * 1.2, // Add 20% headroom
           lineBarsData: [
             LineChartBarData(
-              spots: trends.asMap().entries.map((e) => FlSpot(e.key.toDouble(), e.value.revenue)).toList(),
+              spots: trends
+                  .asMap()
+                  .entries
+                  .map((e) => FlSpot(e.key.toDouble(), e.value.revenue))
+                  .toList(),
               isCurved: true,
               color: const Color(0xFF0F766E),
               barWidth: 3,
@@ -408,8 +422,9 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
   Widget _buildBookingsChart(List<DailyTrendPoint> trends) {
     if (trends.isEmpty) return const SizedBox();
 
-    final maxBookings = trends.map((t) => t.bookings).fold<int>(0, (m, v) => v > m ? v : m);
-    
+    final maxBookings =
+        trends.map((t) => t.bookings).fold<int>(0, (m, v) => v > m ? v : m);
+
     return _ChartCard(
       title: 'Completed Bookings',
       chart: BarChart(
@@ -418,7 +433,8 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
           gridData: FlGridData(
             show: true,
             drawVerticalLine: false,
-            horizontalInterval: maxBookings > 0 ? (maxBookings / 4).ceilToDouble() : 5,
+            horizontalInterval:
+                maxBookings > 0 ? (maxBookings / 4).ceilToDouble() : 5,
             getDrawingHorizontalLine: (value) {
               return const FlLine(
                 color: Color(0xFFE5E7EB),
@@ -428,13 +444,16 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
           ),
           titlesData: FlTitlesData(
             show: true,
-            rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-            topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+            rightTitles:
+                const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+            topTitles:
+                const AxisTitles(sideTitles: SideTitles(showTitles: false)),
             leftTitles: AxisTitles(
               sideTitles: SideTitles(
                 showTitles: true,
                 reservedSize: 40,
-                interval: maxBookings > 0 ? (maxBookings / 4).ceilToDouble() : 5,
+                interval:
+                    maxBookings > 0 ? (maxBookings / 4).ceilToDouble() : 5,
                 getTitlesWidget: (value, meta) {
                   return Text(
                     value.toInt().toString(),
@@ -450,13 +469,16 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
                 interval: 7,
                 getTitlesWidget: (value, meta) {
                   final index = value.toInt();
-                  if (index < 0 || index >= trends.length) return const SizedBox();
+                  if (index < 0 || index >= trends.length) {
+                    return const SizedBox();
+                  }
                   final date = DateTime.parse(trends[index].date);
                   return Padding(
                     padding: const EdgeInsets.only(top: 8.0),
                     child: Text(
                       DateFormat('MMM d').format(date),
-                      style: const TextStyle(color: Colors.black54, fontSize: 12),
+                      style:
+                          const TextStyle(color: Colors.black54, fontSize: 12),
                     ),
                   );
                 },
@@ -473,7 +495,8 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
                   toY: e.value.bookings.toDouble(),
                   color: const Color(0xFF2563EB),
                   width: 12,
-                  borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
+                  borderRadius:
+                      const BorderRadius.vertical(top: Radius.circular(4)),
                 )
               ],
             );
@@ -576,9 +599,14 @@ class _RangeChip extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
         decoration: BoxDecoration(
-          color: selected ? const Color(0xFF0F766E).withValues(alpha: 0.12) : Colors.white,
+          color: selected
+              ? const Color(0xFF0F766E).withValues(alpha: 0.12)
+              : Colors.white,
           borderRadius: BorderRadius.circular(999),
-          border: Border.all(color: selected ? const Color(0xFF0F766E).withValues(alpha: 0.3) : cs.outlineVariant),
+          border: Border.all(
+              color: selected
+                  ? const Color(0xFF0F766E).withValues(alpha: 0.3)
+                  : cs.outlineVariant),
         ),
         child: Text(
           label,
@@ -603,10 +631,14 @@ class _AnalyticsSummaryRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final totalRevenue = trends.fold<double>(0, (sum, point) => sum + point.revenue);
-    final totalCommission = trends.fold<double>(0, (sum, point) => sum + point.commission);
-    final totalBookings = trends.fold<int>(0, (sum, point) => sum + point.bookings);
-    final totalWorkers = trends.fold<int>(0, (sum, point) => sum + point.newWorkers);
+    final totalRevenue =
+        trends.fold<double>(0, (sum, point) => sum + point.revenue);
+    final totalCommission =
+        trends.fold<double>(0, (sum, point) => sum + point.commission);
+    final totalBookings =
+        trends.fold<int>(0, (sum, point) => sum + point.bookings);
+    final totalWorkers =
+        trends.fold<int>(0, (sum, point) => sum + point.newWorkers);
     final topRevenueDay = trends.isEmpty
         ? null
         : trends.reduce((a, b) => a.revenue >= b.revenue ? a : b);
@@ -637,7 +669,9 @@ class _AnalyticsSummaryRow extends StatelessWidget {
         _MetricCard(
           label: 'Completed bookings',
           value: '$totalBookings',
-          sublabel: topBookingsDay == null ? 'No booking data' : 'Peak day ${DateFormat('MMM d').format(DateTime.parse(topBookingsDay.date))}',
+          sublabel: topBookingsDay == null
+              ? 'No booking data'
+              : 'Peak day ${DateFormat('MMM d').format(DateTime.parse(topBookingsDay.date))}',
           icon: Icons.receipt_long_rounded,
           color: const Color(0xFF2563EB),
         ),
@@ -652,14 +686,19 @@ class _AnalyticsSummaryRow extends StatelessWidget {
         _MetricCard(
           label: 'New workers',
           value: '$totalWorkers',
-          sublabel: 'Average ${(trends.isEmpty ? 0 : totalWorkers / trends.length).toStringAsFixed(1)} per day',
+          sublabel:
+              'Average ${(trends.isEmpty ? 0 : totalWorkers / trends.length).toStringAsFixed(1)} per day',
           icon: Icons.person_add_alt_rounded,
           color: const Color(0xFFF59E0B),
         ),
         _MetricCard(
           label: 'Best revenue day',
-          value: topRevenueDay == null ? 'N/A' : '₹${NumberFormat.compact().format(topRevenueDay.revenue)}',
-          sublabel: topRevenueDay == null ? 'No data' : DateFormat('MMM d').format(DateTime.parse(topRevenueDay.date)),
+          value: topRevenueDay == null
+              ? 'N/A'
+              : '₹${NumberFormat.compact().format(topRevenueDay.revenue)}',
+          sublabel: topRevenueDay == null
+              ? 'No data'
+              : DateFormat('MMM d').format(DateTime.parse(topRevenueDay.date)),
           icon: Icons.trending_up_rounded,
           color: const Color(0xFF8B5CF6),
         ),
@@ -696,9 +735,8 @@ class _MetricCard extends StatelessWidget {
         color: Colors.white,
         borderRadius: BorderRadius.circular(AbzioTheme.buttonRadius),
         border: Border.all(
-          color: isLive
-              ? color.withValues(alpha: 0.4)
-              : const Color(0xFFE5E7EB),
+          color:
+              isLive ? color.withValues(alpha: 0.4) : const Color(0xFFE5E7EB),
         ),
         boxShadow: AbzioTheme.eliteShadow,
       ),
@@ -716,21 +754,19 @@ class _MetricCard extends StatelessWidget {
                 child: Icon(icon, color: color, size: 20),
               ),
               const Spacer(),
-              if (isLive) ...
-                [
-                  _PulseDot(color: color),
-                  const SizedBox(width: 6),
-                ],
+              if (isLive) ...[
+                _PulseDot(color: color),
+                const SizedBox(width: 6),
+              ],
               Text(label,
                   style: tt.labelMedium?.copyWith(
-                      color: cs.onSurfaceVariant,
-                      fontWeight: FontWeight.w700)),
+                      color: cs.onSurfaceVariant, fontWeight: FontWeight.w700)),
             ],
           ),
           const SizedBox(height: 18),
           Text(
             value,
-            style: GoogleFonts.poppins(
+            style: GoogleFonts.outfit(
               fontSize: 28,
               fontWeight: FontWeight.w800,
               color: Colors.black87,
@@ -826,21 +862,19 @@ class _ChartCard extends StatelessWidget {
         children: [
           Text(
             title,
-            style: GoogleFonts.poppins(
+            style: GoogleFonts.outfit(
               fontSize: 18,
               fontWeight: FontWeight.w700,
               color: Colors.black87,
             ),
           ),
-          if (subtitle != null) ...
-            [
-              const SizedBox(height: 4),
-              Text(
-                subtitle!,
-                style: GoogleFonts.inter(
-                    fontSize: 13, color: Colors.black45),
-              ),
-            ],
+          if (subtitle != null) ...[
+            const SizedBox(height: 4),
+            Text(
+              subtitle!,
+              style: GoogleFonts.outfit(fontSize: 13, color: Colors.black45),
+            ),
+          ],
           const SizedBox(height: 24),
           Expanded(child: chart),
         ],
@@ -875,7 +909,7 @@ class _BreakdownCard extends StatelessWidget {
         children: [
           Text(
             title,
-            style: GoogleFonts.poppins(
+            style: GoogleFonts.outfit(
               fontSize: 18,
               fontWeight: FontWeight.w700,
               color: Colors.black87,
@@ -883,7 +917,8 @@ class _BreakdownCard extends StatelessWidget {
           ),
           const SizedBox(height: 18),
           if (items.isEmpty)
-            Text('No breakdown data yet.', style: tt.bodyMedium?.copyWith(color: cs.onSurfaceVariant))
+            Text('No breakdown data yet.',
+                style: tt.bodyMedium?.copyWith(color: cs.onSurfaceVariant))
           else
             Column(
               children: items
@@ -923,7 +958,9 @@ class _BreakdownRow extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(item.label, style: tt.titleSmall?.copyWith(fontWeight: FontWeight.w800)),
+                Text(item.label,
+                    style:
+                        tt.titleSmall?.copyWith(fontWeight: FontWeight.w800)),
                 const SizedBox(height: 4),
                 Text(
                   '${item.bookings} bookings',

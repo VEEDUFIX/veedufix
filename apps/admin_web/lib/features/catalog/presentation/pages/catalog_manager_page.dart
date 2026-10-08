@@ -2,12 +2,13 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:marketplace_shared/marketplace_shared.dart';
+
+import '../../../../core/widgets/admin_image_picker_field.dart';
 
 Widget _buildPublicationControls({
   required BuildContext context,
@@ -400,11 +401,11 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
                     final category = ordered[index];
                     return ListTile(
                       key: ValueKey(category.id),
-                      tileColor: const Color(0xFFF9FAFB),
+                      tileColor: AbzioTheme.lightMuted,
                       shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12)),
                       leading: CircleAvatar(
-                        backgroundColor: const Color(0xFFE5E7EB),
+                        backgroundColor: AbzioTheme.lightBorder,
                         child: Text('${index + 1}'),
                       ),
                       title: Text(category.name),
@@ -518,11 +519,11 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
                           final item = ordered.value[index];
                           return ListTile(
                             key: ValueKey(item.id),
-                            tileColor: const Color(0xFFF9FAFB),
+                            tileColor: AbzioTheme.lightMuted,
                             shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(12)),
                             leading: CircleAvatar(
-                              backgroundColor: const Color(0xFFE5E7EB),
+                              backgroundColor: AbzioTheme.lightBorder,
                               child: Text('${index + 1}'),
                             ),
                             title: Text(item.name),
@@ -642,11 +643,11 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
                           final item = ordered.value[index];
                           return ListTile(
                             key: ValueKey(item.id),
-                            tileColor: const Color(0xFFF9FAFB),
+                            tileColor: AbzioTheme.lightMuted,
                             shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(12)),
                             leading: CircleAvatar(
-                              backgroundColor: const Color(0xFFE5E7EB),
+                              backgroundColor: AbzioTheme.lightBorder,
                               child: Text('${index + 1}'),
                             ),
                             title: Text(item.name),
@@ -836,8 +837,7 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
     final slugController = TextEditingController(text: existing?.slug ?? '');
     final descriptionController =
         TextEditingController(text: existing?.description ?? '');
-    final iconUrlController =
-        TextEditingController(text: existing?.iconUrl ?? '');
+    String? iconUrl = existing?.iconUrl;
     final sortOrderController =
         TextEditingController(text: (existing?.sortOrder ?? 0).toString());
     bool isActive = existing?.isActive ?? true;
@@ -875,13 +875,14 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
                             const InputDecoration(labelText: 'Description'),
                         maxLines: 3,
                       ),
-                      TextFormField(
-                        controller: iconUrlController,
-                        decoration: const InputDecoration(
-                          labelText: 'Category image URL',
-                          hintText: 'https://…',
-                        ),
-                        keyboardType: TextInputType.url,
+                      AdminImagePickerField(
+                        label: 'Category image',
+                        value: iconUrl,
+                        onChanged: (value) => setState(() => iconUrl = value),
+                        uploadImage: (bytes, fileName) =>
+                            _uploadCatalogImage(_api, bytes, fileName),
+                        recommendedWidth: 800,
+                        recommendedHeight: 800,
                       ),
                       TextFormField(
                         controller: sortOrderController,
@@ -924,9 +925,7 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
                       'description': descriptionController.text.trim().isEmpty
                           ? null
                           : descriptionController.text.trim(),
-                      'iconUrl': iconUrlController.text.trim().isEmpty
-                          ? null
-                          : iconUrlController.text.trim(),
+                      'iconUrl': iconUrl,
                       'sortOrder':
                           int.tryParse(sortOrderController.text.trim()) ?? 0,
                       'isActive': isActive,
@@ -945,7 +944,6 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
       nameController.dispose();
       slugController.dispose();
       descriptionController.dispose();
-      iconUrlController.dispose();
       sortOrderController.dispose();
     });
   }
@@ -962,8 +960,7 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
     final slugController = TextEditingController(text: existing?.slug ?? '');
     final descriptionController =
         TextEditingController(text: existing?.description ?? '');
-    final iconUrlController =
-        TextEditingController(text: existing?.iconUrl ?? '');
+    String? iconUrl = existing?.iconUrl;
     final basePriceController = TextEditingController(
         text: (existing?.basePrice ?? 0).toStringAsFixed(0));
     final sortOrderController =
@@ -1020,13 +1017,14 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
                             const InputDecoration(labelText: 'Description'),
                         maxLines: 3,
                       ),
-                      TextFormField(
-                        controller: iconUrlController,
-                        decoration: const InputDecoration(
-                          labelText: 'Group image URL',
-                          hintText: 'https://…',
-                        ),
-                        keyboardType: TextInputType.url,
+                      AdminImagePickerField(
+                        label: 'Group image',
+                        value: iconUrl,
+                        onChanged: (value) => setState(() => iconUrl = value),
+                        uploadImage: (bytes, fileName) =>
+                            _uploadCatalogImage(_api, bytes, fileName),
+                        recommendedWidth: 800,
+                        recommendedHeight: 800,
                       ),
                       TextFormField(
                         controller: basePriceController,
@@ -1067,9 +1065,7 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
                       'description': descriptionController.text.trim().isEmpty
                           ? null
                           : descriptionController.text.trim(),
-                      'iconUrl': iconUrlController.text.trim().isEmpty
-                          ? null
-                          : iconUrlController.text.trim(),
+                      'iconUrl': iconUrl,
                       'basePrice':
                           double.tryParse(basePriceController.text.trim()) ?? 0,
                       'sortOrder':
@@ -1089,7 +1085,6 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
       nameController.dispose();
       slugController.dispose();
       descriptionController.dispose();
-      iconUrlController.dispose();
       basePriceController.dispose();
       sortOrderController.dispose();
     });
@@ -1140,7 +1135,7 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
         text: (existing?.estimatedDurationMins ?? 0).toString());
     final warrantyController =
         TextEditingController(text: (existing?.warrantyDays ?? 0).toString());
-    final iconController = TextEditingController(text: existing?.iconUrl ?? '');
+    String? iconUrl = existing?.iconUrl;
     final seoTitleController =
         TextEditingController(text: existing?.seoTitle ?? '');
     final seoDescriptionController =
@@ -1159,6 +1154,14 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
     final addonsController = TextEditingController(
       text: _formatServiceOptions(existing?.addons ?? const []),
     );
+    final variantImageUrls = <String, String?>{
+      for (final option in existing?.variants ?? const <_AdminServiceOption>[])
+        option.name.trim().toLowerCase(): option.imageUrl,
+    };
+    final addonImageUrls = <String, String?>{
+      for (final option in existing?.addons ?? const <_AdminServiceOption>[])
+        option.name.trim().toLowerCase(): option.imageUrl,
+    };
     final ctaLabelController =
         TextEditingController(text: existing?.ctaLabel ?? 'Book service');
     final ratingController = TextEditingController(
@@ -1373,6 +1376,16 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
                         ),
                         maxLines: 4,
                         validator: _validateServiceOptionLines,
+                        onChanged: (_) => setState(() {}),
+                      ),
+                      _buildServiceOptionImageEditors(
+                        context: context,
+                        controller: variantsController,
+                        selectedImageUrls: variantImageUrls,
+                        label: 'Variant images',
+                        setState: setState,
+                        uploadImage: (bytes, fileName) =>
+                            _uploadCatalogImage(_api, bytes, fileName),
                       ),
                       TextFormField(
                         controller: addonsController,
@@ -1383,6 +1396,16 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
                         ),
                         maxLines: 4,
                         validator: _validateServiceOptionLines,
+                        onChanged: (_) => setState(() {}),
+                      ),
+                      _buildServiceOptionImageEditors(
+                        context: context,
+                        controller: addonsController,
+                        selectedImageUrls: addonImageUrls,
+                        label: 'Add-on images',
+                        setState: setState,
+                        uploadImage: (bytes, fileName) =>
+                            _uploadCatalogImage(_api, bytes, fileName),
                       ),
                       _buildPublicationControls(
                         context: context,
@@ -1430,10 +1453,14 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
                             labelText: 'Booking button text'),
                         maxLength: 40,
                       ),
-                      TextFormField(
-                        controller: iconController,
-                        decoration:
-                            const InputDecoration(labelText: 'Icon URL'),
+                      AdminImagePickerField(
+                        label: 'Service image',
+                        value: iconUrl,
+                        onChanged: (value) => setState(() => iconUrl = value),
+                        uploadImage: (bytes, fileName) =>
+                            _uploadCatalogImage(_api, bytes, fileName),
+                        recommendedWidth: 1200,
+                        recommendedHeight: 840,
                       ),
                       TextFormField(
                         controller: seoTitleController,
@@ -1578,19 +1605,19 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
                         variantsController.text,
                         existing?.variants ?? const [],
                         isVariant: true,
+                        imageUrls: variantImageUrls,
                       ),
                       'addons': _serviceOptionRows(
                         addonsController.text,
                         existing?.addons ?? const [],
                         isVariant: false,
+                        imageUrls: addonImageUrls,
                       ),
                       'priceType': priceType,
                       'ctaLabel': ctaLabelController.text.trim().isEmpty
                           ? 'Book service'
                           : ctaLabelController.text.trim(),
-                      'iconUrl': iconController.text.trim().isEmpty
-                          ? null
-                          : iconController.text.trim(),
+                      'iconUrl': iconUrl,
                       'seoTitle': seoTitleController.text.trim().isEmpty
                           ? null
                           : seoTitleController.text.trim(),
@@ -1649,7 +1676,6 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
       sacCodeController.dispose();
       durationController.dispose();
       warrantyController.dispose();
-      iconController.dispose();
       seoTitleController.dispose();
       seoDescriptionController.dispose();
       seoKeywordsController.dispose();
@@ -1818,7 +1844,7 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
                                 children: [
                                   Text(
                                     'Catalog Manager',
-                                    style: GoogleFonts.poppins(
+                                    style: GoogleFonts.outfit(
                                       fontSize: 32,
                                       fontWeight: FontWeight.w800,
                                       color: Colors.black87,
@@ -1828,7 +1854,7 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
                                   const SizedBox(height: 8),
                                   Text(
                                     'Manage categories, services, pricing, images, and bulk imports without code changes.',
-                                    style: GoogleFonts.inter(
+                                    style: GoogleFonts.outfit(
                                       color: Colors.black54,
                                       fontSize: 16,
                                     ),
@@ -2015,27 +2041,12 @@ class _SearchBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFE5E7EB)),
-        boxShadow: AbzioTheme.eliteShadow,
-      ),
-      child: TextField(
-        controller: controller,
-        onChanged: onChanged,
-        decoration: InputDecoration(
-          border: InputBorder.none,
-          prefixIcon: Icon(Icons.search_rounded,
-              color: Theme.of(context).colorScheme.onSurfaceVariant),
-          hintText: 'Search category, subcategory, service, or slug',
-        ),
-        style: GoogleFonts.inter(
-          color: Colors.black87,
-          fontSize: 15,
-        ),
+    return TextField(
+      controller: controller,
+      onChanged: onChanged,
+      decoration: const InputDecoration(
+        prefixIcon: Icon(Icons.search_rounded),
+        hintText: 'Search category, subcategory, service, or slug',
       ),
     );
   }
@@ -2058,79 +2069,50 @@ class _OverviewMetrics extends StatelessWidget {
           label: 'Categories',
           value: totalCategories.toString(),
           icon: Icons.category_rounded,
-          accent: const Color(0xFF6366F1)),
+          accent: AbzioTheme.accentColor),
       _MetricData(
           label: 'Subcategories',
           value: totalSubcategories.toString(),
           icon: Icons.view_module_rounded,
-          accent: const Color(0xFF38BDF8)),
+          accent: AbzioTheme.accentColor),
       _MetricData(
           label: 'Services',
           value: totalServices.toString(),
           icon: Icons.design_services_rounded,
-          accent: const Color(0xFF10B981)),
+          accent: AbzioTheme.successColor),
       _MetricData(
           label: 'Active',
           value: activeServices.toString(),
           icon: Icons.verified_rounded,
-          accent: const Color(0xFFF59E0B)),
+          accent: AbzioTheme.accentColor),
     ];
 
-    return Wrap(
-      spacing: 12,
-      runSpacing: 12,
-      children: metrics
-          .map(
-            (metric) => SizedBox(
-              width: 180,
-              child: Container(
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: const Color(0xFFE5E7EB)),
-                  boxShadow: AbzioTheme.eliteShadow,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final columns = constraints.maxWidth >= 980
+            ? 4
+            : constraints.maxWidth >= 440
+                ? 2
+                : 1;
+        final itemWidth = (constraints.maxWidth - 12 * (columns - 1)) / columns;
+        return Wrap(
+          spacing: 12,
+          runSpacing: 12,
+          children: metrics
+              .map(
+                (metric) => SizedBox(
+                  width: itemWidth,
+                  child: PremiumStatCard(
+                    label: metric.label,
+                    value: metric.value,
+                    icon: metric.icon,
+                    accentColor: metric.accent,
+                  ),
                 ),
-                child: Row(
-                  children: [
-                    Container(
-                      height: 42,
-                      width: 42,
-                      decoration: BoxDecoration(
-                        color: metric.accent.withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Icon(metric.icon, color: metric.accent, size: 20),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            metric.value,
-                            style: GoogleFonts.poppins(
-                              fontSize: 22,
-                              fontWeight: FontWeight.w800,
-                              color: Colors.black87,
-                            ),
-                          ),
-                          Text(
-                            metric.label,
-                            style: GoogleFonts.inter(
-                              fontSize: 13,
-                              color: Colors.black54,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          )
-          .toList(growable: false),
+              )
+              .toList(growable: false),
+        );
+      },
     );
   }
 }
@@ -2284,7 +2266,7 @@ class _CategoriesTab extends StatelessWidget {
           children: [
             Text(
               'Category management',
-              style: GoogleFonts.poppins(
+              style: GoogleFonts.outfit(
                 fontSize: 20,
                 fontWeight: FontWeight.w700,
                 color: Colors.black87,
@@ -2293,7 +2275,7 @@ class _CategoriesTab extends StatelessWidget {
             const SizedBox(height: 4),
             Text(
               'Create, edit, disable, and reorder main service categories.',
-              style: GoogleFonts.inter(
+              style: GoogleFonts.outfit(
                 fontSize: 14,
                 color: Colors.black54,
               ),
@@ -2346,11 +2328,12 @@ class _CategoriesTab extends StatelessWidget {
           (category) => _CatalogCard(
             title: category.name,
             subtitle:
-                '${category.subcategories.length} subcategories - ${category.serviceCount} services',
+                'Order ${category.sortOrder} · ${category.subcategories.length} subcategories · ${category.serviceCount} services',
             tag: category.isActive ? 'Active' : 'Disabled',
+            imageUrl: category.iconUrl,
             accent: category.featured
-                ? const Color(0xFFC2A15E)
-                : const Color(0xFF10B981),
+                ? AbzioTheme.accentColor
+                : AbzioTheme.successColor,
             onTap: () => context.push('/catalog/categories/${category.id}'),
             onEdit: () => onEdit(category),
             onDisable: () => onDisable(category),
@@ -2396,7 +2379,7 @@ class _SubcategoriesTab extends StatelessWidget {
           children: [
             Text(
               'Subcategory management',
-              style: GoogleFonts.poppins(
+              style: GoogleFonts.outfit(
                 fontSize: 20,
                 fontWeight: FontWeight.w700,
                 color: Colors.black87,
@@ -2405,7 +2388,7 @@ class _SubcategoriesTab extends StatelessWidget {
             const SizedBox(height: 4),
             Text(
               'Assign pricing, icons, translations, and active status.',
-              style: GoogleFonts.inter(
+              style: GoogleFonts.outfit(
                 fontSize: 14,
                 color: Colors.black54,
               ),
@@ -2458,9 +2441,10 @@ class _SubcategoriesTab extends StatelessWidget {
             return _CatalogCard(
               title: subcategory.name,
               subtitle:
-                  '${category?.name ?? 'Category'} - ${subcategory.serviceCount} services - ₹${subcategory.basePrice.toStringAsFixed(0)} base',
+                  '${category?.name ?? 'Category'} · Order ${subcategory.sortOrder} · ${subcategory.serviceCount} services · ₹${subcategory.basePrice.toStringAsFixed(0)} base',
               tag: subcategory.isActive ? 'Active' : 'Disabled',
-              accent: const Color(0xFF38BDF8),
+              imageUrl: subcategory.iconUrl,
+              accent: AbzioTheme.accentColor,
               onTap: () =>
                   context.push('/catalog/subcategories/${subcategory.id}'),
               onEdit: () => onEdit(subcategory),
@@ -2510,7 +2494,7 @@ class _ServicesTab extends StatelessWidget {
           children: [
             Text(
               'Service management',
-              style: GoogleFonts.poppins(
+              style: GoogleFonts.outfit(
                 fontSize: 20,
                 fontWeight: FontWeight.w700,
                 color: Colors.black87,
@@ -2519,7 +2503,7 @@ class _ServicesTab extends StatelessWidget {
             const SizedBox(height: 4),
             Text(
               'Edit descriptions, images, durations, skills, and SEO metadata.',
-              style: GoogleFonts.inter(
+              style: GoogleFonts.outfit(
                 fontSize: 14,
                 color: Colors.black54,
               ),
@@ -2580,9 +2564,10 @@ class _ServicesTab extends StatelessWidget {
               subtitle:
                   '${category?.name ?? 'Category'} / ${subcategory?.name ?? 'Subcategory'} - ₹${service.startingPrice.toStringAsFixed(0)} - GST ${service.gstRate.toStringAsFixed(2)}% - SAC ${service.sacCode} - ${service.estimatedDurationMins} mins',
               tag: service.isActive ? 'Active' : 'Disabled',
+              imageUrl: service.iconUrl,
               accent: service.featured
-                  ? const Color(0xFFC2A15E)
-                  : const Color(0xFF10B981),
+                  ? AbzioTheme.accentColor
+                  : AbzioTheme.successColor,
               onTap: () => context.push('/catalog/services/${service.id}'),
               onEdit: () => onEdit(service),
               onDisable: () => onDisable(service),
@@ -2637,7 +2622,7 @@ class _PricingTab extends StatelessWidget {
           children: [
             Text(
               'Pricing management',
-              style: GoogleFonts.poppins(
+              style: GoogleFonts.outfit(
                 fontSize: 20,
                 fontWeight: FontWeight.w700,
                 color: Colors.black87,
@@ -2646,7 +2631,7 @@ class _PricingTab extends StatelessWidget {
             const SizedBox(height: 4),
             Text(
               'Maintain base, city, seasonal, promotional, and worker-level pricing.',
-              style: GoogleFonts.inter(
+              style: GoogleFonts.outfit(
                 fontSize: 14,
                 color: Colors.black54,
               ),
@@ -2672,7 +2657,7 @@ class _PricingTab extends StatelessWidget {
             subtitle:
                 'Base price ₹${service.startingPrice.toStringAsFixed(0)} - GST ${service.gstRate.toStringAsFixed(2)}% - SAC ${service.sacCode} - ${service.pricingRules.length} rules',
             tag: 'Pricing',
-            accent: const Color(0xFFF59E0B),
+            accent: AbzioTheme.accentColor,
             onTap: () => context.push('/catalog/services/${service.id}'),
             onEdit: () => onPricingRule(service),
             onDisable: () {},
@@ -2705,7 +2690,7 @@ class _ImportExportTab extends StatelessWidget {
           children: [
             Text(
               'Import and export',
-              style: GoogleFonts.poppins(
+              style: GoogleFonts.outfit(
                 fontSize: 20,
                 fontWeight: FontWeight.w700,
                 color: Colors.black87,
@@ -2714,7 +2699,7 @@ class _ImportExportTab extends StatelessWidget {
             const SizedBox(height: 4),
             Text(
               'Use JSON import jobs to manage large catalog updates safely.',
-              style: GoogleFonts.inter(
+              style: GoogleFonts.outfit(
                 fontSize: 14,
                 color: Colors.black54,
               ),
@@ -2750,7 +2735,7 @@ class _ImportExportTab extends StatelessWidget {
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: const Color(0xFFE5E7EB)),
+            border: Border.all(color: AbzioTheme.lightBorder),
           ),
           child: const Padding(
             padding: EdgeInsets.all(16),
@@ -2774,6 +2759,7 @@ class _CatalogCard extends StatelessWidget {
     required this.onEdit,
     required this.onDisable,
     this.trailing,
+    this.imageUrl,
     this.secondaryLabel = 'Disable',
   });
 
@@ -2785,65 +2771,69 @@ class _CatalogCard extends StatelessWidget {
   final VoidCallback onEdit;
   final VoidCallback onDisable;
   final Widget? trailing;
+  final String? imageUrl;
   final String secondaryLabel;
 
   @override
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
-      child: Container(
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: const Color(0xFFE5E7EB)),
-          boxShadow: AbzioTheme.eliteShadow,
-        ),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(12),
-          onTap: onTap,
-          child: ListTile(
-            contentPadding: const EdgeInsets.all(16),
-            leading: Container(
-              height: 48,
-              width: 48,
-              decoration: BoxDecoration(
-                color: accent.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(AbzioTheme.buttonRadius),
-              ),
-              child: Icon(Icons.grid_view_rounded, color: accent),
-            ),
-            title: Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    title,
-                    style: const TextStyle(fontWeight: FontWeight.w800),
-                  ),
-                ),
-                _TagChip(label: tag, accent: accent),
-              ],
-            ),
-            subtitle: Padding(
-              padding: const EdgeInsets.only(top: 4),
-              child: Text(subtitle),
-            ),
-            trailing: trailing ??
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    IconButton(
-                      onPressed: onEdit,
-                      icon: const Icon(Icons.edit_rounded),
-                      tooltip: 'Edit',
-                    ),
-                    IconButton(
-                      onPressed: onDisable,
-                      icon: const Icon(Icons.visibility_off_rounded),
-                      tooltip: secondaryLabel,
-                    ),
-                  ],
-                ),
+      child: VeeduFixCard(
+        padding: EdgeInsets.zero,
+        onTap: onTap,
+        child: ListTile(
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: VeeduFixDesignSystem.space16,
+            vertical: VeeduFixDesignSystem.space8,
           ),
+          leading: Container(
+            height: 48,
+            width: 48,
+            decoration: BoxDecoration(
+              color: accent.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(AbzioTheme.buttonRadius),
+            ),
+            clipBehavior: Clip.antiAlias,
+            child: imageUrl != null && imageUrl!.trim().isNotEmpty
+                ? Image.network(
+                    imageUrl!,
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, __, ___) =>
+                        Icon(Icons.grid_view_rounded, color: accent),
+                  )
+                : Icon(Icons.grid_view_rounded, color: accent),
+          ),
+          title: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  title,
+                  style: const TextStyle(fontWeight: FontWeight.w800),
+                ),
+              ),
+              _TagChip(label: tag, accent: accent),
+            ],
+          ),
+          subtitle: Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: Text(subtitle),
+          ),
+          trailing: trailing ??
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  IconButton(
+                    onPressed: onEdit,
+                    icon: const Icon(Icons.edit_rounded),
+                    tooltip: 'Edit',
+                  ),
+                  IconButton(
+                    onPressed: onDisable,
+                    icon: const Icon(Icons.visibility_off_rounded),
+                    tooltip: secondaryLabel,
+                  ),
+                ],
+              ),
         ),
       ),
     );
@@ -2865,7 +2855,7 @@ class _TagChip extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
         color: accent.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(999),
+        borderRadius: BorderRadius.circular(VeeduFixDesignSystem.radiusMedium),
       ),
       child: Text(
         label,
@@ -2931,8 +2921,7 @@ class _CategoryDetailPageState extends ConsumerState<CategoryDetailPage> {
     final slugController = TextEditingController(text: existing.slug);
     final descriptionController =
         TextEditingController(text: existing.description ?? '');
-    final iconUrlController =
-        TextEditingController(text: existing.iconUrl ?? '');
+    String? iconUrl = existing.iconUrl;
     final seoTitleController =
         TextEditingController(text: existing.seoTitle ?? '');
     final seoDescriptionController =
@@ -2973,13 +2962,14 @@ class _CategoryDetailPageState extends ConsumerState<CategoryDetailPage> {
                             const InputDecoration(labelText: 'Description'),
                         maxLines: 3,
                       ),
-                      TextFormField(
-                        controller: iconUrlController,
-                        decoration: const InputDecoration(
-                          labelText: 'Category image URL',
-                          hintText: 'https://…',
-                        ),
-                        keyboardType: TextInputType.url,
+                      AdminImagePickerField(
+                        label: 'Category image',
+                        value: iconUrl,
+                        onChanged: (value) => setState(() => iconUrl = value),
+                        uploadImage: (bytes, fileName) =>
+                            _uploadCatalogImage(_api, bytes, fileName),
+                        recommendedWidth: 800,
+                        recommendedHeight: 800,
                       ),
                       TextFormField(
                         controller: seoTitleController,
@@ -3033,9 +3023,7 @@ class _CategoryDetailPageState extends ConsumerState<CategoryDetailPage> {
                       'description': descriptionController.text.trim().isEmpty
                           ? null
                           : descriptionController.text.trim(),
-                      'iconUrl': iconUrlController.text.trim().isEmpty
-                          ? null
-                          : iconUrlController.text.trim(),
+                      'iconUrl': iconUrl,
                       'seoTitle': seoTitleController.text.trim().isEmpty
                           ? null
                           : seoTitleController.text.trim(),
@@ -3061,7 +3049,6 @@ class _CategoryDetailPageState extends ConsumerState<CategoryDetailPage> {
       nameController.dispose();
       slugController.dispose();
       descriptionController.dispose();
-      iconUrlController.dispose();
       seoTitleController.dispose();
       seoDescriptionController.dispose();
       sortOrderController.dispose();
@@ -3160,11 +3147,11 @@ class _CategoryDetailPageState extends ConsumerState<CategoryDetailPage> {
                     width: 52,
                     height: 52,
                     decoration: BoxDecoration(
-                      color: const Color(0xFF10B981).withValues(alpha: 0.12),
+                      color: AbzioTheme.successColor.withValues(alpha: 0.12),
                       borderRadius: BorderRadius.circular(16),
                     ),
                     child: const Icon(Icons.category_rounded,
-                        color: Color(0xFF10B981)),
+                        color: AbzioTheme.successColor),
                   ),
                   const SizedBox(width: 14),
                   Expanded(
@@ -3227,7 +3214,7 @@ class _CategoryDetailPageState extends ConsumerState<CategoryDetailPage> {
                 const SizedBox(height: 18),
               ],
               if ((category.iconUrl ?? '').trim().isNotEmpty) ...[
-                _DetailLine(label: 'Icon URL', value: category.iconUrl!.trim()),
+                _AdminCatalogImagePreview(url: category.iconUrl!.trim()),
                 const SizedBox(height: 8),
               ],
               if ((category.seoTitle ?? '').trim().isNotEmpty) ...[
@@ -3255,7 +3242,7 @@ class _CategoryDetailPageState extends ConsumerState<CategoryDetailPage> {
                 (subcategory) => Padding(
                   padding: const EdgeInsets.only(bottom: 10),
                   child: ListTile(
-                    tileColor: const Color(0xFFF8FAFC),
+                    tileColor: AbzioTheme.lightMuted,
                     shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(14)),
                     title: Text(subcategory.name),
@@ -3332,8 +3319,7 @@ class _SubcategoryDetailPageState extends ConsumerState<SubcategoryDetailPage> {
     final slugController = TextEditingController(text: existing.slug);
     final descriptionController =
         TextEditingController(text: existing.description ?? '');
-    final iconUrlController =
-        TextEditingController(text: existing.iconUrl ?? '');
+    String? iconUrl = existing.iconUrl;
     final seoTitleController =
         TextEditingController(text: existing.seoTitle ?? '');
     final seoDescriptionController =
@@ -3397,10 +3383,14 @@ class _SubcategoryDetailPageState extends ConsumerState<SubcategoryDetailPage> {
                             const InputDecoration(labelText: 'Description'),
                         maxLines: 3,
                       ),
-                      TextFormField(
-                        controller: iconUrlController,
-                        decoration:
-                            const InputDecoration(labelText: 'Icon URL'),
+                      AdminImagePickerField(
+                        label: 'Group image',
+                        value: iconUrl,
+                        onChanged: (value) => setState(() => iconUrl = value),
+                        uploadImage: (bytes, fileName) =>
+                            _uploadCatalogImage(_api, bytes, fileName),
+                        recommendedWidth: 800,
+                        recommendedHeight: 800,
                       ),
                       TextFormField(
                         controller: seoTitleController,
@@ -3463,9 +3453,7 @@ class _SubcategoryDetailPageState extends ConsumerState<SubcategoryDetailPage> {
                       'description': descriptionController.text.trim().isEmpty
                           ? null
                           : descriptionController.text.trim(),
-                      'iconUrl': iconUrlController.text.trim().isEmpty
-                          ? null
-                          : iconUrlController.text.trim(),
+                      'iconUrl': iconUrl,
                       'seoTitle': seoTitleController.text.trim().isEmpty
                           ? null
                           : seoTitleController.text.trim(),
@@ -3496,7 +3484,6 @@ class _SubcategoryDetailPageState extends ConsumerState<SubcategoryDetailPage> {
       nameController.dispose();
       slugController.dispose();
       descriptionController.dispose();
-      iconUrlController.dispose();
       seoTitleController.dispose();
       seoDescriptionController.dispose();
       basePriceController.dispose();
@@ -3602,11 +3589,11 @@ class _SubcategoryDetailPageState extends ConsumerState<SubcategoryDetailPage> {
                     width: 52,
                     height: 52,
                     decoration: BoxDecoration(
-                      color: const Color(0xFF38BDF8).withValues(alpha: 0.12),
+                      color: AbzioTheme.accentColor.withValues(alpha: 0.12),
                       borderRadius: BorderRadius.circular(16),
                     ),
                     child: const Icon(Icons.layers_rounded,
-                        color: Color(0xFF38BDF8)),
+                        color: AbzioTheme.accentColor),
                   ),
                   const SizedBox(width: 14),
                   Expanded(
@@ -3673,8 +3660,7 @@ class _SubcategoryDetailPageState extends ConsumerState<SubcategoryDetailPage> {
                 const SizedBox(height: 18),
               ],
               if ((subcategory.iconUrl ?? '').trim().isNotEmpty) ...[
-                _DetailLine(
-                    label: 'Icon URL', value: subcategory.iconUrl!.trim()),
+                _AdminCatalogImagePreview(url: subcategory.iconUrl!.trim()),
                 const SizedBox(height: 8),
               ],
               if ((subcategory.seoTitle ?? '').trim().isNotEmpty) ...[
@@ -3713,7 +3699,7 @@ class _SubcategoryDetailPageState extends ConsumerState<SubcategoryDetailPage> {
                 (service) => Padding(
                   padding: const EdgeInsets.only(bottom: 10),
                   child: ListTile(
-                    tileColor: const Color(0xFFF8FAFC),
+                    tileColor: AbzioTheme.lightMuted,
                     shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(14)),
                     title: Text(service.name),
@@ -3779,63 +3765,412 @@ class _ServiceDetailPageState extends ConsumerState<ServiceDetailPage> {
         .showSnackBar(SnackBar(content: Text(message)));
   }
 
-  Future<void> _addServiceImage(_AdminService service) async {
-    final altController = TextEditingController(text: service.name);
-    try {
-      final payload = await showDialog<Map<String, dynamic>>(
-        context: context,
-        builder: (dialogContext) => AlertDialog(
-          title: const Text('Add service image'),
-          content: SizedBox(
-            width: 520,
-            child: TextField(
-              controller: altController,
-              decoration: const InputDecoration(labelText: 'Alt text'),
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () {
-                Navigator.pop(dialogContext, {
-                  'altText': altController.text.trim().isEmpty
-                      ? service.name
-                      : altController.text.trim(),
-                });
-              },
-              child: const Text('Choose image'),
-            ),
-          ],
-        ),
-      );
-      if (payload == null) return;
+  Future<void> _manageServiceImages(_AdminService service) async {
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        final images = service.images
+            .map((image) => <String, dynamic>{
+                  'url': image.url,
+                  'altText': image.altText,
+                  'isPrimary': image.isPrimary,
+                })
+            .toList(growable: true);
+        var saving = false;
+        String? error;
 
-      final picked = await FilePicker.platform.pickFiles(
-        type: FileType.image,
-        withData: true,
-      );
-      if (picked == null || picked.files.single.bytes == null) return;
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            Future<void> editGalleryImage({int? replaceIndex}) async {
+              final current =
+                  replaceIndex == null ? null : images[replaceIndex];
+              final result = await _showServiceGalleryImagePicker(
+                context: context,
+                serviceName: service.name,
+                current: current,
+                uploadImage: (bytes, fileName) async {
+                  final response =
+                      await _api.uploadCatalogImage(bytes, fileName);
+                  final url = response['url'];
+                  if (url is! String || !url.startsWith('https://')) {
+                    throw StateError(
+                        'The image upload returned an invalid URL.');
+                  }
+                  return url;
+                },
+              );
+              if (result == null) return;
+              setDialogState(() {
+                if (replaceIndex != null && replaceIndex < images.length) {
+                  images[replaceIndex] = result;
+                } else {
+                  result['isPrimary'] = images.isEmpty;
+                  images.add(result);
+                }
+                error = null;
+              });
+            }
 
-      final upload = await _api.uploadCatalogImage(
-        picked.files.single.bytes!,
-        picked.files.single.name,
-      );
-      await _api.addServiceImages(service.id, [
-        {
-          'url': upload['url'],
-          'altText': payload['altText'],
-          'isPrimary': true,
-        },
-      ]);
+            return AlertDialog(
+              title: Text('Service images · ${service.name}'),
+              content: SizedBox(
+                width: 720,
+                height: 560,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    const Text(
+                        'Drag to reorder. Choose one primary image for the customer service page.'),
+                    const SizedBox(height: 12),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: OutlinedButton.icon(
+                        onPressed: saving ? null : () => editGalleryImage(),
+                        icon: const Icon(Icons.add_photo_alternate_outlined),
+                        label: const Text('Add gallery image'),
+                      ),
+                    ),
+                    if (error != null) ...[
+                      const SizedBox(height: 8),
+                      Text(error!,
+                          style: TextStyle(
+                              color: Theme.of(context).colorScheme.error)),
+                    ],
+                    const SizedBox(height: 8),
+                    Expanded(
+                      child: images.isEmpty
+                          ? const Center(
+                              child: Text(
+                                  'No service images yet. Add images to preview and manage the gallery.'))
+                          : LayoutBuilder(
+                              builder: (context, constraints) =>
+                                  GridView.builder(
+                                gridDelegate:
+                                    SliverGridDelegateWithFixedCrossAxisCount(
+                                  crossAxisCount:
+                                      constraints.maxWidth < 520 ? 1 : 2,
+                                  crossAxisSpacing: 12,
+                                  mainAxisSpacing: 12,
+                                  mainAxisExtent: 278,
+                                ),
+                                itemCount: images.length,
+                                itemBuilder: (context, imageIndex) {
+                                  final item = images[imageIndex];
+                                  final url = item['url'] as String? ?? '';
+                                  final isPrimary = item['isPrimary'] == true;
+                                  final tile = Card(
+                                    margin: EdgeInsets.zero,
+                                    clipBehavior: Clip.antiAlias,
+                                    child: Padding(
+                                      padding: const EdgeInsets.all(10),
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.stretch,
+                                        children: [
+                                          Expanded(
+                                            child: Stack(
+                                              fit: StackFit.expand,
+                                              children: [
+                                                Image.network(url,
+                                                    fit: BoxFit.cover,
+                                                    errorBuilder: (_, __,
+                                                            ___) =>
+                                                        const ColoredBox(
+                                                            color: Color(
+                                                                0xFFF1EEE7),
+                                                            child: Center(
+                                                                child: Icon(Icons
+                                                                    .broken_image_outlined)))),
+                                                Positioned(
+                                                  right: 4,
+                                                  top: 4,
+                                                  child: DecoratedBox(
+                                                    decoration: BoxDecoration(
+                                                        color: Theme.of(context)
+                                                            .colorScheme
+                                                            .surface
+                                                            .withValues(
+                                                                alpha: 0.9),
+                                                        borderRadius:
+                                                            BorderRadius
+                                                                .circular(20)),
+                                                    child: const Padding(
+                                                        padding:
+                                                            EdgeInsets.all(6),
+                                                        child: Icon(
+                                                            Icons
+                                                                .drag_indicator_rounded,
+                                                            size: 18)),
+                                                  ),
+                                                ),
+                                                if (isPrimary)
+                                                  const Positioned(
+                                                      left: 6,
+                                                      top: 6,
+                                                      child: Chip(
+                                                          label:
+                                                              Text('Primary'))),
+                                              ],
+                                            ),
+                                          ),
+                                          TextFormField(
+                                            initialValue:
+                                                item['altText']?.toString() ??
+                                                    '',
+                                            decoration: const InputDecoration(
+                                                labelText: 'Alt text',
+                                                isDense: true),
+                                            onChanged: (value) =>
+                                                item['altText'] = value,
+                                          ),
+                                          Wrap(
+                                            alignment:
+                                                WrapAlignment.spaceBetween,
+                                            crossAxisAlignment:
+                                                WrapCrossAlignment.center,
+                                            children: [
+                                              if (!isPrimary)
+                                                TextButton.icon(
+                                                  onPressed: () =>
+                                                      setDialogState(() {
+                                                    for (final image
+                                                        in images) {
+                                                      image['isPrimary'] =
+                                                          false;
+                                                    }
+                                                    item['isPrimary'] = true;
+                                                  }),
+                                                  icon: const Icon(Icons
+                                                      .star_border_rounded),
+                                                  label:
+                                                      const Text('Set primary'),
+                                                ),
+                                              IconButton(
+                                                  tooltip: 'Preview',
+                                                  onPressed: () => showDialog<
+                                                          void>(
+                                                      context: context,
+                                                      builder:
+                                                          (previewContext) =>
+                                                              Dialog(
+                                                                child:
+                                                                    ConstrainedBox(
+                                                                  constraints:
+                                                                      const BoxConstraints(
+                                                                          maxWidth:
+                                                                              520),
+                                                                  child:
+                                                                      Padding(
+                                                                    padding:
+                                                                        const EdgeInsets
+                                                                            .all(
+                                                                            20),
+                                                                    child:
+                                                                        Column(
+                                                                      mainAxisSize:
+                                                                          MainAxisSize
+                                                                              .min,
+                                                                      crossAxisAlignment:
+                                                                          CrossAxisAlignment
+                                                                              .start,
+                                                                      children: [
+                                                                        Text(
+                                                                            'Customer preview',
+                                                                            style:
+                                                                                Theme.of(previewContext).textTheme.titleMedium),
+                                                                        const SizedBox(
+                                                                            height:
+                                                                                10),
+                                                                        AspectRatio(
+                                                                          aspectRatio:
+                                                                              360 / 250,
+                                                                          child:
+                                                                              ClipRRect(
+                                                                            borderRadius:
+                                                                                const BorderRadius.vertical(bottom: Radius.circular(22)),
+                                                                            child: Image.network(url,
+                                                                                fit: BoxFit.cover,
+                                                                                errorBuilder: (_, __, ___) => const ColoredBox(color: Color(0xFFF1EEE7), child: Center(child: Icon(Icons.broken_image_outlined)))),
+                                                                          ),
+                                                                        ),
+                                                                        const SizedBox(
+                                                                            height:
+                                                                                8),
+                                                                        const Text(
+                                                                            'Customer service hero · 360 × 250 dp · BoxFit.cover'),
+                                                                        Align(
+                                                                            alignment:
+                                                                                Alignment.centerRight,
+                                                                            child: TextButton(onPressed: () => Navigator.pop(previewContext), child: const Text('Close'))),
+                                                                      ],
+                                                                    ),
+                                                                  ),
+                                                                ),
+                                                              )),
+                                                  icon: const Icon(Icons
+                                                      .visibility_outlined)),
+                                              IconButton(
+                                                  tooltip: 'Replace image',
+                                                  onPressed: saving
+                                                      ? null
+                                                      : () => editGalleryImage(
+                                                          replaceIndex:
+                                                              imageIndex),
+                                                  icon: const Icon(Icons
+                                                      .drive_folder_upload_outlined)),
+                                              IconButton(
+                                                tooltip: 'Remove image',
+                                                onPressed: () async {
+                                                  final confirmed = await showDialog<
+                                                          bool>(
+                                                      context: context,
+                                                      builder: (confirmContext) =>
+                                                          AlertDialog(
+                                                              title: const Text(
+                                                                  'Remove this image?'),
+                                                              content: const Text(
+                                                                  'It will be removed from the gallery when you save.'),
+                                                              actions: [
+                                                                TextButton(
+                                                                    onPressed: () =>
+                                                                        Navigator.pop(
+                                                                            confirmContext,
+                                                                            false),
+                                                                    child: const Text(
+                                                                        'Cancel')),
+                                                                FilledButton(
+                                                                    onPressed: () =>
+                                                                        Navigator.pop(
+                                                                            confirmContext,
+                                                                            true),
+                                                                    child: const Text(
+                                                                        'Remove'))
+                                                              ]));
+                                                  if (confirmed != true) return;
+                                                  setDialogState(() {
+                                                    final removedPrimary =
+                                                        item['isPrimary'] ==
+                                                            true;
+                                                    images.removeAt(imageIndex);
+                                                    if (removedPrimary &&
+                                                        images.isNotEmpty) {
+                                                      images.first[
+                                                          'isPrimary'] = true;
+                                                    }
+                                                  });
+                                                },
+                                                icon: const Icon(Icons
+                                                    .delete_outline_rounded),
+                                              ),
+                                            ],
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  );
+                                  return DragTarget<int>(
+                                    onAcceptWithDetails: (details) =>
+                                        setDialogState(() {
+                                      final moved =
+                                          images.removeAt(details.data);
+                                      final target = details.data < imageIndex
+                                          ? imageIndex - 1
+                                          : imageIndex;
+                                      images.insert(target, moved);
+                                    }),
+                                    builder: (context, candidates, _) =>
+                                        LongPressDraggable<int>(
+                                      data: imageIndex,
+                                      feedback: SizedBox(
+                                          width: 300,
+                                          height: 240,
+                                          child: Opacity(
+                                              opacity: 0.85, child: tile)),
+                                      childWhenDragging:
+                                          Opacity(opacity: 0.3, child: tile),
+                                      child: DecoratedBox(
+                                        decoration: candidates.isEmpty
+                                            ? const BoxDecoration()
+                                            : BoxDecoration(
+                                                border: Border.all(
+                                                    color: Theme.of(context)
+                                                        .colorScheme
+                                                        .primary,
+                                                    width: 2),
+                                                borderRadius:
+                                                    BorderRadius.circular(14)),
+                                        child: tile,
+                                      ),
+                                    ),
+                                  );
+                                },
+                              ),
+                            ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                    onPressed: saving
+                        ? null
+                        : () => Navigator.pop(dialogContext, false),
+                    child: const Text('Cancel')),
+                FilledButton(
+                  onPressed: saving
+                      ? null
+                      : () async {
+                          setDialogState(() {
+                            saving = true;
+                            error = null;
+                          });
+                          try {
+                            if (images.isNotEmpty &&
+                                !images.any(
+                                    (image) => image['isPrimary'] == true)) {
+                              images.first['isPrimary'] = true;
+                            }
+                            await _api.updateService(service.id, {
+                              'images': images
+                                  .asMap()
+                                  .entries
+                                  .map((entry) => {
+                                        'url': entry.value['url'],
+                                        'altText': (entry.value['altText']
+                                                    as String? ??
+                                                '')
+                                            .trim(),
+                                        'sortOrder': entry.key,
+                                        'isPrimary':
+                                            entry.value['isPrimary'] == true,
+                                      })
+                                  .toList(growable: false),
+                            });
+                            if (dialogContext.mounted) {
+                              Navigator.pop(dialogContext, true);
+                            }
+                          } catch (saveError) {
+                            setDialogState(() {
+                              saving = false;
+                              error = 'Could not save gallery: $saveError';
+                            });
+                          }
+                        },
+                  child: saving
+                      ? const SizedBox.square(
+                          dimension: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2))
+                      : const Text('Save gallery'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+    if (saved == true) {
       await _reload();
-      await _showMessage('Service image added');
-    } catch (error) {
-      await _showMessage('Unable to add service image: $error');
-    } finally {
-      altController.dispose();
+      await _showMessage('Service gallery updated');
     }
   }
 
@@ -3870,7 +4205,7 @@ class _ServiceDetailPageState extends ConsumerState<ServiceDetailPage> {
         TextEditingController(text: existing.estimatedDurationMins.toString());
     final warrantyController =
         TextEditingController(text: existing.warrantyDays.toString());
-    final iconController = TextEditingController(text: existing.iconUrl ?? '');
+    String? iconUrl = existing.iconUrl;
     final seoTitleController =
         TextEditingController(text: existing.seoTitle ?? '');
     final seoDescriptionController =
@@ -3889,6 +4224,14 @@ class _ServiceDetailPageState extends ConsumerState<ServiceDetailPage> {
     final addonsController = TextEditingController(
       text: _formatServiceOptions(existing.addons),
     );
+    final variantImageUrls = <String, String?>{
+      for (final option in existing.variants)
+        option.name.trim().toLowerCase(): option.imageUrl,
+    };
+    final addonImageUrls = <String, String?>{
+      for (final option in existing.addons)
+        option.name.trim().toLowerCase(): option.imageUrl,
+    };
     final ctaLabelController = TextEditingController(text: existing.ctaLabel);
     final ratingController =
         TextEditingController(text: existing.rating.toStringAsFixed(2));
@@ -4101,6 +4444,16 @@ class _ServiceDetailPageState extends ConsumerState<ServiceDetailPage> {
                         ),
                         maxLines: 4,
                         validator: _validateServiceOptionLines,
+                        onChanged: (_) => setState(() {}),
+                      ),
+                      _buildServiceOptionImageEditors(
+                        context: context,
+                        controller: variantsController,
+                        selectedImageUrls: variantImageUrls,
+                        label: 'Variant images',
+                        setState: setState,
+                        uploadImage: (bytes, fileName) =>
+                            _uploadCatalogImage(_api, bytes, fileName),
                       ),
                       TextFormField(
                         controller: addonsController,
@@ -4111,6 +4464,16 @@ class _ServiceDetailPageState extends ConsumerState<ServiceDetailPage> {
                         ),
                         maxLines: 4,
                         validator: _validateServiceOptionLines,
+                        onChanged: (_) => setState(() {}),
+                      ),
+                      _buildServiceOptionImageEditors(
+                        context: context,
+                        controller: addonsController,
+                        selectedImageUrls: addonImageUrls,
+                        label: 'Add-on images',
+                        setState: setState,
+                        uploadImage: (bytes, fileName) =>
+                            _uploadCatalogImage(_api, bytes, fileName),
                       ),
                       _buildPublicationControls(
                         context: context,
@@ -4158,10 +4521,14 @@ class _ServiceDetailPageState extends ConsumerState<ServiceDetailPage> {
                             labelText: 'Booking button text'),
                         maxLength: 40,
                       ),
-                      TextFormField(
-                        controller: iconController,
-                        decoration:
-                            const InputDecoration(labelText: 'Icon URL'),
+                      AdminImagePickerField(
+                        label: 'Service image',
+                        value: iconUrl,
+                        onChanged: (value) => setState(() => iconUrl = value),
+                        uploadImage: (bytes, fileName) =>
+                            _uploadCatalogImage(_api, bytes, fileName),
+                        recommendedWidth: 1200,
+                        recommendedHeight: 840,
                       ),
                       TextFormField(
                         controller: seoTitleController,
@@ -4306,19 +4673,19 @@ class _ServiceDetailPageState extends ConsumerState<ServiceDetailPage> {
                         variantsController.text,
                         existing.variants,
                         isVariant: true,
+                        imageUrls: variantImageUrls,
                       ),
                       'addons': _serviceOptionRows(
                         addonsController.text,
                         existing.addons,
                         isVariant: false,
+                        imageUrls: addonImageUrls,
                       ),
                       'priceType': priceType,
                       'ctaLabel': ctaLabelController.text.trim().isEmpty
                           ? 'Book service'
                           : ctaLabelController.text.trim(),
-                      'iconUrl': iconController.text.trim().isEmpty
-                          ? null
-                          : iconController.text.trim(),
+                      'iconUrl': iconUrl,
                       'seoTitle': seoTitleController.text.trim().isEmpty
                           ? null
                           : seoTitleController.text.trim(),
@@ -4377,7 +4744,6 @@ class _ServiceDetailPageState extends ConsumerState<ServiceDetailPage> {
       sacCodeController.dispose();
       durationController.dispose();
       warrantyController.dispose();
-      iconController.dispose();
       seoTitleController.dispose();
       seoDescriptionController.dispose();
       seoKeywordsController.dispose();
@@ -4489,15 +4855,15 @@ class _ServiceDetailPageState extends ConsumerState<ServiceDetailPage> {
                     height: 52,
                     decoration: BoxDecoration(
                       color: service.featured
-                          ? const Color(0xFFC2A15E).withValues(alpha: 0.12)
-                          : const Color(0xFF10B981).withValues(alpha: 0.12),
+                          ? AbzioTheme.accentColor.withValues(alpha: 0.12)
+                          : AbzioTheme.successColor.withValues(alpha: 0.12),
                       borderRadius: BorderRadius.circular(16),
                     ),
                     child: Icon(
                       Icons.design_services_rounded,
                       color: service.featured
-                          ? const Color(0xFFC2A15E)
-                          : const Color(0xFF10B981),
+                          ? AbzioTheme.accentColor
+                          : AbzioTheme.successColor,
                     ),
                   ),
                   const SizedBox(width: 14),
@@ -4554,13 +4920,62 @@ class _ServiceDetailPageState extends ConsumerState<ServiceDetailPage> {
                     label: Text(service.isActive ? 'Disable' : 'Enable'),
                   ),
                   OutlinedButton.icon(
-                    onPressed: () => _addServiceImage(service),
-                    icon: const Icon(Icons.add_photo_alternate_rounded),
-                    label: const Text('Add image'),
+                    onPressed: () => _manageServiceImages(service),
+                    icon: const Icon(Icons.collections_outlined),
+                    label: Text('Manage images (${service.images.length})'),
                   ),
                 ],
               ),
               const SizedBox(height: 18),
+              if (service.images.isNotEmpty) ...[
+                Text('Service gallery',
+                    style:
+                        tt.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
+                const SizedBox(height: 10),
+                Wrap(
+                  spacing: 10,
+                  runSpacing: 10,
+                  children: service.images
+                      .map((image) => Stack(
+                            children: [
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(12),
+                                child: Image.network(
+                                  image.url,
+                                  width: 132,
+                                  height: 96,
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (_, __, ___) => const SizedBox(
+                                      width: 132,
+                                      height: 96,
+                                      child: Icon(Icons.broken_image_outlined)),
+                                ),
+                              ),
+                              if (image.isPrimary)
+                                Positioned(
+                                  left: 6,
+                                  top: 6,
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 8, vertical: 4),
+                                    decoration: BoxDecoration(
+                                        color: Theme.of(context)
+                                            .colorScheme
+                                            .surface,
+                                        borderRadius:
+                                            BorderRadius.circular(20)),
+                                    child: const Text('Primary',
+                                        style: TextStyle(
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.w700)),
+                                  ),
+                                ),
+                            ],
+                          ))
+                      .toList(growable: false),
+                ),
+                const SizedBox(height: 18),
+              ],
               if ((service.description ?? '').trim().isNotEmpty) ...[
                 Text('Description',
                     style:
@@ -4578,7 +4993,7 @@ class _ServiceDetailPageState extends ConsumerState<ServiceDetailPage> {
                 const SizedBox(height: 18),
               ],
               if ((service.iconUrl ?? '').trim().isNotEmpty) ...[
-                _DetailLine(label: 'Icon URL', value: service.iconUrl!.trim()),
+                _AdminCatalogImagePreview(url: service.iconUrl!.trim()),
                 const SizedBox(height: 8),
               ],
               if ((service.seoTitle ?? '').trim().isNotEmpty) ...[
@@ -4638,9 +5053,9 @@ class _ServiceDetailPageState extends ConsumerState<ServiceDetailPage> {
                     child: Container(
                       padding: const EdgeInsets.all(14),
                       decoration: BoxDecoration(
-                        color: const Color(0xFFF8FAFC),
+                        color: AbzioTheme.lightMuted,
                         borderRadius: BorderRadius.circular(14),
-                        border: Border.all(color: const Color(0xFFE5E7EB)),
+                        border: Border.all(color: AbzioTheme.lightBorder),
                       ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -4717,12 +5132,12 @@ class _DetailChip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color: const Color(0xFFF8FAFC),
+        color: AbzioTheme.lightMuted,
         borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
+        border: Border.all(color: AbzioTheme.lightBorder),
       ),
       child: Text(label,
-          style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700)),
+          style: GoogleFonts.outfit(fontSize: 12, fontWeight: FontWeight.w700)),
     );
   }
 }
@@ -4737,11 +5152,11 @@ class _DetailBadge extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color: const Color(0xFF94A3B8).withValues(alpha: 0.12),
+        color: AbzioTheme.lightTextSecondary.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(999),
       ),
       child: Text(label,
-          style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700)),
+          style: GoogleFonts.outfit(fontSize: 12, fontWeight: FontWeight.w700)),
     );
   }
 }
@@ -4953,6 +5368,49 @@ class _CatalogSnapshot {
   }
 }
 
+Future<String> _uploadCatalogImage(
+  _CatalogAdminApi api,
+  Uint8List bytes,
+  String fileName,
+) async {
+  final result = await api.uploadCatalogImage(bytes, fileName);
+  final url = result['url'];
+  if (url is! String || !url.startsWith('https://')) {
+    throw StateError('The image upload returned an invalid URL.');
+  }
+  return url;
+}
+
+class _AdminCatalogImagePreview extends StatelessWidget {
+  const _AdminCatalogImagePreview({required this.url});
+
+  final String url;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        ClipRRect(
+          borderRadius: BorderRadius.circular(8),
+          child: Image.network(
+            url,
+            width: 72,
+            height: 56,
+            fit: BoxFit.cover,
+            errorBuilder: (_, __, ___) => const SizedBox(
+              width: 72,
+              height: 56,
+              child: Icon(Icons.broken_image_outlined),
+            ),
+          ),
+        ),
+        const SizedBox(width: 10),
+        const Text('Image selected'),
+      ],
+    );
+  }
+}
+
 class _AdminCatalogServiceArea {
   const _AdminCatalogServiceArea({
     required this.id,
@@ -5150,6 +5608,7 @@ class _AdminService {
     required this.cancellationPolicy,
     required this.rating,
     required this.reviewCount,
+    required this.images,
     required this.pricingRules,
     required this.variants,
     required this.addons,
@@ -5196,6 +5655,7 @@ class _AdminService {
   final String? cancellationPolicy;
   final double rating;
   final int reviewCount;
+  final List<_AdminServiceImage> images;
   final List<_AdminPricingRule> pricingRules;
   final List<_AdminServiceOption> variants;
   final List<_AdminServiceOption> addons;
@@ -5255,6 +5715,10 @@ class _AdminService {
       cancellationPolicy: json['cancellationPolicy'] as String?,
       rating: _toDouble(json['rating']),
       reviewCount: (json['reviewCount'] as num?)?.toInt() ?? 0,
+      images: (json['images'] as List? ?? const [])
+          .whereType<Map<String, dynamic>>()
+          .map(_AdminServiceImage.fromJson)
+          .toList(growable: false),
       pricingRules: (json['pricingRules'] as List? ?? const [])
           .whereType<Map<String, dynamic>>()
           .map(_AdminPricingRule.fromJson)
@@ -5269,6 +5733,31 @@ class _AdminService {
           .toList(growable: false),
     );
   }
+}
+
+class _AdminServiceImage {
+  const _AdminServiceImage({
+    required this.id,
+    required this.url,
+    required this.altText,
+    required this.sortOrder,
+    required this.isPrimary,
+  });
+
+  final String id;
+  final String url;
+  final String altText;
+  final int sortOrder;
+  final bool isPrimary;
+
+  factory _AdminServiceImage.fromJson(Map<String, dynamic> json) =>
+      _AdminServiceImage(
+        id: json['id'] as String? ?? '',
+        url: json['url'] as String? ?? '',
+        altText: json['altText'] as String? ?? '',
+        sortOrder: (json['sortOrder'] as num?)?.toInt() ?? 0,
+        isPrimary: json['isPrimary'] as bool? ?? false,
+      );
 }
 
 class _AdminServiceOption {
@@ -5389,10 +5878,134 @@ String? _validateServiceOptionLines(String? value) {
   return null;
 }
 
+Future<Map<String, dynamic>?> _showServiceGalleryImagePicker({
+  required BuildContext context,
+  required String serviceName,
+  required Map<String, dynamic>? current,
+  required Future<String> Function(Uint8List, String) uploadImage,
+}) {
+  String? selectedUrl;
+  var altText = current?['altText']?.toString() ?? serviceName;
+  return showDialog<Map<String, dynamic>>(
+    context: context,
+    builder: (dialogContext) => StatefulBuilder(
+      builder: (dialogContext, setDialogState) => AlertDialog(
+        title: Text(
+            current == null ? 'Add service image' : 'Replace service image'),
+        content: SizedBox(
+          width: 520,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (current != null) ...[
+                  Text('Current image',
+                      style: Theme.of(dialogContext).textTheme.labelLarge),
+                  const SizedBox(height: 6),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(14),
+                    child: Image.network(
+                      current['url'] as String? ?? '',
+                      width: double.infinity,
+                      height: 150,
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) => const SizedBox(
+                          height: 100,
+                          child:
+                              Center(child: Icon(Icons.broken_image_outlined))),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                ],
+                TextFormField(
+                  initialValue: altText,
+                  decoration: const InputDecoration(labelText: 'Alt text'),
+                  onChanged: (value) => altText = value,
+                ),
+                const SizedBox(height: 12),
+                AdminImagePickerField(
+                  label: 'Service gallery image',
+                  value: selectedUrl,
+                  onChanged: (value) =>
+                      setDialogState(() => selectedUrl = value),
+                  uploadImage: uploadImage,
+                  recommendedWidth: 1200,
+                  recommendedHeight: 840,
+                ),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Cancel')),
+          FilledButton(
+            onPressed: selectedUrl == null
+                ? null
+                : () => Navigator.pop(dialogContext, {
+                      'url': selectedUrl,
+                      'altText':
+                          altText.trim().isEmpty ? serviceName : altText.trim(),
+                      'isPrimary': current?['isPrimary'] == true,
+                    }),
+            child: Text(current == null ? 'Add to gallery' : 'Use replacement'),
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
+Widget _buildServiceOptionImageEditors({
+  required BuildContext context,
+  required TextEditingController controller,
+  required Map<String, String?> selectedImageUrls,
+  required String label,
+  required StateSetter setState,
+  required Future<String> Function(Uint8List, String) uploadImage,
+}) {
+  final names = controller.text
+      .split('\n')
+      .map((line) => line.split('|').first.trim())
+      .where((name) => name.isNotEmpty)
+      .toSet();
+  if (names.isEmpty) return const SizedBox.shrink();
+
+  return Padding(
+    padding: const EdgeInsets.only(top: 10, bottom: 14),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: Theme.of(context).textTheme.titleSmall),
+        const SizedBox(height: 8),
+        ...names.map((name) {
+          final key = name.toLowerCase();
+          return Padding(
+            key: ValueKey('$label:$key'),
+            padding: const EdgeInsets.only(bottom: 12),
+            child: AdminImagePickerField(
+              label: '$name image',
+              value: selectedImageUrls[key],
+              onChanged: (value) =>
+                  setState(() => selectedImageUrls[key] = value),
+              uploadImage: uploadImage,
+              recommendedWidth: 800,
+              recommendedHeight: 800,
+            ),
+          );
+        }),
+      ],
+    ),
+  );
+}
+
 List<Map<String, dynamic>> _serviceOptionRows(
   String value,
   List<_AdminServiceOption> existing, {
   required bool isVariant,
+  Map<String, String?> imageUrls = const {},
 }) {
   final existingByName = {
     for (final option in existing) option.name.trim().toLowerCase(): option,
@@ -5422,7 +6035,9 @@ List<Map<String, dynamic>> _serviceOptionRows(
       'name': name,
       'price': double.parse(parts[1]),
       'description': description,
-      'imageUrl': previous?.imageUrl,
+      'imageUrl': imageUrls.containsKey(name.toLowerCase())
+          ? imageUrls[name.toLowerCase()]
+          : previous?.imageUrl,
       if (duration != null) 'estimatedDurationMins': duration,
       'sortOrder': entry.key,
       if (isVariant) ...{

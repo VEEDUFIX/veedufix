@@ -39,12 +39,71 @@ class _ServiceAreaManagerPageState
     return _api.fetchSnapshot();
   }
 
-  Future<void> _reload() async {
-    if (!mounted) return;
+  Future<bool> _reload() async {
+    if (!mounted) return false;
+    final future = _loadSnapshot();
     setState(() {
-      _snapshotFuture = _loadSnapshot();
+      _snapshotFuture = future;
     });
-    await _snapshotFuture;
+    // Keep load failures in FutureBuilder so the page can show its retry state.
+    // A successful create/edit should not be reported as failed only because
+    // the follow-up refresh failed.
+    try {
+      await future;
+      return true;
+    } catch (_) {
+      // The FutureBuilder displays the error and retry action.
+      return false;
+    }
+  }
+
+  String _loadErrorMessage(Object? error) {
+    if (error is DioException) {
+      final status = error.response?.statusCode;
+      if (status == 401) {
+        return 'Your admin session has expired. Sign in again, then retry.';
+      }
+      if (status == 403) {
+        return 'This account does not have Admin access to manage service areas.';
+      }
+      if (status == 404) {
+        return 'The service-area API was not found. Check that the latest backend deployment is live.';
+      }
+      if (status != null && status >= 500) {
+        return 'The backend could not load service areas (HTTP $status). Check the backend service and database, then retry.';
+      }
+      if (status != null) {
+        return 'The backend rejected the service-area request (HTTP $status). Check the request and retry.';
+      }
+      return 'Could not reach the backend. Check the connection and API/CORS configuration, then retry.';
+    }
+    return 'The service-area response could not be read. Check that the deployed backend returns the expected service-area data, then retry.';
+  }
+
+  String _mutationErrorMessage(Object error) {
+    if (error is DioException) {
+      final status = error.response?.statusCode;
+      if (status == 401) return 'Your admin session expired. Sign in again.';
+      if (status == 403) return 'This account does not have Admin access.';
+      if (status == 404) {
+        return 'The requested record or backend route was not found.';
+      }
+      if (status == 409) {
+        final body = error.response?.data;
+        if (body is Map && body['message'] is String) {
+          return body['message'] as String;
+        }
+        return 'A record with these details already exists.';
+      }
+      if (status != null && status >= 500) {
+        return 'The backend could not save this change (HTTP $status). Check backend logs and retry.';
+      }
+      if (status == null) {
+        return 'Could not reach the backend. Check the connection and retry.';
+      }
+      return 'The backend rejected this change (HTTP $status). Check the entered values and retry.';
+    }
+    return 'The change could not be saved. Please retry.';
   }
 
   Future<void> _showMessage(String message) async {
@@ -87,10 +146,13 @@ class _ServiceAreaManagerPageState
       if (payload == null) return;
       try {
         await _api.createServiceArea(payload);
-        await _reload();
-        await _showMessage('Service area created');
+        final refreshed = await _reload();
+        await _showMessage(refreshed
+            ? 'Service area created'
+            : 'Service area created, but the list did not refresh. Retry loading the page.');
       } catch (error) {
-        await _showMessage('Unable to create service area: $error');
+        await _showMessage(
+            'Unable to create service area: ${_mutationErrorMessage(error)}');
       }
     });
   }
@@ -101,11 +163,13 @@ class _ServiceAreaManagerPageState
       if (payload == null) return;
       try {
         await _api.createMarket(payload);
-        await _reload();
-        await _showMessage(
-            'Market created. Add active pincode areas before accepting bookings.');
+        final refreshed = await _reload();
+        await _showMessage(refreshed
+            ? 'Market created. Add active pincode areas before accepting bookings.'
+            : 'Market created, but the list did not refresh. Retry loading the page.');
       } catch (error) {
-        await _showMessage('Unable to create market: $error');
+        await _showMessage(
+            'Unable to create market: ${_mutationErrorMessage(error)}');
       }
     });
   }
@@ -116,10 +180,13 @@ class _ServiceAreaManagerPageState
       if (payload == null) return;
       try {
         await _api.updateMarket(city.id, payload);
-        await _reload();
-        await _showMessage('Market updated');
+        final refreshed = await _reload();
+        await _showMessage(refreshed
+            ? 'Market updated'
+            : 'Market updated, but the list did not refresh. Retry loading the page.');
       } catch (error) {
-        await _showMessage('Unable to update market: $error');
+        await _showMessage(
+            'Unable to update market: ${_mutationErrorMessage(error)}');
       }
     });
   }
@@ -234,10 +301,13 @@ class _ServiceAreaManagerPageState
       if (payload == null) return;
       try {
         await _api.updateServiceArea(area.id, payload);
-        await _reload();
-        await _showMessage('Service area updated');
+        final refreshed = await _reload();
+        await _showMessage(refreshed
+            ? 'Service area updated'
+            : 'Service area updated, but the list did not refresh. Retry loading the page.');
       } catch (error) {
-        await _showMessage('Unable to update service area: $error');
+        await _showMessage(
+            'Unable to update service area: ${_mutationErrorMessage(error)}');
       }
     });
   }
@@ -268,10 +338,13 @@ class _ServiceAreaManagerPageState
       if (confirmed != true || !mounted) return;
       try {
         await _api.deleteServiceArea(area.id);
-        await _reload();
-        await _showMessage('Service area deleted');
+        final refreshed = await _reload();
+        await _showMessage(refreshed
+            ? 'Service area deleted'
+            : 'Service area deleted, but the list did not refresh. Retry loading the page.');
       } catch (error) {
-        await _showMessage('Unable to delete service area: $error');
+        await _showMessage(
+            'Unable to delete service area: ${_mutationErrorMessage(error)}');
       }
     });
   }
@@ -280,11 +353,13 @@ class _ServiceAreaManagerPageState
     await _runMutation(() async {
       try {
         await _api.updateServiceArea(area.id, {'isActive': isActive});
-        await _reload();
-        await _showMessage(
-            isActive ? 'Service area activated' : 'Service area paused');
+        final refreshed = await _reload();
+        await _showMessage(refreshed
+            ? (isActive ? 'Service area activated' : 'Service area paused')
+            : 'Service area updated, but the list did not refresh. Retry loading the page.');
       } catch (error) {
-        await _showMessage('Unable to update service area: $error');
+        await _showMessage(
+            'Unable to update service area: ${_mutationErrorMessage(error)}');
       }
     });
   }
@@ -574,28 +649,27 @@ class _ServiceAreaManagerPageState
                         children: [
                           Text(
                             'Service Areas',
-                            style: GoogleFonts.poppins(
+                            style: GoogleFonts.outfit(
                                 fontSize: 30, fontWeight: FontWeight.w800),
                           ),
                           const SizedBox(height: 8),
                           Text(
                             'Control where the marketplace is open and how far each zone reaches.',
-                            style: GoogleFonts.inter(color: Colors.black54),
+                            style: GoogleFonts.outfit(color: Colors.black54),
                           ),
                           const SizedBox(height: 16),
                           Wrap(spacing: 8, runSpacing: 8, children: [
                             OutlinedButton.icon(
-                                onPressed:
-                                    loading || data == null || _isMutating
-                                        ? null
-                                        : _createMarket,
+                                onPressed: _isMutating ? null : _createMarket,
                                 icon: const Icon(Icons.add_business_outlined),
                                 label: const Text('Add market')),
                             FilledButton.icon(
-                                onPressed:
-                                    loading || data == null || _isMutating
-                                        ? null
-                                        : () => _createArea(data),
+                                onPressed: loading ||
+                                        data == null ||
+                                        data.cities.isEmpty ||
+                                        _isMutating
+                                    ? null
+                                    : () => _createArea(data),
                                 icon:
                                     const Icon(Icons.add_location_alt_rounded),
                                 label: const Text('Add pincode area')),
@@ -611,30 +685,29 @@ class _ServiceAreaManagerPageState
                             children: [
                               Text(
                                 'Service Areas',
-                                style: GoogleFonts.poppins(
+                                style: GoogleFonts.outfit(
                                     fontSize: 34, fontWeight: FontWeight.w800),
                               ),
                               const SizedBox(height: 8),
                               Text(
                                 'Control where the marketplace is open and how far each zone reaches.',
-                                style: GoogleFonts.inter(
+                                style: GoogleFonts.outfit(
                                     color: Colors.black54, fontSize: 16),
                               ),
                             ],
                           ),
                           Wrap(spacing: 8, children: [
                             OutlinedButton.icon(
-                                onPressed:
-                                    loading || data == null || _isMutating
-                                        ? null
-                                        : _createMarket,
+                                onPressed: _isMutating ? null : _createMarket,
                                 icon: const Icon(Icons.add_business_outlined),
                                 label: const Text('Add market')),
                             FilledButton.icon(
-                                onPressed:
-                                    loading || data == null || _isMutating
-                                        ? null
-                                        : () => _createArea(data),
+                                onPressed: loading ||
+                                        data == null ||
+                                        data.cities.isEmpty ||
+                                        _isMutating
+                                    ? null
+                                    : () => _createArea(data),
                                 icon:
                                     const Icon(Icons.add_location_alt_rounded),
                                 label: const Text('Add pincode area')),
@@ -644,7 +717,40 @@ class _ServiceAreaManagerPageState
                 const SizedBox(height: 24),
                 if (loading)
                   const Center(child: CircularProgressIndicator())
+                else if (snapshot.hasError)
+                  Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(_loadErrorMessage(snapshot.error)),
+                          const SizedBox(height: 8),
+                          const Text(
+                            'You can still add a market. Pincode areas become available after the market list loads.',
+                          ),
+                          const SizedBox(height: 12),
+                          OutlinedButton.icon(
+                            onPressed: () {
+                              _reload();
+                            },
+                            icon: const Icon(Icons.refresh_rounded),
+                            label: const Text('Retry loading service areas'),
+                          ),
+                        ],
+                      ),
+                    ),
+                  )
                 else if (data != null) ...[
+                  if (data.cities.isEmpty)
+                    const Card(
+                      child: Padding(
+                        padding: EdgeInsets.all(18),
+                        child: Text(
+                          'No launch markets yet. Add a market first; then create pincode areas inside it.',
+                        ),
+                      ),
+                    ),
                   Wrap(
                     spacing: 20,
                     runSpacing: 20,
@@ -752,7 +858,7 @@ class _ServiceAreaManagerPageState
                                 child: Text(
                                   'No matching service areas',
                                   style:
-                                      GoogleFonts.inter(color: Colors.black54),
+                                      GoogleFonts.outfit(color: Colors.black54),
                                 ),
                               ),
                             ),
@@ -834,7 +940,7 @@ class _ServiceAreaTile extends StatelessWidget {
                         Expanded(
                           child: Text(
                             area.name,
-                            style: GoogleFonts.poppins(
+                            style: GoogleFonts.outfit(
                                 fontSize: 18, fontWeight: FontWeight.w700),
                           ),
                         ),
@@ -845,7 +951,7 @@ class _ServiceAreaTile extends StatelessWidget {
                     const SizedBox(height: 6),
                     Text(
                       '${area.city.name} • ${area.slug}',
-                      style: GoogleFonts.inter(color: Colors.black54),
+                      style: GoogleFonts.outfit(color: Colors.black54),
                     ),
                     const SizedBox(height: 10),
                     Wrap(
@@ -1207,7 +1313,7 @@ class _DetailChip extends StatelessWidget {
         borderRadius: BorderRadius.circular(999),
       ),
       child: Text(label,
-          style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700)),
+          style: GoogleFonts.outfit(fontSize: 12, fontWeight: FontWeight.w700)),
     );
   }
 }
@@ -1226,7 +1332,7 @@ class _DetailBadge extends StatelessWidget {
         borderRadius: BorderRadius.circular(999),
       ),
       child: Text(label,
-          style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700)),
+          style: GoogleFonts.outfit(fontSize: 12, fontWeight: FontWeight.w700)),
     );
   }
 }
@@ -1252,7 +1358,7 @@ class _Chip extends StatelessWidget {
           Icon(icon, size: 16, color: Colors.black54),
           const SizedBox(width: 6),
           Text(label,
-              style: GoogleFonts.inter(fontSize: 12, color: Colors.black87)),
+              style: GoogleFonts.outfit(fontSize: 12, color: Colors.black87)),
         ],
       ),
     );
@@ -1299,9 +1405,9 @@ class _StatCard extends StatelessWidget {
             children: [
               Text(label,
                   style:
-                      GoogleFonts.inter(fontSize: 12, color: Colors.black54)),
+                      GoogleFonts.outfit(fontSize: 12, color: Colors.black54)),
               Text(value,
-                  style: GoogleFonts.poppins(
+                  style: GoogleFonts.outfit(
                       fontSize: 22, fontWeight: FontWeight.w700)),
             ],
           ),

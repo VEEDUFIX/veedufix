@@ -22,7 +22,7 @@ class DashboardHeader extends StatelessWidget {
         children: [
           Text(
             'Admin Dashboard',
-            style: GoogleFonts.poppins(
+            style: GoogleFonts.outfit(
               fontSize: 30,
               fontWeight: FontWeight.w800,
               color: Colors.black87,
@@ -32,7 +32,7 @@ class DashboardHeader extends StatelessWidget {
           const SizedBox(height: 8),
           Text(
             'Monitor revenue, support, worker approvals, and marketplace health.',
-            style: GoogleFonts.inter(
+            style: GoogleFonts.outfit(
               color: Colors.black54,
               fontSize: 15,
             ),
@@ -45,7 +45,8 @@ class DashboardHeader extends StatelessWidget {
             style: FilledButton.styleFrom(
               backgroundColor: const Color(0xFF0F766E),
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8)),
             ),
           ),
         ],
@@ -61,7 +62,7 @@ class DashboardHeader extends StatelessWidget {
           children: [
             Text(
               'Admin Dashboard',
-              style: GoogleFonts.poppins(
+              style: GoogleFonts.outfit(
                 fontSize: 32,
                 fontWeight: FontWeight.w800,
                 color: Colors.black87,
@@ -71,7 +72,7 @@ class DashboardHeader extends StatelessWidget {
             const SizedBox(height: 8),
             Text(
               'Monitor revenue, support, worker approvals, and marketplace health.',
-              style: GoogleFonts.inter(
+              style: GoogleFonts.outfit(
                 color: Colors.black54,
                 fontSize: 16,
               ),
@@ -85,7 +86,8 @@ class DashboardHeader extends StatelessWidget {
           style: FilledButton.styleFrom(
             backgroundColor: const Color(0xFF0F766E),
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
           ),
         ),
       ],

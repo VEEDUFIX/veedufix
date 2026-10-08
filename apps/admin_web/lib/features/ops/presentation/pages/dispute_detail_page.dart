@@ -137,7 +137,8 @@ class _DisputeDetailPageState extends ConsumerState<DisputeDetailPage> {
               fit: BoxFit.contain,
               borderRadius: 0,
               optimizeCloudinary: false,
-              backgroundColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+              backgroundColor:
+                  Theme.of(context).colorScheme.surfaceContainerHighest,
             ),
           ),
         );
@@ -162,7 +163,7 @@ class _DisputeDetailPageState extends ConsumerState<DisputeDetailPage> {
         surfaceTintColor: Colors.transparent,
         title: Text(
           'Dispute detail',
-          style: GoogleFonts.poppins(fontWeight: FontWeight.w800),
+          style: GoogleFonts.outfit(fontWeight: FontWeight.w800),
         ),
         actions: [
           IconButton(
@@ -189,9 +190,11 @@ class _DisputeDetailPageState extends ConsumerState<DisputeDetailPage> {
           final dispute = snapshot.data!.dispute;
           final booking = snapshot.data!.booking;
           final isResolved = dispute.status.startsWith('resolved_');
-          final bookingLookup = booking.code.trim().isNotEmpty ? booking.code.trim() : booking.id;
-          final customerLookup =
-              (booking.customerPhone ?? '').trim().isNotEmpty ? booking.customerPhone!.trim() : booking.id;
+          final bookingLookup =
+              booking.code.trim().isNotEmpty ? booking.code.trim() : booking.id;
+          final customerLookup = (booking.customerPhone ?? '').trim().isNotEmpty
+              ? booking.customerPhone!.trim()
+              : booking.id;
 
           return Container(
             color: Colors.transparent,
@@ -208,7 +211,7 @@ class _DisputeDetailPageState extends ConsumerState<DisputeDetailPage> {
                         children: [
                           Text(
                             booking.code,
-                            style: GoogleFonts.poppins(
+                            style: GoogleFonts.outfit(
                               fontSize: 28,
                               fontWeight: FontWeight.w900,
                               letterSpacing: -0.4,
@@ -218,7 +221,7 @@ class _DisputeDetailPageState extends ConsumerState<DisputeDetailPage> {
                           const SizedBox(height: 8),
                           Text(
                             'Complaint review, job evidence, and resolution history.',
-                            style: GoogleFonts.inter(
+                            style: GoogleFonts.outfit(
                               color: const Color(0xFF6B6256),
                               height: 1.45,
                             ),
@@ -247,38 +250,45 @@ class _DisputeDetailPageState extends ConsumerState<DisputeDetailPage> {
                             runSpacing: 10,
                             children: [
                               OutlinedButton.icon(
-                                onPressed: () => _copyToClipboard(booking.code, 'Booking code'),
+                                onPressed: () => _copyToClipboard(
+                                    booking.code, 'Booking code'),
                                 icon: const Icon(Icons.copy_rounded),
                                 label: const Text('Copy booking code'),
                               ),
                               OutlinedButton.icon(
-                                onPressed: () => _copyToClipboard(dispute.id, 'Dispute ID'),
+                                onPressed: () =>
+                                    _copyToClipboard(dispute.id, 'Dispute ID'),
                                 icon: const Icon(Icons.copy_rounded),
                                 label: const Text('Copy dispute ID'),
                               ),
                               if ((dispute.refundId ?? '').trim().isNotEmpty)
                                 OutlinedButton.icon(
-                                  onPressed: () => context.push('/finance/refunds/${dispute.refundId!.trim()}'),
+                                  onPressed: () => context.push(
+                                      '/finance/refunds/${dispute.refundId!.trim()}'),
                                   icon: const Icon(Icons.receipt_long_rounded),
                                   label: const Text('Open refund'),
                                 ),
                               OutlinedButton.icon(
-                                onPressed: () => context.push('/admin-bookings/${booking.id}'),
+                                onPressed: () => context
+                                    .push('/admin-bookings/${booking.id}'),
                                 icon: const Icon(Icons.event_note_rounded),
                                 label: const Text('Open booking'),
                               ),
                               OutlinedButton.icon(
-                                onPressed: () => context.push('/admin-bookings?search=${Uri.encodeComponent(bookingLookup)}'),
+                                onPressed: () => context.push(
+                                    '/admin-bookings?search=${Uri.encodeComponent(bookingLookup)}'),
                                 icon: const Icon(Icons.search_rounded),
                                 label: const Text('Booking search'),
                               ),
                               OutlinedButton.icon(
-                                onPressed: () => context.push('/support-tickets?search=${Uri.encodeComponent(customerLookup)}'),
+                                onPressed: () => context.push(
+                                    '/support-tickets?search=${Uri.encodeComponent(customerLookup)}'),
                                 icon: const Icon(Icons.support_agent_rounded),
                                 label: const Text('Support'),
                               ),
                               OutlinedButton.icon(
-                                onPressed: () => context.push('/audit-logs?search=${Uri.encodeComponent(dispute.id)}'),
+                                onPressed: () => context.push(
+                                    '/audit-logs?search=${Uri.encodeComponent(dispute.id)}'),
                                 icon: const Icon(Icons.history_rounded),
                                 label: const Text('Audit trail'),
                               ),
@@ -303,7 +313,7 @@ class _DisputeDetailPageState extends ConsumerState<DisputeDetailPage> {
                                 children: [
                                   Text(
                                     'Dispute reason',
-                                    style: GoogleFonts.poppins(
+                                    style: GoogleFonts.outfit(
                                         fontWeight: FontWeight.w800),
                                   ),
                                   const SizedBox(height: 8),
@@ -311,7 +321,7 @@ class _DisputeDetailPageState extends ConsumerState<DisputeDetailPage> {
                                   const SizedBox(height: 16),
                                   Text(
                                     'Customer comment',
-                                    style: GoogleFonts.poppins(
+                                    style: GoogleFonts.outfit(
                                         fontWeight: FontWeight.w800),
                                   ),
                                   const SizedBox(height: 8),
@@ -334,7 +344,7 @@ class _DisputeDetailPageState extends ConsumerState<DisputeDetailPage> {
                                 children: [
                                   Text(
                                     'Job evidence',
-                                    style: GoogleFonts.poppins(
+                                    style: GoogleFonts.outfit(
                                         fontWeight: FontWeight.w800),
                                   ),
                                   const SizedBox(height: 12),
@@ -416,7 +426,7 @@ class _DisputeDetailPageState extends ConsumerState<DisputeDetailPage> {
                                 children: [
                                   Text(
                                     'Resolution',
-                                    style: GoogleFonts.poppins(
+                                    style: GoogleFonts.outfit(
                                         fontWeight: FontWeight.w800),
                                   ),
                                   const SizedBox(height: 12),
@@ -433,8 +443,7 @@ class _DisputeDetailPageState extends ConsumerState<DisputeDetailPage> {
                                       value: booking.workerName ??
                                           'Not returned by API'),
                                   _InfoLine(
-                                      label: 'Booking ID',
-                                      value: booking.id),
+                                      label: 'Booking ID', value: booking.id),
                                   _InfoLine(
                                       label: 'Booking code',
                                       value: booking.code),
@@ -456,7 +465,9 @@ class _DisputeDetailPageState extends ConsumerState<DisputeDetailPage> {
                                     _InfoLine(
                                         label: 'Resolution note',
                                         value: dispute.resolutionNote!.trim()),
-                                  if ((dispute.refundId ?? '').trim().isNotEmpty)
+                                  if ((dispute.refundId ?? '')
+                                      .trim()
+                                      .isNotEmpty)
                                     _InfoLine(
                                         label: 'Refund ID',
                                         value: dispute.refundId!.trim()),
@@ -471,23 +482,25 @@ class _DisputeDetailPageState extends ConsumerState<DisputeDetailPage> {
                                 padding: const EdgeInsets.all(16),
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'Actions',
-                                  style: GoogleFonts.poppins(
-                                      fontWeight: FontWeight.w800),
-                                ),
-                                const SizedBox(height: 12),
-                                OutlinedButton.icon(
-                                  onPressed: () => context.push('/audit-logs?search=${Uri.encodeComponent(booking.id)}'),
-                                  icon: const Icon(Icons.history_rounded),
-                                  label: const Text('Open booking audit trail'),
-                                ),
-                                const SizedBox(height: 12),
-                                FilledButton.icon(
-                                  onPressed: _busy
-                                      ? null
-                                      : () => _resolve(
+                                  children: [
+                                    Text(
+                                      'Actions',
+                                      style: GoogleFonts.outfit(
+                                          fontWeight: FontWeight.w800),
+                                    ),
+                                    const SizedBox(height: 12),
+                                    OutlinedButton.icon(
+                                      onPressed: () => context.push(
+                                          '/audit-logs?search=${Uri.encodeComponent(booking.id)}'),
+                                      icon: const Icon(Icons.history_rounded),
+                                      label: const Text(
+                                          'Open booking audit trail'),
+                                    ),
+                                    const SizedBox(height: 12),
+                                    FilledButton.icon(
+                                      onPressed: _busy
+                                          ? null
+                                          : () => _resolve(
                                                 resolution: 'refund',
                                                 title: 'Approve refund',
                                                 buttonLabel: 'Approve',
@@ -526,7 +539,7 @@ class _DisputeDetailPageState extends ConsumerState<DisputeDetailPage> {
                                   children: [
                                     Text(
                                       'Resolution history',
-                                      style: GoogleFonts.poppins(
+                                      style: GoogleFonts.outfit(
                                           fontWeight: FontWeight.w800),
                                     ),
                                     const SizedBox(height: 12),
@@ -617,7 +630,8 @@ class _PhotoGallery extends StatelessWidget {
               borderRadius: AbzioTheme.buttonRadius,
               cloudinaryWidth: 240,
               cloudinaryHeight: 240,
-              backgroundColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+              backgroundColor:
+                  Theme.of(context).colorScheme.surfaceContainerHighest,
             ),
           );
         },

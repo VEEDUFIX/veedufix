@@ -168,7 +168,7 @@ class _OpsAlertsPageState extends ConsumerState<OpsAlertsPage> {
                         children: [
                           Text(
                             'Unified Alerts Queue',
-                            style: GoogleFonts.poppins(
+                            style: GoogleFonts.outfit(
                               fontSize: 32,
                               fontWeight: FontWeight.w800,
                               color: Colors.black87,
@@ -178,7 +178,7 @@ class _OpsAlertsPageState extends ConsumerState<OpsAlertsPage> {
                           const SizedBox(height: 8),
                           Text(
                             'Handle dispatch failures, finance exceptions, and SLA escalations from one queue.',
-                            style: GoogleFonts.inter(
+                            style: GoogleFonts.outfit(
                               color: Colors.black54,
                               fontSize: 16,
                             ),
@@ -265,7 +265,7 @@ class _OpsAlertsPageState extends ConsumerState<OpsAlertsPage> {
                   const SizedBox(height: 10),
                   Text(
                     'Showing ${_queueLabel(_selectedQueue)}',
-                    style: GoogleFonts.inter(
+                    style: GoogleFonts.outfit(
                       color: Colors.black54,
                       fontSize: 13,
                       fontWeight: FontWeight.w600,
@@ -334,7 +334,7 @@ class _OpsAlertsPageState extends ConsumerState<OpsAlertsPage> {
                                             CrossAxisAlignment.start,
                                         children: [
                                           Text(alert.title,
-                                              style: GoogleFonts.poppins(
+                                              style: GoogleFonts.outfit(
                                                   fontWeight: FontWeight.w800)),
                                           const SizedBox(height: 4),
                                           Text(

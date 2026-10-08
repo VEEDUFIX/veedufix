@@ -12,7 +12,6 @@ import '../../data/worker_earnings_repository.dart';
 import '../../domain/entities/worker_earnings.dart';
 import '../providers/earnings_provider.dart';
 import '../../../../core/widgets/liquid_refresh.dart';
-import '../../../../core/widgets/metallic_card.dart';
 
 final workerPayoutProfileProvider =
     FutureProvider.autoDispose<Map<String, dynamic>>((ref) async {
@@ -653,14 +652,11 @@ class _EarningsPageState extends ConsumerState<EarningsPage> {
                       ),
                     ),
                     const SizedBox(height: 18),
-                    TapScale(
+                    VeeduFixFeatureCard(
                       onTap: () => context.push('/wallet'),
-                      child: const MetallicCard(
-                        title: 'Withdraw Earnings',
-                        subtitle: 'Open wallet to request a real payout',
-                        icon: Icons.account_balance_wallet_rounded,
-                        baseColor: Color(0xFFC2A15E),
-                      ),
+                      title: 'Withdraw earnings',
+                      subtitle: 'Open wallet to request a payout',
+                      icon: Icons.account_balance_wallet_rounded,
                     ),
                     const SizedBox(height: 24),
                     const PremiumSectionHeader(

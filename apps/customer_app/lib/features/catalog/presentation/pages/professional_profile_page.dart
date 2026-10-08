@@ -112,7 +112,7 @@ class _ProfileBody extends StatelessWidget {
     final cs = Theme.of(context).colorScheme;
     final tt = Theme.of(context).textTheme;
 
-    const accent = Color(0xFFC2A15E);
+    const accent = VeeduFixDesignSystem.gold;
 
     return Scaffold(
       backgroundColor: cs.surface,
@@ -197,9 +197,8 @@ class _ProfileBody extends StatelessWidget {
                                       vertical: 5,
                                     ),
                                     decoration: BoxDecoration(
-                                      color: const Color(
-                                        0xFF16845B,
-                                      ).withValues(alpha: 0.1),
+                                      color: VeeduFixDesignSystem.success
+                                          .withValues(alpha: 0.1),
                                       borderRadius: BorderRadius.circular(999),
                                     ),
                                     child: const Row(
@@ -208,13 +207,13 @@ class _ProfileBody extends StatelessWidget {
                                         Icon(
                                           Icons.verified_rounded,
                                           size: 14,
-                                          color: Color(0xFF16845B),
+                                          color: VeeduFixDesignSystem.success,
                                         ),
                                         SizedBox(width: 4),
                                         Text(
                                           'Verified',
                                           style: TextStyle(
-                                            color: Color(0xFF16845B),
+                                            color: VeeduFixDesignSystem.success,
                                             fontSize: 11,
                                             fontWeight: FontWeight.w700,
                                           ),
@@ -248,9 +247,11 @@ class _ProfileBody extends StatelessWidget {
                     ),
                     decoration: BoxDecoration(
                       color: profile.isAvailable
-                          ? const Color(0xFFEAF4EA)
+                          ? VeeduFixDesignSystem.success.withValues(alpha: 0.1)
                           : cs.surfaceContainerHighest,
-                      borderRadius: BorderRadius.circular(20),
+                      borderRadius: BorderRadius.circular(
+                        VeeduFixDesignSystem.radiusMedium,
+                      ),
                     ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
@@ -261,7 +262,7 @@ class _ProfileBody extends StatelessWidget {
                               : Icons.schedule_rounded,
                           size: 16,
                           color: profile.isAvailable
-                              ? const Color(0xFF38834A)
+                              ? VeeduFixDesignSystem.success
                               : cs.onSurfaceVariant,
                         ),
                         const SizedBox(width: 6),
@@ -271,7 +272,7 @@ class _ProfileBody extends StatelessWidget {
                               : 'Not taking bookings right now',
                           style: tt.labelMedium?.copyWith(
                             color: profile.isAvailable
-                                ? const Color(0xFF286B39)
+                                ? VeeduFixDesignSystem.success
                                 : cs.onSurfaceVariant,
                             fontWeight: FontWeight.w600,
                           ),
@@ -290,7 +291,7 @@ class _ProfileBody extends StatelessWidget {
                             ? profile.averageRating.toStringAsFixed(1)
                             : 'New',
                         label: 'Rating',
-                        accent: const Color(0xFFF59E0B),
+                        accent: VeeduFixDesignSystem.gold,
                       ),
                       const SizedBox(width: 12),
                       _StatBadge(
@@ -304,7 +305,7 @@ class _ProfileBody extends StatelessWidget {
                         icon: Icons.history_edu_rounded,
                         value: '${profile.experienceYears} yrs',
                         label: 'Experience',
-                        accent: const Color(0xFF10B981),
+                        accent: VeeduFixDesignSystem.success,
                       ),
                     ],
                   ),
@@ -656,7 +657,7 @@ class _ReviewCard extends ConsumerWidget {
                             ? Icons.star_rounded
                             : Icons.star_outline_rounded,
                         size: 14,
-                        color: const Color(0xFFF59E0B),
+                        color: VeeduFixDesignSystem.gold,
                       ),
                     ),
                   ),

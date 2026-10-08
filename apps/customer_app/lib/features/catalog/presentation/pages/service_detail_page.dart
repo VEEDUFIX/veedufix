@@ -224,7 +224,7 @@ class _ServiceDetailViewState extends ConsumerState<_ServiceDetailView> {
                             ? Icons.favorite_rounded
                             : Icons.favorite_border_rounded,
                         color: isFavorite
-                            ? Colors.redAccent
+                            ? VeeduFixDesignSystem.error
                             : colorScheme.onSurfaceVariant,
                         size: 20,
                       ),
@@ -270,7 +270,7 @@ class _ServiceDetailViewState extends ConsumerState<_ServiceDetailView> {
                             vertical: 6,
                           ),
                           decoration: BoxDecoration(
-                            color: Colors.black.withValues(alpha: 0.54),
+                            color: VeeduFixDesignSystem.ink.withValues(alpha: 0.54),
                             borderRadius: BorderRadius.circular(20),
                           ),
                           child: Text(
@@ -520,10 +520,10 @@ class _ServiceDetailViewState extends ConsumerState<_ServiceDetailView> {
                       vertical: 8,
                     ),
                     decoration: BoxDecoration(
-                      color: const Color(0xFF0D9488).withValues(alpha: 0.12),
+                      color: AbzioTheme.successColor.withValues(alpha: 0.10),
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(
-                        color: const Color(0xFF0D9488).withValues(alpha: 0.3),
+                        color: AbzioTheme.successColor.withValues(alpha: 0.25),
                       ),
                     ),
                     child: const Row(
@@ -532,14 +532,14 @@ class _ServiceDetailViewState extends ConsumerState<_ServiceDetailView> {
                         Icon(
                           Icons.home_repair_service_rounded,
                           size: 16,
-                          color: Color(0xFF0D9488),
+                          color: AbzioTheme.successColor,
                         ),
                         SizedBox(width: 8),
                         Flexible(
                           child: Text(
                             'A site visit is needed before final pricing.',
                             style: TextStyle(
-                              color: Color(0xFF0D9488),
+                              color: AbzioTheme.successColor,
                               fontWeight: FontWeight.w700,
                               fontSize: 13,
                             ),
@@ -559,7 +559,7 @@ class _ServiceDetailViewState extends ConsumerState<_ServiceDetailView> {
                   _SectionCard(
                     title: 'What is included',
                     icon: Icons.check_circle_rounded,
-                    accent: const Color(0xFF10B981),
+                    accent: AbzioTheme.successColor,
                     child: _BulletList(
                       items: service.inclusions,
                       positive: true,
@@ -854,7 +854,11 @@ class _ServiceRatingLine extends StatelessWidget {
     final count = (live?['total'] as num?)?.toInt() ?? catalogReviewCount;
     return Row(
       children: [
-        const Icon(Icons.star_rounded, size: 18, color: Color(0xFFF59E0B)),
+        const Icon(
+          Icons.star_rounded,
+          size: 18,
+          color: VeeduFixDesignSystem.gold,
+        ),
         const SizedBox(width: 4),
         Text(
           count > 0 && rating > 0 ? rating.toStringAsFixed(1) : 'New',
@@ -932,7 +936,10 @@ class _CustomerReviewsSection extends StatelessWidget {
                       style: Theme.of(context).textTheme.headlineMedium
                           ?.copyWith(fontWeight: FontWeight.w900),
                     ),
-                    const Icon(Icons.star_rounded, color: Color(0xFFF59E0B)),
+                    const Icon(
+                      Icons.star_rounded,
+                      color: VeeduFixDesignSystem.gold,
+                    ),
                     Text(
                       '$total reviews',
                       textAlign: TextAlign.center,
@@ -960,7 +967,7 @@ class _CustomerReviewsSection extends StatelessWidget {
                               const Icon(
                                 Icons.star_rounded,
                                 size: 14,
-                                color: Color(0xFFF59E0B),
+                                color: VeeduFixDesignSystem.gold,
                               ),
                               const SizedBox(width: 8),
                               Expanded(
@@ -972,7 +979,7 @@ class _CustomerReviewsSection extends StatelessWidget {
                                     backgroundColor: Theme.of(
                                       context,
                                     ).colorScheme.surfaceContainerHighest,
-                                    color: const Color(0xFFC2A15E),
+                                    color: VeeduFixDesignSystem.gold,
                                   ),
                                 ),
                               ),
@@ -1004,7 +1011,7 @@ class _CustomerReviewsSection extends StatelessWidget {
                       const Icon(
                         Icons.star_rounded,
                         size: 16,
-                        color: Color(0xFFF59E0B),
+                        color: VeeduFixDesignSystem.gold,
                       ),
                       const SizedBox(width: 4),
                       Text(
@@ -1107,17 +1114,7 @@ class _SectionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: colorScheme.surface,
-        borderRadius: BorderRadius.circular(AbzioTheme.cardRadius),
-        border: Border.all(
-          color: colorScheme.outlineVariant.withValues(alpha: 0.6),
-        ),
-        boxShadow: AbzioTheme.eliteShadow,
-      ),
+    return VeeduFixCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1143,7 +1140,7 @@ class _SectionCard extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 14),
+          const SizedBox(height: VeeduFixDesignSystem.space16),
           child,
         ],
       ),
@@ -1164,7 +1161,7 @@ class _MetaChip extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
         color: colorScheme.primary.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(999),
+        borderRadius: BorderRadius.circular(VeeduFixDesignSystem.radiusMedium),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -1256,7 +1253,7 @@ class _BookingBottomBar extends ConsumerWidget {
         border: Border(top: BorderSide(color: colorScheme.outlineVariant)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.06),
+            color: VeeduFixDesignSystem.ink.withValues(alpha: 0.06),
             blurRadius: 16,
             offset: const Offset(0, -4),
           ),

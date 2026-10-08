@@ -30,7 +30,7 @@ class AdminPageShell extends StatelessWidget {
         surfaceTintColor: Colors.transparent,
         title: Text(
           title,
-          style: GoogleFonts.poppins(
+          style: GoogleFonts.outfit(
             fontWeight: FontWeight.w800,
             color: cs.onSurface,
           ),
@@ -81,7 +81,7 @@ class AdminSectionHeader extends StatelessWidget {
       children: [
         Text(
           title,
-          style: GoogleFonts.poppins(
+          style: GoogleFonts.outfit(
             fontSize: 18,
             fontWeight: FontWeight.w800,
             color: cs.onSurface,
@@ -90,7 +90,7 @@ class AdminSectionHeader extends StatelessWidget {
         const SizedBox(height: 4),
         Text(
           subtitle,
-          style: GoogleFonts.inter(
+          style: GoogleFonts.outfit(
             color: cs.onSurfaceVariant,
             height: 1.45,
           ),

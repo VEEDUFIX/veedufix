@@ -23,7 +23,7 @@ class _OtpPageState extends ConsumerState<OtpPage> {
   static const int _resendSeconds = 60;
 
   static const _accentColor = AbzioTheme.accentColor;
-  static const _errorColor = Color(0xFFD24B4B);
+  static const _errorColor = VeeduFixDesignSystem.error;
 
   // 6 controllers + focus nodes for the digit boxes
   final List<TextEditingController> _controllers = List.generate(
@@ -533,7 +533,7 @@ class _OtpBoxRow extends StatelessWidget {
               borderRadius: BorderRadius.circular(14),
               border: Border.all(
                 color: hasError
-                    ? const Color(0xFFD24B4B)
+                    ? VeeduFixDesignSystem.error
                     : isFocused
                     ? AbzioTheme.accentColor
                     : hasDigit

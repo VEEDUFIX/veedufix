@@ -17,14 +17,11 @@ class _LoginPageState extends ConsumerState<LoginPage> {
   final _phoneController = TextEditingController();
   final _phoneFocusNode = FocusNode();
   bool _isLoading = false;
-  bool _isFocused = false;
   String? _errorText;
 
-  static const _background = Color(0xFFFAFAF7);
-  static const _ink = Color(0xFF171512);
-  static const _muted = Color(0xFF77736D);
-  static const _gold = Color(0xFFC6A769);
-  static const _border = Color(0xFFE3DED4);
+  static const _background = VeeduFixDesignSystem.ivory;
+  static const _ink = VeeduFixDesignSystem.ink;
+  static const _muted = VeeduFixDesignSystem.mutedInk;
 
   @override
   void initState() {
@@ -33,7 +30,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
     _phoneController.addListener(_onPhoneChanged);
   }
 
-  void _onFocusChanged() => setState(() => _isFocused = _phoneFocusNode.hasFocus);
+  void _onFocusChanged() => setState(() {});
 
   void _onPhoneChanged() {
     if (_errorText != null) {
@@ -89,7 +86,8 @@ class _LoginPageState extends ConsumerState<LoginPage> {
 
   Future<void> _onVerificationCompleted(PhoneAuthCredential credential) async {
     try {
-      final result = await FirebaseAuth.instance.signInWithCredential(credential);
+      final result =
+          await FirebaseAuth.instance.signInWithCredential(credential);
       final idToken = await result.user?.getIdToken();
       if (idToken == null) throw StateError('No Firebase sign-in token');
       await ref.read(authControllerProvider.notifier).signInWithFirebasePhone(
@@ -98,12 +96,17 @@ class _LoginPageState extends ConsumerState<LoginPage> {
           );
       if (mounted) context.go('/worker');
     } catch (_) {
-      if (mounted) setState(() => _errorText = 'Sign-in failed. Please try again.');
+      if (mounted) {
+        setState(() => _errorText = 'Sign-in failed. Please try again.');
+      }
     }
   }
 
   void _onVerificationFailed(FirebaseAuthException error) {
-    if (mounted) setState(() => _errorText = error.message ?? 'Verification failed. Please try again.');
+    if (mounted) {
+      setState(() => _errorText =
+          error.message ?? 'Verification failed. Please try again.');
+    }
   }
 
   void _onCodeSent(String verificationId, int? resendToken) {
@@ -130,63 +133,75 @@ class _LoginPageState extends ConsumerState<LoginPage> {
       body: SafeArea(
         child: SingleChildScrollView(
           keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-          padding: const EdgeInsets.fromLTRB(28, 0, 28, 24),
+          padding: const EdgeInsets.fromLTRB(
+            VeeduFixDesignSystem.pageMargin,
+            0,
+            VeeduFixDesignSystem.pageMargin,
+            24,
+          ),
           child: ConstrainedBox(
-            constraints: BoxConstraints(minHeight: MediaQuery.sizeOf(context).height - MediaQuery.paddingOf(context).vertical),
+            constraints: BoxConstraints(
+                minHeight: MediaQuery.sizeOf(context).height -
+                    MediaQuery.paddingOf(context).vertical),
             child: IntrinsicHeight(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  const SizedBox(height: 56),
-                  const Center(child: WorkerLogo(height: 38, color: _ink)),
-                  const SizedBox(height: 52),
-                  Text('Your work.\nYour growth.', style: textTheme.displaySmall?.copyWith(color: _ink, fontWeight: FontWeight.w800, height: 1.05)),
-                  const SizedBox(height: 14),
-                  Text('Accept trusted local jobs and grow your service business with Veedufix.', style: textTheme.bodyLarge?.copyWith(color: _muted, height: 1.5)),
                   const SizedBox(height: 32),
+                  const Center(child: WorkerLogo(height: 38, color: _ink)),
+                  const SizedBox(height: 32),
+                  Text('Your work.\nYour growth.',
+                      style: textTheme.displayMedium),
+                  const SizedBox(height: 12),
+                  Text(
+                      'Accept trusted local jobs and grow your service business with Veedufix.',
+                      style: textTheme.bodyLarge
+                          ?.copyWith(color: _muted, height: 1.5)),
+                  const SizedBox(height: 24),
                   const _TrustRow(),
-                  const SizedBox(height: 40),
-                  Text('MOBILE NUMBER', style: textTheme.labelSmall?.copyWith(color: _muted, letterSpacing: 1.4, fontWeight: FontWeight.w800)),
+                  const SizedBox(height: 24),
+                  Text('MOBILE NUMBER',
+                      style: textTheme.labelMedium?.copyWith(color: _muted)),
                   const SizedBox(height: 10),
-                  Container(
-                    height: 56,
-                    decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14), border: Border.all(color: _errorText != null ? Colors.redAccent : (_isFocused ? _gold : _border), width: _isFocused ? 1.5 : 1)),
-                    child: Row(
-                      children: [
-                        const SizedBox(width: 16),
-                        const Text('+91', style: TextStyle(fontWeight: FontWeight.w700, color: _ink)),
-                        Container(width: 1, height: 20, margin: const EdgeInsets.symmetric(horizontal: 12), color: _border),
-                        Expanded(
-                          child: TextField(
-                            controller: _phoneController,
-                            focusNode: _phoneFocusNode,
-                            keyboardType: TextInputType.phone,
-                            textInputAction: TextInputAction.done,
-                            inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(10)],
-                            decoration: const InputDecoration(border: InputBorder.none, hintText: '98765 43210'),
-                            onSubmitted: (_) => _requestOtp(),
-                          ),
-                        ),
-                        if (_isPhoneValid) const Padding(padding: EdgeInsets.only(right: 14), child: Icon(Icons.check_circle_rounded, color: Colors.green)),
-                      ],
-                    ),
+                  VeeduFixPhoneField(
+                    controller: _phoneController,
+                    focusNode: _phoneFocusNode,
+                    hasError: _errorText != null,
+                    inputFormatters: [
+                      FilteringTextInputFormatter.digitsOnly,
+                      LengthLimitingTextInputFormatter(10),
+                    ],
+                    onSubmitted: (_) => _requestOtp(),
+                    trailing: _isPhoneValid
+                        ? const Icon(
+                            Icons.check_circle_rounded,
+                            color: AbzioTheme.successColor,
+                          )
+                        : null,
                   ),
                   if (_errorText != null) ...[
                     const SizedBox(height: 8),
-                    Text(_errorText!, style: const TextStyle(color: Colors.redAccent, fontSize: 12)),
+                    Text(
+                      _errorText!,
+                      style: textTheme.bodySmall?.copyWith(
+                        color: Theme.of(context).colorScheme.error,
+                      ),
+                    ),
                   ],
                   const SizedBox(height: 18),
-                  SizedBox(
-                    height: 54,
-                    child: ElevatedButton(
-                      onPressed: _isLoading ? null : _requestOtp,
-                      style: ElevatedButton.styleFrom(backgroundColor: _ink, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14))),
-                      child: _isLoading ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)) : const Text('Send OTP', style: TextStyle(fontWeight: FontWeight.w800)),
-                    ),
+                  VeeduFixButton(
+                    label: 'Send OTP',
+                    onPressed:
+                        _isPhoneValid && !_isLoading ? _requestOtp : null,
+                    isLoading: _isLoading,
                   ),
                   const Spacer(),
                   const SizedBox(height: 28),
-                  const Text('By continuing, you agree to the Veedufix Partner Terms and Privacy Policy.', textAlign: TextAlign.center, style: TextStyle(color: Color(0xFFAAA59D), fontSize: 11, height: 1.5)),
+                  Text(
+                    'By continuing, you agree to the VeeduFix Partner Terms and Privacy Policy.',
+                    textAlign: TextAlign.center,
+                    style: textTheme.bodySmall,
+                  ),
                 ],
               ),
             ),
@@ -222,9 +237,13 @@ class _TrustItem extends StatelessWidget {
     return Expanded(
       child: Column(
         children: [
-          Icon(icon, color: const Color(0xFFC6A769), size: 22),
+          Icon(icon, color: VeeduFixDesignSystem.gold, size: 22),
           const SizedBox(height: 7),
-          Text(label, textAlign: TextAlign.center, style: const TextStyle(color: Color(0xFF77736D), fontSize: 11)),
+          Text(
+            label,
+            textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.labelSmall,
+          ),
         ],
       ),
     );

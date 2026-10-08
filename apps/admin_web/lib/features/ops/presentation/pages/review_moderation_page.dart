@@ -105,7 +105,7 @@ class _ReviewModerationPageState extends ConsumerState<ReviewModerationPage> {
         surfaceTintColor: Colors.transparent,
         title: Text(
           'Review moderation',
-          style: GoogleFonts.poppins(fontWeight: FontWeight.w800),
+          style: GoogleFonts.outfit(fontWeight: FontWeight.w800),
         ),
         actions: [
           IconButton(onPressed: _load, icon: const Icon(Icons.refresh))
@@ -132,7 +132,7 @@ class _ReviewModerationPageState extends ConsumerState<ReviewModerationPage> {
                     children: [
                       Text(
                         'Customer reports',
-                        style: GoogleFonts.poppins(
+                        style: GoogleFonts.outfit(
                           fontSize: 26,
                           fontWeight: FontWeight.w800,
                         ),

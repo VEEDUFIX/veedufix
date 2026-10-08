@@ -149,7 +149,7 @@ class _SystemHealthPageState extends ConsumerState<SystemHealthPage> {
                     children: [
                       Text(
                         'System Health',
-                        style: GoogleFonts.poppins(
+                        style: GoogleFonts.outfit(
                           fontSize: 32,
                           fontWeight: FontWeight.w800,
                           color: Colors.black87,
@@ -158,7 +158,7 @@ class _SystemHealthPageState extends ConsumerState<SystemHealthPage> {
                       const SizedBox(height: 8),
                       Text(
                         'Monitor API, database, and cache availability.',
-                        style: GoogleFonts.inter(
+                        style: GoogleFonts.outfit(
                           color: Colors.black54,
                           fontSize: 15,
                         ),

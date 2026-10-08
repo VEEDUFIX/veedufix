@@ -1,15 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../ui/widgets/abzio_motion.dart';
+import 'veedufix_design_system.dart';
 
 class AbzioTheme {
-  static const Color accentColor = Color(0xFFC2A15E);
-  static const Color workerPrimary = Color(0xFF0F766E);
-  static const Color workerAccent = Color(0xFF14B8A6);
-  static const Color successColor = Color(0xFF2D7A57);
+  // Legacy name retained for existing feature imports. New UI should use
+  // VeeduFixDesignSystem semantic tokens.
+  static const Color accentColor = VeeduFixDesignSystem.gold;
+  static const Color workerPrimary = accentColor;
+  static const Color workerAccent = successColor;
+  static const Color successColor = VeeduFixDesignSystem.success;
   static const Color infoColor = Color(0xFF397AA5);
-  static const Color warningColor = Color(0xFFAA7C2F);
-  static const Color dangerColor = Color(0xFFB34B43);
+  static const Color warningColor = VeeduFixDesignSystem.warning;
+  static const Color dangerColor = VeeduFixDesignSystem.error;
   static const Color primaryColor = lightBackground;
   static const Color backgroundColor = lightBackground;
   static const Color cardColor = lightCard;
@@ -23,29 +26,30 @@ class AbzioTheme {
   static const Color grey500 = Color(0xFF8B8B8B);
   static const Color grey600 = lightTextSecondary;
 
-  static const Color lightBackground = Color(0xFFF9F5EC);
-  static const Color lightCard = Color(0xFFFFFDF9);
-  static const Color lightTextPrimary = Color(0xFF13110F);
-  static const Color lightTextSecondary = Color(0xFF6B6256);
-  static const Color lightBorder = Color(0xFFE5D8C6);
+  static const Color lightBackground = VeeduFixDesignSystem.ivory;
+  static const Color lightCard = VeeduFixDesignSystem.surface;
+  static const Color lightTextPrimary = VeeduFixDesignSystem.ink;
+  static const Color lightTextSecondary = VeeduFixDesignSystem.mutedInk;
+  static const Color lightBorder = VeeduFixDesignSystem.border;
   static const Color lightMuted = Color(0xFFF7F1E4);
 
-  static const double spacing4 = 4;
-  static const double spacing8 = 8;
-  static const double spacing12 = 12;
-  static const double spacing16 = 16;
-  static const double spacing20 = 20;
-  static const double spacing24 = 24;
-  static const double spacing32 = 32;
-  static const double spacing40 = 40;
-  static const double cardRadius = 28;
-  static const double buttonRadius = 18;
-  static const double inputRadius = 20;
-  static const double sectionGap = 32;
-  static const double cardPadding = 24;
-  static const double screenHorizontalPadding = 24;
-  static const double minimumTouchTarget = 48;
-  static const double fieldHeight = 64;
+  static const double spacing4 = VeeduFixDesignSystem.space4;
+  static const double spacing8 = VeeduFixDesignSystem.space8;
+  static const double spacing12 = VeeduFixDesignSystem.space12;
+  static const double spacing16 = VeeduFixDesignSystem.space16;
+  static const double spacing20 = VeeduFixDesignSystem.space20;
+  static const double spacing24 = VeeduFixDesignSystem.space24;
+  static const double spacing28 = VeeduFixDesignSystem.space28;
+  static const double spacing32 = VeeduFixDesignSystem.space32;
+  static const double spacing40 = VeeduFixDesignSystem.space40;
+  static const double cardRadius = VeeduFixDesignSystem.radiusLarge;
+  static const double buttonRadius = 17;
+  static const double inputRadius = VeeduFixDesignSystem.radiusMedium;
+  static const double sectionGap = VeeduFixDesignSystem.space24;
+  static const double cardPadding = VeeduFixDesignSystem.space16;
+  static const double screenHorizontalPadding = VeeduFixDesignSystem.pageMargin;
+  static const double minimumTouchTarget = 44;
+  static const double fieldHeight = VeeduFixDesignSystem.inputHeight;
   static const double internalSpacing = spacing16;
 
   static List<BoxShadow> shadowFor(Brightness brightness) => [
@@ -53,8 +57,8 @@ class AbzioTheme {
           color: Colors.black.withValues(
             alpha: brightness == Brightness.dark ? 0.14 : 0.06,
           ),
-          blurRadius: brightness == Brightness.dark ? 16 : 10,
-          offset: const Offset(0, 6),
+          blurRadius: brightness == Brightness.dark ? 12 : 6,
+          offset: const Offset(0, 2),
         ),
       ];
 
@@ -86,7 +90,7 @@ class AbzioTheme {
       primary: accentColor,
       secondary: accentColor,
       surface: card,
-      error: const Color(0xFFD16A57),
+      error: dangerColor,
     ).copyWith(
       onPrimary: Colors.black,
       onSecondary: Colors.black,
@@ -97,21 +101,21 @@ class AbzioTheme {
     final textTheme = TextTheme(
       displayLarge: GoogleFonts.cormorantGaramond(
         color: textPrimary,
-        fontSize: 42,
+        fontSize: 34,
         fontWeight: FontWeight.w600,
         letterSpacing: -0.9,
         height: 0.95,
       ),
       displayMedium: GoogleFonts.cormorantGaramond(
         color: textPrimary,
-        fontSize: 32,
+        fontSize: 30,
         fontWeight: FontWeight.w600,
         letterSpacing: -0.6,
         height: 1.0,
       ),
       headlineLarge: GoogleFonts.cormorantGaramond(
         color: textPrimary,
-        fontSize: 28,
+        fontSize: 26,
         fontWeight: FontWeight.w600,
         letterSpacing: -0.4,
         height: 1.02,
@@ -126,25 +130,25 @@ class AbzioTheme {
       titleLarge: GoogleFonts.outfit(
         color: textPrimary,
         fontSize: 20,
-        fontWeight: FontWeight.w700,
+        fontWeight: FontWeight.w600,
         letterSpacing: -0.15,
         height: 1.15,
       ),
       titleMedium: GoogleFonts.outfit(
         color: textPrimary,
         fontSize: 17,
-        fontWeight: FontWeight.w700,
+        fontWeight: FontWeight.w600,
         height: 1.2,
       ),
       titleSmall: GoogleFonts.outfit(
         color: textPrimary,
         fontSize: 14,
-        fontWeight: FontWeight.w700,
+        fontWeight: FontWeight.w600,
         height: 1.25,
       ),
       bodyLarge: GoogleFonts.outfit(
         color: textPrimary,
-        fontSize: 16,
+        fontSize: 15,
         fontWeight: FontWeight.w500,
         height: 1.55,
       ),
@@ -205,7 +209,7 @@ class AbzioTheme {
         iconTheme: IconThemeData(color: textPrimary, size: 22),
         titleTextStyle: textTheme.titleLarge?.copyWith(
           color: textPrimary,
-          fontWeight: FontWeight.w800,
+          fontWeight: FontWeight.w600,
         ),
       ),
       iconTheme: IconThemeData(color: textPrimary),
@@ -258,13 +262,14 @@ class AbzioTheme {
           foregroundColor: Colors.black,
           elevation: 0,
           animationDuration: AbzioMotion.medium,
-          padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 24),
+          minimumSize: const Size(0, VeeduFixDesignSystem.buttonHeight),
+          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 20),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(buttonRadius),
           ),
           textStyle: GoogleFonts.outfit(
             fontSize: 14,
-            fontWeight: FontWeight.w800,
+            fontWeight: FontWeight.w600,
           ),
         ).copyWith(
           overlayColor: WidgetStatePropertyAll(
@@ -277,13 +282,14 @@ class AbzioTheme {
           foregroundColor: textPrimary,
           side: BorderSide(color: border, width: 1.1),
           animationDuration: AbzioMotion.medium,
-          padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 20),
+          minimumSize: const Size(0, VeeduFixDesignSystem.buttonHeight),
+          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(buttonRadius),
           ),
           textStyle: GoogleFonts.outfit(
             fontSize: 14,
-            fontWeight: FontWeight.w800,
+            fontWeight: FontWeight.w600,
           ),
         ).copyWith(
           overlayColor: WidgetStatePropertyAll(
@@ -311,10 +317,9 @@ class AbzioTheme {
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: isDark ? const Color(0xFF2A2218) : const Color(0xFFFDF8F0),
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: 20,
-          vertical: 20,
-        ),
+        isDense: true,
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(inputRadius),
           borderSide: BorderSide(color: border, width: 1),
@@ -329,11 +334,11 @@ class AbzioTheme {
         ),
         errorBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(inputRadius),
-          borderSide: const BorderSide(color: Color(0xFFD24B4B), width: 1),
+          borderSide: const BorderSide(color: dangerColor, width: 1),
         ),
         focusedErrorBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(inputRadius),
-          borderSide: const BorderSide(color: Color(0xFFD24B4B), width: 1.3),
+          borderSide: const BorderSide(color: dangerColor, width: 1.3),
         ),
         floatingLabelStyle: GoogleFonts.outfit(
           color: accentColor,
@@ -342,7 +347,7 @@ class AbzioTheme {
         ),
         hintStyle: GoogleFonts.outfit(
           color: textSecondary,
-          fontSize: 14,
+          fontSize: 15,
           fontWeight: FontWeight.w500,
         ),
         labelStyle: GoogleFonts.outfit(color: textSecondary, fontSize: 13),
@@ -358,8 +363,9 @@ class AbzioTheme {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       ),
       navigationBarTheme: NavigationBarThemeData(
+        height: 64,
         backgroundColor: elevated,
-        indicatorColor: accentColor.withValues(alpha: isDark ? 0.2 : 0.12),
+        indicatorColor: accentColor.withValues(alpha: isDark ? 0.14 : 0.08),
         labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
         elevation: 0,
         iconTheme: WidgetStateProperty.resolveWith((states) {
@@ -370,6 +376,7 @@ class AbzioTheme {
           final selected = states.contains(WidgetState.selected);
           return GoogleFonts.outfit(
             color: selected ? textPrimary : textSecondary,
+            fontSize: 11,
             fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
           );
         }),

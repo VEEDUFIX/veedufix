@@ -2,13 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:marketplace_shared/marketplace_shared.dart';
 
 import '../providers/worker_profile_providers.dart';
 
-const _gold = Color(0xFFC8A75A);
-const _ink = Color(0xFF17120D);
-const _muted = Color(0xFF766F66);
-const _cream = Color(0xFFFBF7EF);
+const _gold = VeeduFixDesignSystem.gold;
+const _ink = VeeduFixDesignSystem.ink;
+const _muted = VeeduFixDesignSystem.mutedInk;
+const _cream = VeeduFixDesignSystem.ivory;
 
 class KycVerificationPage extends ConsumerWidget {
   const KycVerificationPage({super.key});
@@ -35,9 +36,9 @@ class KycVerificationPage extends ConsumerWidget {
                         ? Icons.warning_amber_rounded
                         : Icons.hourglass_top_rounded,
                 color: verified
-                    ? Colors.green
+                    ? VeeduFixDesignSystem.success
                     : rejected
-                        ? Colors.red
+                        ? VeeduFixDesignSystem.error
                         : _gold),
             if (rejected && _text(profile['rejectionReason'], '').isNotEmpty)
               _DetailSection(title: 'Review note', children: [

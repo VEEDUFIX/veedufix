@@ -54,7 +54,8 @@ class DashboardCharts extends StatelessWidget {
       return PremiumEmptyState(
         icon: Icons.cloud_off_rounded,
         title: 'Could not load dashboard charts',
-        subtitle: 'The live admin charts are unavailable right now. Please retry.',
+        subtitle:
+            'The live admin charts are unavailable right now. Please retry.',
         actionLabel: 'Retry',
         onAction: onRetry,
       );
@@ -65,7 +66,8 @@ class DashboardCharts extends StatelessWidget {
       return const PremiumEmptyState(
         icon: Icons.analytics_outlined,
         title: 'No dashboard data yet',
-        subtitle: 'Live operational charts will appear once the overview API returns data.',
+        subtitle:
+            'Live operational charts will appear once the overview API returns data.',
       );
     }
 
@@ -77,7 +79,10 @@ class DashboardCharts extends StatelessWidget {
             flex: isSmall ? 0 : 2,
             child: _WorkloadChart(summary: data.summary),
           ),
-          if (isSmall) const SizedBox(height: 32) else const SizedBox(width: 32),
+          if (isSmall)
+            const SizedBox(height: 32)
+          else
+            const SizedBox(width: 32),
           Expanded(
             flex: isSmall ? 0 : 1,
             child: _OperationsMixChart(summary: data.summary),
@@ -86,7 +91,10 @@ class DashboardCharts extends StatelessWidget {
 
         if (isSmall) {
           return Column(
-            children: charts.whereType<Expanded>().map((chart) => chart.child).toList(),
+            children: charts
+                .whereType<Expanded>()
+                .map((chart) => chart.child)
+                .toList(),
           );
         }
 
@@ -108,16 +116,23 @@ class _WorkloadChart extends StatelessWidget {
   Widget build(BuildContext context) {
     final bars = <_WorkloadBar>[
       _WorkloadBar('Active', summary.activeJobsCount, const Color(0xFF2563EB)),
-      _WorkloadBar('Dispatch', summary.dispatchFailuresCount, const Color(0xFFEF4444)),
-      _WorkloadBar('Disputes', summary.openDisputesCount, const Color(0xFFF59E0B)),
-      _WorkloadBar('Payouts', summary.failedPayoutsCount, const Color(0xFF0F766E)),
-      _WorkloadBar('Refunds', summary.failedRefundsCount, const Color(0xFF8B5CF6)),
-      _WorkloadBar('Reviews', summary.pendingWorkerReviewsCount, const Color(0xFF14B8A6)),
+      _WorkloadBar(
+          'Dispatch', summary.dispatchFailuresCount, const Color(0xFFEF4444)),
+      _WorkloadBar(
+          'Disputes', summary.openDisputesCount, const Color(0xFFF59E0B)),
+      _WorkloadBar(
+          'Payouts', summary.failedPayoutsCount, const Color(0xFF0F766E)),
+      _WorkloadBar(
+          'Refunds', summary.failedRefundsCount, const Color(0xFF8B5CF6)),
+      _WorkloadBar('Reviews', summary.pendingWorkerReviewsCount,
+          const Color(0xFF14B8A6)),
     ];
-    final maxY = math.max(
-      1,
-      bars.map((bar) => bar.value).fold<int>(0, math.max),
-    ).toDouble();
+    final maxY = math
+        .max(
+          1,
+          bars.map((bar) => bar.value).fold<int>(0, math.max),
+        )
+        .toDouble();
     final interval = math.max(1.0, (maxY / 4).ceilToDouble());
 
     return GlassCard(
@@ -126,7 +141,7 @@ class _WorkloadChart extends StatelessWidget {
         children: [
           Text(
             'Live workload',
-            style: GoogleFonts.poppins(
+            style: GoogleFonts.outfit(
               fontSize: 18,
               fontWeight: FontWeight.w700,
               color: Colors.black87,
@@ -135,7 +150,7 @@ class _WorkloadChart extends StatelessWidget {
           const SizedBox(height: 6),
           Text(
             'Current operational queue pressure across dispatch, finance, and reviews.',
-            style: GoogleFonts.inter(
+            style: GoogleFonts.outfit(
               color: Colors.black54,
               fontSize: 13,
             ),
@@ -160,8 +175,10 @@ class _WorkloadChart extends StatelessWidget {
                 borderData: FlBorderData(show: false),
                 titlesData: FlTitlesData(
                   show: true,
-                  rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                  topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                  rightTitles: const AxisTitles(
+                      sideTitles: SideTitles(showTitles: false)),
+                  topTitles: const AxisTitles(
+                      sideTitles: SideTitles(showTitles: false)),
                   leftTitles: AxisTitles(
                     sideTitles: SideTitles(
                       showTitles: true,
@@ -243,19 +260,26 @@ class _OperationsMixChart extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final slices = <_PieSlice>[
-      _PieSlice('Active jobs', summary.activeJobsCount, const Color(0xFF2563EB)),
-      _PieSlice('Dispatch failures', summary.dispatchFailuresCount, const Color(0xFFEF4444)),
-      _PieSlice('Open disputes', summary.openDisputesCount, const Color(0xFFF59E0B)),
-      _PieSlice('Failed payouts', summary.failedPayoutsCount, const Color(0xFF0F766E)),
-      _PieSlice('Failed refunds', summary.failedRefundsCount, const Color(0xFF8B5CF6)),
-      _PieSlice('Worker reviews', summary.pendingWorkerReviewsCount, const Color(0xFF14B8A6)),
+      _PieSlice(
+          'Active jobs', summary.activeJobsCount, const Color(0xFF2563EB)),
+      _PieSlice('Dispatch failures', summary.dispatchFailuresCount,
+          const Color(0xFFEF4444)),
+      _PieSlice(
+          'Open disputes', summary.openDisputesCount, const Color(0xFFF59E0B)),
+      _PieSlice('Failed payouts', summary.failedPayoutsCount,
+          const Color(0xFF0F766E)),
+      _PieSlice('Failed refunds', summary.failedRefundsCount,
+          const Color(0xFF8B5CF6)),
+      _PieSlice('Worker reviews', summary.pendingWorkerReviewsCount,
+          const Color(0xFF14B8A6)),
     ].where((slice) => slice.value > 0).toList(growable: false);
 
     if (slices.isEmpty) {
       return const PremiumEmptyState(
         icon: Icons.pie_chart_outline_rounded,
         title: 'No live operations to show',
-        subtitle: 'This snapshot is clean for now, so the operations mix is empty.',
+        subtitle:
+            'This snapshot is clean for now, so the operations mix is empty.',
       );
     }
 
@@ -267,7 +291,7 @@ class _OperationsMixChart extends StatelessWidget {
         children: [
           Text(
             'Operations mix',
-            style: GoogleFonts.poppins(
+            style: GoogleFonts.outfit(
               fontSize: 18,
               fontWeight: FontWeight.w700,
               color: Colors.black87,
@@ -276,7 +300,7 @@ class _OperationsMixChart extends StatelessWidget {
           const SizedBox(height: 6),
           Text(
             'Share of the current issue queue by category.',
-            style: GoogleFonts.inter(
+            style: GoogleFonts.outfit(
               color: Colors.black54,
               fontSize: 13,
             ),
@@ -312,7 +336,7 @@ class _OperationsMixChart extends StatelessWidget {
               children: [
                 Text(
                   '$total open',
-                  style: GoogleFonts.poppins(
+                  style: GoogleFonts.outfit(
                     fontSize: 22,
                     fontWeight: FontWeight.w800,
                     color: Colors.black87,
@@ -321,7 +345,7 @@ class _OperationsMixChart extends StatelessWidget {
                 const SizedBox(height: 4),
                 Text(
                   'live operational items',
-                  style: GoogleFonts.inter(
+                  style: GoogleFonts.outfit(
                     fontSize: 13,
                     color: Colors.black54,
                   ),
@@ -374,7 +398,8 @@ class _ChartSkeletonCard extends StatelessWidget {
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.end,
                       children: [
-                        ShimmerWidget(width: double.infinity, height: 90, radius: 18),
+                        ShimmerWidget(
+                            width: double.infinity, height: 90, radius: 18),
                         SizedBox(height: 10),
                         ShimmerWidget(width: 48, height: 10, radius: 6),
                       ],
@@ -437,7 +462,7 @@ class _LegendChip extends StatelessWidget {
           const SizedBox(width: 8),
           Text(
             '$label · $value',
-            style: GoogleFonts.inter(
+            style: GoogleFonts.outfit(
               fontSize: 12,
               color: Colors.black87,
               fontWeight: FontWeight.w600,

@@ -1,7 +1,11 @@
+import 'dart:typed_data';
+
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:marketplace_shared/marketplace_shared.dart';
 
+import '../../../../core/widgets/admin_image_picker_field.dart';
 import '../widgets/admin_surface.dart';
 
 class HomeBannerManagerPage extends ConsumerStatefulWidget {
@@ -60,10 +64,23 @@ class _HomeBannerManagerPageState extends ConsumerState<HomeBannerManagerPage> {
     await _load();
   }
 
+  Future<String> _uploadBannerImage(Uint8List bytes, String fileName) async {
+    final response =
+        await ref.read(apiClientProvider).dio.post<Map<String, dynamic>>(
+              '/media/catalog',
+              data: FormData.fromMap({
+                'file': MultipartFile.fromBytes(bytes, filename: fileName),
+              }),
+            );
+    final url = response.data?['url'];
+    if (url is! String || !url.startsWith('https://')) {
+      throw StateError('The image upload returned an invalid URL.');
+    }
+    return url;
+  }
+
   Future<void> _showEditor([Map<String, dynamic>? banner]) async {
-    final imageController = TextEditingController(
-      text: banner?['imageUrl']?.toString() ?? '',
-    );
+    String? imageUrl = banner?['imageUrl']?.toString();
     final destinationController = TextEditingController(
       text: banner?['destinationValue']?.toString() ?? '',
     );
@@ -95,7 +112,6 @@ class _HomeBannerManagerPageState extends ConsumerState<HomeBannerManagerPage> {
       context: context,
       builder: (dialogContext) => _BannerDialogControllerOwner(
         controllers: [
-          imageController,
           destinationController,
           orderController,
         ],
@@ -110,12 +126,15 @@ class _HomeBannerManagerPageState extends ConsumerState<HomeBannerManagerPage> {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    TextField(
-                      controller: imageController,
-                      decoration: const InputDecoration(
-                        labelText: 'Image URL',
-                        hintText: 'https://…',
-                      ),
+                    AdminImagePickerField(
+                      label: 'Banner image',
+                      value: imageUrl,
+                      onChanged: (value) =>
+                          setDialogState(() => imageUrl = value),
+                      uploadImage: _uploadBannerImage,
+                      recommendedWidth: 1200,
+                      recommendedHeight: 630,
+                      showCustomerPreview: true,
                     ),
                     const SizedBox(height: 12),
                     DropdownButtonFormField<String>(
@@ -233,12 +252,12 @@ class _HomeBannerManagerPageState extends ConsumerState<HomeBannerManagerPage> {
                 onPressed: saving
                     ? null
                     : () async {
-                        final imageUrl = imageController.text.trim();
+                        final selectedImageUrl = imageUrl?.trim() ?? '';
                         final destinationValue =
                             destinationController.text.trim();
                         final sortOrder =
                             int.tryParse(orderController.text.trim());
-                        if (!imageUrl.startsWith('https://') ||
+                        if (!selectedImageUrl.startsWith('https://') ||
                             (destinationValue.isEmpty &&
                                 destinationType != 'offer') ||
                             sortOrder == null ||
@@ -247,7 +266,7 @@ class _HomeBannerManagerPageState extends ConsumerState<HomeBannerManagerPage> {
                                 endsAt != null &&
                                 startsAt!.isAfter(endsAt!))) {
                           setDialogState(() => error =
-                              'Check the image URL, destination, order, and dates.');
+                              'Choose an image and check the destination, order, and dates.');
                           return;
                         }
                         if (destinationType == 'custom_route') {
@@ -269,7 +288,7 @@ class _HomeBannerManagerPageState extends ConsumerState<HomeBannerManagerPage> {
                         try {
                           await _saveBanner(
                             {
-                              'imageUrl': imageUrl,
+                              'imageUrl': selectedImageUrl,
                               'isActive': isActive,
                               'sortOrder': sortOrder,
                               'destinationType': destinationType,
@@ -369,6 +388,115 @@ class _HomeBannerManagerPageState extends ConsumerState<HomeBannerManagerPage> {
     }
   }
 
+  Future<void> _duplicateBanner(Map<String, dynamic> banner) async {
+    try {
+      final nextOrder = _banners.fold<int>(-1, (maxOrder, item) {
+            final order = (item['sortOrder'] as num?)?.toInt() ?? 0;
+            return order > maxOrder ? order : maxOrder;
+          }) +
+          1;
+      await _saveBanner({
+        'imageUrl': banner['imageUrl'],
+        'isActive': false,
+        'sortOrder': nextOrder,
+        'destinationType': banner['destinationType'],
+        'destinationValue': banner['destinationValue'],
+        'startsAt': banner['startsAt'],
+        'endsAt': banner['endsAt'],
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Banner duplicated as inactive.')),
+        );
+      }
+    } catch (_) {
+      if (mounted) setState(() => _error = 'Could not duplicate this banner.');
+    }
+  }
+
+  Future<void> _previewCustomerBanner(Map<String, dynamic> banner) async {
+    final imageUrl = banner['imageUrl']?.toString() ?? '';
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => Dialog(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 620, maxHeight: 760),
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                          child: Text('Preview customer view',
+                              style: Theme.of(context).textTheme.titleLarge)),
+                      IconButton(
+                          onPressed: () => Navigator.pop(dialogContext),
+                          icon: const Icon(Icons.close_rounded)),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Text('Original preview',
+                      style: Theme.of(context).textTheme.titleSmall),
+                  const SizedBox(height: 8),
+                  Container(
+                    width: double.infinity,
+                    constraints: const BoxConstraints(maxHeight: 280),
+                    decoration: BoxDecoration(
+                      color:
+                          Theme.of(context).colorScheme.surfaceContainerHighest,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                          color: Theme.of(context).colorScheme.outlineVariant),
+                    ),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(16),
+                      child: Image.network(imageUrl,
+                          fit: BoxFit.contain,
+                          errorBuilder: (_, __, ___) => const SizedBox(
+                              height: 120,
+                              child: Center(
+                                  child: Icon(Icons.broken_image_outlined)))),
+                    ),
+                  ),
+                  const SizedBox(height: 18),
+                  Text('Customer preview',
+                      style: Theme.of(context).textTheme.titleSmall),
+                  const SizedBox(height: 8),
+                  Center(
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 328),
+                      child: AspectRatio(
+                        aspectRatio: 328 / 172,
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(20),
+                          child: Image.network(
+                            imageUrl,
+                            width: double.infinity,
+                            height: double.infinity,
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, __, ___) =>
+                                const ColoredBox(color: Color(0xFFECE6DB)),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text('328 × 172 dp · BoxFit.cover · 20 dp corners',
+                      style: Theme.of(context).textTheme.bodySmall),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return AdminPageShell(
@@ -457,11 +585,11 @@ class _HomeBannerManagerPageState extends ConsumerState<HomeBannerManagerPage> {
       child: Image.network(
         banner['imageUrl']?.toString() ?? '',
         width: 180,
-        height: 100,
+        height: 180 * (172 / 328),
         fit: BoxFit.cover,
         errorBuilder: (_, __, ___) => Container(
           width: 180,
-          height: 100,
+          height: 180 * (172 / 328),
           color: cs.surfaceContainerHighest,
           child: const Icon(Icons.image_not_supported_outlined),
         ),
@@ -470,13 +598,19 @@ class _HomeBannerManagerPageState extends ConsumerState<HomeBannerManagerPage> {
     final information = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          'Order ${banner['sortOrder'] ?? 0} · ${banner['destinationType']}',
-          style: Theme.of(context).textTheme.titleMedium,
-        ),
+        Text('Home banner · order ${banner['sortOrder'] ?? 0}',
+            style: Theme.of(context).textTheme.titleMedium),
         const SizedBox(height: 4),
-        Text(banner['destinationValue']?.toString() ?? '',
-            maxLines: 1, overflow: TextOverflow.ellipsis),
+        Text(active ? 'Active' : 'Inactive',
+            style: Theme.of(context)
+                .textTheme
+                .labelMedium
+                ?.copyWith(color: active ? cs.primary : cs.onSurfaceVariant)),
+        const SizedBox(height: 4),
+        Text(
+            'Destination: ${banner['destinationType']} · ${banner['destinationValue'] ?? ''}',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis),
         const SizedBox(height: 4),
         Text(
           '${startsAt == null ? 'Always' : _formatDate(startsAt)} → ${endsAt == null ? 'No end date' : _formatDate(endsAt)}',
@@ -498,7 +632,17 @@ class _HomeBannerManagerPageState extends ConsumerState<HomeBannerManagerPage> {
           icon: const Icon(Icons.edit_outlined),
         ),
         IconButton(
-          tooltip: 'Delete',
+          tooltip: 'Preview customer view',
+          onPressed: () => _previewCustomerBanner(banner),
+          icon: const Icon(Icons.preview_outlined),
+        ),
+        IconButton(
+          tooltip: 'Duplicate',
+          onPressed: () => _duplicateBanner(banner),
+          icon: const Icon(Icons.copy_all_outlined),
+        ),
+        IconButton(
+          tooltip: 'Delete / archive',
           onPressed: () => _deleteBanner(banner),
           icon: const Icon(Icons.delete_outline_rounded),
         ),
@@ -521,7 +665,7 @@ class _HomeBannerManagerPageState extends ConsumerState<HomeBannerManagerPage> {
                       children: [
                         SizedBox(
                           width: imageWidth,
-                          height: imageWidth * (100 / 180),
+                          height: imageWidth * (172 / 328),
                           child: image,
                         ),
                         const SizedBox(width: 12),

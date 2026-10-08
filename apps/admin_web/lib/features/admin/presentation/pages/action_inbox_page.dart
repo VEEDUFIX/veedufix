@@ -45,10 +45,14 @@ class _AdminActionInboxPageState extends ConsumerState<AdminActionInboxPage> {
   Future<_InboxSnapshot> _loadSnapshot() async {
     final overviewFuture = _safe(_opsApi.fetchOverview);
     final supportFuture = _safe(_fetchOpenSupportTickets);
-    final reviewsFuture = _safe(() => _workerReviewApi.fetchPending(page: 1, limit: 8));
-    final payoutsFuture = _safe(() => _financeApi.fetchPayouts(status: 'failed', page: 1, limit: 8));
-    final refundsFuture = _safe(() => _financeApi.fetchRefunds(status: 'failed', page: 1, pageSize: 8));
-    final disputesFuture = _safe(() => _disputesApi.fetchQueue(status: 'open', page: 1, pageSize: 8));
+    final reviewsFuture =
+        _safe(() => _workerReviewApi.fetchPending(page: 1, limit: 8));
+    final payoutsFuture = _safe(
+        () => _financeApi.fetchPayouts(status: 'failed', page: 1, limit: 8));
+    final refundsFuture = _safe(
+        () => _financeApi.fetchRefunds(status: 'failed', page: 1, pageSize: 8));
+    final disputesFuture = _safe(
+        () => _disputesApi.fetchQueue(status: 'open', page: 1, pageSize: 8));
 
     final overview = await overviewFuture;
     final support = await supportFuture;
@@ -297,7 +301,8 @@ class _AdminActionInboxPageState extends ConsumerState<AdminActionInboxPage> {
     );
   }
 
-  Future<void> _bulkMarkSupportInProgress(List<AdminSupportTicket> tickets) async {
+  Future<void> _bulkMarkSupportInProgress(
+      List<AdminSupportTicket> tickets) async {
     if (tickets.isEmpty) {
       return;
     }
@@ -328,7 +333,8 @@ class _AdminActionInboxPageState extends ConsumerState<AdminActionInboxPage> {
     }
   }
 
-  Future<void> _bulkResolveSupportTickets(List<AdminSupportTicket> tickets) async {
+  Future<void> _bulkResolveSupportTickets(
+      List<AdminSupportTicket> tickets) async {
     if (tickets.isEmpty) {
       return;
     }
@@ -596,7 +602,7 @@ class _AdminActionInboxPageState extends ConsumerState<AdminActionInboxPage> {
                                 children: [
                                   Text(
                                     'Unified action inbox',
-                                    style: GoogleFonts.poppins(
+                                    style: GoogleFonts.outfit(
                                       fontSize: 28,
                                       fontWeight: FontWeight.w900,
                                       letterSpacing: -0.4,
@@ -606,7 +612,7 @@ class _AdminActionInboxPageState extends ConsumerState<AdminActionInboxPage> {
                                   const SizedBox(height: 8),
                                   Text(
                                     'One place for alerts, support, reviews, payouts, refunds, and disputes that need a human decision.',
-                                    style: GoogleFonts.inter(
+                                    style: GoogleFonts.outfit(
                                       color: cs.onSurfaceVariant,
                                       height: 1.45,
                                     ),
@@ -616,9 +622,11 @@ class _AdminActionInboxPageState extends ConsumerState<AdminActionInboxPage> {
                             ),
                             const SizedBox(width: 16),
                             Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 14, vertical: 10),
                               decoration: BoxDecoration(
-                                color: const Color(0xFF0F766E).withValues(alpha: 0.12),
+                                color: const Color(0xFF0F766E)
+                                    .withValues(alpha: 0.12),
                                 borderRadius: BorderRadius.circular(999),
                               ),
                               child: Text(
@@ -690,19 +698,23 @@ class _AdminActionInboxPageState extends ConsumerState<AdminActionInboxPage> {
                 _ActionSection<OpsAlert>(
                   icon: Icons.notification_important_rounded,
                   title: 'Urgent alerts',
-                  subtitle: 'Retry failures and jump into the exact record in one tap.',
+                  subtitle:
+                      'Retry failures and jump into the exact record in one tap.',
                   count: alerts.length,
                   onSeeAll: () => context.go('/ops/alerts'),
                   onRetry: _reload,
                   items: alerts.take(8).toList(growable: false),
                   error: data.overviewError,
                   emptyTitle: 'No alerts right now',
-                  emptySubtitle: 'Dispatch, finance, support, and dispute alerts will appear here when they need attention.',
+                  emptySubtitle:
+                      'Dispatch, finance, support, and dispute alerts will appear here when they need attention.',
                   itemBuilder: (context, alert) {
                     return _AlertCard(
                       alert: alert,
                       onOpen: () => _openAlert(alert),
-                      onRetry: alert.retryAvailable ? () => _retryAlert(alert) : null,
+                      onRetry: alert.retryAvailable
+                          ? () => _retryAlert(alert)
+                          : null,
                       onCopy: () => _copyToClipboard(alert.id, 'Alert ID'),
                     );
                   },
@@ -711,36 +723,47 @@ class _AdminActionInboxPageState extends ConsumerState<AdminActionInboxPage> {
                 _ActionSection<AdminSupportTicket>(
                   icon: Icons.support_agent_rounded,
                   title: 'Support tickets',
-                  subtitle: 'Move tickets forward or jump straight into the thread.',
+                  subtitle:
+                      'Move tickets forward or jump straight into the thread.',
                   count: data.supportTickets.length,
                   onSeeAll: () => context.go('/support-tickets'),
                   onRetry: _reload,
                   items: data.supportTickets,
                   selectedIds: _selectedSupportTicketIds,
                   itemIdOf: (ticket) => ticket.id,
-                  onToggleSelection: (ticketId) => _toggleSelection(_selectedSupportTicketIds, ticketId),
-                  onClearSelection: () => _clearSelection(_selectedSupportTicketIds),
+                  onToggleSelection: (ticketId) =>
+                      _toggleSelection(_selectedSupportTicketIds, ticketId),
+                  onClearSelection: () =>
+                      _clearSelection(_selectedSupportTicketIds),
                   bulkActions: [
                     _SectionBulkAction<AdminSupportTicket>(
                       label: 'Start selected',
                       icon: Icons.play_arrow_rounded,
-                      onPressed: (context, selected) => _bulkMarkSupportInProgress(selected),
+                      onPressed: (context, selected) =>
+                          _bulkMarkSupportInProgress(selected),
                     ),
                     _SectionBulkAction<AdminSupportTicket>(
                       label: 'Resolve selected',
                       icon: Icons.check_circle_rounded,
-                      onPressed: (context, selected) => _bulkResolveSupportTickets(selected),
+                      onPressed: (context, selected) =>
+                          _bulkResolveSupportTickets(selected),
                     ),
                   ],
                   error: data.supportError,
                   emptyTitle: 'No open support tickets',
-                  emptySubtitle: 'Customer issues will show up here once they are waiting for an admin response.',
+                  emptySubtitle:
+                      'Customer issues will show up here once they are waiting for an admin response.',
                   itemBuilder: (context, ticket) {
                     return _SupportTicketCard(
                       ticket: ticket,
                       onOpen: () => _openSupportTicket(ticket),
-                      onMarkInProgress: ticket.status == 'OPEN' ? () => _markSupportInProgress(ticket) : null,
-                      onResolve: ticket.status != 'RESOLVED' && ticket.status != 'CLOSED' ? () => _resolveSupportTicket(ticket) : null,
+                      onMarkInProgress: ticket.status == 'OPEN'
+                          ? () => _markSupportInProgress(ticket)
+                          : null,
+                      onResolve: ticket.status != 'RESOLVED' &&
+                              ticket.status != 'CLOSED'
+                          ? () => _resolveSupportTicket(ticket)
+                          : null,
                       onCopy: () => _copyToClipboard(ticket.id, 'Ticket ID'),
                     );
                   },
@@ -749,21 +772,24 @@ class _AdminActionInboxPageState extends ConsumerState<AdminActionInboxPage> {
                 _ActionSection<WorkerReviewProfile>(
                   icon: Icons.how_to_reg_rounded,
                   title: 'Worker reviews',
-                  subtitle: 'Approve or reject onboarding requests without opening another screen.',
+                  subtitle:
+                      'Approve or reject onboarding requests without opening another screen.',
                   count: data.workerReviews.length,
                   onSeeAll: () => context.go('/worker-review'),
                   onRetry: _reload,
                   items: data.workerReviews,
                   error: data.workerReviewError,
                   emptyTitle: 'No pending worker reviews',
-                  emptySubtitle: 'New onboarding submissions will appear here when they are ready for review.',
+                  emptySubtitle:
+                      'New onboarding submissions will appear here when they are ready for review.',
                   itemBuilder: (context, profile) {
                     return _WorkerReviewCard(
                       profile: profile,
                       onOpen: () => _openWorkerReview(profile),
                       onApprove: () => _approveWorker(profile),
                       onReject: () => _rejectWorker(profile),
-                      onCopy: () => _copyToClipboard(profile.id, 'Worker profile ID'),
+                      onCopy: () =>
+                          _copyToClipboard(profile.id, 'Worker profile ID'),
                     );
                   },
                 ),
@@ -771,30 +797,36 @@ class _AdminActionInboxPageState extends ConsumerState<AdminActionInboxPage> {
                 _ActionSection<FinancePayoutItem>(
                   icon: Icons.payments_rounded,
                   title: 'Failed payouts',
-                  subtitle: 'Retry only the items that are stuck in payout failure.',
+                  subtitle:
+                      'Retry only the items that are stuck in payout failure.',
                   count: data.payouts.length,
                   onSeeAll: () => context.go('/finance/payouts'),
                   onRetry: _reload,
                   items: data.payouts,
                   selectedIds: _selectedPayoutIds,
                   itemIdOf: (payout) => payout.id,
-                  onToggleSelection: (payoutId) => _toggleSelection(_selectedPayoutIds, payoutId),
+                  onToggleSelection: (payoutId) =>
+                      _toggleSelection(_selectedPayoutIds, payoutId),
                   onClearSelection: () => _clearSelection(_selectedPayoutIds),
                   bulkActions: [
                     _SectionBulkAction<FinancePayoutItem>(
                       label: 'Retry selected',
                       icon: Icons.refresh_rounded,
-                      onPressed: (context, selected) => _bulkRetryPayouts(selected),
+                      onPressed: (context, selected) =>
+                          _bulkRetryPayouts(selected),
                     ),
                   ],
                   error: data.payoutError,
                   emptyTitle: 'No failed payouts',
-                  emptySubtitle: 'Failed worker payouts will land here if any retries are needed.',
+                  emptySubtitle:
+                      'Failed worker payouts will land here if any retries are needed.',
                   itemBuilder: (context, payout) {
                     return _PayoutCard(
                       payout: payout,
                       onOpen: () => _openPayout(payout),
-                      onRetry: payout.status == 'failed' ? () => _retryPayout(payout) : null,
+                      onRetry: payout.status == 'failed'
+                          ? () => _retryPayout(payout)
+                          : null,
                       onCopy: () => _copyToClipboard(payout.id, 'Payout ID'),
                     );
                   },
@@ -803,30 +835,36 @@ class _AdminActionInboxPageState extends ConsumerState<AdminActionInboxPage> {
                 _ActionSection<FinanceRefundItem>(
                   icon: Icons.receipt_long_rounded,
                   title: 'Failed refunds',
-                  subtitle: 'Retry refund requests that need another gateway attempt.',
+                  subtitle:
+                      'Retry refund requests that need another gateway attempt.',
                   count: data.refunds.length,
                   onSeeAll: () => context.go('/finance/refunds'),
                   onRetry: _reload,
                   items: data.refunds,
                   selectedIds: _selectedRefundIds,
                   itemIdOf: (refund) => refund.id,
-                  onToggleSelection: (refundId) => _toggleSelection(_selectedRefundIds, refundId),
+                  onToggleSelection: (refundId) =>
+                      _toggleSelection(_selectedRefundIds, refundId),
                   onClearSelection: () => _clearSelection(_selectedRefundIds),
                   bulkActions: [
                     _SectionBulkAction<FinanceRefundItem>(
                       label: 'Retry selected',
                       icon: Icons.refresh_rounded,
-                      onPressed: (context, selected) => _bulkRetryRefunds(selected),
+                      onPressed: (context, selected) =>
+                          _bulkRetryRefunds(selected),
                     ),
                   ],
                   error: data.refundError,
                   emptyTitle: 'No failed refunds',
-                  emptySubtitle: 'Refund failures will appear here when they need another try.',
+                  emptySubtitle:
+                      'Refund failures will appear here when they need another try.',
                   itemBuilder: (context, refund) {
                     return _RefundCard(
                       refund: refund,
                       onOpen: () => _openRefund(refund),
-                      onRetry: refund.status == 'failed' ? () => _retryRefund(refund) : null,
+                      onRetry: refund.status == 'failed'
+                          ? () => _retryRefund(refund)
+                          : null,
                       onCopy: () => _copyToClipboard(refund.id, 'Refund ID'),
                     );
                   },
@@ -835,21 +873,24 @@ class _AdminActionInboxPageState extends ConsumerState<AdminActionInboxPage> {
                 _ActionSection<DisputeQueueItem>(
                   icon: Icons.gavel_rounded,
                   title: 'Open disputes',
-                  subtitle: 'Escalations that need review before they can be closed.',
+                  subtitle:
+                      'Escalations that need review before they can be closed.',
                   count: data.disputes.length,
                   onSeeAll: () => context.go('/ops/disputes'),
                   onRetry: _reload,
                   items: data.disputes,
                   error: data.disputeError,
                   emptyTitle: 'No open disputes',
-                  emptySubtitle: 'Disputes will appear here when the resolution queue is active.',
+                  emptySubtitle:
+                      'Disputes will appear here when the resolution queue is active.',
                   itemBuilder: (context, dispute) {
                     return _DisputeCard(
                       dispute: dispute,
                       onOpen: () => _openDispute(dispute),
                       onCopy: () => _copyToClipboard(dispute.id, 'Dispute ID'),
                       onOpenBooking: dispute.bookingId.isNotEmpty
-                          ? () => context.push('/admin-bookings/${dispute.bookingId}')
+                          ? () => context
+                              .push('/admin-bookings/${dispute.bookingId}')
                           : null,
                     );
                   },
@@ -962,9 +1003,12 @@ class _ActionSection<T> extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tt = Theme.of(context).textTheme;
-    final canSelect = selectedIds != null && itemIdOf != null && onToggleSelection != null;
+    final canSelect =
+        selectedIds != null && itemIdOf != null && onToggleSelection != null;
     final selectedItems = canSelect
-        ? items.where((item) => selectedIds!.contains(itemIdOf!(item))).toList(growable: false)
+        ? items
+            .where((item) => selectedIds!.contains(itemIdOf!(item)))
+            .toList(growable: false)
         : <T>[];
 
     return _Panel(
@@ -991,7 +1035,8 @@ class _ActionSection<T> extends StatelessWidget {
                     children: [
                       Text(
                         title,
-                        style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+                        style: tt.titleMedium
+                            ?.copyWith(fontWeight: FontWeight.w800),
                       ),
                       const SizedBox(height: 4),
                       Text(
@@ -1005,9 +1050,13 @@ class _ActionSection<T> extends StatelessWidget {
                 ),
                 const SizedBox(width: 12),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                   decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.6),
+                    color: Theme.of(context)
+                        .colorScheme
+                        .surfaceContainerHighest
+                        .withValues(alpha: 0.6),
                     borderRadius: BorderRadius.circular(999),
                   ),
                   child: Text(
@@ -1024,15 +1073,23 @@ class _ActionSection<T> extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 16),
-            if (canSelect && selectedIds!.isNotEmpty && bulkActions.isNotEmpty) ...[
+            if (canSelect &&
+                selectedIds!.isNotEmpty &&
+                bulkActions.isNotEmpty) ...[
               Container(
                 width: double.infinity,
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+                  color: Theme.of(context)
+                      .colorScheme
+                      .surfaceContainerHighest
+                      .withValues(alpha: 0.5),
                   borderRadius: BorderRadius.circular(16),
                   border: Border.all(
-                    color: Theme.of(context).colorScheme.outlineVariant.withValues(alpha: 0.45),
+                    color: Theme.of(context)
+                        .colorScheme
+                        .outlineVariant
+                        .withValues(alpha: 0.45),
                   ),
                 ),
                 child: Wrap(
@@ -1042,7 +1099,8 @@ class _ActionSection<T> extends StatelessWidget {
                   children: [
                     Text(
                       '${selectedIds!.length} selected',
-                      style: tt.labelLarge?.copyWith(fontWeight: FontWeight.w800),
+                      style:
+                          tt.labelLarge?.copyWith(fontWeight: FontWeight.w800),
                     ),
                     TextButton(
                       onPressed: onClearSelection,
@@ -1050,7 +1108,8 @@ class _ActionSection<T> extends StatelessWidget {
                     ),
                     for (final action in bulkActions)
                       FilledButton.tonalIcon(
-                        onPressed: () => action.onPressed(context, selectedItems),
+                        onPressed: () =>
+                            action.onPressed(context, selectedItems),
                         icon: Icon(action.icon, size: 18),
                         label: Text(action.label),
                       ),
@@ -1096,7 +1155,10 @@ class _ActionSection<T> extends StatelessWidget {
                         child: Tooltip(
                           message: 'Select ${title.toLowerCase()} item',
                           child: Material(
-                            color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.92),
+                            color: Theme.of(context)
+                                .colorScheme
+                                .surface
+                                .withValues(alpha: 0.92),
                             shape: const CircleBorder(),
                             child: Checkbox(
                               value: selectedIds!.contains(itemId),
@@ -1144,9 +1206,11 @@ class _AlertCard extends StatelessWidget {
         if (alert.amount != null) '₹${alert.amount!.toStringAsFixed(2)}',
       ],
       trailing: [
-        _CardAction(label: 'Open', icon: Icons.open_in_new_rounded, onTap: onOpen),
+        _CardAction(
+            label: 'Open', icon: Icons.open_in_new_rounded, onTap: onOpen),
         if (onRetry != null)
-          _CardAction(label: 'Retry', icon: Icons.refresh_rounded, onTap: onRetry!),
+          _CardAction(
+              label: 'Retry', icon: Icons.refresh_rounded, onTap: onRetry!),
         _CardAction(label: 'Copy', icon: Icons.copy_rounded, onTap: onCopy),
       ],
     );
@@ -1193,7 +1257,8 @@ class _SupportTicketCard extends StatelessWidget {
         '${ticket.replyCount} replies',
       ],
       trailing: [
-        _CardAction(label: 'Open', icon: Icons.open_in_new_rounded, onTap: onOpen),
+        _CardAction(
+            label: 'Open', icon: Icons.open_in_new_rounded, onTap: onOpen),
         if (onMarkInProgress != null)
           _CardAction(
             label: 'Start',
@@ -1241,9 +1306,12 @@ class _WorkerReviewCard extends StatelessWidget {
         profile.submittedLabel,
       ],
       trailing: [
-        _CardAction(label: 'Open', icon: Icons.open_in_new_rounded, onTap: onOpen),
-        _CardAction(label: 'Approve', icon: Icons.verified_rounded, onTap: onApprove),
-        _CardAction(label: 'Reject', icon: Icons.block_rounded, onTap: onReject),
+        _CardAction(
+            label: 'Open', icon: Icons.open_in_new_rounded, onTap: onOpen),
+        _CardAction(
+            label: 'Approve', icon: Icons.verified_rounded, onTap: onApprove),
+        _CardAction(
+            label: 'Reject', icon: Icons.block_rounded, onTap: onReject),
         _CardAction(label: 'Copy', icon: Icons.copy_rounded, onTap: onCopy),
       ],
     );
@@ -1277,9 +1345,11 @@ class _PayoutCard extends StatelessWidget {
         if ((payout.failureReason ?? '').isNotEmpty) payout.failureReason!,
       ],
       trailing: [
-        _CardAction(label: 'Open', icon: Icons.open_in_new_rounded, onTap: onOpen),
+        _CardAction(
+            label: 'Open', icon: Icons.open_in_new_rounded, onTap: onOpen),
         if (onRetry != null)
-          _CardAction(label: 'Retry', icon: Icons.refresh_rounded, onTap: onRetry!),
+          _CardAction(
+              label: 'Retry', icon: Icons.refresh_rounded, onTap: onRetry!),
         _CardAction(label: 'Copy', icon: Icons.copy_rounded, onTap: onCopy),
       ],
     );
@@ -1313,9 +1383,11 @@ class _RefundCard extends StatelessWidget {
         if ((refund.failureReason ?? '').isNotEmpty) refund.failureReason!,
       ],
       trailing: [
-        _CardAction(label: 'Open', icon: Icons.open_in_new_rounded, onTap: onOpen),
+        _CardAction(
+            label: 'Open', icon: Icons.open_in_new_rounded, onTap: onOpen),
         if (onRetry != null)
-          _CardAction(label: 'Retry', icon: Icons.refresh_rounded, onTap: onRetry!),
+          _CardAction(
+              label: 'Retry', icon: Icons.refresh_rounded, onTap: onRetry!),
         _CardAction(label: 'Copy', icon: Icons.copy_rounded, onTap: onCopy),
       ],
     );
@@ -1349,7 +1421,8 @@ class _DisputeCard extends StatelessWidget {
         if ((dispute.resolutionNote ?? '').isNotEmpty) dispute.resolutionNote!,
       ],
       trailing: [
-        _CardAction(label: 'Open', icon: Icons.open_in_new_rounded, onTap: onOpen),
+        _CardAction(
+            label: 'Open', icon: Icons.open_in_new_rounded, onTap: onOpen),
         if (onOpenBooking != null)
           _CardAction(
             label: 'Booking',
@@ -1389,7 +1462,11 @@ class _QueueCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Theme.of(context).colorScheme.outlineVariant.withValues(alpha: 0.45)),
+        border: Border.all(
+            color: Theme.of(context)
+                .colorScheme
+                .outlineVariant
+                .withValues(alpha: 0.45)),
       ),
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -1415,7 +1492,8 @@ class _QueueCard extends StatelessWidget {
                     children: [
                       Text(
                         title,
-                        style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+                        style: tt.titleMedium
+                            ?.copyWith(fontWeight: FontWeight.w800),
                       ),
                       const SizedBox(height: 4),
                       Text(
@@ -1486,7 +1564,10 @@ class _MetaChip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.65),
+        color: Theme.of(context)
+            .colorScheme
+            .surfaceContainerHighest
+            .withValues(alpha: 0.65),
         borderRadius: BorderRadius.circular(999),
       ),
       child: Text(
@@ -1562,7 +1643,10 @@ class _SectionMessage extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.45),
+        color: Theme.of(context)
+            .colorScheme
+            .surfaceContainerHighest
+            .withValues(alpha: 0.45),
         borderRadius: BorderRadius.circular(16),
       ),
       child: Column(
@@ -1572,7 +1656,10 @@ class _SectionMessage extends StatelessWidget {
           const SizedBox(height: 8),
           Text(
             title,
-            style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800),
+            style: Theme.of(context)
+                .textTheme
+                .titleSmall
+                ?.copyWith(fontWeight: FontWeight.w800),
           ),
           const SizedBox(height: 4),
           Text(
@@ -1621,7 +1708,10 @@ class _NoticeCard extends StatelessWidget {
                 children: [
                   Text(
                     title,
-                    style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800),
+                    style: Theme.of(context)
+                        .textTheme
+                        .titleSmall
+                        ?.copyWith(fontWeight: FontWeight.w800),
                   ),
                   const SizedBox(height: 4),
                   Text(
@@ -1652,7 +1742,10 @@ class _Panel extends StatelessWidget {
         color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(20),
         border: Border.all(
-          color: Theme.of(context).colorScheme.outlineVariant.withValues(alpha: 0.35),
+          color: Theme.of(context)
+              .colorScheme
+              .outlineVariant
+              .withValues(alpha: 0.35),
         ),
         boxShadow: const [
           BoxShadow(
@@ -1695,7 +1788,10 @@ class _SkeletonBlock extends StatelessWidget {
     return Container(
       height: height,
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.4),
+        color: Theme.of(context)
+            .colorScheme
+            .surfaceContainerHighest
+            .withValues(alpha: 0.4),
         borderRadius: BorderRadius.circular(20),
       ),
     );
@@ -1703,5 +1799,6 @@ class _SkeletonBlock extends StatelessWidget {
 }
 
 String _money(double value, {int decimals = 2}) {
-  return NumberFormat.currency(symbol: '₹', decimalDigits: decimals).format(value);
+  return NumberFormat.currency(symbol: '₹', decimalDigits: decimals)
+      .format(value);
 }

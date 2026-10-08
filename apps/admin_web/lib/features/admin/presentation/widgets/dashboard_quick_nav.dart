@@ -14,14 +14,13 @@ class DashboardQuickNav extends StatelessWidget {
       children: [
         Text(
           'Quick Navigation',
-          style: GoogleFonts.poppins(
+          style: GoogleFonts.outfit(
             fontSize: 20,
             fontWeight: FontWeight.w700,
             color: Colors.black87,
           ),
         ),
         const SizedBox(height: 24),
-
         const SectionTitle(title: 'Operations'),
         Wrap(
           spacing: 24,
@@ -29,7 +28,8 @@ class DashboardQuickNav extends StatelessWidget {
           children: [
             ActionCard(
               title: 'Action Inbox',
-              subtitle: 'Unified queue for alerts, support, reviews, payouts, refunds, and disputes',
+              subtitle:
+                  'Unified queue for alerts, support, reviews, payouts, refunds, and disputes',
               icon: Icons.inbox_rounded,
               color: const Color(0xFF0F766E),
               onTap: () => context.go('/admin/action-inbox'),
@@ -72,7 +72,6 @@ class DashboardQuickNav extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 40),
-
         const SectionTitle(title: 'Catalog & Workers'),
         Wrap(
           spacing: 24,
@@ -109,7 +108,6 @@ class DashboardQuickNav extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 40),
-
         const SectionTitle(title: 'Customers & Bookings'),
         Wrap(
           spacing: 24,
@@ -139,7 +137,6 @@ class DashboardQuickNav extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 40),
-
         const SectionTitle(title: 'Finance & Analytics'),
         Wrap(
           spacing: 24,
@@ -242,7 +239,7 @@ class ActionCard extends StatelessWidget {
                 children: [
                   Text(
                     title,
-                    style: GoogleFonts.poppins(
+                    style: GoogleFonts.outfit(
                       fontWeight: FontWeight.w600,
                       color: Colors.black87,
                       fontSize: 15,
@@ -251,7 +248,7 @@ class ActionCard extends StatelessWidget {
                   const SizedBox(height: 4),
                   Text(
                     subtitle,
-                    style: GoogleFonts.inter(
+                    style: GoogleFonts.outfit(
                       color: Colors.black54,
                       fontSize: 13,
                     ),

@@ -165,9 +165,25 @@ class _DocumentUploadPageState extends ConsumerState<DocumentUploadPage> {
                         padding: const EdgeInsets.only(bottom: 12),
                         child: PremiumGlassCard(
                           child: ListTile(
-                            leading: Icon(Icons.description_rounded, color: verified ? Colors.green : cs.primary),
+                            leading: Icon(
+                              Icons.description_rounded,
+                              color: verified
+                                  ? VeeduFixDesignSystem.success
+                                  : cs.primary,
+                            ),
                             title: Text((doc['type'] ?? 'Document').toString(), style: const TextStyle(fontWeight: FontWeight.bold)),
-                            subtitle: Text(verified ? 'Verified' : status == 'REJECTED' ? 'Action required' : 'Under review', style: TextStyle(color: verified ? Colors.green : cs.onSurfaceVariant)),
+                            subtitle: Text(
+                              verified
+                                  ? 'Verified'
+                                  : status == 'REJECTED'
+                                      ? 'Action required'
+                                      : 'Under review',
+                              style: TextStyle(
+                                color: verified
+                                    ? VeeduFixDesignSystem.success
+                                    : cs.onSurfaceVariant,
+                              ),
+                            ),
                           ),
                         ),
                       );

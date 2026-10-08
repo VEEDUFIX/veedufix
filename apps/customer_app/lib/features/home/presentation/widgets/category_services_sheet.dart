@@ -1,6 +1,6 @@
-import 'package:cached_network_image/cached_network_image.dart';
 import 'dart:async';
 
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:marketplace_shared/marketplace_shared.dart';
@@ -42,14 +42,16 @@ class _CategoryServicesSheetState extends ConsumerState<CategoryServicesSheet> {
     final colorScheme = Theme.of(context).colorScheme;
 
     return DraggableScrollableSheet(
-      initialChildSize: 0.9,
+      initialChildSize: 0.88,
       minChildSize: 0.55,
       maxChildSize: 0.96,
       builder: (context, scrollController) => Container(
         decoration: BoxDecoration(
-          color: AbzioTheme.lightCard,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-          boxShadow: AbzioTheme.shadowFor(Theme.of(context).brightness),
+          color: VeeduFixDesignSystem.surface,
+          borderRadius: const BorderRadius.vertical(
+            top: Radius.circular(VeeduFixDesignSystem.radiusLarge),
+          ),
+          border: Border.all(color: VeeduFixDesignSystem.border),
         ),
         child: SafeArea(
           top: false,
@@ -65,7 +67,7 @@ class _CategoryServicesSheetState extends ConsumerState<CategoryServicesSheet> {
                 ),
               ),
               Padding(
-                padding: const EdgeInsets.fromLTRB(20, 12, 12, 8),
+                padding: const EdgeInsets.fromLTRB(16, 12, 12, 8),
                 child: Row(
                   children: [
                     Expanded(
@@ -73,11 +75,7 @@ class _CategoryServicesSheetState extends ConsumerState<CategoryServicesSheet> {
                         widget.category.name,
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                          fontSize: 22,
-                          fontWeight: FontWeight.w800,
-                          color: AbzioTheme.lightTextPrimary,
-                        ),
+                        style: Theme.of(context).textTheme.titleLarge,
                       ),
                     ),
                     IconButton(
@@ -148,9 +146,9 @@ class _CategoryServicesSheetState extends ConsumerState<CategoryServicesSheet> {
                       children: [
                         if (totalServices >= 8)
                           Padding(
-                            padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+                            padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
                             child: SizedBox(
-                              height: 48,
+                              height: VeeduFixDesignSystem.inputHeight,
                               child: TextField(
                                 controller: _searchController,
                                 onChanged: (value) {
@@ -184,16 +182,20 @@ class _CategoryServicesSheetState extends ConsumerState<CategoryServicesSheet> {
                                           icon: const Icon(Icons.close_rounded),
                                         ),
                                   filled: true,
-                                  fillColor: AbzioTheme.lightMuted,
+                                  fillColor: VeeduFixDesignSystem.ivory,
                                   contentPadding: const EdgeInsets.symmetric(
                                     horizontal: 16,
                                   ),
                                   border: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(15),
+                                    borderRadius: BorderRadius.circular(
+                                      VeeduFixDesignSystem.radiusMedium,
+                                    ),
                                     borderSide: BorderSide.none,
                                   ),
                                   enabledBorder: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(15),
+                                    borderRadius: BorderRadius.circular(
+                                      VeeduFixDesignSystem.radiusMedium,
+                                    ),
                                     borderSide: BorderSide(
                                       color: AbzioTheme.lightBorder.withValues(
                                         alpha: 0.65,
@@ -251,10 +253,10 @@ class _CategoryServicesSheetState extends ConsumerState<CategoryServicesSheet> {
                               : ListView.builder(
                                   controller: scrollController,
                                   padding: const EdgeInsets.fromLTRB(
-                                    16,
+                                    VeeduFixDesignSystem.space16,
                                     0,
-                                    16,
-                                    24,
+                                    VeeduFixDesignSystem.space16,
+                                    VeeduFixDesignSystem.space24,
                                   ),
                                   itemCount: visibleGroups.length,
                                   itemBuilder: (context, index) {

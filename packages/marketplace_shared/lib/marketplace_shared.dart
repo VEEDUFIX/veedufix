@@ -15,6 +15,8 @@ export 'core/storage/app_locale_provider.dart';
 export 'core/widgets/gradient_hero.dart';
 export 'core/widgets/app_backdrop.dart';
 export 'core/theme/abzio_theme.dart';
+export 'core/theme/veedufix_design_system.dart';
+export 'core/widgets/veedufix_components.dart';
 export 'core/widgets/premium_widgets.dart';
 export 'core/widgets/network_image_widgets.dart';
 export 'core/widgets/network_status_banner.dart';

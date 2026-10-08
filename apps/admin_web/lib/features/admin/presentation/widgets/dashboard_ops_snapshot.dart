@@ -26,7 +26,7 @@ class DashboardOpsSnapshot extends StatelessWidget {
       children: [
         Text(
           'Operations Snapshot',
-          style: GoogleFonts.poppins(
+          style: GoogleFonts.outfit(
             fontSize: 20,
             fontWeight: FontWeight.w700,
             color: Colors.black87,
@@ -46,7 +46,8 @@ class DashboardOpsSnapshot extends StatelessWidget {
                       color: const Color(0xFF0F766E).withValues(alpha: 0.12),
                       borderRadius: BorderRadius.circular(16),
                     ),
-                    child: const Icon(Icons.inbox_rounded, color: Color(0xFF0F766E)),
+                    child: const Icon(Icons.inbox_rounded,
+                        color: Color(0xFF0F766E)),
                   ),
                   const SizedBox(width: 14),
                   Expanded(
@@ -55,7 +56,7 @@ class DashboardOpsSnapshot extends StatelessWidget {
                       children: [
                         Text(
                           'Unified action inbox',
-                          style: GoogleFonts.poppins(
+                          style: GoogleFonts.outfit(
                             fontSize: 18,
                             fontWeight: FontWeight.w700,
                             color: Colors.black87,
@@ -64,7 +65,7 @@ class DashboardOpsSnapshot extends StatelessWidget {
                         const SizedBox(height: 4),
                         Text(
                           'Triage support, finance, review, and dispute items from one queue before they grow.',
-                          style: GoogleFonts.inter(
+                          style: GoogleFonts.outfit(
                             color: Colors.black54,
                             height: 1.35,
                           ),
@@ -110,20 +111,27 @@ class DashboardOpsSnapshot extends StatelessWidget {
               final cards = [
                 SnapshotCard(
                   label: 'Service completion rate',
-                  value: '${snapshot!.summary.totalBookings > 0 ? ((snapshot!.summary.completedBookings / snapshot!.summary.totalBookings) * 100).toStringAsFixed(1) : 0}%',
+                  value:
+                      '${snapshot!.summary.totalBookings > 0 ? ((snapshot!.summary.completedBookings / snapshot!.summary.totalBookings) * 100).toStringAsFixed(1) : 0}%',
                 ),
-                if (isSmall) const SizedBox(height: 24) else const SizedBox(width: 24),
+                if (isSmall)
+                  const SizedBox(height: 24)
+                else
+                  const SizedBox(width: 24),
                 SnapshotCard(
                   label: 'Open support tickets',
                   value: '${snapshot!.summary.openSupportTicketsCount} active',
                 ),
-                if (isSmall) const SizedBox(height: 24) else const SizedBox(width: 24),
+                if (isSmall)
+                  const SizedBox(height: 24)
+                else
+                  const SizedBox(width: 24),
                 SnapshotCard(
                   label: 'Today\'s new workers',
                   value: '${snapshot!.summary.todaysNewWorkers} apps',
                 ),
               ];
-              
+
               if (isSmall) {
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -131,14 +139,16 @@ class DashboardOpsSnapshot extends StatelessWidget {
                 );
               }
               return Row(
-                children: cards.map((c) => c is SizedBox ? c : Expanded(child: c)).toList(),
+                children: cards
+                    .map((c) => c is SizedBox ? c : Expanded(child: c))
+                    .toList(),
               );
             },
           ),
           const SizedBox(height: 24),
           Text(
             'Operations Health',
-            style: GoogleFonts.poppins(
+            style: GoogleFonts.outfit(
               fontSize: 20,
               fontWeight: FontWeight.w700,
               color: Colors.black87,
@@ -153,12 +163,18 @@ class DashboardOpsSnapshot extends StatelessWidget {
                   label: 'Live jobs',
                   value: '${snapshot!.summary.activeJobsCount}',
                 ),
-                if (isSmall) const SizedBox(height: 24) else const SizedBox(width: 24),
+                if (isSmall)
+                  const SizedBox(height: 24)
+                else
+                  const SizedBox(width: 24),
                 SnapshotCard(
                   label: 'Dispatch failures',
                   value: '${snapshot!.summary.dispatchFailuresCount}',
                 ),
-                if (isSmall) const SizedBox(height: 24) else const SizedBox(width: 24),
+                if (isSmall)
+                  const SizedBox(height: 24)
+                else
+                  const SizedBox(width: 24),
                 SnapshotCard(
                   label: 'Open disputes',
                   value: '${snapshot!.summary.openDisputesCount}',
@@ -172,7 +188,9 @@ class DashboardOpsSnapshot extends StatelessWidget {
                 );
               }
               return Row(
-                children: cards.map((c) => c is SizedBox ? c : Expanded(child: c)).toList(),
+                children: cards
+                    .map((c) => c is SizedBox ? c : Expanded(child: c))
+                    .toList(),
               );
             },
           ),
@@ -185,15 +203,22 @@ class DashboardOpsSnapshot extends StatelessWidget {
                   label: 'Failed payouts',
                   value: '${snapshot!.summary.failedPayoutsCount}',
                 ),
-                if (isSmall) const SizedBox(height: 24) else const SizedBox(width: 24),
+                if (isSmall)
+                  const SizedBox(height: 24)
+                else
+                  const SizedBox(width: 24),
                 SnapshotCard(
                   label: 'Failed refunds',
                   value: '${snapshot!.summary.failedRefundsCount}',
                 ),
-                if (isSmall) const SizedBox(height: 24) else const SizedBox(width: 24),
+                if (isSmall)
+                  const SizedBox(height: 24)
+                else
+                  const SizedBox(width: 24),
                 SnapshotCard(
                   label: 'Completion ratio',
-                  value: '${snapshot!.summary.totalBookings > 0 ? ((snapshot!.summary.completedBookings / snapshot!.summary.totalBookings) * 100).toStringAsFixed(1) : 0}%',
+                  value:
+                      '${snapshot!.summary.totalBookings > 0 ? ((snapshot!.summary.completedBookings / snapshot!.summary.totalBookings) * 100).toStringAsFixed(1) : 0}%',
                 ),
               ];
 
@@ -204,7 +229,9 @@ class DashboardOpsSnapshot extends StatelessWidget {
                 );
               }
               return Row(
-                children: cards.map((c) => c is SizedBox ? c : Expanded(child: c)).toList(),
+                children: cards
+                    .map((c) => c is SizedBox ? c : Expanded(child: c))
+                    .toList(),
               );
             },
           ),
@@ -227,14 +254,14 @@ class SnapshotCard extends StatelessWidget {
         children: [
           Text(
             label,
-            style: GoogleFonts.inter(
+            style: GoogleFonts.outfit(
               color: Colors.black54,
               fontWeight: FontWeight.w500,
             ),
           ),
           Text(
             value,
-            style: GoogleFonts.poppins(
+            style: GoogleFonts.outfit(
               color: Colors.black87,
               fontWeight: FontWeight.w700,
             ),
@@ -255,9 +282,15 @@ class _SnapshotSkeletonRow extends StatelessWidget {
         final isSmall = constraints.maxWidth < 800;
         final cards = [
           const _SnapshotSkeletonCard(),
-          if (isSmall) const SizedBox(height: 24) else const SizedBox(width: 24),
+          if (isSmall)
+            const SizedBox(height: 24)
+          else
+            const SizedBox(width: 24),
           const _SnapshotSkeletonCard(),
-          if (isSmall) const SizedBox(height: 24) else const SizedBox(width: 24),
+          if (isSmall)
+            const SizedBox(height: 24)
+          else
+            const SizedBox(width: 24),
           const _SnapshotSkeletonCard(),
         ];
 
@@ -268,7 +301,8 @@ class _SnapshotSkeletonRow extends StatelessWidget {
           );
         }
         return Row(
-          children: cards.map((c) => c is SizedBox ? c : Expanded(child: c)).toList(),
+          children:
+              cards.map((c) => c is SizedBox ? c : Expanded(child: c)).toList(),
         );
       },
     );

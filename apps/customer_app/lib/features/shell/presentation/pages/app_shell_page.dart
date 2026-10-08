@@ -17,27 +17,28 @@ class AppShellPage extends StatelessWidget {
     return Scaffold(
       backgroundColor: AbzioTheme.lightBackground,
       body: child,
-      bottomNavigationBar: NavigationBar(
+      bottomNavigationBar: VeeduFixBottomNav(
         selectedIndex: index,
         onDestinationSelected: (selected) => context.go(destinations[selected]),
         destinations: [
-          NavigationDestination(
-            icon: const Icon(Icons.home_outlined),
-            selectedIcon: const Icon(Icons.home_rounded),
+          VeeduFixNavDestination(
+            icon: Icons.home_outlined,
+            selectedIcon: Icons.home_rounded,
             label: appText(context, 'Home', 'முகப்பு'),
           ),
-          NavigationDestination(
-            icon: const Icon(Icons.search_rounded),
+          VeeduFixNavDestination(
+            icon: Icons.search_rounded,
+            selectedIcon: Icons.search_rounded,
             label: appText(context, 'Search', 'தேடல்'),
           ),
-          NavigationDestination(
-            icon: const Icon(Icons.receipt_long_outlined),
-            selectedIcon: const Icon(Icons.receipt_long_rounded),
+          VeeduFixNavDestination(
+            icon: Icons.receipt_long_outlined,
+            selectedIcon: Icons.receipt_long_rounded,
             label: appText(context, 'Bookings', 'முன்பதிவுகள்'),
           ),
-          NavigationDestination(
-            icon: const Icon(Icons.person_outline_rounded),
-            selectedIcon: const Icon(Icons.person_rounded),
+          VeeduFixNavDestination(
+            icon: Icons.person_outline_rounded,
+            selectedIcon: Icons.person_rounded,
             label: appText(context, 'Profile', 'சுயவிவரம்'),
           ),
         ],

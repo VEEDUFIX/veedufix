@@ -226,6 +226,21 @@ class WorkerDirectoryApi {
 
   final Dio _dio;
 
+  Future<List<WorkerDirectoryPortfolioPhoto>> fetchPortfolioPhotos(
+      String profileId) async {
+    final response = await _dio.get<Map<String, dynamic>>(
+      '/users/workers/$profileId/profile',
+    );
+    final profile = response.data?['profile'];
+    if (profile is! Map) return const [];
+    return (profile['portfolioPhotos'] as List? ?? const [])
+        .whereType<Map>()
+        .map((item) => WorkerDirectoryPortfolioPhoto.fromJson(
+            item.cast<String, dynamic>()))
+        .where((photo) => photo.url.isNotEmpty)
+        .toList(growable: false);
+  }
+
   Future<List<CatalogCategory>> fetchCategories() async {
     final response = await _dio.get<Map<String, dynamic>>('/catalog');
     final categories = response.data?['categories'];
@@ -296,6 +311,25 @@ class WorkerDirectoryApi {
     }
     throw Exception('Worker directory response was malformed.');
   }
+}
+
+class WorkerDirectoryPortfolioPhoto {
+  const WorkerDirectoryPortfolioPhoto({
+    required this.id,
+    required this.url,
+    required this.caption,
+  });
+
+  final String id;
+  final String url;
+  final String caption;
+
+  factory WorkerDirectoryPortfolioPhoto.fromJson(Map<String, dynamic> json) =>
+      WorkerDirectoryPortfolioPhoto(
+        id: json['id'] as String? ?? '',
+        url: json['url'] as String? ?? '',
+        caption: json['caption'] as String? ?? '',
+      );
 }
 
 DateTime? _parseDateTime(dynamic value) {

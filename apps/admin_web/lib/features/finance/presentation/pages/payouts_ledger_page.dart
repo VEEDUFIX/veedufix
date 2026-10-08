@@ -237,7 +237,8 @@ class _PayoutsLedgerPageState extends ConsumerState<PayoutsLedgerPage> {
       if (!mounted) return;
       if (result['paused'] == 1) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Payouts are paused in Platform Settings')),
+          const SnackBar(
+              content: Text('Payouts are paused in Platform Settings')),
         );
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -283,8 +284,12 @@ class _PayoutsLedgerPageState extends ConsumerState<PayoutsLedgerPage> {
   @override
   Widget build(BuildContext context) {
     final failedCount = _items.where((item) => item.status == 'failed').length;
-    final successCount = _items.where((item) => item.status == 'success').length;
-    final inFlightCount = _items.where((item) => item.status == 'pending' || item.status == 'processing').length;
+    final successCount =
+        _items.where((item) => item.status == 'success').length;
+    final inFlightCount = _items
+        .where(
+            (item) => item.status == 'pending' || item.status == 'processing')
+        .length;
     final failureRate = _items.isEmpty ? 0.0 : failedCount / _items.length;
 
     if (_loadingInitial && _items.isEmpty) {
@@ -355,7 +360,7 @@ class _PayoutsLedgerPageState extends ConsumerState<PayoutsLedgerPage> {
                     children: [
                       Text(
                         'Payouts ledger',
-                        style: GoogleFonts.poppins(
+                        style: GoogleFonts.outfit(
                           fontSize: 28,
                           fontWeight: FontWeight.w900,
                           letterSpacing: -0.4,
@@ -365,7 +370,7 @@ class _PayoutsLedgerPageState extends ConsumerState<PayoutsLedgerPage> {
                       const SizedBox(height: 8),
                       Text(
                         'Review every worker payout attempt and retry failed transfers when needed.',
-                        style: GoogleFonts.inter(
+                        style: GoogleFonts.outfit(
                           color: Colors.black54,
                           height: 1.45,
                         ),
@@ -383,7 +388,9 @@ class _PayoutsLedgerPageState extends ConsumerState<PayoutsLedgerPage> {
                           ),
                           PremiumStatCard(
                             label: 'Status filter',
-                            value: _selectedStatus == 'all' ? 'All' : _selectedStatus,
+                            value: _selectedStatus == 'all'
+                                ? 'All'
+                                : _selectedStatus,
                             icon: Icons.filter_alt_rounded,
                             accentColor: const Color(0xFF0F766E),
                           ),
@@ -419,20 +426,29 @@ class _PayoutsLedgerPageState extends ConsumerState<PayoutsLedgerPage> {
                           width: double.infinity,
                           padding: const EdgeInsets.all(14),
                           decoration: BoxDecoration(
-                            color: const Color(0xFFF59E0B).withValues(alpha: 0.08),
+                            color:
+                                const Color(0xFFF59E0B).withValues(alpha: 0.08),
                             borderRadius: BorderRadius.circular(16),
-                            border: Border.all(color: const Color(0xFFF59E0B).withValues(alpha: 0.16)),
+                            border: Border.all(
+                                color: const Color(0xFFF59E0B)
+                                    .withValues(alpha: 0.16)),
                           ),
                           child: Row(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              const Icon(Icons.info_outline_rounded, color: Color(0xFFF59E0B), size: 20),
+                              const Icon(Icons.info_outline_rounded,
+                                  color: Color(0xFFF59E0B), size: 20),
                               const SizedBox(width: 10),
                               Expanded(
                                 child: Text(
                                   'Failed payouts usually need a beneficiary or UPI check before retrying. Open a payout row to review the failure reason and retry from the detail view.',
-                                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .bodySmall
+                                      ?.copyWith(
+                                        color: Theme.of(context)
+                                            .colorScheme
+                                            .onSurfaceVariant,
                                         height: 1.35,
                                       ),
                                 ),
@@ -525,10 +541,13 @@ class _PayoutsLedgerPageState extends ConsumerState<PayoutsLedgerPage> {
                     return SingleChildScrollView(
                       scrollDirection: Axis.horizontal,
                       child: SizedBox(
-                        width: constraints.maxWidth > 800 ? constraints.maxWidth : 800,
+                        width: constraints.maxWidth > 800
+                            ? constraints.maxWidth
+                            : 800,
                         child: DataTable(
-                          headingRowColor: const WidgetStatePropertyAll(Color(0xFFF8FAFC)),
-                          headingTextStyle: GoogleFonts.inter(
+                          headingRowColor:
+                              const WidgetStatePropertyAll(Color(0xFFF8FAFC)),
+                          headingTextStyle: GoogleFonts.outfit(
                             fontWeight: FontWeight.w700,
                             fontSize: 12,
                             color: const Color(0xFF64748B),
@@ -555,18 +574,24 @@ class _PayoutsLedgerPageState extends ConsumerState<PayoutsLedgerPage> {
                                     children: [
                                       Expanded(
                                         child: Text(
-                                          payout.bookingCode.isNotEmpty ? payout.bookingCode : payout.bookingId,
-                                          style: const TextStyle(fontWeight: FontWeight.w600),
+                                          payout.bookingCode.isNotEmpty
+                                              ? payout.bookingCode
+                                              : payout.bookingId,
+                                          style: const TextStyle(
+                                              fontWeight: FontWeight.w600),
                                         ),
                                       ),
                                       IconButton(
                                         tooltip: 'Copy reference',
                                         visualDensity: VisualDensity.compact,
                                         onPressed: () => _copyToClipboard(
-                                          payout.bookingCode.isNotEmpty ? payout.bookingCode : payout.bookingId,
+                                          payout.bookingCode.isNotEmpty
+                                              ? payout.bookingCode
+                                              : payout.bookingId,
                                           'Reference',
                                         ),
-                                        icon: const Icon(Icons.copy_rounded, size: 16),
+                                        icon: const Icon(Icons.copy_rounded,
+                                            size: 16),
                                       ),
                                     ],
                                   ),
@@ -583,7 +608,9 @@ class _PayoutsLedgerPageState extends ConsumerState<PayoutsLedgerPage> {
                                         child: Icon(
                                           Icons.person_rounded,
                                           size: 16,
-                                          color: Theme.of(context).colorScheme.primary,
+                                          color: Theme.of(context)
+                                              .colorScheme
+                                              .primary,
                                         ),
                                       ),
                                       const SizedBox(width: 8),
@@ -591,11 +618,15 @@ class _PayoutsLedgerPageState extends ConsumerState<PayoutsLedgerPage> {
                                     ],
                                   ),
                                 ),
-                                DataCell(Text('₹${payout.amount.toStringAsFixed(2)}')),
-                                DataCell(Text('₹${payout.commissionAmount.toStringAsFixed(2)}')),
-                                DataCell(_GlowingStatusBadge(status: payout.status)),
+                                DataCell(Text(
+                                    '₹${payout.amount.toStringAsFixed(2)}')),
+                                DataCell(Text(
+                                    '₹${payout.commissionAmount.toStringAsFixed(2)}')),
                                 DataCell(
-                                  Text(MaterialLocalizations.of(context).formatMediumDate(payout.createdAt)),
+                                    _GlowingStatusBadge(status: payout.status)),
+                                DataCell(
+                                  Text(MaterialLocalizations.of(context)
+                                      .formatMediumDate(payout.createdAt)),
                                 ),
                                 DataCell(
                                   Wrap(
@@ -604,18 +635,25 @@ class _PayoutsLedgerPageState extends ConsumerState<PayoutsLedgerPage> {
                                     children: [
                                       TextButton.icon(
                                         onPressed: () => _openDetails(payout),
-                                        icon: const Icon(Icons.open_in_new_rounded, size: 16),
+                                        icon: const Icon(
+                                            Icons.open_in_new_rounded,
+                                            size: 16),
                                         label: const Text('Open'),
                                       ),
                                       TextButton.icon(
-                                        onPressed: () => context.push('/audit-logs?search=${Uri.encodeComponent(payout.id)}'),
-                                        icon: const Icon(Icons.manage_search_rounded, size: 16),
+                                        onPressed: () => context.push(
+                                            '/audit-logs?search=${Uri.encodeComponent(payout.id)}'),
+                                        icon: const Icon(
+                                            Icons.manage_search_rounded,
+                                            size: 16),
                                         label: const Text('Audit'),
                                       ),
                                       if (payout.status == 'failed')
                                         TextButton.icon(
                                           onPressed: () => _retry(payout.id),
-                                          icon: const Icon(Icons.refresh_rounded, size: 16),
+                                          icon: const Icon(
+                                              Icons.refresh_rounded,
+                                              size: 16),
                                           label: const Text('Retry'),
                                         ),
                                     ],
@@ -634,13 +672,16 @@ class _PayoutsLedgerPageState extends ConsumerState<PayoutsLedgerPage> {
               const SizedBox(height: 12),
               _SurfacePanel(
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                   child: Row(
                     children: [
                       Text(
                         'Showing ${_items.length} of $_total',
                         style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                              color: Theme.of(context).colorScheme.onSurfaceVariant,
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .onSurfaceVariant,
                             ),
                       ),
                       const Spacer(),
@@ -653,16 +694,22 @@ class _PayoutsLedgerPageState extends ConsumerState<PayoutsLedgerPage> {
                       else if (_hasMore)
                         Text(
                           'Scroll to load more',
-                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                color: Theme.of(context).colorScheme.onSurfaceVariant,
-                              ),
+                          style:
+                              Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .onSurfaceVariant,
+                                  ),
                         )
                       else
                         Text(
                           'End of results',
-                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                color: Theme.of(context).colorScheme.onSurfaceVariant,
-                              ),
+                          style:
+                              Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .onSurfaceVariant,
+                                  ),
                         ),
                     ],
                   ),
@@ -711,7 +758,8 @@ class _PayoutDetailPageState extends ConsumerState<PayoutDetailPage> {
   }
 
   Future<FinancePayoutItem?> _loadPayout() async {
-    if (widget.initialPayout != null && widget.initialPayout!.id == widget.payoutId) {
+    if (widget.initialPayout != null &&
+        widget.initialPayout!.id == widget.payoutId) {
       return widget.initialPayout;
     }
 
@@ -753,11 +801,13 @@ class _PayoutDetailPageState extends ConsumerState<PayoutDetailPage> {
       body: FutureBuilder<FinancePayoutItem?>(
         future: _payoutFuture,
         builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting && !snapshot.hasData) {
+          if (snapshot.connectionState == ConnectionState.waiting &&
+              !snapshot.hasData) {
             return const Center(child: CircularProgressIndicator());
           }
           if (snapshot.hasError) {
-            return Center(child: Text('Unable to load payout: ${snapshot.error}'));
+            return Center(
+                child: Text('Unable to load payout: ${snapshot.error}'));
           }
           final payout = snapshot.data;
           if (payout == null) {
@@ -769,15 +819,19 @@ class _PayoutDetailPageState extends ConsumerState<PayoutDetailPage> {
                   children: [
                     const Icon(Icons.search_off_rounded, size: 48),
                     const SizedBox(height: 12),
-                    Text('Payout not found', style: tt.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
+                    Text('Payout not found',
+                        style: tt.titleLarge
+                            ?.copyWith(fontWeight: FontWeight.w800)),
                     const SizedBox(height: 8),
                     Text(
                       'This payout is not present in the current ledger snapshot.',
                       textAlign: TextAlign.center,
-                      style: tt.bodyMedium?.copyWith(color: cs.onSurfaceVariant),
+                      style:
+                          tt.bodyMedium?.copyWith(color: cs.onSurfaceVariant),
                     ),
                     const SizedBox(height: 16),
-                    FilledButton(onPressed: _reload, child: const Text('Reload')),
+                    FilledButton(
+                        onPressed: _reload, child: const Text('Reload')),
                   ],
                 ),
               ),
@@ -789,8 +843,12 @@ class _PayoutDetailPageState extends ConsumerState<PayoutDetailPage> {
           return ListView(
             padding: const EdgeInsets.all(24),
             children: [
-              Text(payout.bookingCode.isNotEmpty ? payout.bookingCode : payout.bookingId,
-                  style: tt.headlineSmall?.copyWith(fontWeight: FontWeight.w800)),
+              Text(
+                  payout.bookingCode.isNotEmpty
+                      ? payout.bookingCode
+                      : payout.bookingId,
+                  style:
+                      tt.headlineSmall?.copyWith(fontWeight: FontWeight.w800)),
               const SizedBox(height: 12),
               Wrap(
                 spacing: 8,
@@ -799,8 +857,12 @@ class _PayoutDetailPageState extends ConsumerState<PayoutDetailPage> {
                   _DetailChip(label: payout.status),
                   _DetailChip(label: payout.workerName ?? 'Unknown worker'),
                   _DetailChip(label: '₹${payout.amount.toStringAsFixed(2)}'),
-                  _DetailChip(label: 'Commission ₹${payout.commissionAmount.toStringAsFixed(2)}'),
-                  _DetailChip(label: MaterialLocalizations.of(context).formatMediumDate(payout.createdAt)),
+                  _DetailChip(
+                      label:
+                          'Commission ₹${payout.commissionAmount.toStringAsFixed(2)}'),
+                  _DetailChip(
+                      label: MaterialLocalizations.of(context)
+                          .formatMediumDate(payout.createdAt)),
                 ],
               ),
               const SizedBox(height: 12),
@@ -814,22 +876,26 @@ class _PayoutDetailPageState extends ConsumerState<PayoutDetailPage> {
                     label: const Text('Copy payout ID'),
                   ),
                   OutlinedButton.icon(
-                    onPressed: () => _copyToClipboard(payout.bookingId, 'Booking ID'),
+                    onPressed: () =>
+                        _copyToClipboard(payout.bookingId, 'Booking ID'),
                     icon: const Icon(Icons.copy_rounded),
                     label: const Text('Copy booking ID'),
                   ),
                   OutlinedButton.icon(
-                    onPressed: () => context.push('/admin-bookings/${payout.bookingId}'),
+                    onPressed: () =>
+                        context.push('/admin-bookings/${payout.bookingId}'),
                     icon: const Icon(Icons.receipt_long_rounded),
                     label: const Text('Open booking'),
                   ),
                   OutlinedButton.icon(
-                    onPressed: () => context.push('/admin-bookings?search=${Uri.encodeComponent(bookingLookup)}'),
+                    onPressed: () => context.push(
+                        '/admin-bookings?search=${Uri.encodeComponent(bookingLookup)}'),
                     icon: const Icon(Icons.search_rounded),
                     label: const Text('Booking search'),
                   ),
                   OutlinedButton.icon(
-                    onPressed: () => context.push('/audit-logs?search=${Uri.encodeComponent(payout.id)}'),
+                    onPressed: () => context.push(
+                        '/audit-logs?search=${Uri.encodeComponent(payout.id)}'),
                     icon: const Icon(Icons.history_rounded),
                     label: const Text('Audit trail'),
                   ),
@@ -839,13 +905,23 @@ class _PayoutDetailPageState extends ConsumerState<PayoutDetailPage> {
               _DetailLine(label: 'Payout ID', value: payout.id),
               _DetailLine(label: 'Booking ID', value: payout.bookingId),
               _DetailLine(label: 'Booking code', value: payout.bookingCode),
-              _DetailLine(label: 'Worker', value: payout.workerName ?? 'Unknown'),
-              _DetailLine(label: 'Amount', value: '₹${payout.amount.toStringAsFixed(2)}'),
-              _DetailLine(label: 'Commission', value: '₹${payout.commissionAmount.toStringAsFixed(2)}'),
-              _DetailLine(label: 'Created', value: MaterialLocalizations.of(context).formatMediumDate(payout.createdAt)),
+              _DetailLine(
+                  label: 'Worker', value: payout.workerName ?? 'Unknown'),
+              _DetailLine(
+                  label: 'Amount',
+                  value: '₹${payout.amount.toStringAsFixed(2)}'),
+              _DetailLine(
+                  label: 'Commission',
+                  value: '₹${payout.commissionAmount.toStringAsFixed(2)}'),
+              _DetailLine(
+                  label: 'Created',
+                  value: MaterialLocalizations.of(context)
+                      .formatMediumDate(payout.createdAt)),
               if ((payout.failureReason ?? '').trim().isNotEmpty) ...[
                 const SizedBox(height: 8),
-                Text('Failure reason', style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
+                Text('Failure reason',
+                    style:
+                        tt.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
                 const SizedBox(height: 6),
                 Text(payout.failureReason!),
               ],
@@ -878,7 +954,9 @@ class _PayoutDetailPageState extends ConsumerState<PayoutDetailPage> {
   }
 
   String _bookingLookup(FinancePayoutItem payout) {
-    return payout.bookingCode.trim().isNotEmpty ? payout.bookingCode.trim() : payout.bookingId;
+    return payout.bookingCode.trim().isNotEmpty
+        ? payout.bookingCode.trim()
+        : payout.bookingId;
   }
 
   Future<void> _copyToClipboard(String value, String label) async {
@@ -902,12 +980,18 @@ class _DetailChip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.7),
+        color: Theme.of(context)
+            .colorScheme
+            .surfaceContainerHighest
+            .withValues(alpha: 0.7),
         borderRadius: BorderRadius.circular(999),
       ),
       child: Text(
         label,
-        style: Theme.of(context).textTheme.labelSmall?.copyWith(fontWeight: FontWeight.w700),
+        style: Theme.of(context)
+            .textTheme
+            .labelSmall
+            ?.copyWith(fontWeight: FontWeight.w700),
       ),
     );
   }
@@ -932,11 +1016,13 @@ class _DetailLine extends StatelessWidget {
             width: 110,
             child: Text(
               label,
-              style: tt.bodyMedium?.copyWith(color: cs.onSurfaceVariant, fontWeight: FontWeight.w700),
+              style: tt.bodyMedium?.copyWith(
+                  color: cs.onSurfaceVariant, fontWeight: FontWeight.w700),
             ),
           ),
           Expanded(
-            child: Text(value, style: tt.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
+            child: Text(value,
+                style: tt.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
           ),
         ],
       ),
@@ -953,9 +1039,18 @@ class _GlowingStatusBadge extends StatelessWidget {
   Widget build(BuildContext context) {
     final normalized = status.toLowerCase();
     final (color, bgColor) = switch (normalized) {
-      'approved' || 'success' || 'processed' => (const Color(0xFF10B981), const Color(0xFFD1FAE5)),
-      'suspended' || 'pending' || 'under_review' => (const Color(0xFFF59E0B), const Color(0xFFFEF3C7)),
-      'rejected' || 'failed' => (const Color(0xFFEF4444), const Color(0xFFFEE2E2)),
+      'approved' || 'success' || 'processed' => (
+          const Color(0xFF10B981),
+          const Color(0xFFD1FAE5)
+        ),
+      'suspended' || 'pending' || 'under_review' => (
+          const Color(0xFFF59E0B),
+          const Color(0xFFFEF3C7)
+        ),
+      'rejected' || 'failed' => (
+          const Color(0xFFEF4444),
+          const Color(0xFFFEE2E2)
+        ),
       'disputed' => (const Color(0xFF8B5CF6), const Color(0xFFEDE9FE)),
       _ => (const Color(0xFF64748B), const Color(0xFFF1F5F9)),
     };

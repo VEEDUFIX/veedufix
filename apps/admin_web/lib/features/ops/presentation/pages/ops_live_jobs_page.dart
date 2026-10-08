@@ -88,7 +88,7 @@ class _OpsLiveJobsPageState extends ConsumerState<OpsLiveJobsPage> {
                         children: [
                           Text(
                             'Active Jobs',
-                            style: GoogleFonts.poppins(
+                            style: GoogleFonts.outfit(
                               fontSize: 32,
                               fontWeight: FontWeight.w800,
                               color: Colors.black87,
@@ -98,7 +98,7 @@ class _OpsLiveJobsPageState extends ConsumerState<OpsLiveJobsPage> {
                           const SizedBox(height: 8),
                           Text(
                             'Track bookings currently assigned, arrived, or in progress. Highlighted rows indicate no-show risk.',
-                            style: GoogleFonts.inter(
+                            style: GoogleFonts.outfit(
                               color: Colors.black54,
                               fontSize: 16,
                             ),
@@ -112,7 +112,8 @@ class _OpsLiveJobsPageState extends ConsumerState<OpsLiveJobsPage> {
                         style: FilledButton.styleFrom(
                           backgroundColor: Colors.white,
                           foregroundColor: Colors.black87,
-                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 20, vertical: 16),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(8),
                             side: const BorderSide(color: Color(0xFFE5E7EB)),
@@ -191,42 +192,60 @@ class _OpsLiveJobsPageState extends ConsumerState<OpsLiveJobsPage> {
                                     DataCell(
                                       Row(
                                         children: [
-                                          Expanded(child: Text(job.bookingCode)),
+                                          Expanded(
+                                              child: Text(job.bookingCode)),
                                           IconButton(
                                             tooltip: 'Copy booking code',
-                                            visualDensity: VisualDensity.compact,
+                                            visualDensity:
+                                                VisualDensity.compact,
                                             onPressed: () async {
-                                              await Clipboard.setData(ClipboardData(text: job.bookingCode));
+                                              await Clipboard.setData(
+                                                  ClipboardData(
+                                                      text: job.bookingCode));
                                               if (context.mounted) {
-                                                ScaffoldMessenger.of(context).showSnackBar(
-                                                  const SnackBar(content: Text('Booking code copied')),
+                                                ScaffoldMessenger.of(context)
+                                                    .showSnackBar(
+                                                  const SnackBar(
+                                                      content: Text(
+                                                          'Booking code copied')),
                                                 );
                                               }
                                             },
-                                            icon: const Icon(Icons.copy_rounded, size: 16),
+                                            icon: const Icon(Icons.copy_rounded,
+                                                size: 16),
                                           ),
                                         ],
                                       ),
                                     ),
                                     DataCell(Text(job.customerName)),
-                                    DataCell(Text(job.workerName ?? 'Unassigned')),
-                                    DataCell(SizedBox(width: 180, child: Text(job.serviceLabel))),
+                                    DataCell(
+                                        Text(job.workerName ?? 'Unassigned')),
+                                    DataCell(SizedBox(
+                                        width: 180,
+                                        child: Text(job.serviceLabel))),
                                     DataCell(_StatusPill(status: job.status)),
                                     DataCell(Text(job.elapsedLabel)),
-                                    DataCell(Text(_formatDate(context, job.scheduledAt))),
+                                    DataCell(Text(
+                                        _formatDate(context, job.scheduledAt))),
                                     DataCell(
                                       Wrap(
                                         spacing: 6,
                                         runSpacing: 6,
                                         children: [
                                           TextButton.icon(
-                                            onPressed: () => _showJobDetails(job),
-                                            icon: const Icon(Icons.open_in_new_rounded, size: 16),
+                                            onPressed: () =>
+                                                _showJobDetails(job),
+                                            icon: const Icon(
+                                                Icons.open_in_new_rounded,
+                                                size: 16),
                                             label: const Text('Open'),
                                           ),
                                           TextButton.icon(
-                                            onPressed: () => context.push('/audit-logs?search=${Uri.encodeComponent(job.bookingId)}'),
-                                            icon: const Icon(Icons.manage_search_rounded, size: 16),
+                                            onPressed: () => context.push(
+                                                '/audit-logs?search=${Uri.encodeComponent(job.bookingId)}'),
+                                            icon: const Icon(
+                                                Icons.manage_search_rounded,
+                                                size: 16),
                                             label: const Text('Audit'),
                                           ),
                                         ],
@@ -344,7 +363,8 @@ class _PhotoStrip extends StatelessWidget {
               borderRadius: AbzioTheme.buttonRadius,
               cloudinaryWidth: 240,
               cloudinaryHeight: 240,
-              backgroundColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+              backgroundColor:
+                  Theme.of(context).colorScheme.surfaceContainerHighest,
             ),
           )
           .toList(growable: false),
@@ -396,7 +416,8 @@ class OpsLiveJobDetailPage extends ConsumerStatefulWidget {
   final OpsLiveJob? initialJob;
 
   @override
-  ConsumerState<OpsLiveJobDetailPage> createState() => _OpsLiveJobDetailPageState();
+  ConsumerState<OpsLiveJobDetailPage> createState() =>
+      _OpsLiveJobDetailPageState();
 }
 
 class _OpsLiveJobDetailPageState extends ConsumerState<OpsLiveJobDetailPage> {
@@ -411,7 +432,8 @@ class _OpsLiveJobDetailPageState extends ConsumerState<OpsLiveJobDetailPage> {
   }
 
   Future<OpsLiveJob?> _loadJob() async {
-    if (widget.initialJob != null && widget.initialJob!.bookingId == widget.bookingId) {
+    if (widget.initialJob != null &&
+        widget.initialJob!.bookingId == widget.bookingId) {
       return widget.initialJob;
     }
 
@@ -454,7 +476,8 @@ class _OpsLiveJobDetailPageState extends ConsumerState<OpsLiveJobDetailPage> {
       body: FutureBuilder<OpsLiveJob?>(
         future: _jobFuture,
         builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting && !snapshot.hasData) {
+          if (snapshot.connectionState == ConnectionState.waiting &&
+              !snapshot.hasData) {
             return const Padding(
               padding: EdgeInsets.all(24),
               child: _JobDetailSkeleton(),
@@ -489,16 +512,19 @@ class _OpsLiveJobDetailPageState extends ConsumerState<OpsLiveJobDetailPage> {
                     const SizedBox(height: 12),
                     Text(
                       'Job not found',
-                      style: tt.titleLarge?.copyWith(fontWeight: FontWeight.w800),
+                      style:
+                          tt.titleLarge?.copyWith(fontWeight: FontWeight.w800),
                     ),
                     const SizedBox(height: 8),
                     Text(
                       'This booking is not currently in the active jobs snapshot.',
                       textAlign: TextAlign.center,
-                      style: tt.bodyMedium?.copyWith(color: cs.onSurfaceVariant),
+                      style:
+                          tt.bodyMedium?.copyWith(color: cs.onSurfaceVariant),
                     ),
                     const SizedBox(height: 16),
-                    FilledButton(onPressed: _reload, child: const Text('Reload')),
+                    FilledButton(
+                        onPressed: _reload, child: const Text('Reload')),
                   ],
                 ),
               ),
@@ -526,7 +552,9 @@ class _OpsLiveJobDetailPageState extends ConsumerState<OpsLiveJobDetailPage> {
           return ListView(
             padding: const EdgeInsets.all(24),
             children: [
-              Text('${job.bookingCode} - ${job.customerName}', style: tt.headlineSmall?.copyWith(fontWeight: FontWeight.w800)),
+              Text('${job.bookingCode} - ${job.customerName}',
+                  style:
+                      tt.headlineSmall?.copyWith(fontWeight: FontWeight.w800)),
               const SizedBox(height: 12),
               Wrap(
                 spacing: 8,
@@ -538,27 +566,42 @@ class _OpsLiveJobDetailPageState extends ConsumerState<OpsLiveJobDetailPage> {
                   _DetailChip(label: '${job.elapsedLabel} active'),
                   _DetailChip(
                     label: job.isNoShowRisk ? 'No-show risk' : 'Within window',
-                    accent: job.isNoShowRisk ? const Color(0xFFEF4444) : const Color(0xFF0F766E),
+                    accent: job.isNoShowRisk
+                        ? const Color(0xFFEF4444)
+                        : const Color(0xFF0F766E),
                   ),
                 ],
               ),
               const SizedBox(height: 16),
-              _DetailLine(label: 'Worker', value: job.workerName ?? 'Unassigned'),
-              _DetailLine(label: 'Scheduled', value: _formatDate(context, job.scheduledAt)),
-              _DetailLine(label: 'Assigned at', value: _formatDate(context, job.assignedAt)),
-              _DetailLine(label: 'Booking status', value: job.bookingStatus.replaceAll('_', ' ')),
-              if ((job.notes ?? '').trim().isNotEmpty) _DetailLine(label: 'Notes', value: job.notes!.trim()),
-              if ((job.customerNotes ?? '').trim().isNotEmpty) _DetailLine(label: 'Customer notes', value: job.customerNotes!.trim()),
+              _DetailLine(
+                  label: 'Worker', value: job.workerName ?? 'Unassigned'),
+              _DetailLine(
+                  label: 'Scheduled',
+                  value: _formatDate(context, job.scheduledAt)),
+              _DetailLine(
+                  label: 'Assigned at',
+                  value: _formatDate(context, job.assignedAt)),
+              _DetailLine(
+                  label: 'Booking status',
+                  value: job.bookingStatus.replaceAll('_', ' ')),
+              if ((job.notes ?? '').trim().isNotEmpty)
+                _DetailLine(label: 'Notes', value: job.notes!.trim()),
+              if ((job.customerNotes ?? '').trim().isNotEmpty)
+                _DetailLine(
+                    label: 'Customer notes', value: job.customerNotes!.trim()),
               const SizedBox(height: 12),
-              Text('Before photos', style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
+              Text('Before photos',
+                  style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
               const SizedBox(height: 8),
               _PhotoStrip(urls: job.beforePhotos),
               const SizedBox(height: 12),
-              Text('After photos', style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
+              Text('After photos',
+                  style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
               const SizedBox(height: 8),
               _PhotoStrip(urls: job.afterPhotos),
               const SizedBox(height: 12),
-              Text('Checklist', style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
+              Text('Checklist',
+                  style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
               const SizedBox(height: 8),
               if (job.checklistItems.isEmpty)
                 const Text('No checklist state stored yet.')
@@ -569,8 +612,12 @@ class _OpsLiveJobDetailPageState extends ConsumerState<OpsLiveJobDetailPage> {
                     child: Row(
                       children: [
                         Icon(
-                          item.complete ? Icons.check_circle_rounded : Icons.radio_button_unchecked_rounded,
-                          color: item.complete ? const Color(0xFF0F766E) : Theme.of(context).colorScheme.outline,
+                          item.complete
+                              ? Icons.check_circle_rounded
+                              : Icons.radio_button_unchecked_rounded,
+                          color: item.complete
+                              ? const Color(0xFF0F766E)
+                              : Theme.of(context).colorScheme.outline,
                           size: 18,
                         ),
                         const SizedBox(width: 8),
@@ -580,7 +627,8 @@ class _OpsLiveJobDetailPageState extends ConsumerState<OpsLiveJobDetailPage> {
                   ),
                 ),
               const SizedBox(height: 12),
-              Text('Raw evidence snapshot', style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
+              Text('Raw evidence snapshot',
+                  style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
               const SizedBox(height: 8),
               SelectableText(
                 encoder.convert(rawEvidence),
@@ -614,7 +662,7 @@ class _SummaryBadge extends StatelessWidget {
       ),
       child: RichText(
         text: TextSpan(
-          style: GoogleFonts.inter(
+          style: GoogleFonts.outfit(
             color: const Color(0xFF374151),
             fontSize: 13,
             fontWeight: FontWeight.w600,
@@ -623,7 +671,8 @@ class _SummaryBadge extends StatelessWidget {
             TextSpan(text: '$label: '),
             TextSpan(
               text: value,
-              style: const TextStyle(fontWeight: FontWeight.w800, color: Colors.black87),
+              style: const TextStyle(
+                  fontWeight: FontWeight.w800, color: Colors.black87),
             ),
           ],
         ),

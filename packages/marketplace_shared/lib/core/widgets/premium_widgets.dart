@@ -1,53 +1,15 @@
 import 'package:flutter/material.dart';
-import '../../ui/widgets/abzio_motion.dart';
-import '../theme/abzio_theme.dart';
+import '../theme/veedufix_design_system.dart';
+import 'veedufix_components.dart';
 
-class PremiumSectionHeader extends StatelessWidget {
+class PremiumSectionHeader extends VeeduFixSectionHeader {
   const PremiumSectionHeader({
     super.key,
-    required this.title,
-    this.subtitle,
-    this.actionLabel,
-    this.onAction,
+    required super.title,
+    super.subtitle,
+    super.actionLabel,
+    super.onAction,
   });
-
-  final String title;
-  final String? subtitle;
-  final String? actionLabel;
-  final VoidCallback? onAction;
-
-  @override
-  Widget build(BuildContext context) {
-    final textTheme = Theme.of(context).textTheme;
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                title,
-                style:
-                    textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
-              ),
-              if (subtitle != null) ...[
-                const SizedBox(height: 4),
-                Text(
-                  subtitle!,
-                  style: textTheme.bodyMedium?.copyWith(
-                    color: textTheme.bodySmall?.color?.withValues(alpha: 0.75),
-                  ),
-                ),
-              ],
-            ],
-          ),
-        ),
-        if (actionLabel != null && onAction != null)
-          TextButton(onPressed: onAction, child: Text(actionLabel!)),
-      ],
-    );
-  }
 }
 
 class PremiumStatCard extends StatelessWidget {
@@ -67,10 +29,10 @@ class PremiumStatCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(VeeduFixDesignSystem.space16),
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surface,
-        borderRadius: BorderRadius.circular(22),
+        borderRadius: BorderRadius.circular(VeeduFixDesignSystem.radiusLarge),
         border: Border.all(
           color: accentColor.withValues(alpha: 0.15),
         ),
@@ -82,11 +44,11 @@ class PremiumStatCard extends StatelessWidget {
             width: 44,
             decoration: BoxDecoration(
               color: accentColor.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(14),
+              borderRadius: BorderRadius.circular(VeeduFixDesignSystem.radiusSmall),
             ),
             child: Icon(icon, color: accentColor),
           ),
-          const SizedBox(width: 12),
+          const SizedBox(width: VeeduFixDesignSystem.space12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -100,7 +62,7 @@ class PremiumStatCard extends StatelessWidget {
                             .withValues(alpha: 0.72),
                       ),
                 ),
-                const SizedBox(height: 4),
+                const SizedBox(height: VeeduFixDesignSystem.space4),
                 Text(
                   value,
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
@@ -128,15 +90,7 @@ class PremiumCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return AbzioAnimatedCard(
-      onTap: onTap,
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface,
-        borderRadius: BorderRadius.circular(AbzioTheme.cardRadius),
-        boxShadow: AbzioTheme.shadowFor(Theme.of(context).brightness),
-      ),
-      child: child,
-    );
+    return VeeduFixCard(onTap: onTap, child: child);
   }
 }
 
@@ -160,7 +114,7 @@ class PremiumEmptyState extends StatelessWidget {
   Widget build(BuildContext context) {
     return Center(
       child: Padding(
-        padding: const EdgeInsets.all(AbzioTheme.cardPadding),
+        padding: const EdgeInsets.all(VeeduFixDesignSystem.space24),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -172,7 +126,7 @@ class PremiumEmptyState extends StatelessWidget {
                     .colorScheme
                     .primaryContainer
                     .withValues(alpha: 0.7),
-                borderRadius: BorderRadius.circular(AbzioTheme.cardRadius),
+                borderRadius: BorderRadius.circular(VeeduFixDesignSystem.radiusLarge),
               ),
               child: Icon(
                 icon,
@@ -180,7 +134,7 @@ class PremiumEmptyState extends StatelessWidget {
                 color: Theme.of(context).colorScheme.primary,
               ),
             ),
-            const SizedBox(height: AbzioTheme.spacing16),
+            const SizedBox(height: VeeduFixDesignSystem.space16),
             Text(
               title,
               textAlign: TextAlign.center,
@@ -188,7 +142,7 @@ class PremiumEmptyState extends StatelessWidget {
                     fontWeight: FontWeight.w800,
                   ),
             ),
-            const SizedBox(height: AbzioTheme.spacing8),
+            const SizedBox(height: VeeduFixDesignSystem.space8),
             Text(
               subtitle,
               textAlign: TextAlign.center,
@@ -200,16 +154,16 @@ class PremiumEmptyState extends StatelessWidget {
                   ),
             ),
             if (actionLabel != null && onAction != null) ...[
-              const SizedBox(height: AbzioTheme.spacing16),
-              FilledButton(
-                style: FilledButton.styleFrom(
-                  shape: RoundedRectangleBorder(
-                    borderRadius:
-                        BorderRadius.circular(AbzioTheme.buttonRadius),
+              const SizedBox(height: VeeduFixDesignSystem.space16),
+              Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 320),
+                  child: VeeduFixButton(
+                    icon: Icons.refresh_rounded,
+                    onPressed: onAction,
+                    label: actionLabel!,
                   ),
                 ),
-                onPressed: onAction,
-                child: Text(actionLabel!),
               ),
             ],
           ],
@@ -252,7 +206,7 @@ class PremiumRetryState extends StatelessWidget {
         },
         child: ListView(
           physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.all(24),
+          padding: const EdgeInsets.all(VeeduFixDesignSystem.space24),
           children: [
             ConstrainedBox(
               constraints: BoxConstraints(minHeight: constraints.maxHeight),
@@ -291,18 +245,13 @@ class PremiumGlassCard extends StatelessWidget {
     return Container(
       padding: padding,
       decoration: BoxDecoration(
-        color: cs.surfaceContainerHighest.withValues(alpha: 0.45),
-        borderRadius: BorderRadius.circular(borderRadius ?? 24),
-        border: Border.all(
-          color: cs.outlineVariant.withValues(alpha: 0.25),
+        color: cs.surface,
+        borderRadius: BorderRadius.circular(
+          borderRadius ?? VeeduFixDesignSystem.radiusLarge,
         ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.04),
-            blurRadius: 16,
-            offset: const Offset(0, 6),
-          ),
-        ],
+        border: Border.all(
+          color: cs.outlineVariant.withValues(alpha: 0.65),
+        ),
       ),
       child: child,
     );

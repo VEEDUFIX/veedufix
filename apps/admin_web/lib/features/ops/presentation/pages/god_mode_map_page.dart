@@ -95,17 +95,15 @@ class _GodModeMapPageState extends ConsumerState<GodModeMapPage> {
   @override
   Widget build(BuildContext context) {
     final liveCount = _snapshot?.liveJobs.length ?? 0;
-    final inProgress = _snapshot?.liveJobs
-            .where((j) => j.status == 'IN_PROGRESS')
-            .length ??
-        0;
+    final inProgress =
+        _snapshot?.liveJobs.where((j) => j.status == 'IN_PROGRESS').length ?? 0;
 
     return Scaffold(
       backgroundColor: Theme.of(context).colorScheme.surface,
       appBar: AppBar(
         title: Text(
           'God-Mode Live Map',
-          style: GoogleFonts.inter(fontWeight: FontWeight.w700),
+          style: GoogleFonts.outfit(fontWeight: FontWeight.w700),
         ),
         actions: [
           // Live job count badge
@@ -113,27 +111,26 @@ class _GodModeMapPageState extends ConsumerState<GodModeMapPage> {
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                 decoration: BoxDecoration(
                   color: liveCount > 0
                       ? const Color(0xFF0F766E).withValues(alpha: 0.12)
                       : Colors.grey.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(20),
                   border: Border.all(
-                    color: liveCount > 0
-                        ? const Color(0xFF0F766E)
-                        : Colors.grey,
+                    color:
+                        liveCount > 0 ? const Color(0xFF0F766E) : Colors.grey,
                     width: 1,
                   ),
                 ),
                 child: Text(
                   '$liveCount live · $inProgress active',
-                  style: GoogleFonts.inter(
+                  style: GoogleFonts.outfit(
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
-                    color: liveCount > 0
-                        ? const Color(0xFF0F766E)
-                        : Colors.grey,
+                    color:
+                        liveCount > 0 ? const Color(0xFF0F766E) : Colors.grey,
                   ),
                 ),
               ),
@@ -173,7 +170,8 @@ class _GodModeMapPageState extends ConsumerState<GodModeMapPage> {
               left: 12,
               bottom: 32,
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                 decoration: BoxDecoration(
                   color: Colors.white.withValues(alpha: 0.9),
                   borderRadius: BorderRadius.circular(12),
@@ -191,7 +189,7 @@ class _GodModeMapPageState extends ConsumerState<GodModeMapPage> {
                   children: [
                     Text(
                       'Legend',
-                      style: GoogleFonts.inter(
+                      style: GoogleFonts.outfit(
                         fontWeight: FontWeight.w700,
                         fontSize: 12,
                         color: Colors.black87,
@@ -243,7 +241,7 @@ class _LegendDot extends StatelessWidget {
         const SizedBox(width: 6),
         Text(
           label,
-          style: GoogleFonts.inter(fontSize: 11, color: Colors.black87),
+          style: GoogleFonts.outfit(fontSize: 11, color: Colors.black87),
         ),
       ],
     );

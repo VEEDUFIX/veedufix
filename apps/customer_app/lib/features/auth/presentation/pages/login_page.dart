@@ -23,15 +23,12 @@ class _LoginPageState extends ConsumerState<LoginPage> {
   final _phoneFocusNode = FocusNode();
 
   bool _isLoading = false;
-  bool _isFocused = false;
   String? _errorText;
 
   static const _bg = AbzioTheme.lightBackground;
-  static const _ink = Color(0xFF111111);
-  static const _muted = Color(0xFF888888);
-  static const _border = Color(0xFFE4E4E4);
-  static const _focusBorder = AbzioTheme.accentColor;
-  static const _errorColor = Color(0xFFCC4444);
+  static const _ink = AbzioTheme.lightTextPrimary;
+  static const _muted = AbzioTheme.lightTextSecondary;
+  static const _errorColor = AbzioTheme.dangerColor;
 
   @override
   void initState() {
@@ -40,7 +37,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
     _phoneController.addListener(_onPhoneChange);
   }
 
-  void _onFocusChange() => setState(() => _isFocused = _phoneFocusNode.hasFocus);
+  void _onFocusChange() => setState(() {});
 
   void _onPhoneChange() {
     if (_errorText != null) setState(() => _errorText = null);
@@ -97,14 +94,23 @@ class _LoginPageState extends ConsumerState<LoginPage> {
 
   Future<void> _onVerificationCompleted(PhoneAuthCredential credential) async {
     try {
-      final userCred = await FirebaseAuth.instance.signInWithCredential(credential);
+      final userCred = await FirebaseAuth.instance.signInWithCredential(
+        credential,
+      );
       final idToken = await userCred.user?.getIdToken();
       if (idToken == null) throw StateError('No sign-in token');
-      await ref.read(authControllerProvider.notifier).signInWithFirebasePhone(idToken: idToken);
+      await ref
+          .read(authControllerProvider.notifier)
+          .signInWithFirebasePhone(idToken: idToken);
       ref.read(guestModeProvider.notifier).state = false;
       if (mounted) context.go('/app');
     } catch (e) {
-      if (mounted) setState(() { _isLoading = false; _errorText = 'Sign-in failed. Please try again.'; });
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          _errorText = 'Sign-in failed. Please try again.';
+        });
+      }
     }
   }
 
@@ -119,11 +125,14 @@ class _LoginPageState extends ConsumerState<LoginPage> {
   void _onCodeSent(String verificationId, int? resendToken) {
     if (!mounted) return;
     setState(() => _isLoading = false);
-    context.go('/otp', extra: <String, dynamic>{
-      'identifier': _e164,
-      'name': null,
-      'verificationId': verificationId,
-    });
+    context.go(
+      '/otp',
+      extra: <String, dynamic>{
+        'identifier': _e164,
+        'name': null,
+        'verificationId': verificationId,
+      },
+    );
   }
 
   void _onTimeout(String verificationId) {
@@ -139,9 +148,9 @@ class _LoginPageState extends ConsumerState<LoginPage> {
     final uri = Uri.parse(url);
     if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Could not open link')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Could not open link')));
       }
     }
   }
@@ -156,27 +165,31 @@ class _LoginPageState extends ConsumerState<LoginPage> {
       body: SafeArea(
         child: SingleChildScrollView(
           keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-          padding: EdgeInsets.fromLTRB(28, 0, 28, bottomInset + 24),
+          padding: const EdgeInsets.fromLTRB(
+            VeeduFixDesignSystem.pageMargin,
+            0,
+            VeeduFixDesignSystem.pageMargin,
+            24,
+          ),
           child: ConstrainedBox(
             constraints: BoxConstraints(
-              minHeight: MediaQuery.of(context).size.height -
+              minHeight:
+                  MediaQuery.of(context).size.height -
                   MediaQuery.of(context).padding.top -
-                  MediaQuery.of(context).padding.bottom,
+                  MediaQuery.of(context).padding.bottom -
+                  bottomInset,
             ),
             child: IntrinsicHeight(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  const SizedBox(height: 56),
+                  const SizedBox(height: 32),
 
                   // ─── Logo ────────────────────────────────────────
                   const Center(
                     child: SizedBox(
                       height: 48,
-                      child: CustomerLogo(
-                        height: 48,
-                        color: _ink,
-                      ),
+                      child: CustomerLogo(height: 48, color: _ink),
                     ),
                   ),
                   const SizedBox(height: 48),
@@ -184,13 +197,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                   // ─── Headline ────────────────────────────────────
                   Text(
                     'Your home.\nHandled.',
-                    style: GoogleFonts.playfairDisplay(
-                      fontSize: 38,
-                      fontWeight: FontWeight.w700,
-                      color: _ink,
-                      height: 1.12,
-                      letterSpacing: -0.5,
-                    ),
+                    style: Theme.of(context).textTheme.displayMedium,
                   ),
                   const SizedBox(height: 12),
                   Text(
@@ -202,17 +209,17 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                       height: 1.55,
                     ),
                   ),
-                  const SizedBox(height: 36),
+                  const SizedBox(height: 24),
 
                   // ─── Trust items ─────────────────────────────────
                   const _TrustRow(),
-                  const SizedBox(height: 40),
+                  const SizedBox(height: 24),
 
                   // ─── Phone label ─────────────────────────────────
                   Text(
                     'MOBILE NUMBER',
                     style: GoogleFonts.outfit(
-                      fontSize: 10.5,
+                      fontSize: 12,
                       fontWeight: FontWeight.w700,
                       letterSpacing: 1.4,
                       color: _muted,
@@ -221,90 +228,24 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                   const SizedBox(height: 10),
 
                   // ─── Phone input ─────────────────────────────────
-                  AnimatedContainer(
-                    duration: const Duration(milliseconds: 160),
-                    height: 56,
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(
-                        color: _errorText != null
-                            ? _errorColor
-                            : _isFocused
-                                ? _focusBorder
-                                : _border,
-                        width: _isFocused ? 1.5 : 1.0,
-                      ),
-                      boxShadow: _isFocused
-                          ? [
-                              BoxShadow(
-                                color: _focusBorder.withValues(alpha: 0.12),
-                                blurRadius: 0,
-                                spreadRadius: 3,
-                              ),
-                            ]
-                          : [],
-                    ),
-                    child: Row(
-                      children: [
-                        const SizedBox(width: 16),
-                        Text(
-                          '+91',
-                          style: GoogleFonts.outfit(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w600,
-                            color: _ink,
-                          ),
-                        ),
-                        Container(
-                          width: 1,
-                          height: 20,
-                          margin: const EdgeInsets.symmetric(horizontal: 12),
-                          color: _border,
-                        ),
-                        Expanded(
-                          child: TextField(
-                            controller: _phoneController,
-                            focusNode: _phoneFocusNode,
-                            keyboardType: TextInputType.phone,
-                            textInputAction: TextInputAction.done,
-                            inputFormatters: [
-                              FilteringTextInputFormatter.digitsOnly,
-                              LengthLimitingTextInputFormatter(10),
-                            ],
-                            autofillHints: const [AutofillHints.telephoneNumber],
-                            style: GoogleFonts.outfit(
-                              fontSize: 15,
-                              fontWeight: FontWeight.w500,
-                              color: _ink,
-                              letterSpacing: 0.5,
-                            ),
-                            decoration: InputDecoration(
-                              border: InputBorder.none,
-                              contentPadding: EdgeInsets.zero,
-                              hintText: '98765 43210',
-                              hintStyle: GoogleFonts.outfit(
-                                fontSize: 15,
-                                color: const Color(0xFFBBBBBB),
-                                fontWeight: FontWeight.w400,
-                              ),
-                            ),
-                            onSubmitted: (_) {
-                              if (_isPhoneValid && !_isLoading) _sendOtp();
-                            },
-                          ),
-                        ),
-                        if (_isPhoneValid)
-                          const Padding(
-                            padding: EdgeInsets.only(right: 14),
-                            child: Icon(
-                              Icons.check_circle_rounded,
-                              size: 18,
-                              color: Color(0xFF2E7D32),
-                            ),
-                          ),
-                      ],
-                    ),
+                  VeeduFixPhoneField(
+                    controller: _phoneController,
+                    focusNode: _phoneFocusNode,
+                    hasError: _errorText != null,
+                    inputFormatters: [
+                      FilteringTextInputFormatter.digitsOnly,
+                      LengthLimitingTextInputFormatter(10),
+                    ],
+                    onSubmitted: (_) {
+                      if (_isPhoneValid && !_isLoading) _sendOtp();
+                    },
+                    trailing: _isPhoneValid
+                        ? const Icon(
+                            Icons.check_circle_rounded,
+                            size: 18,
+                            color: AbzioTheme.successColor,
+                          )
+                        : null,
                   ),
 
                   // ─── Inline error ────────────────────────────────
@@ -322,11 +263,10 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                   const SizedBox(height: 16),
 
                   // ─── Send OTP button ─────────────────────────────
-                  _PrimaryButton(
+                  VeeduFixButton(
                     label: 'Send OTP',
                     isLoading: _isLoading,
-                    enabled: _isPhoneValid && !_isLoading,
-                    onTap: _sendOtp,
+                    onPressed: _isPhoneValid && !_isLoading ? _sendOtp : null,
                   ),
                   const SizedBox(height: 14),
 
@@ -337,7 +277,9 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                       onTap: _skipForNow,
                       child: Padding(
                         padding: const EdgeInsets.symmetric(
-                            vertical: 10, horizontal: 16),
+                          vertical: 10,
+                          horizontal: 16,
+                        ),
                         child: Text(
                           'Skip for now',
                           style: GoogleFonts.outfit(
@@ -360,7 +302,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                     TextSpan(
                       text: 'By continuing, you agree to our ',
                       style: GoogleFonts.outfit(
-                        fontSize: 11.5,
+                        fontSize: 12,
                         color: const Color(0xFFAAAAAA),
                         height: 1.5,
                       ),
@@ -372,7 +314,8 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                             color: Color(0xFF888888),
                           ),
                           recognizer: TapGestureRecognizer()
-                            ..onTap = () => _openUrl('https://veedufix.com/terms'),
+                            ..onTap = () =>
+                                _openUrl('https://veedufix.com/terms'),
                         ),
                         const TextSpan(text: ' and '),
                         TextSpan(
@@ -382,7 +325,8 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                             color: Color(0xFF888888),
                           ),
                           recognizer: TapGestureRecognizer()
-                            ..onTap = () => _openUrl('https://veedufix.com/privacy'),
+                            ..onTap = () =>
+                                _openUrl('https://veedufix.com/privacy'),
                         ),
                         const TextSpan(text: '.'),
                       ],
@@ -434,14 +378,14 @@ class _TrustItem extends StatelessWidget {
           width: 18,
           height: 18,
           decoration: const BoxDecoration(
-            color: Color(0xFFF0EBE1),
+            color: AbzioTheme.lightMuted,
             shape: BoxShape.circle,
           ),
           child: const Center(
             child: Icon(
               Icons.check_rounded,
               size: 11,
-              color: Color(0xFF8A6A20),
+              color: AbzioTheme.accentColor,
             ),
           ),
         ),
@@ -449,101 +393,12 @@ class _TrustItem extends StatelessWidget {
         Text(
           label,
           style: GoogleFonts.outfit(
-            fontSize: 13.5,
+            fontSize: 14,
             fontWeight: FontWeight.w500,
-            color: const Color(0xFF555555),
+            color: AbzioTheme.lightTextSecondary,
           ),
         ),
       ],
-    );
-  }
-}
-
-// ──────────────────────────────────────────────────────────────────────────────
-// Primary CTA button
-// ──────────────────────────────────────────────────────────────────────────────
-
-class _PrimaryButton extends StatefulWidget {
-  const _PrimaryButton({
-    required this.label,
-    required this.isLoading,
-    required this.enabled,
-    required this.onTap,
-  });
-
-  final String label;
-  final bool isLoading;
-  final bool enabled;
-  final VoidCallback onTap;
-
-  @override
-  State<_PrimaryButton> createState() => _PrimaryButtonState();
-}
-
-class _PrimaryButtonState extends State<_PrimaryButton> {
-  bool _pressed = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final bg = widget.enabled
-        ? const Color(0xFF111111)
-        : const Color(0xFFE0E0E0);
-    final fg = widget.enabled ? Colors.white : const Color(0xFFAAAAAA);
-
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTapDown: widget.enabled ? (_) => setState(() => _pressed = true) : null,
-      onTapUp: widget.enabled
-          ? (_) {
-              setState(() => _pressed = false);
-              widget.onTap();
-            }
-          : null,
-      onTapCancel: widget.enabled ? () => setState(() => _pressed = false) : null,
-      child: AnimatedScale(
-        scale: _pressed ? 0.975 : 1.0,
-        duration: const Duration(milliseconds: 80),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 180),
-          height: 56,
-          decoration: BoxDecoration(
-            color: bg,
-            borderRadius: BorderRadius.circular(14),
-          ),
-          alignment: Alignment.center,
-          child: widget.isLoading
-              ? SizedBox(
-                  width: 20,
-                  height: 20,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: fg,
-                  ),
-                )
-              : Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      widget.label,
-                      style: GoogleFonts.outfit(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w600,
-                        color: fg,
-                        letterSpacing: 0.2,
-                      ),
-                    ),
-                    if (widget.enabled) ...[
-                      const SizedBox(width: 8),
-                      Icon(
-                        Icons.arrow_forward_rounded,
-                        size: 16,
-                        color: fg,
-                      ),
-                    ],
-                  ],
-                ),
-        ),
-      ),
     );
   }
 }

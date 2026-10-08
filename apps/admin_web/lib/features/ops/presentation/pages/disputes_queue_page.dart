@@ -170,7 +170,7 @@ class _DisputesQueuePageState extends ConsumerState<DisputesQueuePage> {
         surfaceTintColor: Colors.transparent,
         title: Text(
           'Disputes queue',
-          style: GoogleFonts.poppins(fontWeight: FontWeight.w800),
+          style: GoogleFonts.outfit(fontWeight: FontWeight.w800),
         ),
         actions: [
           IconButton(
@@ -195,7 +195,7 @@ class _DisputesQueuePageState extends ConsumerState<DisputesQueuePage> {
                     children: [
                       Text(
                         'Review customer cases from filing through resolution.',
-                        style: GoogleFonts.poppins(
+                        style: GoogleFonts.outfit(
                           fontSize: 28,
                           fontWeight: FontWeight.w900,
                           letterSpacing: -0.4,
@@ -205,7 +205,7 @@ class _DisputesQueuePageState extends ConsumerState<DisputesQueuePage> {
                       const SizedBox(height: 8),
                       Text(
                         'Review customer complaints, evidence, and refund decisions in one queue.',
-                        style: GoogleFonts.inter(
+                        style: GoogleFonts.outfit(
                           color: Colors.black54,
                           height: 1.45,
                         ),
@@ -218,11 +218,13 @@ class _DisputesQueuePageState extends ConsumerState<DisputesQueuePage> {
                           _MiniStat(label: 'Total', value: '$_total'),
                           _MiniStat(
                             label: 'Open',
-                            value: '${filteredItems.where((item) => item.status == 'open').length}',
+                            value:
+                                '${filteredItems.where((item) => item.status == 'open').length}',
                           ),
                           _MiniStat(
                             label: 'Under review',
-                            value: '${filteredItems.where((item) => item.status == 'under_review').length}',
+                            value:
+                                '${filteredItems.where((item) => item.status == 'under_review').length}',
                           ),
                         ],
                       ),
@@ -236,7 +238,8 @@ class _DisputesQueuePageState extends ConsumerState<DisputesQueuePage> {
                           ),
                           items: const [
                             DropdownMenuItem(value: 'all', child: Text('All')),
-                            DropdownMenuItem(value: 'open', child: Text('Open')),
+                            DropdownMenuItem(
+                                value: 'open', child: Text('Open')),
                             DropdownMenuItem(
                               value: 'under_review',
                               child: Text('Under review'),
@@ -286,7 +289,8 @@ class _DisputesQueuePageState extends ConsumerState<DisputesQueuePage> {
                 Container(
                   decoration: BoxDecoration(
                     color: Colors.white,
-                    borderRadius: BorderRadius.circular(AbzioTheme.buttonRadius),
+                    borderRadius:
+                        BorderRadius.circular(AbzioTheme.buttonRadius),
                     boxShadow: AbzioTheme.eliteShadow,
                   ),
                   clipBehavior: Clip.antiAlias,
@@ -295,10 +299,13 @@ class _DisputesQueuePageState extends ConsumerState<DisputesQueuePage> {
                       return SingleChildScrollView(
                         scrollDirection: Axis.horizontal,
                         child: SizedBox(
-                          width: constraints.maxWidth > 800 ? constraints.maxWidth : 800,
+                          width: constraints.maxWidth > 800
+                              ? constraints.maxWidth
+                              : 800,
                           child: DataTable(
-                            headingRowColor: const WidgetStatePropertyAll(Color(0xFFF8FAFC)),
-                            headingTextStyle: GoogleFonts.inter(
+                            headingRowColor:
+                                const WidgetStatePropertyAll(Color(0xFFF8FAFC)),
+                            headingTextStyle: GoogleFonts.outfit(
                               fontWeight: FontWeight.w700,
                               fontSize: 12,
                               color: const Color(0xFF64748B),
@@ -326,21 +333,28 @@ class _DisputesQueuePageState extends ConsumerState<DisputesQueuePage> {
                                         Expanded(
                                           child: Text(
                                             item.bookingCode,
-                                            style: const TextStyle(fontWeight: FontWeight.w600),
+                                            style: const TextStyle(
+                                                fontWeight: FontWeight.w600),
                                           ),
                                         ),
                                         IconButton(
                                           tooltip: 'Copy booking code',
                                           visualDensity: VisualDensity.compact,
                                           onPressed: () async {
-                                            await Clipboard.setData(ClipboardData(text: item.bookingCode));
+                                            await Clipboard.setData(
+                                                ClipboardData(
+                                                    text: item.bookingCode));
                                             if (context.mounted) {
-                                              ScaffoldMessenger.of(context).showSnackBar(
-                                                const SnackBar(content: Text('Booking code copied')),
+                                              ScaffoldMessenger.of(context)
+                                                  .showSnackBar(
+                                                const SnackBar(
+                                                    content: Text(
+                                                        'Booking code copied')),
                                               );
                                             }
                                           },
-                                          icon: const Icon(Icons.copy_rounded, size: 16),
+                                          icon: const Icon(Icons.copy_rounded,
+                                              size: 16),
                                         ),
                                       ],
                                     ),
@@ -356,7 +370,9 @@ class _DisputesQueuePageState extends ConsumerState<DisputesQueuePage> {
                                         child: Icon(
                                           Icons.person_rounded,
                                           size: 16,
-                                          color: Theme.of(context).colorScheme.primary,
+                                          color: Theme.of(context)
+                                              .colorScheme
+                                              .primary,
                                         ),
                                       ),
                                       const SizedBox(width: 8),
@@ -378,25 +394,34 @@ class _DisputesQueuePageState extends ConsumerState<DisputesQueuePage> {
                                       Text(item.workerName ?? 'Unknown'),
                                     ],
                                   )),
-                                  DataCell(_GlowingStatusBadge(status: item.status)),
-                                  DataCell(Text(MaterialLocalizations.of(context).formatMediumDate(item.createdAt))),
+                                  DataCell(
+                                      _GlowingStatusBadge(status: item.status)),
+                                  DataCell(Text(
+                                      MaterialLocalizations.of(context)
+                                          .formatMediumDate(item.createdAt))),
                                   DataCell(
                                     Wrap(
                                       spacing: 6,
                                       runSpacing: 6,
                                       children: [
                                         TextButton.icon(
-                                          onPressed: () => _openDispute(item.id),
-                                          icon: const Icon(Icons.open_in_new_rounded, size: 16),
+                                          onPressed: () =>
+                                              _openDispute(item.id),
+                                          icon: const Icon(
+                                              Icons.open_in_new_rounded,
+                                              size: 16),
                                           label: const Text('Open'),
                                         ),
                                         TextButton.icon(
-                                          onPressed: () => context.push('/audit-logs?search=${Uri.encodeComponent(item.bookingId)}'),
-                                          icon: const Icon(Icons.manage_search_rounded, size: 16),
+                                          onPressed: () => context.push(
+                                              '/audit-logs?search=${Uri.encodeComponent(item.bookingId)}'),
+                                          icon: const Icon(
+                                              Icons.manage_search_rounded,
+                                              size: 16),
                                           label: const Text('Audit'),
                                         ),
                                       ],
-                                  ),
+                                    ),
                                   ),
                                 ],
                               );
@@ -410,13 +435,16 @@ class _DisputesQueuePageState extends ConsumerState<DisputesQueuePage> {
               const SizedBox(height: 12),
               _SurfacePanel(
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                   child: Row(
                     children: [
                       Text(
                         'Showing ${filteredItems.length} of $_total',
                         style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                              color: Theme.of(context).colorScheme.onSurfaceVariant,
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .onSurfaceVariant,
                             ),
                       ),
                       const Spacer(),
@@ -429,7 +457,8 @@ class _DisputesQueuePageState extends ConsumerState<DisputesQueuePage> {
                               SizedBox(
                                 width: 18,
                                 height: 18,
-                                child: CircularProgressIndicator(strokeWidth: 2),
+                                child:
+                                    CircularProgressIndicator(strokeWidth: 2),
                               ),
                               SizedBox(width: 10),
                               Text('Loading more'),
@@ -439,16 +468,22 @@ class _DisputesQueuePageState extends ConsumerState<DisputesQueuePage> {
                       else if (_hasMore)
                         Text(
                           'Scroll to load more',
-                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                color: Theme.of(context).colorScheme.onSurfaceVariant,
-                              ),
+                          style:
+                              Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .onSurfaceVariant,
+                                  ),
                         )
                       else
                         Text(
                           'End of results',
-                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                color: Theme.of(context).colorScheme.onSurfaceVariant,
-                              ),
+                          style:
+                              Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .onSurfaceVariant,
+                                  ),
                         ),
                     ],
                   ),
@@ -488,7 +523,7 @@ class _MiniStat extends StatelessWidget {
       ),
       child: RichText(
         text: TextSpan(
-          style: GoogleFonts.inter(
+          style: GoogleFonts.outfit(
             color: const Color(0xFF13110F),
             fontSize: 13,
             fontWeight: FontWeight.w700,
@@ -515,9 +550,18 @@ class _GlowingStatusBadge extends StatelessWidget {
   Widget build(BuildContext context) {
     final normalized = status.toLowerCase();
     final (color, bgColor) = switch (normalized) {
-      'approved' || 'success' || 'processed' => (const Color(0xFF10B981), const Color(0xFFD1FAE5)),
-      'suspended' || 'pending' || 'under_review' => (const Color(0xFFF59E0B), const Color(0xFFFEF3C7)),
-      'rejected' || 'failed' => (const Color(0xFFEF4444), const Color(0xFFFEE2E2)),
+      'approved' || 'success' || 'processed' => (
+          const Color(0xFF10B981),
+          const Color(0xFFD1FAE5)
+        ),
+      'suspended' || 'pending' || 'under_review' => (
+          const Color(0xFFF59E0B),
+          const Color(0xFFFEF3C7)
+        ),
+      'rejected' || 'failed' => (
+          const Color(0xFFEF4444),
+          const Color(0xFFFEE2E2)
+        ),
       'disputed' => (const Color(0xFF8B5CF6), const Color(0xFFEDE9FE)),
       _ => (const Color(0xFF64748B), const Color(0xFFF1F5F9)),
     };

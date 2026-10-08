@@ -68,9 +68,9 @@ class ProfilePage extends ConsumerWidget {
       backgroundColor: AbzioTheme.lightBackground,
       body: ListView(
         padding: EdgeInsets.fromLTRB(
-          20,
+          VeeduFixDesignSystem.pageMargin,
           MediaQuery.paddingOf(context).top + 16,
-          20,
+          VeeduFixDesignSystem.pageMargin,
           24,
         ),
         children: [
@@ -79,10 +79,7 @@ class ProfilePage extends ConsumerWidget {
               Expanded(
                 child: Text(
                   'Account',
-                  style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                    fontWeight: FontWeight.w900,
-                    letterSpacing: -0.5,
-                  ),
+                  style: Theme.of(context).textTheme.headlineMedium,
                 ),
               ),
               Container(
@@ -177,9 +174,9 @@ class ProfilePage extends ConsumerWidget {
             style: OutlinedButton.styleFrom(
               foregroundColor: Theme.of(context).colorScheme.error,
               side: BorderSide(
-                color: Theme.of(context).colorScheme.error.withValues(
-                  alpha: 0.45,
-                ),
+                color: Theme.of(
+                  context,
+                ).colorScheme.error.withValues(alpha: 0.45),
               ),
               padding: const EdgeInsets.symmetric(vertical: 14),
             ),
@@ -399,7 +396,7 @@ class _GuestProfileSignIn extends StatelessWidget {
       backgroundColor: AbzioTheme.lightBackground,
       body: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.all(24),
+          padding: const EdgeInsets.all(VeeduFixDesignSystem.space24),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -408,8 +405,10 @@ class _GuestProfileSignIn extends StatelessWidget {
                 width: 78,
                 height: 78,
                 decoration: BoxDecoration(
-                  color: const Color(0xFF111111),
-                  borderRadius: BorderRadius.circular(24),
+                  color: VeeduFixDesignSystem.ink,
+                  borderRadius: BorderRadius.circular(
+                    VeeduFixDesignSystem.radiusLarge,
+                  ),
                 ),
                 child: const Icon(
                   Icons.person_rounded,
@@ -420,23 +419,17 @@ class _GuestProfileSignIn extends StatelessWidget {
               const SizedBox(height: 24),
               Text(
                 'Sign in to manage your account',
-                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                  fontWeight: FontWeight.w900,
-                  color: const Color(0xFF111111),
-                ),
+                style: Theme.of(context).textTheme.headlineSmall,
               ),
               const SizedBox(height: 10),
               Text(
                 'View bookings, saved addresses, wallet credits, referrals, and support in one place.',
-                style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                  color: const Color(0xFF666666),
-                  height: 1.45,
-                ),
+                style: Theme.of(context).textTheme.bodyLarge,
               ),
               const SizedBox(height: 28),
-              FilledButton(
+              VeeduFixButton(
                 onPressed: () => context.go('/login'),
-                child: const Text('Sign in'),
+                label: 'Sign in',
               ),
               const SizedBox(height: 12),
               TextButton(
@@ -460,37 +453,20 @@ class _ProfileHeroCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final phone = user.phone?.trim();
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: const Color(0xFF111111),
-        borderRadius: BorderRadius.circular(24),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.14),
-            blurRadius: 24,
-            offset: const Offset(0, 12),
-          ),
-        ],
-      ),
+    final text = Theme.of(context).textTheme;
+    return VeeduFixCard(
       child: Row(
         children: [
-          CircleAvatar(
-            radius: 34,
-            backgroundColor: AbzioTheme.accentColor,
-            backgroundImage: user.avatarUrl?.isNotEmpty == true
-                ? NetworkImage(user.avatarUrl!)
-                : null,
-            child: user.avatarUrl?.isNotEmpty == true
-                ? null
-                : Text(
-                    _initial(user.name),
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w900,
-                      color: Color(0xFF111111),
-                      fontSize: 24,
-                    ),
-                  ),
+          MarketplaceNetworkAvatar(
+            imageUrl: user.avatarUrl,
+            radius: 32,
+            backgroundColor: AbzioTheme.lightMuted,
+            fallback: Text(
+              _initial(user.name),
+              style: text.titleLarge?.copyWith(
+                color: AbzioTheme.lightTextPrimary,
+              ),
+            ),
           ),
           const SizedBox(width: 16),
           Expanded(
@@ -506,10 +482,7 @@ class _ProfileHeroCard extends StatelessWidget {
                             : user.name.trim(),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                          fontWeight: FontWeight.w900,
-                          color: Colors.white,
-                        ),
+                        style: text.titleLarge,
                       ),
                     ),
                   ],
@@ -521,10 +494,7 @@ class _ProfileHeroCard extends StatelessWidget {
                       : 'Phone verified customer',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: Colors.white.withValues(alpha: 0.72),
-                    fontWeight: FontWeight.w600,
-                  ),
+                  style: text.bodyMedium,
                 ),
               ],
             ),

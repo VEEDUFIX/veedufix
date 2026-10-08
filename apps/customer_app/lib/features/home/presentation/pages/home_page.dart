@@ -79,11 +79,11 @@ class _HomePageState extends ConsumerState<HomePage> {
         child: ListView(
           padding: EdgeInsets.only(
             top: MediaQuery.of(context).padding.top,
-            bottom: 20,
+            bottom: VeeduFixDesignSystem.space20,
           ),
           children: [
             Padding(
-              padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
               child: Column(
                 children: [
                   HomeHeader(
@@ -94,14 +94,14 @@ class _HomePageState extends ConsumerState<HomePage> {
                       _locationCheckFinished,
                     ),
                   ),
-                  const SizedBox(height: 14),
+                  const SizedBox(height: VeeduFixDesignSystem.space16),
                   HomeSearchBar(
                     onVoiceTap: () => showAiAssistantSheet(context),
                   ),
                 ],
               ),
             ),
-            const SizedBox(height: 22),
+            const SizedBox(height: VeeduFixDesignSystem.space24),
             if (isLoading || categories.isNotEmpty) ...[
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -127,7 +127,8 @@ class _HomePageState extends ConsumerState<HomePage> {
                   onRetry: () => ref.invalidate(homeCatalogProvider),
                 ),
               ),
-            if (categories.isNotEmpty || isLoading) const SizedBox(height: 22),
+            if (categories.isNotEmpty || isLoading)
+              const SizedBox(height: VeeduFixDesignSystem.space24),
             if (bannersAsync.isLoading)
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -143,7 +144,7 @@ class _HomePageState extends ConsumerState<HomePage> {
               ),
             if (bannersAsync.valueOrNull?.isNotEmpty == true ||
                 bannersAsync.isLoading)
-              const SizedBox(height: 26),
+              const SizedBox(height: VeeduFixDesignSystem.space24),
             if (isLoading || mostBooked.isNotEmpty) ...[
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -308,7 +309,7 @@ class _HomePageState extends ConsumerState<HomePage> {
       itemBuilder: (context, _) => const Column(
         mainAxisAlignment: MainAxisAlignment.start,
         children: [
-          ShimmerPlaceholder(width: 64, height: 64, borderRadius: 14),
+          ShimmerPlaceholder(width: 64, height: 64, borderRadius: 12),
           SizedBox(height: 4),
           ShimmerPlaceholder(width: 54, height: 12, borderRadius: 6),
         ],
@@ -424,10 +425,10 @@ class _CatalogErrorState extends StatelessWidget {
     final text = Theme.of(context).textTheme;
 
     return Container(
-      padding: const EdgeInsets.fromLTRB(14, 12, 8, 12),
+      padding: const EdgeInsets.fromLTRB(16, 12, 8, 12),
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surface,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(VeeduFixDesignSystem.radiusMedium),
         border: Border.all(color: colors.outlineVariant),
       ),
       child: Row(

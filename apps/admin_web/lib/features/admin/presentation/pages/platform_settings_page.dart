@@ -128,7 +128,8 @@ class _PlatformSettingsPageState extends ConsumerState<PlatformSettingsPage> {
       return;
     }
     if (referralLimit == null || referralLimit < 0 || referralLimit > 100000) {
-      await _showMessage('Referral limit must be 0 or a whole number up to 100000');
+      await _showMessage(
+          'Referral limit must be 0 or a whole number up to 100000');
       return;
     }
 
@@ -607,27 +608,35 @@ class _PlatformSettingsPageState extends ConsumerState<PlatformSettingsPage> {
                               TextField(
                                 controller: _referralLimitController,
                                 keyboardType: TextInputType.number,
-                                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                                inputFormatters: [
+                                  FilteringTextInputFormatter.digitsOnly
+                                ],
                                 decoration: const InputDecoration(
-                                  labelText: 'Successful referrals per referrer',
-                                  helperText: '0 means unlimited. Existing completed referrals count toward this limit.',
+                                  labelText:
+                                      'Successful referrals per referrer',
+                                  helperText:
+                                      '0 means unlimited. Existing completed referrals count toward this limit.',
                                   border: OutlineInputBorder(),
                                 ),
                               ),
                               SwitchListTile.adaptive(
                                 contentPadding: EdgeInsets.zero,
                                 value: _referralsEnabled,
-                                onChanged: (value) => setState(() => _referralsEnabled = value),
+                                onChanged: (value) =>
+                                    setState(() => _referralsEnabled = value),
                                 title: const Text('Referral rewards enabled'),
-                                subtitle: const Text('Turn off to stop accepting referral rewards for new signups.'),
+                                subtitle: const Text(
+                                    'Turn off to stop accepting referral rewards for new signups.'),
                               ),
                               const Divider(),
                               SwitchListTile.adaptive(
                                 contentPadding: EdgeInsets.zero,
                                 value: _payoutsPaused,
-                                onChanged: (value) => setState(() => _payoutsPaused = value),
+                                onChanged: (value) =>
+                                    setState(() => _payoutsPaused = value),
                                 title: const Text('Pause partner payouts'),
-                                subtitle: const Text('Stops new withdrawal requests and holds new booking settlements.'),
+                                subtitle: const Text(
+                                    'Stops new withdrawal requests and holds new booking settlements.'),
                               ),
                               if (_payoutsPaused) ...[
                                 TextField(
@@ -635,7 +644,8 @@ class _PlatformSettingsPageState extends ConsumerState<PlatformSettingsPage> {
                                   maxLength: 240,
                                   decoration: const InputDecoration(
                                     labelText: 'Reason shown to partners',
-                                    helperText: 'Required while payouts are paused.',
+                                    helperText:
+                                        'Required while payouts are paused.',
                                     border: OutlineInputBorder(),
                                   ),
                                 ),
@@ -644,7 +654,10 @@ class _PlatformSettingsPageState extends ConsumerState<PlatformSettingsPage> {
                                 const SizedBox(height: 4),
                                 Text(
                                   'Settings saved ${DateFormat('d MMM yyyy, h:mm a').format(_snapshot!.platformConfig.updatedAt.toLocal())}. Updates affect new activity; existing payout amounts are preserved.',
-                                  style: Theme.of(context).textTheme.bodySmall?.copyWith(color: kAdminMuted),
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .bodySmall
+                                      ?.copyWith(color: kAdminMuted),
                                 ),
                               ],
                               const SizedBox(height: 18),
@@ -987,7 +1000,8 @@ class _PlatformConfig {
           (json['referralMaxSuccessfulPerReferrer'] as num?)?.toInt() ?? 0,
       payoutsPaused: json['payoutsPaused'] as bool? ?? false,
       payoutPauseReason: json['payoutPauseReason'] as String?,
-      updatedAt: DateTime.tryParse(json['updatedAt'] as String? ?? '') ?? DateTime.now(),
+      updatedAt: DateTime.tryParse(json['updatedAt'] as String? ?? '') ??
+          DateTime.now(),
     );
   }
 }
@@ -1140,9 +1154,9 @@ class _MetricCard extends StatelessWidget {
                 children: [
                   Text(label,
                       style:
-                          GoogleFonts.inter(fontSize: 12, color: kAdminMuted)),
+                          GoogleFonts.outfit(fontSize: 12, color: kAdminMuted)),
                   Text(value,
-                      style: GoogleFonts.poppins(
+                      style: GoogleFonts.outfit(
                           fontSize: 22, fontWeight: FontWeight.w700)),
                 ],
               ),

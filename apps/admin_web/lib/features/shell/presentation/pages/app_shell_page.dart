@@ -100,11 +100,13 @@ class _AppShellPageState extends ConsumerState<AppShellPage> {
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   const AdminLogo(
-                                      height: 28, color: Color(0xFF0F766E)),
+                                    height: 28,
+                                    color: AbzioTheme.accentColor,
+                                  ),
                                   const SizedBox(height: 4),
                                   Text(
                                     'ADMIN PANEL',
-                                    style: GoogleFonts.inter(
+                                    style: GoogleFonts.outfit(
                                       color: textMuted,
                                       fontWeight: FontWeight.w700,
                                       letterSpacing: 1.5,
@@ -367,7 +369,7 @@ class _AppShellPageState extends ConsumerState<AppShellPage> {
                           padding: const EdgeInsets.all(24),
                           child: Text(
                             '(c) 2026 VeeduFix',
-                            style: GoogleFonts.inter(
+                            style: GoogleFonts.outfit(
                               color: textMuted.withValues(alpha: 0.72),
                               fontSize: 12,
                             ),
@@ -420,12 +422,12 @@ class _AppShellPageState extends ConsumerState<AppShellPage> {
                                         decoration: InputDecoration(
                                           hintText:
                                               'Search jobs, workers, support, etc. (Ctrl+K)',
-                                          hintStyle: GoogleFonts.inter(
+                                          hintStyle: GoogleFonts.outfit(
                                               fontSize: 13, color: textMuted),
                                           border: InputBorder.none,
                                           isDense: true,
                                         ),
-                                        style: GoogleFonts.inter(
+                                        style: GoogleFonts.outfit(
                                             fontSize: 14, color: textPrimary),
                                       ),
                                     ),
@@ -448,12 +450,12 @@ class _AppShellPageState extends ConsumerState<AppShellPage> {
                                 children: [
                                   CircleAvatar(
                                     radius: 16,
-                                    backgroundColor: const Color(0xFF0F766E)
+                                    backgroundColor: AbzioTheme.accentColor
                                         .withValues(alpha: 0.12),
                                     child: Text(
                                       adminInitial,
                                       style: const TextStyle(
-                                        color: Color(0xFF0F766E),
+                                        color: AbzioTheme.accentColor,
                                         fontSize: 12,
                                         fontWeight: FontWeight.bold,
                                       ),
@@ -462,7 +464,7 @@ class _AppShellPageState extends ConsumerState<AppShellPage> {
                                   const SizedBox(width: 8),
                                   Text(
                                     adminName,
-                                    style: GoogleFonts.inter(
+                                    style: GoogleFonts.outfit(
                                       fontWeight: FontWeight.w600,
                                       color: textPrimary,
                                     ),
@@ -569,7 +571,7 @@ class _AppShellPageState extends ConsumerState<AppShellPage> {
       padding: const EdgeInsets.fromLTRB(16, 24, 16, 8),
       child: Text(
         title.toUpperCase(),
-        style: GoogleFonts.inter(
+        style: GoogleFonts.outfit(
           color: textMuted,
           fontWeight: FontWeight.w700,
           fontSize: 11,
@@ -601,12 +603,12 @@ class _AppShellPageState extends ConsumerState<AppShellPage> {
               horizontal: showExpanded ? 16 : 0, vertical: 12),
           decoration: BoxDecoration(
             color: isSelected
-                ? const Color(0xFF0F766E).withValues(alpha: 0.08)
+                ? AbzioTheme.accentColor.withValues(alpha: 0.08)
                 : Colors.transparent,
             borderRadius: BorderRadius.circular(14),
             border: isSelected && !showExpanded
                 ? const Border(
-                    left: BorderSide(color: Color(0xFF0F766E), width: 3))
+                    left: BorderSide(color: AbzioTheme.accentColor, width: 3))
                 : null,
           ),
           child: showExpanded
@@ -615,7 +617,7 @@ class _AppShellPageState extends ConsumerState<AppShellPage> {
                     Icon(
                       isSelected ? activeIcon : icon,
                       color: isSelected
-                          ? const Color(0xFF0F766E)
+                          ? AbzioTheme.accentColor
                           : Theme.of(context).colorScheme.onSurfaceVariant,
                       size: 20,
                     ),
@@ -623,9 +625,9 @@ class _AppShellPageState extends ConsumerState<AppShellPage> {
                     Expanded(
                       child: Text(
                         label,
-                        style: GoogleFonts.inter(
+                        style: GoogleFonts.outfit(
                           color: isSelected
-                              ? const Color(0xFF0F766E)
+                              ? AbzioTheme.accentColor
                               : Theme.of(context).colorScheme.onSurface,
                           fontWeight:
                               isSelected ? FontWeight.w700 : FontWeight.w500,
@@ -638,12 +640,12 @@ class _AppShellPageState extends ConsumerState<AppShellPage> {
                         padding: const EdgeInsets.symmetric(
                             horizontal: 6, vertical: 2),
                         decoration: BoxDecoration(
-                          color: const Color(0xFFEF4444),
+                          color: AbzioTheme.dangerColor,
                           borderRadius: BorderRadius.circular(10),
                         ),
                         child: Text(
                           badge,
-                          style: GoogleFonts.inter(
+                          style: GoogleFonts.outfit(
                             color: Colors.white,
                             fontSize: 10,
                             fontWeight: FontWeight.w700,
@@ -659,7 +661,7 @@ class _AppShellPageState extends ConsumerState<AppShellPage> {
                     child: Icon(
                       isSelected ? activeIcon : icon,
                       color: isSelected
-                          ? const Color(0xFF0F766E)
+                          ? AbzioTheme.accentColor
                           : Theme.of(context).colorScheme.onSurfaceVariant,
                       size: 24,
                     ),

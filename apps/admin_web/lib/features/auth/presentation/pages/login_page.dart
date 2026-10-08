@@ -1,6 +1,4 @@
 import 'dart:async';
-import 'dart:ui';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:dio/dio.dart';
@@ -50,9 +48,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
     }
     if (message.isNotEmpty && message != 'null') {
       final compact = message.replaceAll(RegExp(r'\s+'), ' ').trim();
-      return compact.length > 180
-          ? '${compact.substring(0, 177)}...'
-          : compact;
+      return compact.length > 180 ? '${compact.substring(0, 177)}...' : compact;
     }
     return 'Unable to sign in right now.';
   }
@@ -167,7 +163,8 @@ class _LoginPageState extends ConsumerState<LoginPage> {
         }
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: const Text('This Google account is not authorized for admin access.'),
+            content: const Text(
+                'This Google account is not authorized for admin access.'),
             backgroundColor: Theme.of(context).colorScheme.error,
           ),
         );
@@ -221,169 +218,148 @@ class _LoginPageState extends ConsumerState<LoginPage> {
     });
 
     final theme = Theme.of(context);
+    final compact = MediaQuery.sizeOf(context).width < 900;
+
+    final form = Center(
+      child: SingleChildScrollView(
+        padding: EdgeInsets.all(compact ? 16 : 32),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 440),
+          child: _buildSignInCard(theme),
+        ),
+      ),
+    );
 
     return Scaffold(
-      body: Row(
-        children: [
-          Expanded(
-            flex: 5,
-            child: Container(
-              decoration: const BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [Color(0xFF0F766E), Color(0xFF064E3B)],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-              ),
-              child: Stack(
-                children: [
-                  const Positioned.fill(
-                    child: Opacity(
-                      opacity: 0.1,
-                      child: GridPaper(
-                        color: Colors.white,
-                        interval: 40,
-                        divisions: 2,
-                        subdivisions: 1,
-                      ),
-                    ),
-                  ),
-                  Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(48.0),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Icon(Icons.shield, color: Colors.white, size: 80),
-                          const SizedBox(height: 24),
-                          const AdminLogo(height: 64, color: Colors.white),
-                          const SizedBox(height: 16),
-                          Text(
-                            'Admin Control Center',
-                            style: theme.textTheme.headlineMedium?.copyWith(
-                              color: Colors.white.withValues(alpha: 0.9),
-                              fontWeight: FontWeight.w300,
-                            ),
-                          ),
-                          const SizedBox(height: 32),
-                          Text(
-                            'Secure access portal for managing platform operations, workers, and services.',
-                            style: theme.textTheme.titleMedium?.copyWith(
-                              color: Colors.white.withValues(alpha: 0.7),
-                              height: 1.5,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          Expanded(
-            flex: 4,
-            child: Container(
-              color: const Color(0xFFF9FAFB),
-              child: Center(
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.all(48),
+      backgroundColor: AbzioTheme.lightBackground,
+      body: SafeArea(
+        child: compact
+            ? LayoutBuilder(
+                builder: (context, constraints) => SingleChildScrollView(
+                  padding: const EdgeInsets.all(20),
                   child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 440),
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(AbzioTheme.cardRadius),
-                        boxShadow: AbzioTheme.eliteShadow,
-                        border: Border.all(color: Colors.white.withValues(alpha: 0.2)),
-                      ),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(AbzioTheme.cardRadius),
-                        child: BackdropFilter(
-                          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-                          child: Padding(
-                            padding: const EdgeInsets.all(48),
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                    constraints:
+                        BoxConstraints(minHeight: constraints.maxHeight - 40),
+                    child: Center(
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 480),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Row(
                               children: [
-                                Text(
-                                  'Welcome Back',
-                                  textAlign: TextAlign.center,
-                                  style: theme.textTheme.headlineMedium?.copyWith(
-                                    color: const Color(0xFF111827),
-                                    fontWeight: FontWeight.w800,
-                                    letterSpacing: -0.5,
-                                  ),
+                                const AdminLogo(
+                                  height: 40,
+                                  color: AbzioTheme.lightTextPrimary,
                                 ),
-                                const SizedBox(height: 12),
+                                const SizedBox(width: 12),
                                 Text(
-                                  'Sign in with your authorized admin account to continue.',
-                                  textAlign: TextAlign.center,
-                                  style: theme.textTheme.bodyLarge?.copyWith(
-                                    color: const Color(0xFF6B7280),
-                                  ),
-                                ),
-                                const SizedBox(height: 32),
-                                if (_initError != null) ...[
-                                  Container(
-                                    padding: const EdgeInsets.all(14),
-                                    decoration: BoxDecoration(
-                                      color: theme.colorScheme.errorContainer,
-                                      borderRadius: BorderRadius.circular(14),
-                                    ),
-                                    child: Text(
-                                      _initError!,
-                                      textAlign: TextAlign.center,
-                                      style: theme.textTheme.bodyMedium?.copyWith(
-                                        color: theme.colorScheme.onErrorContainer,
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(height: 16),
-                                ],
-                                SizedBox(
-                                  height: 52,
-                                  child: Stack(
-                                    alignment: Alignment.center,
-                                    children: [
-                                      Positioned.fill(
-                                        child: IgnorePointer(
-                                          ignoring: _isSigningIn ||
-                                              !_isGoogleButtonAvailable,
-                                          child: Opacity(
-                                            opacity: _isSigningIn ? 0.35 : 1,
-                                            child: (GoogleSignInPlatform.instance
-                                                    as web.GoogleSignInPlugin)
-                                                .renderButton(
-                                              configuration: web.GSIButtonConfiguration(
-                                                size: web.GSIButtonSize.large,
-                                                text: web.GSIButtonText.continueWith,
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                      if (_isSigningIn)
-                                        const SizedBox(
-                                          width: 22,
-                                          height: 22,
-                                          child: CircularProgressIndicator(strokeWidth: 2.5),
-                                        ),
-                                    ],
-                                  ),
+                                  'Admin',
+                                  style: theme.textTheme.titleLarge,
                                 ),
                               ],
                             ),
-                          ),
+                            const SizedBox(height: 24),
+                            _buildSignInCard(theme),
+                          ],
                         ),
                       ),
                     ),
                   ),
                 ),
+              )
+            : Row(
+                children: [
+                  Expanded(flex: 5, child: _buildBrandPanel(theme)),
+                  Expanded(flex: 4, child: form),
+                ],
               ),
+      ),
+    );
+  }
+
+  Widget _buildBrandPanel(ThemeData theme) {
+    return Container(
+      color: AbzioTheme.lightMuted,
+      alignment: Alignment.center,
+      padding: const EdgeInsets.all(48),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 440),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const AdminLogo(height: 52, color: AbzioTheme.lightTextPrimary),
+            const SizedBox(height: 32),
+            Text('Admin Control Center', style: theme.textTheme.headlineMedium),
+            const SizedBox(height: 12),
+            Text(
+              'Manage platform operations, workers, and services.',
+              style: theme.textTheme.bodyLarge,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSignInCard(ThemeData theme) {
+    return VeeduFixCard(
+      padding: const EdgeInsets.all(32),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text('Welcome back', style: theme.textTheme.headlineMedium),
+          const SizedBox(height: 8),
+          Text(
+            'Sign in with your authorized admin account to continue.',
+            style: theme.textTheme.bodyMedium,
+          ),
+          if (_initError != null) ...[
+            const SizedBox(height: 20),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.errorContainer,
+                borderRadius: BorderRadius.circular(AbzioTheme.inputRadius),
+              ),
+              child: Text(
+                _initError!,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onErrorContainer,
+                ),
+              ),
+            ),
+          ],
+          const SizedBox(height: 24),
+          SizedBox(
+            height: VeeduFixDesignSystem.buttonHeight,
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                Positioned.fill(
+                  child: IgnorePointer(
+                    ignoring: _isSigningIn || !_isGoogleButtonAvailable,
+                    child: Opacity(
+                      opacity: _isSigningIn ? 0.35 : 1,
+                      child: (GoogleSignInPlatform.instance
+                              as web.GoogleSignInPlugin)
+                          .renderButton(
+                        configuration: web.GSIButtonConfiguration(
+                          size: web.GSIButtonSize.large,
+                          text: web.GSIButtonText.continueWith,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                if (_isSigningIn)
+                  const SizedBox.square(
+                    dimension: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+              ],
             ),
           ),
         ],
