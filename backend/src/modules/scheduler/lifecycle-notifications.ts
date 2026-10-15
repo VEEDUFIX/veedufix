@@ -83,7 +83,9 @@ async function sendBookingReminders() {
 
   const bookings = await prisma.booking.findMany({
     where: {
-      status: { in: [BookingStatus.ACCEPTED, BookingStatus.WORKER_ASSIGNED] },
+      status: {
+        in: [BookingStatus.ACCEPTED, BookingStatus.WORKER_ASSIGNED, BookingStatus.EN_ROUTE]
+      },
       scheduledAt: {
         gte: minTime,
         lte: maxTime,

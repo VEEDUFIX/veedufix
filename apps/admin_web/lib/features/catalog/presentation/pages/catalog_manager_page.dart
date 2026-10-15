@@ -695,7 +695,7 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
     if (payload == null || !mounted) return;
     final summary = switch (payload['action']) {
       'APPLY_LOCATIONS' =>
-        'Apply ${((payload['serviceIds'] as List?) ?? []).length} selected services to ${((payload['serviceAreaIds'] as List?) ?? []).length} locations?',
+        'Replace location coverage for ${((payload['serviceIds'] as List?) ?? []).length} selected services with the ${((payload['serviceAreaIds'] as List?) ?? []).length} selected locations?',
       'REMOVE_LOCATIONS' =>
         'Remove selected locations from ${((payload['serviceIds'] as List?) ?? []).length} services?',
       'COPY_SERVICE' =>

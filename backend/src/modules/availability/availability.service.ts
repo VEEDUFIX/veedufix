@@ -281,6 +281,16 @@ export async function getCustomerScheduleSlots(input: {
     throw AppError.badRequest("One or more selected services are unavailable in this area");
   }
 
+  const latitude = savedAddress?.lat ?? (bookingAddress?.latitude == null
+    ? Number.NaN
+    : Number(bookingAddress.latitude));
+  const longitude = savedAddress?.lng ?? (bookingAddress?.longitude == null
+    ? Number.NaN
+    : Number(bookingAddress.longitude));
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+    throw AppError.badRequest("Add a map location to this address before scheduling a booking");
+  }
+
   return previewCustomerScheduleSlots({
     cityId: resolvedCity.id,
     services: services.map((service) => ({
@@ -288,8 +298,8 @@ export async function getCustomerScheduleSlots(input: {
       categoryId: service.categoryId
     })),
     pincode,
-    latitude: savedAddress?.lat ?? Number(bookingAddress?.latitude),
-    longitude: savedAddress?.lng ?? Number(bookingAddress?.longitude),
+    latitude,
+    longitude,
     cityName: resolvedCity.name,
     startDate: input.startDate,
     days: input.days

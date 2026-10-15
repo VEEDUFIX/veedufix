@@ -72,6 +72,7 @@ final workerLocationProvider = StreamProvider.autoDispose
       var disposed = false;
       int? snapshotEtaMinutes;
       DateTime? lastEmittedTimestamp;
+      String? lastObservedStatus;
       StreamSubscription<Map<String, dynamic>>? eventSubscription;
       Timer? refreshTimer;
       final stream = Stream<WorkerLocation?>.multi((controller) {
@@ -81,12 +82,21 @@ final workerLocationProvider = StreamProvider.autoDispose
           controller.add(location);
         }
 
+        void refreshBookingDetailsWhenStatusChanges(Object? rawStatus) {
+          final status = rawStatus?.toString();
+          if (status == null || status == lastObservedStatus) return;
+          lastObservedStatus = status;
+          if (status != 'EN_ROUTE') {
+            ref.invalidate(bookingDetailProvider(bookingId));
+          }
+        }
+
         Future<void> refreshSnapshot() async {
           try {
             final snapshot = await api.get('/bookings/$bookingId/tracking');
             if (disposed) return;
+            refreshBookingDetailsWhenStatusChanges(snapshot['status']);
             if (snapshot['status'] != 'EN_ROUTE') {
-              ref.invalidate(bookingDetailProvider(bookingId));
               snapshotEtaMinutes = null;
               controller.add(null);
               return;
@@ -122,9 +132,9 @@ final workerLocationProvider = StreamProvider.autoDispose
             await connection;
             if (disposed) return;
             eventSubscription = events.listen((payload) {
+              refreshBookingDetailsWhenStatusChanges(payload['status']);
               if (payload['status'] != null &&
                   payload['status'] != 'EN_ROUTE') {
-                ref.invalidate(bookingDetailProvider(bookingId));
                 controller.add(null);
                 return;
               }

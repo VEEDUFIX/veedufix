@@ -102,4 +102,14 @@ describe("lifecycle notifications", () => {
     expect(mocks.sendPush).toHaveBeenCalledTimes(3);
     expect(mocks.loggerError).toHaveBeenCalledTimes(1);
   });
+
+  it("includes en-route bookings in scheduled booking reminders", async () => {
+    await processLifecycleNotifications();
+
+    expect(mocks.bookingFindMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({
+        status: { in: expect.arrayContaining([BookingStatus.EN_ROUTE]) }
+      })
+    }));
+  });
 });

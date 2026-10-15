@@ -408,9 +408,11 @@ class _RebookReviewPageState extends ConsumerState<RebookReviewPage> {
               style: TextStyle(color: colors.error),
             ),
             TextButton.icon(
-              onPressed: () => context.push(
-                '/search?q=${Uri.encodeComponent(line.serviceName)}',
-              ),
+              onPressed: _loadingCatalog
+                  ? null
+                  : () => context.push(
+                        '/search?q=${Uri.encodeComponent(line.serviceName)}',
+                      ),
               icon: const Icon(Icons.search_rounded),
               label: const Text('Find a similar service'),
             ),
