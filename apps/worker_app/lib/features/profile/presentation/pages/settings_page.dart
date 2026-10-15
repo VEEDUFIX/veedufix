@@ -23,15 +23,19 @@ class SettingsPage extends ConsumerWidget {
         elevation: 0,
         leading: Padding(
           padding: const EdgeInsets.all(8),
-          child: TapScale(
-            onTap: () => context.pop(),
-            child: Container(
-              decoration: BoxDecoration(
-                color: cs.surface,
-                shape: BoxShape.circle,
-                boxShadow: AbzioTheme.eliteShadow,
+          child: Semantics(
+            button: true,
+            label: appText(context, 'Back', 'பின்செல்'),
+            child: TapScale(
+              onTap: () => context.pop(),
+              child: Container(
+                decoration: BoxDecoration(
+                  color: cs.surface,
+                  shape: BoxShape.circle,
+                  boxShadow: AbzioTheme.eliteShadow,
+                ),
+                child: const Icon(Icons.arrow_back_ios_new_rounded, size: 18),
               ),
-              child: const Icon(Icons.arrow_back_ios_new_rounded, size: 18),
             ),
           ),
         ),
@@ -43,7 +47,8 @@ class SettingsPage extends ConsumerWidget {
       body: ListView(
         padding: const EdgeInsets.all(24),
         children: [
-          _SectionHeader(title: appText(context, 'Preferences', 'விருப்பங்கள்')),
+          _SectionHeader(
+              title: appText(context, 'Preferences', 'விருப்பங்கள்')),
           _SettingsTile(
             icon: Icons.language_rounded,
             title: 'Language',
@@ -63,8 +68,9 @@ class SettingsPage extends ConsumerWidget {
             onTap: () => context.push('/connection-diagnostics'),
           ),
           const SizedBox(height: 32),
-          
-          _SectionHeader(title: appText(context, 'Security & Privacy', 'பாதுகாப்பு மற்றும் தனியுரிமை')),
+          _SectionHeader(
+              title: appText(context, 'Security & Privacy',
+                  'பாதுகாப்பு மற்றும் தனியுரிமை')),
           _SettingsTile(
             icon: Icons.lock_outline_rounded,
             title: 'Privacy Center',
@@ -72,7 +78,8 @@ class SettingsPage extends ConsumerWidget {
             onTap: () => _openSupportRequest(
               context,
               subject: 'Privacy and data request',
-              message: 'Please help me with a privacy or personal data request for my Veedufix Partner account.',
+              message:
+                  'Please help me with a privacy or personal data request for my Veedufix Partner account.',
             ),
           ),
           _SettingsTile(
@@ -88,7 +95,6 @@ class SettingsPage extends ConsumerWidget {
             onTap: () => _confirmDeleteAccount(context),
           ),
           const SizedBox(height: 32),
-
           const _SectionHeader(title: 'About'),
           _SettingsTile(
             icon: Icons.description_rounded,
@@ -96,16 +102,18 @@ class SettingsPage extends ConsumerWidget {
             onTap: () => _showInfoDialog(
               context,
               title: 'Terms of Service',
-              body: 'The worker app uses marketplace rules, payout policies, and service standards to keep the platform safe and reliable.',
+              body:
+                  'The worker app uses marketplace rules, payout policies, and service standards to keep the platform safe and reliable.',
             ),
           ),
           _SettingsTile(
             icon: Icons.privacy_tip_rounded,
             title: 'Privacy Policy',
-              onTap: () => _showInfoDialog(
-                context,
-                title: 'Privacy Policy',
-              body: 'For a copy or deletion request for your account data, contact Veedufix Support so the team can verify your identity and explain any requirements.',
+            onTap: () => _showInfoDialog(
+              context,
+              title: 'Privacy Policy',
+              body:
+                  'For a copy or deletion request for your account data, contact Veedufix Support so the team can verify your identity and explain any requirements.',
             ),
           ),
           _SettingsTile(
@@ -124,7 +132,8 @@ class SettingsPage extends ConsumerWidget {
             child: TapScale(
               onTap: () => _confirmSignOut(context, ref),
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
                 decoration: BoxDecoration(
                   color: cs.error.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(AbzioTheme.buttonRadius),
@@ -198,7 +207,9 @@ class _SettingsTile extends StatelessWidget {
           color: cs.surfaceContainerHighest.withValues(alpha: 0.3),
           borderRadius: BorderRadius.circular(AbzioTheme.cardRadius),
           border: Border.all(
-            color: isDestructive ? cs.error.withValues(alpha: 0.3) : cs.outlineVariant.withValues(alpha: 0.5),
+            color: isDestructive
+                ? cs.error.withValues(alpha: 0.3)
+                : cs.outlineVariant.withValues(alpha: 0.5),
           ),
         ),
         child: Row(
@@ -206,10 +217,13 @@ class _SettingsTile extends StatelessWidget {
             Container(
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: isDestructive ? cs.error.withValues(alpha: 0.1) : cs.primary.withValues(alpha: 0.1),
+                color: isDestructive
+                    ? cs.error.withValues(alpha: 0.1)
+                    : cs.primary.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: Icon(icon, color: isDestructive ? cs.error : cs.primary, size: 22),
+              child: Icon(icon,
+                  color: isDestructive ? cs.error : cs.primary, size: 22),
             ),
             const SizedBox(width: 16),
             Expanded(
@@ -236,7 +250,8 @@ class _SettingsTile extends StatelessWidget {
               ),
             ),
             if (showChevron)
-              Icon(Icons.arrow_forward_ios_rounded, size: 16, color: cs.onSurfaceVariant),
+              Icon(Icons.arrow_forward_ios_rounded,
+                  size: 16, color: cs.onSurfaceVariant),
           ],
         ),
       ),
@@ -251,7 +266,8 @@ Future<void> _exportWorkerData(BuildContext context, WidgetRef ref) async {
     await Clipboard.setData(ClipboardData(text: json));
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('Your account export was copied as JSON. Store it securely.'),
+        content:
+            Text('Your account export was copied as JSON. Store it securely.'),
       ));
     }
   } catch (error) {
@@ -263,14 +279,17 @@ Future<void> _exportWorkerData(BuildContext context, WidgetRef ref) async {
   }
 }
 
-void _showInfoDialog(BuildContext context, {required String title, required String body}) {
+void _showInfoDialog(BuildContext context,
+    {required String title, required String body}) {
   showDialog<void>(
     context: context,
     builder: (context) => AlertDialog(
       title: Text(title),
       content: Text(body),
       actions: [
-        TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Close')),
+        TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Close')),
       ],
     ),
   );
@@ -282,7 +301,8 @@ Future<void> _showLanguagePicker(BuildContext context, WidgetRef ref) async {
     builder: (dialogContext) {
       final activeLanguage = ref.read(appLocaleProvider).languageCode;
       return SimpleDialog(
-        title: Text(appText(context, 'Choose language', 'மொழியைத் தேர்ந்தெடுக்கவும்')),
+        title: Text(
+            appText(context, 'Choose language', 'மொழியைத் தேர்ந்தெடுக்கவும்')),
         children: [
           for (final option in const [('en', 'English'), ('ta', 'தமிழ்')])
             SimpleDialogOption(
@@ -305,7 +325,9 @@ Future<void> _showLanguagePicker(BuildContext context, WidgetRef ref) async {
   } catch (_) {
     if (!context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(appText(context, 'Could not save language preference.', 'மொழி விருப்பத்தைச் சேமிக்க முடியவில்லை.'))),
+      SnackBar(
+          content: Text(appText(context, 'Could not save language preference.',
+              'மொழி விருப்பத்தைச் சேமிக்க முடியவில்லை.'))),
     );
   }
 }
@@ -333,11 +355,13 @@ Future<void> _showNotificationPrefs(BuildContext context, WidgetRef ref) async {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('Job and payout alerts follow your device notification permission.'),
+            const Text(
+                'Job and payout alerts follow your device notification permission.'),
             SwitchListTile.adaptive(
               contentPadding: EdgeInsets.zero,
               title: const Text('Offers and promotions'),
-              subtitle: const Text('Receive promotional messages on your account'),
+              subtitle:
+                  const Text('Receive promotional messages on your account'),
               value: marketingEnabled,
               onChanged: isSaving
                   ? null
@@ -353,27 +377,33 @@ Future<void> _showNotificationPrefs(BuildContext context, WidgetRef ref) async {
                         );
                         if (!context.mounted) return;
                         setDialogState(() {
-                          marketingEnabled = updated['marketingNotificationsEnabled'] == true;
+                          marketingEnabled =
+                              updated['marketingNotificationsEnabled'] == true;
                         });
                       } catch (_) {
                         if (context.mounted) {
-                          setDialogState(() => errorMessage = 'Could not save this preference. Try again.');
+                          setDialogState(() => errorMessage =
+                              'Could not save this preference. Try again.');
                         }
                       } finally {
-                        if (context.mounted) setDialogState(() => isSaving = false);
+                        if (context.mounted) {
+                          setDialogState(() => isSaving = false);
+                        }
                       }
                     },
             ),
             if (isSaving) const LinearProgressIndicator(),
             if (errorMessage != null) ...[
               const SizedBox(height: 8),
-              Text(errorMessage!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
+              Text(errorMessage!,
+                  style: TextStyle(color: Theme.of(context).colorScheme.error)),
             ],
           ],
         ),
         actions: [
           TextButton(
-            onPressed: isSaving ? null : () => Navigator.of(dialogContext).pop(),
+            onPressed:
+                isSaving ? null : () => Navigator.of(dialogContext).pop(),
             child: const Text('Done'),
           ),
         ],
@@ -387,7 +417,8 @@ void _confirmDeleteAccount(BuildContext context) {
     context: context,
     builder: (dialogContext) => AlertDialog(
       title: const Text('Delete account?'),
-      content: const Text('Account deletion is handled by support after your identity and any active jobs or payouts are reviewed. Continue to contact support?'),
+      content: const Text(
+          'Account deletion is handled by support after your identity and any active jobs or payouts are reviewed. Continue to contact support?'),
       actions: [
         TextButton(
           onPressed: () => Navigator.of(dialogContext).pop(),
@@ -399,7 +430,8 @@ void _confirmDeleteAccount(BuildContext context) {
             _openSupportRequest(
               context,
               subject: 'Request to delete my account',
-              message: 'Please explain the steps to delete my Veedufix Partner account.',
+              message:
+                  'Please explain the steps to delete my Veedufix Partner account.',
             );
           },
           child: const Text('Contact support'),
@@ -414,10 +446,15 @@ Future<void> _confirmSignOut(BuildContext context, WidgetRef ref) async {
     context: context,
     builder: (dialogContext) => AlertDialog(
       title: const Text('Log out of Veedufix?'),
-      content: const Text('You can sign in again anytime using your registered mobile number.'),
+      content: const Text(
+          'You can sign in again anytime using your registered mobile number.'),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Cancel')),
-        FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('Log out')),
+        TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel')),
+        FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Log out')),
       ],
     ),
   );

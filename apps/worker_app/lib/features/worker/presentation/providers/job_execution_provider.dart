@@ -26,6 +26,8 @@ enum JobExecutionStep {
 
 enum JobExecutionPhotoType { before, after }
 
+enum TrackingErrorKind { permission, gps, network, background }
+
 enum JobExecutionErrorKind {
   unknown,
   network,
@@ -51,6 +53,8 @@ class JobExecutionBooking {
     required this.earningsLabel,
     required this.summary,
     required this.accentColor,
+    this.isMaintenanceVisit = false,
+    this.isEnRoute = false,
   });
 
   final String bookingId;
@@ -65,6 +69,8 @@ class JobExecutionBooking {
   final String earningsLabel;
   final String summary;
   final Color accentColor;
+  final bool isMaintenanceVisit;
+  final bool isEnRoute;
 }
 
 final jobExecutionBookingProvider = FutureProvider.autoDispose
@@ -120,6 +126,8 @@ final jobExecutionBookingProvider = FutureProvider.autoDispose
       earningsLabel: '₹${job.totalAmount.toStringAsFixed(0)}',
       summary: '${job.serviceName} for ${job.customerName ?? 'the customer'}',
       accentColor: _accentForJob(job.status),
+      isMaintenanceVisit: job.isMaintenanceVisit,
+      isEnRoute: job.status.toUpperCase() == 'EN_ROUTE',
     );
   }
 
@@ -279,6 +287,11 @@ class JobExecutionState {
     this.loadingSteps = const <JobExecutionStep>{},
     this.stepErrors = const <JobExecutionStep, JobExecutionStepError>{},
     this.currentPosition,
+    this.trackingError,
+    this.trackingErrorKind,
+    this.trackingStarted = false,
+    this.trackingConnected = false,
+    this.trackingBusy = false,
     this.beforePhotos = const <JobExecutionPhotoDraft>[],
     this.afterPhotos = const <JobExecutionPhotoDraft>[],
     this.checklistItems = const <JobExecutionChecklistItem>[],
@@ -292,6 +305,16 @@ class JobExecutionState {
   final Set<JobExecutionStep> loadingSteps;
   final Map<JobExecutionStep, JobExecutionStepError> stepErrors;
   final Position? currentPosition;
+  final String? trackingError;
+  final TrackingErrorKind? trackingErrorKind;
+  bool get canOpenTrackingSettings =>
+      trackingErrorKind == TrackingErrorKind.permission ||
+      trackingErrorKind == TrackingErrorKind.gps;
+  final bool trackingStarted;
+  final bool trackingConnected;
+  final bool trackingBusy;
+
+  bool get isTracking => trackingConnected;
   final List<JobExecutionPhotoDraft> beforePhotos;
   final List<JobExecutionPhotoDraft> afterPhotos;
   final List<JobExecutionChecklistItem> checklistItems;
@@ -327,6 +350,11 @@ class JobExecutionState {
     Set<JobExecutionStep>? loadingSteps,
     Map<JobExecutionStep, JobExecutionStepError>? stepErrors,
     Object? currentPosition = _unset,
+    Object? trackingError = _unset,
+    Object? trackingErrorKind = _unset,
+    bool? trackingStarted,
+    bool? trackingConnected,
+    bool? trackingBusy,
     List<JobExecutionPhotoDraft>? beforePhotos,
     List<JobExecutionPhotoDraft>? afterPhotos,
     List<JobExecutionChecklistItem>? checklistItems,
@@ -344,6 +372,19 @@ class JobExecutionState {
       currentPosition: identical(currentPosition, _unset)
           ? this.currentPosition
           : currentPosition as Position?,
+      trackingError: identical(trackingError, _unset)
+          ? this.trackingError
+          : trackingError as String?,
+      trackingErrorKind: identical(trackingErrorKind, _unset)
+          ? identical(trackingError, _unset)
+              ? this.trackingErrorKind
+              : trackingError == null
+                  ? null
+                  : this.trackingErrorKind
+          : trackingErrorKind as TrackingErrorKind?,
+      trackingStarted: trackingStarted ?? this.trackingStarted,
+      trackingConnected: trackingConnected ?? this.trackingConnected,
+      trackingBusy: trackingBusy ?? this.trackingBusy,
       beforePhotos: beforePhotos ?? this.beforePhotos,
       afterPhotos: afterPhotos ?? this.afterPhotos,
       checklistItems: checklistItems ?? this.checklistItems,
@@ -365,13 +406,35 @@ final jobExecutionProvider =
   return JobExecutionNotifier(ref);
 });
 
-class JobExecutionNotifier extends StateNotifier<JobExecutionState> {
+class JobExecutionNotifier extends StateNotifier<JobExecutionState>
+    with WidgetsBindingObserver {
   JobExecutionNotifier(this.ref) : super(const JobExecutionState()) {
     ref.onDispose(_dispose);
+    WidgetsBinding.instance.addObserver(this);
     _listenForConnectivity();
   }
 
   StreamSubscription<List<ConnectivityResult>>? _connectivitySub;
+  bool _trackingPausedForBackground = false;
+  bool _trackingResumePending = false;
+
+  bool get _isAppForeground {
+    final lifecycle = WidgetsBinding.instance.lifecycleState;
+    // Before Flutter receives the first lifecycle callback, null is the
+    // initial state and should not prevent a foreground trip from starting.
+    return lifecycle == null || lifecycle == AppLifecycleState.resumed;
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      resumeLiveTracking();
+    } else if (state == AppLifecycleState.hidden ||
+        state == AppLifecycleState.paused ||
+        state == AppLifecycleState.detached) {
+      pauseLiveTracking();
+    }
+  }
 
   void _listenForConnectivity() {
     _connectivitySub = Connectivity().onConnectivityChanged.listen((results) {
@@ -383,11 +446,17 @@ class JobExecutionNotifier extends StateNotifier<JobExecutionState> {
       );
       if (isOnline) {
         _drainQueue();
+        if (!_trackingPausedForBackground &&
+            state.trackingStarted &&
+            state.trackingErrorKind == TrackingErrorKind.network) {
+          unawaited(retryLiveTracking());
+        }
       }
     });
   }
 
   void _dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _connectivitySub?.cancel();
     _cancelTracking();
   }
@@ -437,6 +506,7 @@ class JobExecutionNotifier extends StateNotifier<JobExecutionState> {
   StreamSubscription<Position>? _positionStream;
   String? _trackingBookingId;
   int _trackingGeneration = 0;
+  bool _trackingFixReceived = false;
 
   final ImagePicker _imagePicker = ImagePicker();
   final Dio _uploadDio = Dio(
@@ -461,16 +531,195 @@ class JobExecutionNotifier extends StateNotifier<JobExecutionState> {
       mounted && state.booking?.bookingId == bookingId;
 
   void start(JobExecutionBooking booking) {
+    final isForeground = _isAppForeground;
+    if (!isForeground) _trackingPausedForBackground = true;
     if (state.booking?.bookingId == booking.bookingId) {
       state = state.copyWith(booking: booking);
-      if (state.currentStep == 1 && _trackingBookingId != booking.bookingId) {
-        _startLiveTracking(booking.bookingId);
+      if (booking.isEnRoute &&
+          !state.trackingStarted &&
+          state.currentStep == 1) {
+        state = state.copyWith(trackingStarted: true);
+        if (!_trackingPausedForBackground) {
+          unawaited(_startLiveTracking(booking.bookingId));
+        } else {
+          state = state.copyWith(
+            trackingError:
+                "Live location sharing will start when the app is active.",
+            trackingErrorKind: TrackingErrorKind.background,
+          );
+        }
       }
       return;
     }
 
-    state = JobExecutionState(booking: booking);
-    _startLiveTracking(booking.bookingId);
+    _trackingResumePending = false;
+    _trackingPausedForBackground = !isForeground;
+    _cancelTracking();
+    _lastTrackingUpdateAt = null;
+    state = JobExecutionState(
+      booking: booking,
+      trackingStarted: booking.isEnRoute,
+      trackingError: booking.isEnRoute && !isForeground
+          ? "Live location sharing will start when the app is active."
+          : null,
+      trackingErrorKind: booking.isEnRoute && !isForeground
+          ? TrackingErrorKind.background
+          : null,
+    );
+    if (booking.isEnRoute && isForeground) {
+      unawaited(_startLiveTracking(booking.bookingId));
+    }
+  }
+
+  void pauseLiveTracking() {
+    if (!state.trackingStarted &&
+        _trackingBookingId == null &&
+        _positionStream == null) {
+      return;
+    }
+    _trackingPausedForBackground = true;
+    _cancelTracking();
+    state = state.copyWith(
+      trackingConnected: false,
+      trackingError:
+          "Live location sharing paused while the app is in the background.",
+      trackingErrorKind: TrackingErrorKind.background,
+    );
+  }
+
+  void resumeLiveTracking() {
+    if (!_trackingPausedForBackground) return;
+    _trackingPausedForBackground = false;
+    if (state.trackingStarted && state.currentStep == 1) {
+      if (state.trackingBusy) {
+        _trackingResumePending = true;
+      } else {
+        unawaited(retryLiveTracking());
+      }
+    } else if (state.trackingErrorKind == TrackingErrorKind.background) {
+      if (state.trackingBusy) {
+        _trackingResumePending = true;
+      } else {
+        state = state.copyWith(trackingError: null, trackingErrorKind: null);
+      }
+    }
+  }
+
+  Future<void> startEnRoute() async {
+    final bookingId = state.booking?.bookingId;
+    if (bookingId == null || state.currentStep != 1 || state.trackingBusy) {
+      return;
+    }
+    if (state.trackingStarted) {
+      await retryLiveTracking();
+      return;
+    }
+    state = state.copyWith(trackingBusy: true, trackingError: null);
+    try {
+      final locationError = await _locationPrerequisiteError(
+        requestPermission: true,
+      );
+      if (locationError != null) {
+        state = state.copyWith(
+            trackingError: _locationPrerequisiteMessage(locationError),
+            trackingErrorKind: locationError);
+        return;
+      }
+      await _dio.post<Map<String, dynamic>>("/bookings/$bookingId/en-route");
+      if (!_isCurrentBooking(bookingId)) return;
+      state = state.copyWith(trackingStarted: true, trackingConnected: false);
+      if (!_isAppForeground) {
+        _trackingPausedForBackground = true;
+        state = state.copyWith(
+          trackingError:
+              "Live location sharing will start when the app is active.",
+          trackingErrorKind: TrackingErrorKind.background,
+        );
+        return;
+      }
+      await _startLiveTracking(bookingId);
+      if (_isCurrentBooking(bookingId) &&
+          state.currentStep == 1 &&
+          _trackingBookingId == null &&
+          state.trackingError == null) {
+        state = state.copyWith(
+          trackingConnected: false,
+          trackingError:
+              "Live location did not connect. Check your connection and retry.",
+          trackingErrorKind: TrackingErrorKind.network,
+        );
+      }
+    } catch (_) {
+      if (_isCurrentBooking(bookingId)) {
+        state = state.copyWith(
+            trackingConnected: false,
+            trackingError:
+                "Could not start trip sharing. Check your connection and retry.",
+            trackingErrorKind: TrackingErrorKind.network);
+      }
+    } finally {
+      if (_isCurrentBooking(bookingId)) {
+        state = state.copyWith(trackingBusy: false);
+        _resumeTrackingIfPending(bookingId);
+      }
+    }
+  }
+
+  Future<void> retryLiveTracking() async {
+    final bookingId = state.booking?.bookingId;
+    if (bookingId == null ||
+        state.currentStep != 1 ||
+        !state.trackingStarted ||
+        !_isAppForeground ||
+        state.trackingBusy) {
+      return;
+    }
+    _trackingPausedForBackground = false;
+    state = state.copyWith(trackingBusy: true, trackingError: null);
+    try {
+      await _startLiveTracking(bookingId);
+      if (_isCurrentBooking(bookingId) &&
+          state.currentStep == 1 &&
+          _trackingBookingId == null &&
+          state.trackingError == null) {
+        state = state.copyWith(
+          trackingConnected: false,
+          trackingError:
+              "Live location did not reconnect. Check your connection and retry.",
+          trackingErrorKind: TrackingErrorKind.network,
+        );
+      }
+    } finally {
+      if (_isCurrentBooking(bookingId)) {
+        state = state.copyWith(trackingBusy: false);
+        _resumeTrackingIfPending(bookingId);
+      }
+    }
+  }
+
+  void _resumeTrackingIfPending(String bookingId) {
+    if (!_trackingResumePending) return;
+    _trackingResumePending = false;
+    if (!_isCurrentBooking(bookingId) ||
+        _trackingPausedForBackground ||
+        !_isAppForeground) {
+      return;
+    }
+
+    if (state.trackingErrorKind == TrackingErrorKind.background) {
+      state = state.copyWith(trackingError: null, trackingErrorKind: null);
+    }
+    if (!state.trackingStarted || state.currentStep != 1) return;
+
+    // The in-flight start may have completed after the app resumed. Reuse it
+    // when its stream is active; otherwise retry the cancelled generation.
+    if (_trackingBookingId == bookingId && _positionStream != null) {
+      if (state.trackingErrorKind == TrackingErrorKind.background) {
+        state = state.copyWith(trackingError: null, trackingErrorKind: null);
+      }
+      return;
+    }
+    unawaited(retryLiveTracking());
   }
 
   Future<void> _startLiveTracking(String bookingId) async {
@@ -478,14 +727,26 @@ class JobExecutionNotifier extends StateNotifier<JobExecutionState> {
     _cancelTracking();
     final generation = _trackingGeneration;
     _trackingBookingId = bookingId;
+    _lastTrackingUpdateAt = null;
+    _trackingPositionUpdateInProgress = false;
+    _trackingFixReceived = false;
+    state = state.copyWith(trackingConnected: false, trackingError: null);
 
     try {
-      final hasPermission = await _ensureLocationPermission();
+      final locationError = await _locationPrerequisiteError();
       if (!mounted ||
           generation != _trackingGeneration ||
           state.booking?.bookingId != bookingId ||
-          !hasPermission) {
-        if (generation == _trackingGeneration) _trackingBookingId = null;
+          locationError != null) {
+        if (generation == _trackingGeneration) {
+          _trackingBookingId = null;
+          if (mounted && locationError != null) {
+            state = state.copyWith(
+                trackingConnected: false,
+                trackingError: _locationPrerequisiteMessage(locationError),
+                trackingErrorKind: locationError);
+          }
+        }
         return;
       }
 
@@ -510,15 +771,179 @@ class JobExecutionNotifier extends StateNotifier<JobExecutionState> {
             state.booking?.bookingId == bookingId &&
             state.currentStep == 1) {
           state = state.copyWith(currentPosition: position);
-          realtime.sendLocationUpdate(
-            position.latitude,
-            position.longitude,
-          );
+          _trackingFixReceived = true;
+          unawaited(_sendTrackingPosition(bookingId, position, generation));
         }
+      }, onError: (_) {
+        _setTrackingFailure(
+          generation,
+          "Location updates stopped. Check GPS and retry sharing.",
+          kind: TrackingErrorKind.gps,
+        );
+      }, onDone: () {
+        _setTrackingFailure(
+          generation,
+          "Location updates stopped. Retry sharing to reconnect.",
+          kind: TrackingErrorKind.gps,
+        );
       });
+      // A distance-filtered stream may stay silent when the Partner is
+      // stationary. Send one current fix immediately to establish tracking.
+      unawaited(_sendInitialTrackingPosition(bookingId, generation));
+      unawaited(_checkTrackingStartupTimeout(bookingId, generation));
     } catch (_) {
-      if (generation == _trackingGeneration) _trackingBookingId = null;
+      if (generation == _trackingGeneration) {
+        _trackingBookingId = null;
+        if (mounted) {
+          state = state.copyWith(
+              trackingConnected: false,
+              trackingError:
+                  "Could not connect to live location. Retry when your connection is available.",
+              trackingErrorKind: TrackingErrorKind.network);
+        }
+      }
       // Live location is best-effort; job execution can continue without it.
+    }
+  }
+
+  DateTime? _lastTrackingUpdateAt;
+  bool _trackingPositionUpdateInProgress = false;
+
+  Future<void> _checkTrackingStartupTimeout(
+    String bookingId,
+    int generation,
+  ) async {
+    await Future<void>.delayed(const Duration(seconds: 20));
+    bool isCurrentAttempt() =>
+        mounted &&
+        generation == _trackingGeneration &&
+        state.booking?.bookingId == bookingId &&
+        state.currentStep == 1 &&
+        _positionStream != null;
+
+    if (!isCurrentAttempt() ||
+        state.trackingConnected ||
+        _trackingPositionUpdateInProgress) {
+      return;
+    }
+
+    if (!_trackingFixReceived) {
+      try {
+        final position = await Geolocator.getCurrentPosition(
+          locationSettings: const LocationSettings(
+            accuracy: LocationAccuracy.bestForNavigation,
+            timeLimit: Duration(seconds: 10),
+          ),
+        );
+        if (!isCurrentAttempt()) return;
+        _trackingFixReceived = true;
+        state = state.copyWith(currentPosition: position);
+        await _sendTrackingPosition(bookingId, position, generation);
+      } catch (_) {
+        // Only report a GPS timeout after a second, bounded position request.
+      }
+    }
+
+    if (!isCurrentAttempt() || state.trackingConnected) return;
+    if (!_trackingFixReceived) {
+      _setTrackingFailure(
+        generation,
+        "Waiting for a GPS update timed out. Check location services and retry.",
+        kind: TrackingErrorKind.gps,
+      );
+    } else {
+      state = state.copyWith(
+        trackingError:
+            "Location is available, but it could not be sent. Check your connection, then tap Retry location sharing.",
+        trackingErrorKind: TrackingErrorKind.network,
+      );
+    }
+  }
+
+  Future<void> _sendInitialTrackingPosition(
+    String bookingId,
+    int generation,
+  ) async {
+    try {
+      final position = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.bestForNavigation,
+        ),
+      );
+      if (!mounted ||
+          generation != _trackingGeneration ||
+          state.booking?.bookingId != bookingId ||
+          state.currentStep != 1) {
+        return;
+      }
+      _trackingFixReceived = true;
+      state = state.copyWith(currentPosition: position);
+      await _sendTrackingPosition(bookingId, position, generation);
+    } catch (_) {
+      // Let the subscribed position stream provide a fix; the existing startup
+      // timeout will expose a recoverable GPS error if neither source responds.
+    }
+  }
+
+  void _setTrackingFailure(
+    int generation,
+    String message, {
+    TrackingErrorKind kind = TrackingErrorKind.gps,
+  }) {
+    if (!mounted || generation != _trackingGeneration) return;
+    _trackingBookingId = null;
+    _positionStream?.cancel();
+    _positionStream = null;
+    ref.read(realtimeServiceProvider).disconnectTracking();
+    state = state.copyWith(
+      trackingConnected: false,
+      trackingError: message,
+      trackingErrorKind: kind,
+    );
+  }
+
+  Future<void> _sendTrackingPosition(
+    String bookingId,
+    Position position,
+    int generation,
+  ) async {
+    final now = DateTime.now();
+    final lastSent = _lastTrackingUpdateAt;
+    if (_trackingPositionUpdateInProgress ||
+        (lastSent != null && now.difference(lastSent).inSeconds < 5)) {
+      return;
+    }
+    _trackingPositionUpdateInProgress = true;
+    try {
+      await _dio.post<Map<String, dynamic>>(
+        "/bookings/$bookingId/tracking/location",
+        data: {
+          "lat": position.latitude,
+          "lng": position.longitude,
+          "heading": position.heading,
+          "capturedAt": position.timestamp.toUtc().toIso8601String(),
+        },
+      );
+      if (mounted &&
+          generation == _trackingGeneration &&
+          _positionStream != null) {
+        _trackingFixReceived = true;
+        _lastTrackingUpdateAt = DateTime.now();
+        state = state.copyWith(trackingConnected: true, trackingError: null);
+      }
+    } catch (_) {
+      if (mounted && generation == _trackingGeneration) {
+        state = state.copyWith(
+          trackingConnected: false,
+          trackingError:
+              "Live location update failed. Check your connection, then tap Retry location sharing.",
+          trackingErrorKind: TrackingErrorKind.network,
+        );
+      }
+    } finally {
+      if (generation == _trackingGeneration) {
+        _trackingPositionUpdateInProgress = false;
+      }
     }
   }
 
@@ -530,16 +955,27 @@ class JobExecutionNotifier extends StateNotifier<JobExecutionState> {
     ref.read(realtimeServiceProvider).disconnectTracking();
   }
 
-  Future<bool> _ensureLocationPermission() async {
+  Future<TrackingErrorKind?> _locationPrerequisiteError({
+    bool requestPermission = false,
+  }) async {
     final serviceEnabled = await Geolocator.isLocationServiceEnabled();
-    if (!serviceEnabled) return false;
+    if (!serviceEnabled) return TrackingErrorKind.gps;
 
     var permission = await Geolocator.checkPermission();
-    if (permission == LocationPermission.denied) {
+    if (permission == LocationPermission.denied && requestPermission) {
       permission = await Geolocator.requestPermission();
     }
-    return permission == LocationPermission.whileInUse ||
-        permission == LocationPermission.always;
+    if (permission == LocationPermission.whileInUse ||
+        permission == LocationPermission.always) {
+      return null;
+    }
+    return TrackingErrorKind.permission;
+  }
+
+  String _locationPrerequisiteMessage(TrackingErrorKind kind) {
+    return kind == TrackingErrorKind.permission
+        ? "Enable location permission in Settings to share your trip."
+        : "Turn on GPS/location services to share your trip.";
   }
 
   void clearStepError(JobExecutionStep step) {
@@ -659,8 +1095,14 @@ class JobExecutionNotifier extends StateNotifier<JobExecutionState> {
         data: {'workerLat': position.latitude, 'workerLng': position.longitude},
       );
       if (!_isCurrentBooking(bookingId)) return;
-      state = state.copyWith(currentPosition: position, currentStep: 2);
       _cancelTracking(); // Stop live location once arrived
+      state = state.copyWith(
+          currentPosition: position,
+          currentStep: 2,
+          trackingStarted: false,
+          trackingConnected: false,
+          trackingError: null,
+          trackingErrorKind: null);
     } on JobExecutionStepError catch (error) {
       if (_isCurrentBooking(bookingId)) _setStepError(step, error);
     } catch (error) {

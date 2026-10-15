@@ -272,23 +272,23 @@ class _LoginPageState extends ConsumerState<LoginPage> {
 
                   // ─── Skip ────────────────────────────────────────
                   Center(
-                    child: GestureDetector(
-                      behavior: HitTestBehavior.opaque,
-                      onTap: _skipForNow,
-                      child: Padding(
+                    child: TextButton(
+                      onPressed: _skipForNow,
+                      style: TextButton.styleFrom(
+                        minimumSize: const Size(48, 48),
                         padding: const EdgeInsets.symmetric(
-                          vertical: 10,
+                          vertical: 12,
                           horizontal: 16,
                         ),
-                        child: Text(
-                          'Skip for now',
-                          style: GoogleFonts.outfit(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w500,
-                            color: _muted,
-                            decoration: TextDecoration.underline,
-                            decorationColor: _muted.withValues(alpha: 0.5),
-                          ),
+                      ),
+                      child: Text(
+                        'Skip for now',
+                        style: GoogleFonts.outfit(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                          color: _muted,
+                          decoration: TextDecoration.underline,
+                          decorationColor: _muted.withValues(alpha: 0.5),
                         ),
                       ),
                     ),

@@ -286,6 +286,21 @@ class WorkerDirectoryApi {
         response.data ?? const <String, dynamic>{});
   }
 
+  Future<Map<String, dynamic>> fetchServiceAreaAssignments(
+      String profileId) async {
+    final response = await _dio
+        .get<Map<String, dynamic>>('/admin/workers/$profileId/service-areas');
+    return response.data ?? <String, dynamic>{};
+  }
+
+  Future<void> updateServiceAreaAssignments(
+      String profileId, List<String> serviceAreaIds) async {
+    await _dio.put<void>(
+      '/admin/workers/$profileId/service-areas',
+      data: {'serviceAreaIds': serviceAreaIds},
+    );
+  }
+
   Future<WorkerDirectoryProfile> reinstate(
       String profileId, String note) async {
     final response = await _dio.post<Map<String, dynamic>>(

@@ -14,6 +14,15 @@ class DisputeQueueItem {
     required this.resolvedAt,
     required this.resolvedBy,
     required this.refundId,
+    this.issueCategory,
+    this.referenceCode,
+    this.evidencePhotoIds = const [],
+    this.history = const [],
+    this.remedyType,
+    this.remedyStatus,
+    this.reworkProposedAt,
+    this.reworkScheduledAt,
+    this.serviceId,
   });
 
   final String id;
@@ -28,6 +37,15 @@ class DisputeQueueItem {
   final DateTime? resolvedAt;
   final String? resolvedBy;
   final String? refundId;
+  final String? issueCategory;
+  final String? referenceCode;
+  final List<String> evidencePhotoIds;
+  final List<Map<String, dynamic>> history;
+  final String? remedyType;
+  final String? remedyStatus;
+  final DateTime? reworkProposedAt;
+  final DateTime? reworkScheduledAt;
+  final String? serviceId;
 
   factory DisputeQueueItem.fromJson(Map<String, dynamic> json) {
     final booking = (json['booking'] as Map?)?.cast<String, dynamic>() ??
@@ -50,6 +68,15 @@ class DisputeQueueItem {
       resolvedAt: _parseDateTime(json['resolvedAt']),
       resolvedBy: json['resolvedBy'] as String?,
       refundId: json['refundId'] as String?,
+      issueCategory: json['issueCategory'] as String?,
+      referenceCode: json['referenceCode'] as String?,
+      evidencePhotoIds: (json['evidencePhotoIds'] as List? ?? const []).whereType<String>().toList(growable: false),
+      history: (json['history'] as List? ?? const []).whereType<Map>().map((item) => Map<String, dynamic>.from(item)).toList(growable: false),
+      remedyType: json['remedyType'] as String?,
+      remedyStatus: json['remedyStatus'] as String?,
+      reworkProposedAt: _parseDateTime(json['reworkProposedAt']),
+      reworkScheduledAt: _parseDateTime(json['reworkScheduledAt']),
+      serviceId: json['serviceId'] as String?,
     );
   }
 }
@@ -108,6 +135,8 @@ class DisputeEvidenceBooking {
     required this.beforePhotos,
     required this.afterPhotos,
     required this.checklist,
+    this.servicePolicies = const [],
+    this.paymentRecords = const [],
   });
 
   final String id;
@@ -126,6 +155,8 @@ class DisputeEvidenceBooking {
   final List<String> beforePhotos;
   final List<String> afterPhotos;
   final List<DisputeChecklistItem> checklist;
+  final List<Map<String, dynamic>> servicePolicies;
+  final List<Map<String, dynamic>> paymentRecords;
 
   factory DisputeEvidenceBooking.fromJson(Map<String, dynamic> json) {
     final city = (json['city'] as Map?)?.cast<String, dynamic>() ??
@@ -137,6 +168,19 @@ class DisputeEvidenceBooking {
     final jobExecution =
         (json['jobExecution'] as Map?)?.cast<String, dynamic>() ??
             const <String, dynamic>{};
+    final servicePolicies = (json['services'] as List? ?? const [])
+        .whereType<Map>()
+        .map((entry) {
+          final serviceEntry = Map<String, dynamic>.from(entry);
+          final service = (serviceEntry['service'] as Map?)?.cast<String, dynamic>() ?? const <String, dynamic>{};
+          final snapshot = (serviceEntry['guaranteePolicySnapshot'] as Map?)?.cast<String, dynamic>() ?? const <String, dynamic>{};
+          return <String, dynamic>{'serviceId': serviceEntry['serviceId'] as String?, 'serviceName': service['name'] as String? ?? 'Service', 'policy': snapshot};
+        })
+        .toList(growable: false);
+    final paymentRecords = (json['payments'] as List? ?? const [])
+        .whereType<Map>()
+        .map((row) => Map<String, dynamic>.from(row))
+        .toList(growable: false);
 
     return DisputeEvidenceBooking(
       id: json['id'] as String? ?? '',
@@ -161,6 +205,8 @@ class DisputeEvidenceBooking {
       checklist: (jobExecution['checklist'] as List? ?? const [])
           .mapIndexed(DisputeChecklistItem.fromJson)
           .toList(growable: false),
+      servicePolicies: servicePolicies,
+      paymentRecords: paymentRecords,
     );
   }
 }
@@ -283,6 +329,16 @@ class DisputesApi {
     );
     return DisputeResolutionResult.fromJson(
         response.data ?? const <String, dynamic>{});
+  }
+
+  Future<DisputeResolutionResult> updateClaim(String disputeId, {required String action, required String message, String visibility = 'CUSTOMER', DateTime? scheduledAt}) async {
+    final response = await _dio.post<Map<String, dynamic>>('/admin/disputes/$disputeId/update', data: {
+      'action': action,
+      'message': message,
+      'visibility': visibility,
+      if (scheduledAt != null) 'scheduledAt': scheduledAt.toUtc().toIso8601String(),
+    });
+    return DisputeResolutionResult.fromJson(response.data ?? const <String, dynamic>{});
   }
 }
 

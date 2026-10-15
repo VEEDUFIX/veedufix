@@ -126,3 +126,16 @@ export function extractPublicIdFromUrl(secureUrl: string): string | null {
     return null;
   }
 }
+
+/** Deletes a private Cloudinary image. The caller must remove its DB reference only after success. */
+export async function destroyAuthenticatedImage(publicId: string): Promise<void> {
+  ensureConfigured();
+  const result = await cloudinary.uploader.destroy(publicId, {
+    resource_type: "image",
+    type: "authenticated",
+    invalidate: true
+  });
+  if (result.result !== "ok" && result.result !== "not found") {
+    throw new Error("Cloudinary image deletion failed");
+  }
+}

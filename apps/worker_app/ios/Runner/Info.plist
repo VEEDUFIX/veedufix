@@ -10,6 +10,8 @@
 		<string>VeeduFix Partner</string>
 		<key>NSCameraUsageDescription</key>
 		<string>Take photos for your profile, verification, and booking conversations.</string>
+		<key>NSLocationWhenInUseUsageDescription</key>
+		<string>Share your location with the customer while you are travelling to their assigned booking. Sharing stops when you arrive.</string>
 		<key>CFBundleExecutable</key>
 		<string>$(EXECUTABLE_NAME)</string>
 		<key>CFBundleIdentifier</key>

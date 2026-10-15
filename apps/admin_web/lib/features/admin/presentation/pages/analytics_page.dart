@@ -678,7 +678,7 @@ class _AnalyticsSummaryRow extends StatelessWidget {
         _MetricCard(
           label: 'Live active jobs',
           value: '$activeBookings',
-          sublabel: 'Right now across Chennai',
+          sublabel: 'Right now across active service areas',
           icon: Icons.bolt_rounded,
           color: const Color(0xFFEA580C),
           isLive: true,

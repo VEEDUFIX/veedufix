@@ -20,6 +20,10 @@ class _ServiceAreaManagerPageState
   late Future<_ServiceAreaSnapshot> _snapshotFuture;
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
+  String _stateFilter = 'all';
+  String _districtFilter = 'all';
+  String _cityFilter = 'all';
+  String _availabilityFilter = 'all';
   bool _isMutating = false;
 
   @override
@@ -124,19 +128,161 @@ class _ServiceAreaManagerPageState
     }
   }
 
-  List<_ServiceAreaRecord> _visibleAreas(_ServiceAreaSnapshot snapshot) {
-    final query = _searchQuery.trim().toLowerCase();
-    if (query.isEmpty) {
-      return snapshot.serviceAreas;
-    }
+  ({String state, String district, String city}) _effectiveLocationFilters(
+    _ServiceAreaSnapshot snapshot,
+  ) {
+    final states = snapshot.cities.map((city) => city.state).toSet();
+    final state = _stateFilter == 'all' || states.contains(_stateFilter)
+        ? _stateFilter
+        : 'all';
+    final districts = snapshot.cities
+        .where((city) => state == 'all' || city.state == state)
+        .map((city) => city.district)
+        .toSet();
+    final district =
+        _districtFilter == 'all' || districts.contains(_districtFilter)
+            ? _districtFilter
+            : 'all';
+    final cities = snapshot.cities
+        .where((city) =>
+            (state == 'all' || city.state == state) &&
+            (district == 'all' || city.district == district))
+        .map((city) => city.id)
+        .toSet();
+    final city = _cityFilter == 'all' || cities.contains(_cityFilter)
+        ? _cityFilter
+        : 'all';
+    return (state: state, district: district, city: city);
+  }
 
+  List<_ServiceAreaRecord> _visibleAreas(_ServiceAreaSnapshot snapshot) {
+    final filters = _effectiveLocationFilters(snapshot);
+    final query = _searchQuery.trim().toLowerCase();
     return snapshot.serviceAreas.where((area) {
-      return area.name.toLowerCase().contains(query) ||
+      final matchesQuery = query.isEmpty ||
+          area.name.toLowerCase().contains(query) ||
           area.slug.toLowerCase().contains(query) ||
           area.city.name.toLowerCase().contains(query) ||
+          area.city.state.toLowerCase().contains(query) ||
+          area.city.district.toLowerCase().contains(query) ||
+          area.pincodes.any((pincode) => pincode.contains(query)) ||
           (area.pincode ?? '').contains(query) ||
           (area.pincodeRangeStart ?? '').contains(query) ||
           (area.pincodeRangeEnd ?? '').contains(query);
+      final matchesState =
+          filters.state == 'all' || area.city.state == filters.state;
+      final matchesDistrict =
+          filters.district == 'all' || area.city.district == filters.district;
+      final matchesCity = filters.city == 'all' || area.cityId == filters.city;
+      final matchesStatus = _availabilityFilter == 'all' ||
+          (_availabilityFilter == 'active' && area.isActive) ||
+          (_availabilityFilter == 'inactive' && !area.isActive);
+      return matchesQuery &&
+          matchesState &&
+          matchesDistrict &&
+          matchesCity &&
+          matchesStatus;
+    }).toList(growable: false);
+  }
+
+  List<Widget> _areaHierarchyWidgets(
+    List<_ServiceAreaRecord> areas,
+    _ServiceAreaSnapshot snapshot,
+  ) {
+    final hasActiveFilter = _searchQuery.trim().isNotEmpty ||
+        _stateFilter != 'all' ||
+        _districtFilter != 'all' ||
+        _cityFilter != 'all' ||
+        _availabilityFilter != 'all';
+    final expansionKey = hasActiveFilter
+        ? '${_searchQuery.trim().toLowerCase()}:$_stateFilter:$_districtFilter:$_cityFilter:$_availabilityFilter'
+        : 'all';
+    final byState =
+        <String, Map<String, Map<String, List<_ServiceAreaRecord>>>>{};
+    for (final area in areas) {
+      final state =
+          area.city.state.trim().isEmpty ? 'Unknown state' : area.city.state;
+      final district = area.city.district.trim().isEmpty
+          ? 'District not set'
+          : area.city.district;
+      final city =
+          area.city.name.trim().isEmpty ? 'City not set' : area.city.name;
+      byState
+          .putIfAbsent(
+              state, () => <String, Map<String, List<_ServiceAreaRecord>>>{})
+          .putIfAbsent(district, () => <String, List<_ServiceAreaRecord>>{})
+          .putIfAbsent(city, () => <_ServiceAreaRecord>[])
+          .add(area);
+    }
+    final states = byState.keys.toList()..sort();
+    return states.map((state) {
+      final districts = byState[state]!;
+      final districtNames = districts.keys.toList()..sort();
+      final stateAreas = districts.values
+          .expand((cities) => cities.values.expand((items) => items))
+          .toList();
+      return Card(
+        margin: const EdgeInsets.only(bottom: 12),
+        child: ExpansionTile(
+          key: PageStorageKey('state:$state'),
+          initiallyExpanded: true,
+          leading: const Icon(Icons.map_outlined),
+          title:
+              Text(state, style: const TextStyle(fontWeight: FontWeight.w800)),
+          subtitle: Text(
+              '${stateAreas.length} areas · ${stateAreas.where((item) => item.isActive).length} active'),
+          children: districtNames.map((district) {
+            final cities = districts[district]!;
+            final cityNames = cities.keys.toList()..sort();
+            return ExpansionTile(
+              key: PageStorageKey('district:$state:$district:$expansionKey'),
+              initiallyExpanded: hasActiveFilter,
+              leading: const Icon(Icons.location_city_outlined),
+              title: Text(district,
+                  style: const TextStyle(fontWeight: FontWeight.w700)),
+              subtitle: Text(
+                  '${cities.values.expand((items) => items).length} areas'),
+              children: cityNames.map((cityName) {
+                final cityAreas = cities[cityName]!.toList()
+                  ..sort((a, b) => a.name.compareTo(b.name));
+                final cityId = cityAreas.first.cityId;
+                final city = snapshot.cities
+                    .where((item) => item.id == cityId)
+                    .firstOrNull;
+                return ExpansionTile(
+                  key: PageStorageKey(
+                    'city:$state:$district:$cityName:$cityId:$expansionKey',
+                  ),
+                  initiallyExpanded: hasActiveFilter,
+                  leading: const Icon(Icons.place_outlined),
+                  title: Text(cityName,
+                      style: const TextStyle(fontWeight: FontWeight.w700)),
+                  subtitle: Text(
+                      '${cityAreas.length} areas · ${city?.isActive == true ? 'market active' : 'market inactive'}'),
+                  children: cityAreas
+                      .map((area) => Padding(
+                            padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
+                            child: AbsorbPointer(
+                              absorbing: _isMutating,
+                              child: _ServiceAreaTile(
+                                area: area,
+                                onTap: () => context.push(
+                                    '/service-areas/${area.id}',
+                                    extra: area),
+                                onEdit: () => _editArea(snapshot, area),
+                                onDelete: () => _deleteArea(area),
+                                onToggleActive: (value) =>
+                                    _toggleAreaActive(area, value),
+                              ),
+                            ),
+                          ))
+                      .toList(growable: false),
+                );
+              }).toList(growable: false),
+            );
+          }).toList(growable: false),
+        ),
+      );
     }).toList(growable: false);
   }
 
@@ -371,8 +517,11 @@ class _ServiceAreaManagerPageState
     final formKey = GlobalKey<FormState>();
     final nameController = TextEditingController(text: existing?.name ?? '');
     final slugController = TextEditingController(text: existing?.slug ?? '');
-    final exactPincodeController =
-        TextEditingController(text: existing?.pincode ?? '');
+    final exactPincodeController = TextEditingController(
+      text: existing != null && existing.pincodes.isNotEmpty
+          ? existing.pincodes.join(', ')
+          : existing?.pincode ?? '',
+    );
     final rangeStartController =
         TextEditingController(text: existing?.pincodeRangeStart ?? '');
     final rangeEndController =
@@ -463,15 +612,16 @@ class _ServiceAreaManagerPageState
                                 child: TextFormField(
                                   controller: exactPincodeController,
                                   decoration: const InputDecoration(
-                                    labelText: 'Exact pincode',
+                                    labelText: 'Pincodes',
                                     helperText:
-                                        'Optional if you are using a pincode range.',
+                                        'Enter multiple pincodes separated by commas or new lines.',
                                     border: OutlineInputBorder(),
                                   ),
-                                  keyboardType: TextInputType.number,
+                                  keyboardType: TextInputType.multiline,
+                                  maxLines: 3,
                                   inputFormatters: [
-                                    FilteringTextInputFormatter.digitsOnly,
-                                    LengthLimitingTextInputFormatter(6),
+                                    FilteringTextInputFormatter.allow(
+                                        RegExp(r'[0-9,;\s]')),
                                   ],
                                 ),
                               ),
@@ -556,12 +706,20 @@ class _ServiceAreaManagerPageState
                   final name = nameController.text.trim();
                   final slug = slugController.text.trim();
                   final exact = exactPincodeController.text.trim();
+                  final pincodes = exact
+                      .split(RegExp(r'[,;\s]+'))
+                      .where((value) => value.isNotEmpty)
+                      .toSet()
+                      .toList(growable: false);
                   final start = rangeStartController.text.trim();
                   final end = rangeEndController.text.trim();
 
                   String? error;
-                  final exactValid = exact.isEmpty ||
-                      RegExp(r'^[1-9][0-9]{5}$').hasMatch(exact);
+                  final invalidExactPincodes = pincodes
+                      .where((value) =>
+                          !RegExp(r'^[1-9][0-9]{5}$').hasMatch(value))
+                      .toList(growable: false);
+                  final exactValid = invalidExactPincodes.isEmpty;
                   final startValid = start.isEmpty ||
                       RegExp(r'^[1-9][0-9]{5}$').hasMatch(start);
                   final endValid =
@@ -572,10 +730,15 @@ class _ServiceAreaManagerPageState
                   } else if (name.isEmpty) {
                     error = 'Enter a name';
                   } else if (!exactValid || !startValid || !endValid) {
-                    error = 'A valid 6-digit pincode is required';
-                  } else if (exact.isEmpty && (start.isEmpty || end.isEmpty)) {
-                    error =
-                        'Enter either an exact pincode or both range fields';
+                    error = !exactValid
+                        ? 'Invalid pincode: ${invalidExactPincodes.first}'
+                        : 'A valid 6-digit pincode is required';
+                  } else if (pincodes.isNotEmpty &&
+                      (start.isNotEmpty || end.isNotEmpty)) {
+                    error = 'Use exact pincodes or a pincode range, not both';
+                  } else if (pincodes.isEmpty &&
+                      (start.isEmpty || end.isEmpty)) {
+                    error = 'Enter one or more pincodes or both range fields';
                   } else if (start.isNotEmpty &&
                       end.isNotEmpty &&
                       int.parse(start) > int.parse(end)) {
@@ -592,18 +755,24 @@ class _ServiceAreaManagerPageState
                     'cityId': cityId.value,
                     'name': name,
                     'isActive': isActive.value,
+                    'pincode': null,
                   };
+                  if (existing != null || pincodes.isNotEmpty) {
+                    payload['pincodes'] = pincodes;
+                  }
                   if (slug.isNotEmpty) {
                     payload['slug'] = slug;
                   }
-                  if (exact.isNotEmpty) {
-                    payload['pincode'] = exact;
-                  }
-                  if (start.isNotEmpty) {
-                    payload['pincodeRangeStart'] = start;
-                  }
-                  if (end.isNotEmpty) {
-                    payload['pincodeRangeEnd'] = end;
+                  if (existing != null) {
+                    payload['pincodeRangeStart'] = start.isEmpty ? null : start;
+                    payload['pincodeRangeEnd'] = end.isEmpty ? null : end;
+                  } else {
+                    if (start.isNotEmpty) {
+                      payload['pincodeRangeStart'] = start;
+                    }
+                    if (end.isNotEmpty) {
+                      payload['pincodeRangeEnd'] = end;
+                    }
                   }
                   Navigator.of(dialogContext).pop(payload);
                 },
@@ -784,73 +953,152 @@ class _ServiceAreaManagerPageState
                   const SizedBox(height: 24),
                   LayoutBuilder(
                     builder: (context, constraints) {
-                      final narrow = constraints.maxWidth < 900;
-                      final filterRow = narrow
-                          ? Column(
-                              children: [
-                                TextField(
-                                  controller: _searchController,
-                                  onChanged: (value) =>
-                                      setState(() => _searchQuery = value),
-                                  decoration: const InputDecoration(
-                                    prefixIcon: Icon(Icons.search_rounded),
-                                    hintText:
-                                        'Search by area, city, or pincode',
-                                    border: OutlineInputBorder(),
-                                  ),
-                                ),
-                              ],
-                            )
-                          : Row(
-                              children: [
-                                Expanded(
-                                  child: TextField(
-                                    controller: _searchController,
-                                    onChanged: (value) =>
-                                        setState(() => _searchQuery = value),
-                                    decoration: const InputDecoration(
-                                      prefixIcon: Icon(Icons.search_rounded),
-                                      hintText:
-                                          'Search by area, city, or pincode',
-                                      border: OutlineInputBorder(),
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(width: 12),
-                                TextButton.icon(
-                                  onPressed: () {
-                                    _searchController.clear();
-                                    setState(() => _searchQuery = '');
-                                  },
-                                  icon: const Icon(Icons.clear_rounded),
-                                  label: const Text('Clear'),
-                                ),
-                              ],
-                            );
+                      final filters = _effectiveLocationFilters(data);
+                      final states = data.cities
+                          .map((city) => city.state)
+                          .where((value) => value.trim().isNotEmpty)
+                          .toSet()
+                          .toList()
+                        ..sort();
+                      final districts = data.cities
+                          .where((city) =>
+                              filters.state == 'all' ||
+                              city.state == filters.state)
+                          .map((city) => city.district)
+                          .where((value) => value.trim().isNotEmpty)
+                          .toSet()
+                          .toList()
+                        ..sort();
+                      final cities = data.cities.where((city) {
+                        return (filters.state == 'all' ||
+                                city.state == filters.state) &&
+                            (filters.district == 'all' ||
+                                city.district == filters.district);
+                      }).toList(growable: false);
+                      final compact = constraints.maxWidth < 980;
+                      final searchWidth =
+                          compact ? constraints.maxWidth : 280.0;
+                      Widget selector({
+                        required String value,
+                        required String label,
+                        required List<DropdownMenuItem<String>> items,
+                        required ValueChanged<String?> onChanged,
+                      }) =>
+                          SizedBox(
+                            width:
+                                compact ? (constraints.maxWidth - 12) / 2 : 176,
+                            child: DropdownButtonFormField<String>(
+                              key: ValueKey('$label:$value'),
+                              initialValue: value,
+                              isExpanded: true,
+                              decoration: InputDecoration(
+                                labelText: label,
+                                border: const OutlineInputBorder(),
+                                contentPadding: const EdgeInsets.symmetric(
+                                    horizontal: 12, vertical: 14),
+                              ),
+                              items: items,
+                              onChanged: onChanged,
+                            ),
+                          );
+
+                      final filterRow = Wrap(
+                        spacing: 12,
+                        runSpacing: 12,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          SizedBox(
+                            width: searchWidth,
+                            child: TextField(
+                              controller: _searchController,
+                              onChanged: (value) =>
+                                  setState(() => _searchQuery = value),
+                              decoration: const InputDecoration(
+                                prefixIcon: Icon(Icons.search_rounded),
+                                hintText: 'Search by pincode or area',
+                                border: OutlineInputBorder(),
+                              ),
+                            ),
+                          ),
+                          selector(
+                            value: filters.state,
+                            label: 'State',
+                            items: [
+                              const DropdownMenuItem(
+                                  value: 'all', child: Text('All states')),
+                              ...states.map((value) => DropdownMenuItem(
+                                  value: value, child: Text(value))),
+                            ],
+                            onChanged: (value) => setState(() {
+                              _stateFilter = value ?? 'all';
+                              _districtFilter = 'all';
+                              _cityFilter = 'all';
+                            }),
+                          ),
+                          selector(
+                            value: filters.district,
+                            label: 'District',
+                            items: [
+                              const DropdownMenuItem(
+                                  value: 'all', child: Text('All districts')),
+                              ...districts.map((value) => DropdownMenuItem(
+                                  value: value, child: Text(value))),
+                            ],
+                            onChanged: (value) => setState(() {
+                              _districtFilter = value ?? 'all';
+                              _cityFilter = 'all';
+                            }),
+                          ),
+                          selector(
+                            value: filters.city,
+                            label: 'City / locality',
+                            items: [
+                              const DropdownMenuItem(
+                                  value: 'all', child: Text('All cities')),
+                              ...cities.map((city) => DropdownMenuItem(
+                                  value: city.id, child: Text(city.name))),
+                            ],
+                            onChanged: (value) =>
+                                setState(() => _cityFilter = value ?? 'all'),
+                          ),
+                          selector(
+                            value: _availabilityFilter,
+                            label: 'Availability',
+                            items: const [
+                              DropdownMenuItem(
+                                  value: 'all', child: Text('Any status')),
+                              DropdownMenuItem(
+                                  value: 'active', child: Text('Live only')),
+                              DropdownMenuItem(
+                                  value: 'inactive',
+                                  child: Text('Inactive only')),
+                            ],
+                            onChanged: (value) => setState(
+                                () => _availabilityFilter = value ?? 'all'),
+                          ),
+                          TextButton.icon(
+                            onPressed: () {
+                              _searchController.clear();
+                              setState(() {
+                                _searchQuery = '';
+                                _stateFilter = 'all';
+                                _districtFilter = 'all';
+                                _cityFilter = 'all';
+                                _availabilityFilter = 'all';
+                              });
+                            },
+                            icon: const Icon(Icons.clear_rounded),
+                            label: const Text('Clear filters'),
+                          ),
+                        ],
+                      );
 
                       return Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
                           filterRow,
                           const SizedBox(height: 20),
-                          ...visibleAreas.map(
-                            (area) => Padding(
-                              padding: const EdgeInsets.only(bottom: 14),
-                              child: AbsorbPointer(
-                                absorbing: _isMutating,
-                                child: _ServiceAreaTile(
-                                  area: area,
-                                  onTap: () => context.push(
-                                      '/service-areas/${area.id}',
-                                      extra: area),
-                                  onEdit: () => _editArea(data, area),
-                                  onDelete: () => _deleteArea(area),
-                                  onToggleActive: (value) =>
-                                      _toggleAreaActive(area, value),
-                                ),
-                              ),
-                            ),
-                          ),
+                          ..._areaHierarchyWidgets(visibleAreas, data),
                           if (visibleAreas.isEmpty)
                             Padding(
                               padding: const EdgeInsets.symmetric(vertical: 48),
@@ -893,9 +1141,7 @@ class _ServiceAreaTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final coverage = area.pincode != null
-        ? 'Exact pincode ${area.pincode}'
-        : 'Range ${area.pincodeRangeStart ?? 'n/a'} - ${area.pincodeRangeEnd ?? 'n/a'}';
+    final coverage = area.coverageLabel;
 
     return Card(
       elevation: 0,
@@ -969,6 +1215,12 @@ class _ServiceAreaTile extends StatelessWidget {
                           const _Chip(
                               label: 'Range mode',
                               icon: Icons.alt_route_rounded),
+                        _Chip(
+                            label: '${area.assignedPartnerCount} partners',
+                            icon: Icons.people_alt_outlined),
+                        _Chip(
+                            label: '${area.assignedServiceCount} services',
+                            icon: Icons.home_repair_service_outlined),
                       ],
                     ),
                   ],
@@ -1053,13 +1305,7 @@ class _ServiceAreaDetailPageState extends ConsumerState<ServiceAreaDetailPage> {
       await _api.updateServiceArea(
         area.id,
         {
-          'cityId': area.cityId,
-          'name': area.name,
-          'slug': area.slug,
           'isActive': !area.isActive,
-          'pincode': area.pincode,
-          'pincodeRangeStart': area.pincodeRangeStart,
-          'pincodeRangeEnd': area.pincodeRangeEnd,
         },
       );
       await _reload();
@@ -1159,9 +1405,7 @@ class _ServiceAreaDetailPageState extends ConsumerState<ServiceAreaDetailPage> {
           }
 
           final area = data.area;
-          final coverage = area.pincode != null
-              ? 'Exact pincode ${area.pincode}'
-              : 'Range ${area.pincodeRangeStart ?? 'n/a'} - ${area.pincodeRangeEnd ?? 'n/a'}';
+          final coverage = area.coverageLabel;
           final cityLookup = area.city.id;
 
           return ListView(
@@ -1571,9 +1815,12 @@ class _ServiceAreaRecord {
     required this.name,
     required this.slug,
     required this.pincode,
+    required this.pincodes,
     required this.pincodeRangeStart,
     required this.pincodeRangeEnd,
     required this.isActive,
+    required this.assignedPartnerCount,
+    required this.assignedServiceCount,
   });
 
   final String id;
@@ -1582,15 +1829,48 @@ class _ServiceAreaRecord {
   final String name;
   final String slug;
   final String? pincode;
+  final List<String> pincodes;
   final String? pincodeRangeStart;
   final String? pincodeRangeEnd;
   final bool isActive;
+  final int assignedPartnerCount;
+  final int assignedServiceCount;
+
+  String get coverageLabel {
+    if (pincodes.length == 1) return 'Pincode ${pincodes.single}';
+    if (pincodes.length > 1) {
+      final preview = pincodes.take(3).join(', ');
+      final remaining = pincodes.length - 3;
+      return remaining > 0
+          ? '${pincodes.length} pincodes: $preview +$remaining'
+          : '${pincodes.length} pincodes: $preview';
+    }
+    if (pincode != null) return 'Pincode $pincode';
+    return 'Range ${pincodeRangeStart ?? 'n/a'} - ${pincodeRangeEnd ?? 'n/a'}';
+  }
 
   factory _ServiceAreaRecord.fromJson(
     Map<String, dynamic> json,
     List<_ServiceAreaCity> cities,
   ) {
     final cityId = json['cityId']?.toString() ?? '';
+    final legacyPincode = json['pincode']?.toString();
+    final configuredPincodes = (json['pincodes'] as List? ?? const [])
+        .map((item) {
+          if (item is String) return item.trim();
+          if (item is Map) return item['pincode']?.toString().trim() ?? '';
+          return '';
+        })
+        .where((item) => item.isNotEmpty)
+        .toSet()
+        .toList(growable: false);
+    final coverageCounts = json['coverageCounts'] is Map
+        ? (json['coverageCounts'] as Map).cast<String, dynamic>()
+        : const <String, dynamic>{};
+    final pincodes =
+        legacyPincode == null || configuredPincodes.contains(legacyPincode)
+            ? configuredPincodes
+            : [...configuredPincodes, legacyPincode];
     final city = cities.firstWhere(
       (item) => item.id == cityId,
       orElse: () => _ServiceAreaCity(
@@ -1618,10 +1898,13 @@ class _ServiceAreaRecord {
       city: city,
       name: json['name']?.toString() ?? '',
       slug: json['slug']?.toString() ?? '',
-      pincode: json['pincode']?.toString(),
+      pincode: legacyPincode,
+      pincodes: pincodes,
       pincodeRangeStart: json['pincodeRangeStart']?.toString(),
       pincodeRangeEnd: json['pincodeRangeEnd']?.toString(),
       isActive: json['isActive'] == true,
+      assignedPartnerCount: (coverageCounts['partners'] as num?)?.toInt() ?? 0,
+      assignedServiceCount: (coverageCounts['services'] as num?)?.toInt() ?? 0,
     );
   }
 }

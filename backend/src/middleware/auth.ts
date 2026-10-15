@@ -31,6 +31,25 @@ export function requireAuth(request: AuthenticatedRequest, response: Response, n
     });
 }
 
+export function optionalAuth(request: AuthenticatedRequest, _response: Response, next: NextFunction): void {
+  const header = request.headers.authorization;
+  if (!header?.startsWith("Bearer ")) {
+    next();
+    return;
+  }
+
+  void authenticateAccessToken(header.slice(7))
+    .then((payload) => {
+      request.auth = {
+        userId: payload.sub,
+        role: payload.role,
+        sessionId: payload.sessionId
+      };
+      next();
+    })
+    .catch(() => next());
+}
+
 export function requireRole(...roles: Array<"CUSTOMER" | "WORKER" | "ADMIN">) {
   return (request: AuthenticatedRequest, response: Response, next: NextFunction): void => {
     if (!request.auth) {

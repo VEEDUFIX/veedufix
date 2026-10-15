@@ -130,6 +130,12 @@ class ProfilePage extends ConsumerWidget {
             onTap: () => context.push('/favorites'),
           ),
           _ProfileTile(
+            icon: Icons.event_repeat_outlined,
+            title: 'Maintenance plans',
+            subtitle: 'Manage upcoming recurring service visits',
+            onTap: () => context.push('/maintenance-plans'),
+          ),
+          _ProfileTile(
             icon: Icons.support_agent_rounded,
             title: 'Help & support',
             subtitle: 'Raise a query or track a request',

@@ -20,10 +20,12 @@ import { opsRouter, adminAlertsRouter } from "./modules/ops/ops.routes.js";
 import { jobExecutionRouter } from "./modules/job-execution/job-execution.routes.js";
 import { adminHealthRouter, healthRouter } from "./modules/health/health.routes.js";
 import { mediaRouter } from "./modules/media/media.routes.js";
+import { bookingDiagnosticPhotoUploadRouter, bookingDiagnosticPhotosRouter } from "./modules/media/booking-diagnostic-photo.routes.js";
 import { matchingRouter } from "./modules/matching/matching.routes.js";
 import { addressRouter } from "./modules/address/address.routes.js";
 import { availabilityRouter } from "./modules/availability/availability.routes.js";
 import { paymentsRouter } from "./modules/payments/payments.routes.js";
+import { maintenanceRouter } from "./modules/maintenance/maintenance.routes.js";
 import { payoutRouter } from "./modules/payout/payout.routes.js";
 import { earningsRouter } from "./modules/earnings/earnings.routes.js";
 import { refundRouter } from "./modules/refund/refund.routes.js";
@@ -55,6 +57,7 @@ import { adminPlatformSettingsRouter } from "./modules/platform-settings/platfor
 import { taxSummaryRouter } from "./modules/tax-summary/tax-summary.routes.js";
 import { customQuoteRouter } from "./modules/bookings/custom-quote.routes.js";
 import { sparePartsRouter } from "./modules/bookings/spare-parts.routes.js";
+import { trackingRouter } from "./modules/tracking/tracking.routes.js";
 import { clientIpKey } from "./lib/rate-limit.js";
 
 function scrubSentryRequest<T extends Sentry.Event>(event: T): T {
@@ -89,6 +92,9 @@ function scrubSentryRequest<T extends Sentry.Event>(event: T): T {
 
 export function createApp() {
   const app = express();
+  // Render's public ingress passes requests through Cloudflare and the Render
+  // load balancer. Trust only those configured hops when deriving request.ip.
+  app.set("trust proxy", env.TRUST_PROXY_HOPS ?? 0);
 
   Sentry.init({
     dsn: process.env.SENTRY_DSN || "",
@@ -171,10 +177,14 @@ export function createApp() {
   app.use("/api/admin/alerts", adminAlertsRouter);
   app.use("/api", matchingRouter);
   app.use("/api", jobExecutionRouter);
+  app.use("/api", trackingRouter);
   app.use("/api/media", mediaRouter);
+  app.use("/api/media", bookingDiagnosticPhotoUploadRouter);
+  app.use("/api", bookingDiagnosticPhotosRouter);
   app.use("/api/uploads", uploadRouter);
   app.use("/uploads", uploadRouter);
   app.use("/api/payments", paymentsRouter);
+  app.use("/api/maintenance-plans", maintenanceRouter);
   app.use("/api", addressRouter);
   app.use("/api", serviceAreaRouter);
   app.use("/api", availabilityRouter);

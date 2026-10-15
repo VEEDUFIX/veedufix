@@ -18,7 +18,8 @@ class LiveTrackingPage extends ConsumerStatefulWidget {
 class _LiveTrackingPageState extends ConsumerState<LiveTrackingPage> {
   GoogleMapController? _mapController;
   Timer? _freshnessTimer;
-  static const _fallbackCenter = LatLng(13.0827, 80.2707);
+  // Use a neutral country-level view until either booking coordinate is known.
+  static const _fallbackCenter = LatLng(20.5937, 78.9629);
 
   @override
   void initState() {
@@ -43,41 +44,39 @@ class _LiveTrackingPageState extends ConsumerState<LiveTrackingPage> {
     final bookingAsync = ref.watch(bookingDetailProvider(widget.bookingId));
     final booking = bookingAsync.valueOrNull;
     final trackingEnded = const {
+      'ARRIVED',
+      'IN_PROGRESS',
       'COMPLETED',
       'CANCELLED',
+      'CANCELLED_MANUAL',
+      'CANCELLED_NO_SHOW',
+      'REFUNDED',
     }.contains(booking?.status.toUpperCase());
     final AsyncValue<WorkerLocation?> workerLocationAsync = trackingEnded
         ? const AsyncData<WorkerLocation?>(null)
         : ref.watch(workerLocationProvider(widget.bookingId));
     final destinationLatitude = booking?.destinationLatitude;
     final destinationLongitude = booking?.destinationLongitude;
-    final hasValidDestination =
-        destinationLatitude != null &&
-        destinationLongitude != null &&
-        destinationLatitude.isFinite &&
-        destinationLongitude.isFinite &&
-        destinationLatitude >= -90 &&
-        destinationLatitude <= 90 &&
-        destinationLongitude >= -180 &&
-        destinationLongitude <= 180;
-    final customerLocation = hasValidDestination
-        ? LatLng(destinationLatitude, destinationLongitude)
-        : null;
+    final customerLocation = _latLngForCoordinates(
+      destinationLatitude,
+      destinationLongitude,
+    );
     final workerLocation = trackingEnded
         ? null
         : workerLocationAsync.valueOrNull;
-    final liveWorkerLocation = workerLocation == null
-        ? null
-        : LatLng(workerLocation.latitude, workerLocation.longitude);
-    final mapCenter = liveWorkerLocation ?? customerLocation ?? _fallbackCenter;
-    final mapFocusLocation = liveWorkerLocation ?? customerLocation;
     final locationAge = workerLocation == null
         ? null
         : DateTime.now().difference(workerLocation.timestamp);
     final locationIsStale =
-        locationAge != null &&
-        !locationAge.isNegative &&
-        locationAge > const Duration(minutes: 2);
+        workerLocation != null && !workerLocation.isFreshAt(DateTime.now());
+    final liveWorkerLocation = locationIsStale
+        ? null
+        : _latLngForCoordinates(
+            workerLocation?.latitude,
+            workerLocation?.longitude,
+          );
+    final mapCenter = liveWorkerLocation ?? customerLocation ?? _fallbackCenter;
+    final mapFocusLocation = liveWorkerLocation ?? customerLocation;
     final trackingStatusColor = trackingEnded
         ? cs.onSurfaceVariant
         : workerLocationAsync.hasError
@@ -96,10 +95,9 @@ class _LiveTrackingPageState extends ConsumerState<LiveTrackingPage> {
     if (!trackingEnded) {
       ref.listen(workerLocationProvider(widget.bookingId), (prev, next) {
         final loc = next.valueOrNull;
-        if (loc != null && _mapController != null) {
-          _mapController!.animateCamera(
-            CameraUpdate.newLatLng(LatLng(loc.latitude, loc.longitude)),
-          );
+        final target = _latLngForCoordinates(loc?.latitude, loc?.longitude);
+        if (target != null && _mapController != null) {
+          _mapController!.animateCamera(CameraUpdate.newLatLng(target));
         }
       });
     }
@@ -112,10 +110,9 @@ class _LiveTrackingPageState extends ConsumerState<LiveTrackingPage> {
       final address = next.valueOrNull;
       final latitude = address?.destinationLatitude;
       final longitude = address?.destinationLongitude;
-      if (latitude != null && longitude != null && _mapController != null) {
-        _mapController!.animateCamera(
-          CameraUpdate.newLatLng(LatLng(latitude, longitude)),
-        );
+      final target = _latLngForCoordinates(latitude, longitude);
+      if (target != null && _mapController != null) {
+        _mapController!.animateCamera(CameraUpdate.newLatLng(target));
       }
     });
 
@@ -327,12 +324,36 @@ class _LiveTrackingPageState extends ConsumerState<LiveTrackingPage> {
                         if (workerLocation != null) ...[
                           const SizedBox(height: 6),
                           Text(
-                            _lastUpdatedLabel(locationAge),
+                            locationIsStale
+                                ? '${_lastUpdatedLabel(locationAge)} · location is no longer live'
+                                : _lastUpdatedLabel(locationAge),
                             style: tt.labelSmall?.copyWith(
                               color: cs.onSurfaceVariant,
                             ),
                           ),
                         ],
+                        const SizedBox(height: 8),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              Icons.schedule_rounded,
+                              size: 16,
+                              color: cs.onSurfaceVariant,
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              !trackingEnded &&
+                                      !locationIsStale &&
+                                      workerLocation?.etaMinutes != null
+                                  ? 'Road ETA about ${workerLocation!.etaMinutes} min'
+                                  : 'Road ETA unavailable',
+                              style: tt.labelMedium?.copyWith(
+                                color: cs.onSurfaceVariant,
+                              ),
+                            ),
+                          ],
+                        ),
                         const SizedBox(height: 16),
 
                         // Professional info row
@@ -450,6 +471,25 @@ class _LiveTrackingPageState extends ConsumerState<LiveTrackingPage> {
   }
 }
 
+bool _hasValidCoordinates(double? latitude, double? longitude) =>
+    latitude != null &&
+    longitude != null &&
+    latitude.isFinite &&
+    longitude.isFinite &&
+    latitude >= -90 &&
+    latitude <= 90 &&
+    longitude >= -180 &&
+    longitude <= 180;
+
+LatLng? _latLngForCoordinates(double? latitude, double? longitude) {
+  if (latitude == null ||
+      longitude == null ||
+      !_hasValidCoordinates(latitude, longitude)) {
+    return null;
+  }
+  return LatLng(latitude, longitude);
+}
+
 String _trackingStatus(
   LatLng? workerLatLng,
   bool isStale,
@@ -457,16 +497,24 @@ String _trackingStatus(
   bool hasLocationError,
 ) {
   final normalizedStatus = bookingStatus?.toUpperCase();
-  if (normalizedStatus == 'COMPLETED' || normalizedStatus == 'CANCELLED') {
+  if (normalizedStatus == 'ARRIVED') return 'Partner has arrived';
+  if (normalizedStatus == 'IN_PROGRESS') return 'Service is in progress';
+  if (const {
+    'COMPLETED',
+    'CANCELLED',
+    'CANCELLED_MANUAL',
+    'CANCELLED_NO_SHOW',
+    'REFUNDED',
+  }.contains(normalizedStatus)) {
     return 'Live tracking ended';
   }
   if (hasLocationError) return 'Live location unavailable';
+  if (isStale) return 'Last location update is delayed';
   if (workerLatLng == null) {
     return normalizedStatus == 'PENDING'
         ? 'Waiting for professional assignment'
         : 'Waiting for first location update';
   }
-  if (isStale) return 'Last location update is delayed';
   return 'Professional location is live';
 }
 

@@ -1,13 +1,16 @@
 import { BookingStatus, CouponType, PaymentStatus, Prisma } from "@prisma/client";
 import { AppError } from "../../lib/app-error.js";
-import { createHmac, randomBytes, timingSafeEqual } from "crypto";
+import { createHash, createHmac, randomBytes, timingSafeEqual } from "crypto";
 import Razorpay from "razorpay";
 import { env } from "../../config/env.js";
 import { prisma } from "../../lib/prisma.js";
 import { logger } from "../../lib/logger.js";
 import { publishNotificationEvent, publishTrackingEvent } from "../../lib/realtime.js";
 import { recordBookingTimelineEvent } from "../../lib/booking-timeline.js";
-import { dispatchBookingAfterPayment } from "../matching/matching.service.js";
+import {
+  dispatchBookingAfterPayment,
+  hasAvailablePartnersForInstantBooking
+} from "../matching/matching.service.js";
 import { raiseOpsAlert } from "../ops/ops.service.js";
 import { getTokensForUser } from "../device-token/device-token.service.js";
 import { sendMulticastPush } from "../../lib/fcm.js";
@@ -15,6 +18,9 @@ import { allocateProportionalShares, reverseInclusiveTax, roundMoney, toPaise } 
 import { generateInvoiceForBooking } from "../invoice/invoice.service.js";
 import { assertServiceablePincode } from "../service-area/service-area.service.js";
 import { getCustomerScheduleSlots } from "../availability/availability.service.js";
+import { isAvailableInAreas, type AvailabilityNode } from "../catalog/availability-inheritance.js";
+import { attachDiagnosticPhotosToBooking } from "./diagnostic-photo-attachments.js";
+import { updatePaymentForWebhook } from "../webhooks/webhooks.service.js";
 
 type BookingItemInput = {
   serviceId: string;
@@ -27,11 +33,14 @@ type CreatePaymentOrderInput = {
   userId: string;
   cityId?: string;
   addressId?: string;
+  maintenanceOccurrenceId?: string;
   items: BookingItemInput[];
   couponCode?: string;
   bookingType?: "instant" | "scheduled";
   scheduledFor?: Date;
   useWalletBalance?: boolean;
+  diagnosticPhotoIds?: string[];
+  idempotencyKey?: string;
 };
 
 type VerifyPaymentInput = {
@@ -41,6 +50,13 @@ type VerifyPaymentInput = {
   razorpayPaymentId: string;
   razorpaySignature: string;
 };
+
+type PaymentOrderStatusInput = {
+  userId: string;
+  bookingId: string;
+  razorpayOrderId: string;
+};
+
 
 type PaymentOrderResult = {
   keyId: string;
@@ -74,20 +90,37 @@ type ServicePricingRule = {
 
 type ServicePricingRecord = {
   id: string;
+  categoryId: string;
   name: string;
   isActive: boolean;
+  updatedAt: Date;
+  guaranteeEnabled: boolean;
+  guaranteeClaimWindowDays: number;
+  guaranteeIssueCategories: string[];
+  guaranteeTerms: string | null;
+  guaranteeExclusions: string | null;
+  guaranteeResolutionTypes: string[];
+  guaranteeRequiresPartnerReview: boolean;
+  guaranteeEvidenceRequired: boolean;
   startingPrice: Prisma.Decimal;
   gstRate: Prisma.Decimal;
   sacCode: string | null;
   gstApplicable: boolean;
   bookingEnabled: boolean;
   publicationStatus: string;
+  availabilityMode: string;
   publishStartsAt: Date | null;
   publishEndsAt: Date | null;
   requiresSiteVisit: boolean;
   subcategory: {
     id: string;
     name: string;
+    availabilityMode: string;
+    serviceAreaAssignments: Array<{ serviceAreaId: string }>;
+    category: {
+      availabilityMode: string;
+      serviceAreaAssignments: Array<{ serviceAreaId: string }>;
+    };
   };
   pricingRules: ServicePricingRule[];
   variants: Array<{
@@ -97,6 +130,8 @@ type ServicePricingRecord = {
     price: Prisma.Decimal;
     originalPrice: Prisma.Decimal | null;
     estimatedDurationMins: number | null;
+    availabilityMode: string;
+    serviceAreaAssignments: Array<{ serviceAreaId: string }>;
   }>;
   addons: Array<{
     id: string;
@@ -110,6 +145,7 @@ type ServicePricingRecord = {
 
 type ResolvedBookingItem = {
   serviceId: string;
+  categoryId: string;
   serviceName: string;
   serviceSubcategoryId: string;
   quantity: number;
@@ -118,6 +154,7 @@ type ResolvedBookingItem = {
   gstRate: Prisma.Decimal;
   sacCode: string;
   configuration: Record<string, unknown>;
+  guaranteePolicySnapshot: Record<string, unknown>;
 };
 
 const MINIMUM_ORDER_AMOUNT_PAISE = 100;
@@ -149,6 +186,76 @@ function formatBookingCode(): string {
 
 function asJsonRecord(value: Record<string, unknown> | undefined): Prisma.InputJsonValue {
   return (value ?? {}) as Prisma.InputJsonValue;
+}
+
+function checkoutRequestHash(input: CreatePaymentOrderInput): string {
+  const payload = {
+    addressId: input.addressId ?? null,
+    cityId: input.cityId ?? null,
+    bookingType: input.bookingType ?? "instant",
+    scheduledFor: input.scheduledFor?.toISOString() ?? null,
+    maintenanceOccurrenceId: input.maintenanceOccurrenceId ?? null,
+    couponCode: input.couponCode?.trim().toUpperCase() ?? null,
+    useWalletBalance: input.useWalletBalance === true,
+    items: input.items.map((item) => ({
+      serviceId: item.serviceId,
+      quantity: item.quantity ?? 1,
+      variantId: item.variantId ?? null,
+      addonIds: [...(item.addonIds ?? [])].sort()
+    })),
+    diagnosticPhotoIds: [...(input.diagnosticPhotoIds ?? [])].sort()
+  };
+  return createHash("sha256").update(JSON.stringify(payload)).digest("hex");
+}
+
+async function findIdempotentOrder(
+  userId: string,
+  idempotencyKey: string,
+  requestHash: string
+): Promise<PaymentOrderResult | null> {
+  const booking = await prisma.booking.findFirst({
+    where: { customerId: userId, clientRequestKey: idempotencyKey },
+    include: {
+      payments: {
+        where: { provider: "RAZORPAY" },
+        orderBy: { createdAt: "desc" },
+        take: 1,
+        select: { providerRef: true, status: true, amount: true, currency: true }
+      }
+    }
+  });
+  if (!booking) return null;
+  if (booking.clientRequestHash !== requestHash) {
+    throw AppError.conflict("This checkout request key was already used for different booking details");
+  }
+  const payment = booking.payments[0];
+  if (booking.status !== BookingStatus.PENDING) {
+    throw AppError.conflict("This checkout request has already been submitted. Open its booking instead of creating it again.");
+  }
+  if (!payment?.providerRef) {
+    throw AppError.conflict("Your booking request is still processing. Wait a moment and retry with the same checkout.");
+  }
+  if (payment.status !== PaymentStatus.PENDING) {
+    throw AppError.conflict("This payment request is no longer pending. Refresh your bookings before retrying.");
+  }
+
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { name: true, email: true, phone: true }
+  });
+  if (!user) throw AppError.notFound("User not found");
+  return {
+    keyId: env.RAZORPAY_KEY_ID ?? "",
+    webhookUrl: getRazorpayWebhookUrl(),
+    bookingId: booking.id,
+    bookingCode: booking.code,
+    orderId: payment.providerRef,
+    amountPaise: toPaise(payment.amount),
+    currency: payment.currency,
+    customerName: user.name,
+    customerEmail: user.email,
+    customerPhone: user.phone
+  };
 }
 
 function now(): Date {
@@ -254,7 +361,7 @@ async function ensureBookingAddress(
   throw AppError.badRequest("Please add a valid saved address before placing a booking");
 }
 
-async function resolveCustomerContext(
+export async function resolveCustomerContext(
   userId: string,
   cityId?: string,
   addressId?: string
@@ -267,7 +374,7 @@ async function resolveCustomerContext(
   };
   cityId: string;
   addressId: string;
-  serviceAreaId: string;
+  serviceAreaIds: string[];
 }> {
   const user = await prisma.user.findUnique({
     where: { id: userId },
@@ -306,6 +413,7 @@ async function resolveCustomerContext(
         isActive: true,
         OR: [
           { pincode: savedAddress.pincode },
+          { assignedPincodes: { some: { pincode: savedAddress.pincode } } },
           {
             pincodeRangeStart: { lte: savedAddress.pincode },
             pincodeRangeEnd: { gte: savedAddress.pincode }
@@ -363,13 +471,13 @@ async function resolveCustomerContext(
     },
     cityId: bookingCity.id,
     addressId: bookingAddressId,
-    serviceAreaId: serviceArea.id
+    serviceAreaIds: serviceArea.serviceAreaIds
   };
 }
 
 async function resolveBookingItems(input: {
   cityId: string;
-  serviceAreaId: string;
+  serviceAreaIds: string[];
   items: BookingItemInput[];
 }): Promise<{
   items: ResolvedBookingItem[];
@@ -395,7 +503,15 @@ async function resolveBookingItems(input: {
       subcategory: {
         select: {
           id: true,
-          name: true
+          name: true,
+          availabilityMode: true,
+          serviceAreaAssignments: { select: { serviceAreaId: true } },
+          category: {
+            select: {
+              availabilityMode: true,
+              serviceAreaAssignments: { select: { serviceAreaId: true } }
+            }
+          }
         }
       },
       pricingRules: {
@@ -407,7 +523,10 @@ async function resolveBookingItems(input: {
       },
       variants: {
         where: { isAvailable: true },
-        orderBy: [{ sortOrder: "asc" as const }, { createdAt: "asc" as const }]
+        orderBy: [{ sortOrder: "asc" as const }, { createdAt: "asc" as const }],
+        include: {
+          serviceAreaAssignments: { select: { serviceAreaId: true } }
+        }
       },
       addons: {
         where: { isActive: true },
@@ -433,12 +552,21 @@ async function resolveBookingItems(input: {
     if (!service.bookingEnabled) {
       throw AppError.conflict("One or more selected services are not accepting bookings");
     }
-    if (
-      service.serviceAreaAssignments.length > 0 &&
-      !service.serviceAreaAssignments.some(
-        (assignment) => assignment.serviceAreaId === input.serviceAreaId
-      )
-    ) {
+    const categoryAvailability: AvailabilityNode = {
+      availabilityMode: service.subcategory.category.availabilityMode,
+      serviceAreaAssignments: service.subcategory.category.serviceAreaAssignments
+    };
+    const subcategoryAvailability: AvailabilityNode = {
+      availabilityMode: service.subcategory.availabilityMode,
+      serviceAreaAssignments: service.subcategory.serviceAreaAssignments,
+      parent: categoryAvailability
+    };
+    const serviceAvailability: AvailabilityNode = {
+      availabilityMode: service.availabilityMode,
+      serviceAreaAssignments: service.serviceAreaAssignments,
+      parent: subcategoryAvailability
+    };
+    if (!isAvailableInAreas(serviceAvailability, input.serviceAreaIds)) {
       throw AppError.conflict("This service is not available at the selected address");
     }
 
@@ -448,12 +576,25 @@ async function resolveBookingItems(input: {
     }
 
     const baseUnitPrice = resolveServiceUnitPrice(service, input.cityId, at);
+    const areaVariants = service.variants.filter((variant) =>
+      isAvailableInAreas(
+        {
+          availabilityMode: variant.availabilityMode,
+          serviceAreaAssignments: variant.serviceAreaAssignments,
+          parent: serviceAvailability
+        },
+        input.serviceAreaIds
+      )
+    );
     const selectedVariant = item.variantId
-      ? service.variants.find((variant) => variant.id === item.variantId)
+      ? areaVariants.find((variant) => variant.id === item.variantId)
       : undefined;
 
     if (item.variantId && !selectedVariant) {
-      throw AppError.badRequest("The selected service option is no longer available");
+      throw AppError.conflict("The selected service option is not available at this address");
+    }
+    if (service.variants.length > 0 && areaVariants.length === 0) {
+      throw AppError.conflict("No service options are available at this address");
     }
     if (service.variants.length > 0 && !selectedVariant) {
       throw AppError.badRequest("Choose a service option before continuing");
@@ -499,6 +640,7 @@ async function resolveBookingItems(input: {
 
     return {
       serviceId: service.id,
+      categoryId: service.categoryId,
       serviceName: service.name,
       serviceSubcategoryId: service.subcategory.id,
       quantity,
@@ -506,7 +648,18 @@ async function resolveBookingItems(input: {
       totalPrice,
       gstRate: service.gstApplicable ? roundMoney(service.gstRate) : new Prisma.Decimal(0),
       sacCode: service.sacCode?.trim() || "PENDING",
-      configuration
+      configuration,
+      guaranteePolicySnapshot: {
+        enabled: service.guaranteeEnabled,
+        claimWindowDays: service.guaranteeClaimWindowDays,
+        issueCategories: service.guaranteeIssueCategories,
+        terms: service.guaranteeTerms,
+        exclusions: service.guaranteeExclusions,
+        resolutionTypes: service.guaranteeResolutionTypes,
+        requiresPartnerReview: service.guaranteeRequiresPartnerReview,
+        evidenceRequired: service.guaranteeEvidenceRequired,
+        policyVersion: service.updatedAt.toISOString()
+      }
     };
   });
 
@@ -705,6 +858,12 @@ async function fetchRazorpayPayment(paymentId: string): Promise<{
 export async function createPaymentOrder(
   input: CreatePaymentOrderInput
 ): Promise<PaymentOrderResult> {
+  const idempotencyKey = input.idempotencyKey?.trim() || undefined;
+  const requestHash = idempotencyKey ? checkoutRequestHash(input) : undefined;
+  if (idempotencyKey && requestHash) {
+    const existingOrder = await findIdempotentOrder(input.userId, idempotencyKey, requestHash);
+    if (existingOrder) return existingOrder;
+  }
   const context = await resolveCustomerContext(input.userId, input.cityId, input.addressId);
   const bookingType = input.bookingType ?? "instant";
   const scheduledFor = bookingType === "scheduled" ? input.scheduledFor : undefined;
@@ -716,9 +875,32 @@ export async function createPaymentOrder(
 
   const { items, subtotalAmount } = await resolveBookingItems({
     cityId: context.cityId,
-    serviceAreaId: context.serviceAreaId,
+    serviceAreaIds: context.serviceAreaIds,
     items: input.items
   });
+
+  if (bookingType === "instant") {
+    const address = await prisma.address.findUnique({
+      where: { id: context.addressId },
+      select: { latitude: true, longitude: true, pincode: true }
+    });
+    if (address?.latitude == null || address.longitude == null) {
+      throw AppError.badRequest("Add a map location to this address before requesting an instant booking");
+    }
+    const hasAvailablePartners = await hasAvailablePartnersForInstantBooking({
+      cityId: context.cityId,
+      services: items.map((item) => ({
+        serviceId: item.serviceId,
+        categoryId: item.categoryId
+      })),
+      pincode: address.pincode,
+      latitude: Number(address.latitude),
+      longitude: Number(address.longitude)
+    });
+    if (!hasAvailablePartners) {
+      throw AppError.conflict("No professionals are available in this service area right now. Choose a scheduled appointment or change your location.");
+    }
+  }
 
   if (bookingType === "scheduled") {
     if (!scheduledFor || !input.addressId) {
@@ -797,9 +979,12 @@ export async function createPaymentOrder(
   }
 
   const bookingSummary = items.map((item) => `${item.serviceName} x${item.quantity}`).join(", ");
-  const booking = await prisma.$transaction(async (tx) => {
+  let booking: Awaited<ReturnType<typeof prisma.booking.create>>;
+  try {
+    booking = await prisma.$transaction(async (tx) => {
     const notesStr = [
       bookingSummary,
+      input.maintenanceOccurrenceId ? "Recurring maintenance visit" : null,
       couponCode ? `Coupon: ${couponCode}` : null,
       walletDeductAmount.gt(0) ? `Wallet: \u20b9${walletDeductAmount}` : null
     ].filter(Boolean).join(" | ");
@@ -807,6 +992,9 @@ export async function createPaymentOrder(
     const createdBooking = await tx.booking.create({
       data: {
         code: bookingCode,
+        ...(idempotencyKey && requestHash
+          ? { clientRequestKey: idempotencyKey, clientRequestHash: requestHash }
+          : {}),
         customerId: context.user.id,
         bookingType,
         ...(scheduledFor ? { scheduledFor } : {}),
@@ -834,10 +1022,12 @@ export async function createPaymentOrder(
         gstRate: item.gstRate,
         gstAmount: item.gstAmount,
         sacCode: item.sacCode,
-        configuration: asJsonRecord(item.configuration)
+        configuration: asJsonRecord(item.configuration),
+        guaranteePolicySnapshot: asJsonRecord(item.guaranteePolicySnapshot)
       }))
     });
 
+    await attachDiagnosticPhotosToBooking(tx, { userId: input.userId, bookingId: createdBooking.id, photoIds: input.diagnosticPhotoIds });
     await tx.payment.create({
       data: {
         bookingId: createdBooking.id,
@@ -865,6 +1055,23 @@ export async function createPaymentOrder(
         }
       }
     });
+
+    if (input.maintenanceOccurrenceId) {
+      if (!scheduledFor || input.items.length !== 1 || (input.items[0].quantity ?? 1) !== 1) {
+        throw AppError.badRequest("Maintenance visits require one scheduled service");
+      }
+      const { confirmOccurrenceBookingLink } = await import("../maintenance/maintenance.service.js");
+      await confirmOccurrenceBookingLink({
+        tx,
+        customerId: input.userId,
+        occurrenceId: input.maintenanceOccurrenceId,
+        serviceId: input.items[0].serviceId,
+        variantId: input.items[0].variantId,
+        addressId: context.addressId,
+        bookingId: createdBooking.id,
+        scheduledFor
+      });
+    }
 
     // Debit wallet if customer chose to use balance
     if (walletDeductAmount.gt(0)) {
@@ -896,10 +1103,25 @@ export async function createPaymentOrder(
       });
     }
 
-    return createdBooking;
-  });
+      return createdBooking;
+    });
+  } catch (error) {
+    const prismaError = error as { code?: string; meta?: { target?: unknown } };
+    const uniqueTarget = prismaError.meta?.target;
+    const idempotencyKeyCollision = prismaError.code === "P2002" &&
+      (Array.isArray(uniqueTarget)
+        ? uniqueTarget.includes("clientRequestKey") && uniqueTarget.includes("customerId")
+        : typeof uniqueTarget === "string" && uniqueTarget.includes("clientRequestKey"));
+    if (idempotencyKey && idempotencyKeyCollision) {
+      const existingOrder = await findIdempotentOrder(input.userId, idempotencyKey, requestHash!);
+      if (existingOrder) return existingOrder;
+      throw AppError.conflict("Your checkout is still processing. Wait briefly and retry the same request.");
+    }
+    throw error;
+  }
 
 
+  let createdRazorpayOrderId: string | null = null;
   try {
     const order = (await razorpay.orders.create({
       amount: totalAmountPaise,
@@ -912,6 +1134,7 @@ export async function createPaymentOrder(
         ...(couponCode ? { couponCode } : {})
       }
     })) as { id: string };
+    createdRazorpayOrderId = order.id;
 
     await prisma.payment.updateMany({
       where: { bookingId: booking.id, provider: "RAZORPAY" },
@@ -976,6 +1199,32 @@ export async function createPaymentOrder(
       customerPhone: context.user.phone
     };
   } catch (error) {
+    if (createdRazorpayOrderId) {
+      // Once Razorpay has created an order, keep the booking and idempotency
+      // record pending. A later local failure must not release the key and
+      // create a second payable order on retry.
+      try {
+        await prisma.payment.updateMany({
+          where: {
+            bookingId: booking.id,
+            provider: "RAZORPAY",
+            status: PaymentStatus.PENDING
+          },
+          data: { providerRef: createdRazorpayOrderId }
+        });
+      } catch (persistenceError) {
+        logger.error(
+          { err: persistenceError, bookingId: booking.id, orderId: createdRazorpayOrderId },
+          "Unable to persist an already-created Razorpay order"
+        );
+      }
+      logger.error(
+        { err: error, bookingId: booking.id, orderId: createdRazorpayOrderId },
+        "Checkout finalization failed after Razorpay created the order; keeping checkout pending"
+      );
+      throw error;
+    }
+
     await prisma.$transaction(async (tx) => {
       await tx.payment.updateMany({
         where: { bookingId: booking.id, provider: "RAZORPAY" },
@@ -992,8 +1241,35 @@ export async function createPaymentOrder(
 
       await tx.booking.update({
         where: { id: booking.id },
-        data: { status: BookingStatus.CANCELLED }
+        data: {
+          status: BookingStatus.CANCELLED,
+          clientRequestKey: null,
+          clientRequestHash: null
+        }
       });
+
+      if (input.maintenanceOccurrenceId) {
+        const occurrence = await tx.maintenanceOccurrence.findFirst({
+          where: { id: input.maintenanceOccurrenceId, bookingId: booking.id },
+          select: { id: true, planId: true }
+        });
+        if (occurrence) {
+          await tx.maintenanceOccurrence.updateMany({
+            where: { id: occurrence.id, bookingId: booking.id },
+            data: { status: "AWAITING_CONFIRMATION", bookingId: null, failureReason: "Payment order creation failed" }
+          });
+          await tx.maintenancePlanEvent.create({
+            data: { planId: occurrence.planId, actorId: input.userId, action: "PAYMENT_ORDER_CREATION_FAILED", details: { occurrenceId: occurrence.id, bookingId: booking.id } }
+          });
+        }
+      }
+
+      if ((input.diagnosticPhotoIds ?? []).length > 0) {
+        await tx.bookingDiagnosticPhoto.updateMany({
+          where: { id: { in: input.diagnosticPhotoIds }, uploadedById: input.userId, bookingId: booking.id },
+          data: { bookingId: null, expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000) }
+        });
+      }
 
       if (walletDeductAmount.gt(0)) {
         const updatedUser = await tx.user.update({
@@ -1043,6 +1319,10 @@ export async function verifyPayment(
 
   if (!payment) {
     throw AppError.notFound("Payment not found");
+  }
+
+  if (payment.customQuoteRevisionId) {
+    throw AppError.badRequest('Use the custom quote payment verification endpoint for this payment');
   }
 
   if (payment.booking.customerId !== input.userId) {
@@ -1287,4 +1567,135 @@ export async function verifyPayment(
     paymentId: input.razorpayPaymentId,
     status: PaymentStatus.CAPTURED
   };
+}
+
+/**
+ * Resolves an interrupted checkout against Razorpay before the Customer is
+ * allowed to retry. Provider state is reconciled through the same settlement
+ * handler used by verified webhooks, so a captured order cannot be treated as
+ * cancelled merely because the mobile SDK reported an error.
+ */
+export async function getPaymentOrderStatus(
+  input: PaymentOrderStatusInput
+): Promise<PaymentStatus> {
+  const payment = await prisma.payment.findFirst({
+    where: {
+      bookingId: input.bookingId,
+      provider: "RAZORPAY",
+      providerRef: input.razorpayOrderId,
+      booking: { customerId: input.userId }
+    },
+    select: {
+      id: true,
+      status: true,
+      customQuoteRevisionId: true,
+      createdAt: true
+    }
+  });
+
+  if (!payment) throw AppError.notFound("Payment order not found");
+  if (payment.customQuoteRevisionId) {
+    throw AppError.badRequest("Use the custom quote payment status flow for this order");
+  }
+  if (payment.status === PaymentStatus.CAPTURED || payment.status === PaymentStatus.REFUNDED) {
+    return payment.status;
+  }
+
+  const order = await razorpay.orders.fetch(input.razorpayOrderId);
+  const result = await razorpay.orders.fetchPayments(input.razorpayOrderId);
+  const attempts = result.items.filter(
+    (attempt) => attempt.order_id === input.razorpayOrderId
+  );
+  if (
+    order.id !== input.razorpayOrderId ||
+    attempts.length !== result.items.length
+  ) {
+    logger.warn(
+      {
+        bookingId: input.bookingId,
+        orderId: input.razorpayOrderId,
+        fetchedOrderId: order.id
+      },
+      "Ignoring inconsistent Razorpay order payment response"
+    );
+    return PaymentStatus.PENDING;
+  }
+  const captured = attempts.find((attempt) => attempt.status === "captured");
+
+  if (captured) {
+    const capturedAmount = typeof captured.amount === "number" ? captured.amount : 0;
+    await updatePaymentForWebhook(
+      input.razorpayOrderId,
+      PaymentStatus.CAPTURED,
+      {
+        webhookEvent: "checkout.cancelled.payment.reconciled",
+        reconciledBy: "customer_checkout",
+        paymentId: captured.id ?? null,
+        paymentStatus: captured.status ?? null
+      },
+      capturedAmount
+    );
+    const reconciled = await prisma.payment.findUnique({
+      where: { id: payment.id },
+      select: { status: true }
+    });
+    return reconciled?.status ?? PaymentStatus.PENDING;
+  }
+
+  // Razorpay orders in `created` and `attempted` states remain payable. Age
+  // alone cannot prove that a checkout is terminal, so keep local state
+  // pending until a provider event or reconciliation confirms the outcome.
+  return PaymentStatus.PENDING;
+}
+
+/**
+ * Confirms that an old checkout has no captured, authorized, or unresolved
+ * Razorpay attempt before a maintenance occurrence is released. The caller
+ * must enforce the abandonment grace period before using this result.
+ */
+export async function isPaymentOrderSafeToAbandon(
+  input: PaymentOrderStatusInput
+): Promise<boolean> {
+  const payment = await prisma.payment.findFirst({
+    where: {
+      bookingId: input.bookingId,
+      provider: "RAZORPAY",
+      providerRef: input.razorpayOrderId,
+      booking: { customerId: input.userId }
+    },
+    select: { id: true, status: true, customQuoteRevisionId: true, notes: true }
+  });
+
+  if (
+    !payment ||
+    payment.customQuoteRevisionId ||
+    payment.status === PaymentStatus.CAPTURED ||
+    payment.status === PaymentStatus.REFUNDED ||
+    (payment.notes && typeof payment.notes === "object" && !Array.isArray(payment.notes) &&
+      (payment.notes as Record<string, unknown>).amountMismatch === true)
+  ) {
+    return false;
+  }
+
+  const order = await razorpay.orders.fetch(input.razorpayOrderId);
+  const result = await razorpay.orders.fetchPayments(input.razorpayOrderId);
+  const attempts = result.items.filter(
+    (attempt) => attempt.order_id === input.razorpayOrderId
+  );
+  if (
+    order.id !== input.razorpayOrderId ||
+    attempts.length !== result.items.length
+  ) {
+    return false;
+  }
+
+  if (attempts.some((attempt) => attempt.status === "captured")) {
+    // Reconcile the capture through the verified webhook settlement path.
+    await getPaymentOrderStatus(input);
+    return false;
+  }
+
+  if (order.status === "paid") return false;
+  if (attempts.some((attempt) => attempt.status !== "failed")) return false;
+  return order.status === "created" || order.status === "attempted";
 }

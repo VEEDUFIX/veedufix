@@ -98,7 +98,7 @@ class _DisputeDetailPageState extends ConsumerState<DisputeDetailPage> {
 
     setState(() => _busy = true);
     try {
-      await _api.resolveDispute(widget.disputeId,
+      final result = await _api.resolveDispute(widget.disputeId,
           resolution: resolution, note: note);
       if (!mounted) {
         return;
@@ -108,7 +108,17 @@ class _DisputeDetailPageState extends ConsumerState<DisputeDetailPage> {
         return;
       }
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Dispute resolved')),
+        SnackBar(
+          content: Text(resolution == 'refund'
+              ? result.status == 'resolved_refund'
+                  ? 'Refund completed by the payment provider'
+                  : result.status == 'refund_pending'
+                      ? 'Refund approved and processing; completion is still pending'
+                      : result.status == 'under_review'
+                          ? 'Refund did not complete; the claim returned to review'
+                          : 'Claim status updated: ${result.status.replaceAll('_', ' ')}'
+              : 'Claim rejected'),
+        ),
       );
     } catch (error) {
       if (!mounted) {
@@ -121,6 +131,60 @@ class _DisputeDetailPageState extends ConsumerState<DisputeDetailPage> {
       if (mounted) {
         setState(() => _busy = false);
       }
+    }
+  }
+
+  Future<void> _updateClaim(String action, String title,
+      {String visibility = 'CUSTOMER'}) async {
+    DateTime? scheduledAt;
+    if (action == 'schedule_rework') {
+      final now = DateTime.now();
+      final date = await showDatePicker(
+        context: context,
+        initialDate: now.add(const Duration(days: 1)),
+        firstDate: now,
+        lastDate: now.add(const Duration(days: 90)),
+      );
+      if (!mounted || date == null) return;
+      final time = await showTimePicker(
+        context: context,
+        initialTime: TimeOfDay.fromDateTime(now.add(const Duration(hours: 2))),
+      );
+      if (!mounted || time == null) return;
+      scheduledAt =
+          DateTime(date.year, date.month, date.day, time.hour, time.minute);
+      if (!scheduledAt.isAfter(DateTime.now())) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Choose a revisit time in the future.')),
+        );
+        return;
+      }
+    }
+    final message = await showDialog<String>(
+      context: context,
+      builder: (_) => _ClaimNoteDialog(title: title, visibility: visibility),
+    );
+    if (message == null || message.trim().length < 3) return;
+    setState(() => _busy = true);
+    try {
+      await _api.updateClaim(widget.disputeId,
+          action: action,
+          message: message,
+          visibility: visibility,
+          scheduledAt: scheduledAt);
+      if (!mounted) return;
+      await _reload();
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text('Claim updated')));
+      }
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(error.toString())));
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
     }
   }
 
@@ -189,7 +253,45 @@ class _DisputeDetailPageState extends ConsumerState<DisputeDetailPage> {
 
           final dispute = snapshot.data!.dispute;
           final booking = snapshot.data!.booking;
-          final isResolved = dispute.status.startsWith('resolved_');
+          final isResolved = dispute.status.startsWith('resolved_') ||
+              dispute.status == 'closed';
+          final canResolveRefund = <String>{
+            'open',
+            'under_review',
+            'action_required',
+          }.contains(dispute.status);
+          final canRequestInfo = <String>{
+            'open',
+            'under_review',
+            'approved',
+          }.contains(dispute.status);
+          final canChangeRemedy = !<String>{
+            'scheduled',
+            'completed',
+            'customer_confirmed',
+          }.contains(dispute.remedyStatus);
+          Map<String, dynamic>? claimPolicy;
+          if (dispute.serviceId != null) {
+            for (final entry in booking.servicePolicies) {
+              if (entry['serviceId'] == dispute.serviceId) {
+                claimPolicy = entry['policy'] as Map<String, dynamic>?;
+                break;
+              }
+            }
+          } else if (booking.servicePolicies.length == 1) {
+            // The backend applies the only booking service's policy when the
+            // claim is not tied to a specific service.
+            claimPolicy = booking.servicePolicies.single['policy']
+                as Map<String, dynamic>?;
+          }
+          final policyEnabled = claimPolicy?['enabled'] == true;
+          final canRefund = !policyEnabled ||
+              (claimPolicy?['resolutionTypes'] as List? ?? const [])
+                  .contains('REFUND_REVIEW');
+          final canRework = claimPolicy?['enabled'] == true &&
+              (claimPolicy?['resolutionTypes'] as List? ?? const []).any(
+                (type) => type == 'REWORK' || type == 'REVISIT',
+              );
           final bookingLookup =
               booking.code.trim().isNotEmpty ? booking.code.trim() : booking.id;
           final customerLookup = (booking.customerPhone ?? '').trim().isNotEmpty
@@ -244,6 +346,29 @@ class _DisputeDetailPageState extends ConsumerState<DisputeDetailPage> {
                                       .formatMediumDate(dispute.createdAt)),
                             ],
                           ),
+                          if (booking.servicePolicies.isNotEmpty) ...[
+                            const SizedBox(height: 14),
+                            Text(
+                              'Policy saved with this booking',
+                              style: GoogleFonts.outfit(
+                                  fontWeight: FontWeight.w800),
+                            ),
+                            const SizedBox(height: 6),
+                            for (final entry in booking.servicePolicies) ...[
+                              Builder(builder: (context) {
+                                final policy =
+                                    entry['policy'] as Map<String, dynamic>;
+                                return Padding(
+                                  padding: const EdgeInsets.only(bottom: 8),
+                                  child: Text(
+                                    '${entry['serviceName']}${entry['serviceId'] == dispute.serviceId ? ' · claim service' : ''}: ${policy['enabled'] == true ? 'covered for ${policy['claimWindowDays'] ?? 0} days' : 'no configured guarantee'}${(policy['terms'] as String?)?.trim().isNotEmpty == true ? '\nTerms: ${policy['terms']}' : ''}${(policy['exclusions'] as String?)?.trim().isNotEmpty == true ? '\nExclusions: ${policy['exclusions']}' : ''}${(policy['issueCategories'] as List?)?.isNotEmpty == true ? '\nEligible issues: ${(policy['issueCategories'] as List).join(', ')}' : ''}${(policy['resolutionTypes'] as List?)?.isNotEmpty == true ? '\nPermitted remedies: ${(policy['resolutionTypes'] as List).join(', ')}' : ''}${policy['evidenceRequired'] == true ? '\nSupporting evidence required' : ''}${policy['requiresPartnerReview'] == true ? '\nPartner review required' : ''}',
+                                    style: GoogleFonts.outfit(
+                                        color: const Color(0xFF6B6256)),
+                                  ),
+                                );
+                              }),
+                            ],
+                          ],
                           const SizedBox(height: 10),
                           Wrap(
                             spacing: 10,
@@ -318,6 +443,18 @@ class _DisputeDetailPageState extends ConsumerState<DisputeDetailPage> {
                                   ),
                                   const SizedBox(height: 8),
                                   Text(dispute.reason),
+                                  if (dispute.issueCategory?.isNotEmpty ==
+                                      true) ...[
+                                    const SizedBox(height: 8),
+                                    _InfoLine(
+                                        label: 'Issue category',
+                                        value: dispute.issueCategory!
+                                            .replaceAll('_', ' ')),
+                                  ],
+                                  if (dispute.referenceCode?.isNotEmpty == true)
+                                    _InfoLine(
+                                        label: 'Claim reference',
+                                        value: dispute.referenceCode!),
                                   const SizedBox(height: 16),
                                   Text(
                                     'Customer comment',
@@ -371,6 +508,13 @@ class _DisputeDetailPageState extends ConsumerState<DisputeDetailPage> {
                                   _PhotoGallery(
                                       urls: booking.afterPhotos,
                                       onTap: _showImage),
+                                  if (dispute.evidencePhotoIds.isNotEmpty) ...[
+                                    const SizedBox(height: 16),
+                                    BookingDiagnosticPhotosSection(
+                                      bookingId: booking.id,
+                                      photoIds: dispute.evidencePhotoIds,
+                                    ),
+                                  ],
                                   const SizedBox(height: 12),
                                   Text(
                                     'Checklist',
@@ -471,11 +615,97 @@ class _DisputeDetailPageState extends ConsumerState<DisputeDetailPage> {
                                     _InfoLine(
                                         label: 'Refund ID',
                                         value: dispute.refundId!.trim()),
+                                  if ((dispute.remedyType ?? '').isNotEmpty)
+                                    _InfoLine(
+                                      label: 'Approved remedy',
+                                      value: dispute.remedyType!,
+                                    ),
+                                  if ((dispute.remedyStatus ?? '').isNotEmpty)
+                                    _InfoLine(
+                                      label: 'Remedy status',
+                                      value: dispute.remedyStatus!
+                                          .replaceAll('_', ' '),
+                                    ),
+                                  if (dispute.reworkProposedAt != null)
+                                    _InfoLine(
+                                      label: 'Partner proposal',
+                                      value: MaterialLocalizations.of(context)
+                                          .formatMediumDate(dispute
+                                              .reworkProposedAt!
+                                              .toLocal()),
+                                    ),
+                                  if (dispute.reworkScheduledAt != null)
+                                    _InfoLine(
+                                      label: 'Revisit scheduled',
+                                      value:
+                                          '${MaterialLocalizations.of(context).formatMediumDate(dispute.reworkScheduledAt!.toLocal())} · ${MaterialLocalizations.of(context).formatTimeOfDay(TimeOfDay.fromDateTime(dispute.reworkScheduledAt!.toLocal()))}',
+                                    ),
                                 ],
                               ),
                             ),
                           ),
                           const SizedBox(height: 16),
+                          if (booking.paymentRecords.isNotEmpty)
+                            _SurfacePanel(
+                              child: Padding(
+                                padding: const EdgeInsets.all(16),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text('Payment records',
+                                        style: GoogleFonts.outfit(
+                                            fontWeight: FontWeight.w800)),
+                                    const SizedBox(height: 8),
+                                    for (final payment
+                                        in booking.paymentRecords) ...[
+                                      _InfoLine(
+                                        label:
+                                            '${payment['status'] ?? 'Payment'} · ${payment['currency'] ?? 'INR'}',
+                                        value:
+                                            '₹${(double.tryParse(payment['amount']?.toString() ?? '') ?? 0).toStringAsFixed(2)}${payment['customQuoteRevisionId'] == null ? '' : ' · quotation payment'}',
+                                      ),
+                                      const SizedBox(height: 6),
+                                    ],
+                                  ],
+                                ),
+                              ),
+                            ),
+                          if (booking.paymentRecords.isNotEmpty)
+                            const SizedBox(height: 16),
+                          if (dispute.history.isNotEmpty) ...[
+                            _SurfacePanel(
+                              child: Padding(
+                                padding: const EdgeInsets.all(16),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'Claim history',
+                                      style: GoogleFonts.outfit(
+                                        fontWeight: FontWeight.w800,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 8),
+                                    for (final event in dispute.history)
+                                      ListTile(
+                                        contentPadding: EdgeInsets.zero,
+                                        leading:
+                                            const Icon(Icons.history_rounded),
+                                        title: Text(
+                                          (event['type'] as String? ?? 'update')
+                                              .replaceAll('_', ' '),
+                                        ),
+                                        subtitle: Text(
+                                          event['message'] as String? ??
+                                              'No message',
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+                          ],
                           if (!isResolved)
                             _SurfacePanel(
                               child: Padding(
@@ -496,36 +726,109 @@ class _DisputeDetailPageState extends ConsumerState<DisputeDetailPage> {
                                       label: const Text(
                                           'Open booking audit trail'),
                                     ),
-                                    const SizedBox(height: 12),
-                                    FilledButton.icon(
-                                      onPressed: _busy
-                                          ? null
-                                          : () => _resolve(
-                                                resolution: 'refund',
-                                                title: 'Approve refund',
-                                                buttonLabel: 'Approve',
-                                                description:
-                                                    'This will refund the full booking amount for the disputed job. Please confirm the amount and add a short note for the audit trail.',
-                                                amount: booking.totalAmount,
-                                              ),
-                                      icon: const Icon(Icons.reply_rounded),
-                                      label: const Text('Approve Refund'),
-                                    ),
-                                    const SizedBox(height: 12),
+                                    if (canRequestInfo && canChangeRemedy) ...[
+                                      const SizedBox(height: 12),
+                                      OutlinedButton.icon(
+                                        onPressed: _busy
+                                            ? null
+                                            : () => _updateClaim('request_info',
+                                                'Request more information'),
+                                        icon: const Icon(
+                                            Icons.help_outline_rounded),
+                                        label: const Text(
+                                            'Request more information'),
+                                      ),
+                                    ],
+                                    if (canRework &&
+                                        canResolveRefund &&
+                                        canChangeRemedy) ...[
+                                      const SizedBox(height: 8),
+                                      OutlinedButton.icon(
+                                        onPressed: _busy
+                                            ? null
+                                            : () => _updateClaim(
+                                                'approve_rework',
+                                                'Approve corrective-work claim'),
+                                        icon: const Icon(
+                                            Icons.build_circle_outlined),
+                                        label: const Text(
+                                            'Approve corrective-work claim'),
+                                      ),
+                                    ],
+                                    if (dispute.remedyStatus ==
+                                        'awaiting_admin_schedule') ...[
+                                      const SizedBox(height: 8),
+                                      FilledButton.icon(
+                                        onPressed: _busy
+                                            ? null
+                                            : () => _updateClaim(
+                                                  'schedule_rework',
+                                                  'Confirm corrective-work appointment',
+                                                ),
+                                        icon: const Icon(
+                                            Icons.event_available_outlined),
+                                        label: const Text(
+                                            'Confirm revisit appointment'),
+                                      ),
+                                    ],
+                                    const SizedBox(height: 8),
                                     OutlinedButton.icon(
                                       onPressed: _busy
                                           ? null
-                                          : () => _resolve(
-                                                resolution: 'reject',
-                                                title: 'Reject dispute',
-                                                buttonLabel: 'Reject',
-                                                description:
-                                                    'Use this when the job evidence does not support a refund. Add a concise reason for the decision.',
-                                                amount: booking.totalAmount,
+                                          : () => _updateClaim(
+                                                'internal_note',
+                                                'Add internal note',
+                                                visibility: 'INTERNAL',
                                               ),
-                                      icon: const Icon(Icons.close_rounded),
-                                      label: const Text('Reject Dispute'),
+                                      icon: const Icon(
+                                          Icons.lock_outline_rounded),
+                                      label: const Text('Add internal note'),
                                     ),
+                                    if (canRefund && canResolveRefund) ...[
+                                      const SizedBox(height: 12),
+                                      FilledButton.icon(
+                                        onPressed: _busy
+                                            ? null
+                                            : () => _resolve(
+                                                  resolution: 'refund',
+                                                  title: 'Approve refund',
+                                                  buttonLabel: 'Approve',
+                                                  description:
+                                                      'This will refund the full booking amount for the disputed job. Please confirm the amount and add a short note for the audit trail.',
+                                                  amount: booking.totalAmount,
+                                                ),
+                                        icon: const Icon(Icons.reply_rounded),
+                                        label: const Text('Approve Refund'),
+                                      ),
+                                    ],
+                                    if (canChangeRemedy &&
+                                        dispute.status == 'approved') ...[
+                                      const SizedBox(height: 12),
+                                      OutlinedButton.icon(
+                                        onPressed: _busy
+                                            ? null
+                                            : () => _updateClaim(
+                                                'reject', 'Reject claim'),
+                                        icon: const Icon(Icons.close_rounded),
+                                        label: const Text('Reject claim'),
+                                      ),
+                                    ] else if (canResolveRefund) ...[
+                                      const SizedBox(height: 12),
+                                      OutlinedButton.icon(
+                                        onPressed: _busy
+                                            ? null
+                                            : () => _resolve(
+                                                  resolution: 'reject',
+                                                  title: 'Reject dispute',
+                                                  buttonLabel: 'Reject',
+                                                  description:
+                                                      'Use this when the job evidence does not support the claim. Add a concise reason for the decision.',
+                                                  amount: booking.totalAmount,
+                                                ),
+                                        icon: const Icon(Icons.close_rounded),
+                                        label: const Text('Reject claim'),
+                                      ),
+                                    ],
                                   ],
                                 ),
                               ),
@@ -598,6 +901,76 @@ class _DisputeDetailPageState extends ConsumerState<DisputeDetailPage> {
       ),
     );
   }
+}
+
+class _ClaimNoteDialog extends StatefulWidget {
+  const _ClaimNoteDialog({required this.title, required this.visibility});
+
+  final String title;
+  final String visibility;
+
+  @override
+  State<_ClaimNoteDialog> createState() => _ClaimNoteDialogState();
+}
+
+class _ClaimNoteDialogState extends State<_ClaimNoteDialog> {
+  final TextEditingController _controller = TextEditingController();
+  String? _validationError;
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+        title: Text(widget.title),
+        content: SizedBox(
+          width: 520,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              TextField(
+                controller: _controller,
+                maxLines: 4,
+                decoration: InputDecoration(
+                  labelText: widget.visibility == 'INTERNAL'
+                      ? 'Internal Admin note'
+                      : 'Customer-visible explanation',
+                  hintText: 'Explain the next step or decision',
+                ),
+              ),
+              if (_validationError != null) ...[
+                const SizedBox(height: 8),
+                Text(
+                  _validationError!,
+                  style: TextStyle(color: Theme.of(context).colorScheme.error),
+                ),
+              ],
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () {
+              final text = _controller.text.trim();
+              if (text.length < 3) {
+                setState(
+                    () => _validationError = 'Enter at least 3 characters.');
+                return;
+              }
+              Navigator.pop(context, text);
+            },
+            child: const Text('Save'),
+          ),
+        ],
+      );
 }
 
 class _PhotoGallery extends StatelessWidget {

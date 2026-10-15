@@ -202,14 +202,14 @@ class CouponManagerPage extends ConsumerWidget {
   void _confirmDelete(BuildContext context, WidgetRef ref, AdminCoupon coupon) {
     showDialog(
       context: context,
-      builder: (_) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         title: const Text('Delete Coupon?'),
         content: Text('Delete "${coupon.code}"? This cannot be undone.'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Cancel')),
           FilledButton(
             onPressed: () {
-              Navigator.pop(context);
+              Navigator.pop(dialogContext);
               ref.read(couponToggleProvider.notifier).delete(coupon.id);
             },
             style: FilledButton.styleFrom(backgroundColor: Colors.red),

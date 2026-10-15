@@ -11,7 +11,10 @@ import { getTravelTimeMinutes } from "../../lib/maps.js";
 export const MAX_CONCURRENT_JOBS = 1;
 const OFFER_WINDOW_MS = 90_000;
 const SCHEDULED_OFFER_WINDOW_MS = 2 * 60 * 60 * 1000;
-const RADIUS_STEPS_KM = [3, 6, 10] as const;
+// Keep candidate discovery bounded by the largest radius accepted by onboarding.
+// Each Partner's own radius is then checked as the final distance eligibility rule.
+const MAX_PARTNER_SERVICE_RADIUS_KM = 100;
+const DEFAULT_PARTNER_SERVICE_RADIUS_KM = 10;
 const ACTIVE_JOB_EXECUTION_STATUSES = ["assigned", "arrived", "in_progress"] as const;
 const NON_ACTIVE_BOOKING_STATUSES = ["CANCELLED", "CANCELLED_MANUAL", "CANCELLED_NO_SHOW", "REFUNDED"] as const;
 const DEFAULT_RATING = 4.0;
@@ -113,14 +116,6 @@ export class OfferExpiredError extends MatchingError {
 const dispatchSessions = new Map<string, DispatchSession>();
 let expiredOfferRecoveryStarted = false;
 
-const CITY_CENTROIDS: Record<string, { latitude: number; longitude: number }> = {
-  chennai: { latitude: 13.0827, longitude: 80.2707 },
-  bengaluru: { latitude: 12.9716, longitude: 77.5946 },
-  hyderabad: { latitude: 17.385, longitude: 78.4867 },
-  mumbai: { latitude: 19.076, longitude: 72.8777 },
-  delhi: { latitude: 28.6139, longitude: 77.209 }
-};
-
 function toNumber(value: Prisma.Decimal | number | string | null | undefined): number | null {
   if (value === null || value === undefined) {
     return null;
@@ -178,12 +173,37 @@ function resolveWorkerLocation(worker: WorkerPoolCandidate): { latitude: number;
     return { latitude, longitude };
   }
 
-  const cityName = worker.cityRelation?.name?.trim().toLowerCase();
-  if (!cityName) {
+  return null;
+}
+
+function resolveWorkerServiceRadiusKm(worker: WorkerPoolCandidate): number | null {
+  const configuredRadius = toNumber(worker.serviceRadiusKm);
+  if (configuredRadius === null) {
+    return DEFAULT_PARTNER_SERVICE_RADIUS_KM;
+  }
+
+  if (
+    !Number.isInteger(configuredRadius) ||
+    configuredRadius < 1 ||
+    configuredRadius > MAX_PARTNER_SERVICE_RADIUS_KM
+  ) {
     return null;
   }
 
-  return CITY_CENTROIDS[cityName] ?? null;
+  return configuredRadius;
+}
+
+function isWorkerWithinServiceRadius(
+  worker: WorkerPoolCandidate,
+  customerLocation: { latitude: number; longitude: number }
+): boolean {
+  const workerLocation = resolveWorkerLocation(worker);
+  const serviceRadiusKm = resolveWorkerServiceRadiusKm(worker);
+  if (!workerLocation || serviceRadiusKm === null) {
+    return false;
+  }
+
+  return haversineDistanceKm(customerLocation, workerLocation) <= serviceRadiusKm;
 }
 
 function resolveBookingCategoryId(booking: BookingWithDispatchData): string {
@@ -204,6 +224,14 @@ function resolveBookingCategoryIds(booking: BookingWithDispatchData): string[] {
     return typeof categoryId === "string" ? [categoryId] : [];
   });
   return [...new Set(categoryIds)];
+}
+
+function resolveBookingServiceIds(booking: BookingWithDispatchData): string[] {
+  const serviceIds: string[] = [];
+  for (const item of booking.services as Array<{ service?: { id?: unknown } | null }>) {
+    if (typeof item.service?.id === "string") serviceIds.push(item.service.id);
+  }
+  return [...new Set(serviceIds)];
 }
 
 function getIndiaScheduleParts(dateTime: Date): { dayOfWeek: number; minuteOfDay: number } {
@@ -706,17 +734,38 @@ async function getCandidateWorkers(
   excludeWorkerIds: string[] = [],
   options: {
     includeBusyWorkers?: boolean;
+    requireAvailable?: boolean;
+    requireOnline?: boolean;
   } = {}
 ): Promise<WorkerPoolCandidate[]> {
   const categoryIds = resolveBookingCategoryIds(booking);
+  const serviceIds = resolveBookingServiceIds(booking);
   const excludedWorkerIds = new Set(excludeWorkerIds);
   const bookingLocation = resolveBookingLocation(booking);
-  const searchBounds = getBoundingBox(bookingLocation, RADIUS_STEPS_KM[RADIUS_STEPS_KM.length - 1]);
+  const searchBounds = getBoundingBox(bookingLocation, MAX_PARTNER_SERVICE_RADIUS_KM);
 
   const workers = await prisma.workerProfile.findMany({
     where: {
       onboardingStatus: "approved",
       verificationStatus: VerificationStatus.VERIFIED,
+      ...(options.requireAvailable === false ? {} : { isAvailable: true }),
+      ...(options.requireOnline === false ? {} : { isOnline: true }),
+      serviceAreaAssignments: {
+        some: {
+          serviceArea: {
+            isActive: true,
+            city: { isActive: true, id: booking.cityId },
+            OR: [
+              { pincode: booking.address.pincode },
+              { assignedPincodes: { some: { pincode: booking.address.pincode } } },
+              {
+                pincodeRangeStart: { lte: booking.address.pincode },
+                pincodeRangeEnd: { gte: booking.address.pincode }
+              }
+            ]
+          }
+        }
+      },
       ...(excludedWorkerIds.size > 0
         ? {
             id: {
@@ -732,9 +781,14 @@ async function getCandidateWorkers(
         gte: searchBounds.minLongitude,
         lte: searchBounds.maxLongitude
       },
-      AND: categoryIds.map((categoryId) => ({
-        skills: { some: { categoryId, verifiedByAdmin: true } }
-      }))
+      AND: [
+        ...categoryIds.map((categoryId) => ({
+          skills: { some: { categoryId, verifiedByAdmin: true } }
+        })),
+        ...serviceIds.map((serviceId) => ({
+          workerServices: { some: { serviceId, isAvailable: true } }
+        }))
+      ]
     },
     include: {
       user: {
@@ -765,6 +819,80 @@ async function getCandidateWorkers(
   return approvedEligibleWorkers.filter((worker) => !activeJobWorkerIds.has(worker.id));
 }
 
+export async function hasAvailablePartnersForInstantBooking(input: {
+  cityId: string;
+  services: Array<{ serviceId: string; categoryId: string }>;
+  pincode: string;
+  latitude: number;
+  longitude: number;
+}): Promise<boolean> {
+  if (
+    input.services.length === 0 ||
+    !Number.isFinite(input.latitude) ||
+    !Number.isFinite(input.longitude)
+  ) {
+    return false;
+  }
+
+  const booking = {
+    cityId: input.cityId,
+    services: input.services.map((item) => ({ service: { id: item.serviceId, categoryId: item.categoryId } })),
+    address: { latitude: input.latitude, longitude: input.longitude, pincode: input.pincode }
+  } as unknown as BookingWithDispatchData;
+  const workers = await getCandidateWorkers(booking);
+  const location = { latitude: input.latitude, longitude: input.longitude };
+  const availableAt = await filterWorkersAvailableAt(workers, new Date(), location);
+
+  return availableAt.some((worker) => {
+    return isWorkerWithinServiceRadius(worker, location);
+  });
+}
+
+/**
+ * Validates a no-charge claim revisit against the same active/qualified,
+ * assigned-area, service, radius, schedule, and conflicting-job checks used
+ * during dispatch. It deliberately does not create or reopen a payable booking.
+ */
+export async function assertAssignedPartnerAvailableForRemedy(
+  bookingId: string,
+  scheduledAt: Date
+): Promise<void> {
+  if (!Number.isFinite(scheduledAt.getTime()) || scheduledAt.getTime() <= Date.now()) {
+    throw new MatchingError("Choose a future corrective-work appointment time");
+  }
+
+  const booking = await getBookingForDispatch(bookingId);
+  if (!booking.workerId || booking.status !== BookingStatus.COMPLETED) {
+    throw new MatchingError("Corrective work requires the original assigned Partner and a completed booking");
+  }
+
+  const location = resolveBookingLocation(booking);
+  const candidates = await getCandidateWorkers(booking, [], {
+    includeBusyWorkers: true,
+    requireAvailable: false,
+    requireOnline: false
+  });
+  const qualifiedAssigned = candidates.filter(
+    (worker) => worker.id === booking.workerId && isWorkerWithinServiceRadius(worker, location)
+  );
+  const availableAtTime = await filterWorkersAvailableAt(qualifiedAssigned, scheduledAt, location);
+  if (availableAtTime.length === 0) {
+    throw new MatchingError("The assigned Partner is not eligible or available at that time");
+  }
+
+  const holiday = await prisma.holiday.findFirst({
+    where: {
+      workerId: booking.workerId,
+      startsAt: { lte: scheduledAt },
+      endsAt: { gte: scheduledAt }
+    },
+    select: { id: true }
+  });
+  if (holiday) {
+    throw new MatchingError("The assigned Partner is unavailable on that date");
+  }
+}
+
 function scoreWorker(
   worker: WorkerPoolCandidate,
   bookingLocation: { latitude: number; longitude: number },
@@ -776,10 +904,18 @@ function scoreWorker(
   }
 
   const distanceKm = haversineDistanceKm(bookingLocation, location);
+  const radiusKm = resolveWorkerServiceRadiusKm(worker);
+  if (radiusKm === null) {
+    return null;
+  }
+  const distanceScore = Math.max(
+    0,
+    Math.min(1, 1 - distanceKm / MAX_PARTNER_SERVICE_RADIUS_KM)
+  );
   const ratingAvg = neutralRating(worker.averageRating);
   const recency = recencyFactor(lastCompletedAt);
   const score =
-    (1 / Math.max(distanceKm, 0.1)) * 0.4 +
+    distanceScore * 0.4 +
     (ratingAvg / 5) * 0.4 +
     recency * 0.2;
 
@@ -799,11 +935,15 @@ async function rankCandidates(
   options: {
     includeBusyWorkers?: boolean;
     availabilityAt?: Date;
+    requireAvailable?: boolean;
+    requireOnline?: boolean;
   } = {}
 ): Promise<RankedWorker[]> {
   const bookingLocation = resolveBookingLocation(booking);
   const candidateWorkers = await getCandidateWorkers(booking, excludeWorkerIds, {
-    includeBusyWorkers: options.includeBusyWorkers
+    includeBusyWorkers: options.includeBusyWorkers,
+    requireAvailable: options.requireAvailable,
+    requireOnline: options.requireOnline
   });
   const workers =
     options.availabilityAt && candidateWorkers.length > 0
@@ -813,25 +953,17 @@ async function rankCandidates(
   const lastCompletionMap = await getLastCompletionByWorker(workerIds);
 
   const scored = workers
-    .map((worker) => scoreWorker(worker, bookingLocation, lastCompletionMap.get(worker.id) ?? null))
+    .map((worker) => {
+      if (!isWorkerWithinServiceRadius(worker, bookingLocation)) return null;
+      return scoreWorker(worker, bookingLocation, lastCompletionMap.get(worker.id) ?? null);
+    })
     .filter((item): item is RankedWorker => item !== null);
 
-  const ranked = scored.sort((left, right) => {
-    if (left.distanceKm !== right.distanceKm) {
-      return left.distanceKm - right.distanceKm;
-    }
+  const ranked = scored.sort(
+    (left, right) => right.score - left.score || left.distanceKm - right.distanceKm
+  );
 
-    return right.score - left.score;
-  });
-
-  for (const radiusKm of RADIUS_STEPS_KM) {
-    const withinRadius = ranked.filter((candidate) => candidate.distanceKm <= radiusKm);
-    if (withinRadius.length > 0) {
-      return withinRadius.sort((left, right) => right.score - left.score).slice(0, 5);
-    }
-  }
-
-  return [];
+  return ranked.slice(0, 5);
 }
 
 async function createJobExecutionAssignment(bookingId: string, workerProfileId: string) {
@@ -1051,7 +1183,11 @@ export async function findAvailableWorkers(
   excludeWorkerIds: string[] = []
 ): Promise<RankedWorker[]> {
   const booking = await getBookingForDispatch(bookingId);
-  const ranked = await rankCandidates(booking, excludeWorkerIds);
+  const scheduledFor = booking.bookingType === "scheduled" ? booking.scheduledFor : null;
+  const ranked = await rankCandidates(booking, excludeWorkerIds, {
+    availabilityAt: scheduledFor ?? new Date(),
+    requireOnline: scheduledFor === null
+  });
 
   logger.info(
     {
@@ -1078,7 +1214,9 @@ export async function findAvailableWorkersForSchedule(
 
   const ranked = await rankCandidates(booking, excludeWorkerIds, {
     includeBusyWorkers: true,
-    availabilityAt: booking.scheduledFor
+    availabilityAt: booking.scheduledFor,
+    requireAvailable: false,
+    requireOnline: false
   });
 
   logger.info(
@@ -1095,7 +1233,9 @@ export async function findAvailableWorkersForSchedule(
 }
 
 export async function previewCustomerScheduleSlots(input: {
-  categoryIds: string[];
+  cityId: string;
+  services: Array<{ serviceId: string; categoryId: string }>;
+  pincode: string;
   latitude: number;
   longitude: number;
   cityName: string;
@@ -1105,11 +1245,24 @@ export async function previewCustomerScheduleSlots(input: {
   const [year, month, day] = input.startDate.split("-").map(Number);
   const start = new Date(Date.UTC(year, month - 1, day));
   const previewBooking = {
-    services: input.categoryIds.map((categoryId) => ({ service: { categoryId } })),
-    address: { latitude: input.latitude, longitude: input.longitude },
+    cityId: input.cityId,
+    services: input.services.map((item) => ({
+      service: { id: item.serviceId, categoryId: item.categoryId }
+    })),
+    address: { latitude: input.latitude, longitude: input.longitude, pincode: input.pincode },
     city: { name: input.cityName }
   } as unknown as BookingWithDispatchData;
-  const candidates = await getCandidateWorkers(previewBooking, [], { includeBusyWorkers: true });
+  const candidates = (await getCandidateWorkers(previewBooking, [], {
+    includeBusyWorkers: true,
+    requireAvailable: false,
+    requireOnline: false
+  }))
+    .filter((worker) => {
+      return isWorkerWithinServiceRadius(worker, {
+        latitude: input.latitude,
+        longitude: input.longitude
+      });
+    });
   if (candidates.length === 0) return [];
 
   const slotHours = [9, 11, 13, 15, 17];

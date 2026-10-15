@@ -265,6 +265,14 @@ class _AppShellPageState extends ConsumerState<AppShellPage> {
                               location,
                               showExpanded,
                             ),
+                            _buildNavItem(
+                              '/maintenance-plans',
+                              Icons.event_repeat_outlined,
+                              Icons.event_repeat_rounded,
+                              'Maintenance Plans',
+                              location,
+                              showExpanded,
+                            ),
                             _buildCategoryHeader(
                                 'Marketing', showExpanded, textMuted),
                             _buildNavItem(

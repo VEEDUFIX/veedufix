@@ -88,6 +88,7 @@ class WorkerOnboardingProfile {
     required this.bankIfsc,
     required this.serviceRadiusKm,
     required this.serviceAreas,
+    required this.serviceAreaIds,
     required this.workType,
     required this.acceptsUrgentJobs,
     required this.toolsOwned,
@@ -122,6 +123,7 @@ class WorkerOnboardingProfile {
   final String? bankIfsc;
   final int? serviceRadiusKm;
   final String? serviceAreas;
+  final List<String> serviceAreaIds;
   final String? workType;
   final bool acceptsUrgentJobs;
   final List<String> toolsOwned;
@@ -172,6 +174,9 @@ class WorkerOnboardingProfile {
       bankIfsc: json['bankIfsc'] as String?,
       serviceRadiusKm: (json['serviceRadiusKm'] as num?)?.toInt(),
       serviceAreas: json['serviceAreas'] as String?,
+      serviceAreaIds: (json['serviceAreaIds'] as List? ?? const [])
+          .whereType<String>()
+          .toList(growable: false),
       workType: json['workType'] as String?,
       acceptsUrgentJobs: json['acceptsUrgentJobs'] as bool? ?? true,
       toolsOwned: decodeToolsOwned(json['toolsOwned']),
@@ -437,6 +442,7 @@ class WorkerOnboardingApi {
     String? bankIfsc,
     int? serviceRadiusKm,
     String? serviceAreas,
+    List<String>? serviceAreaIds,
     String? workType,
     bool? acceptsUrgentJobs,
     String? aadhaarNumber,
@@ -482,6 +488,9 @@ class WorkerOnboardingApi {
     }
     if (serviceAreas != null) {
       body['serviceAreas'] = serviceAreas;
+    }
+    if (serviceAreaIds != null) {
+      body['serviceAreaIds'] = serviceAreaIds;
     }
     if (workType != null) {
       body['workType'] = workType;
@@ -922,6 +931,7 @@ class WorkerOnboardingController extends StateNotifier<WorkerOnboardingState> {
   Future<void> savePersonalDetails({
     int? serviceRadiusKm,
     String? serviceAreas,
+    List<String>? serviceAreaIds,
     String? workType,
     bool? acceptsUrgentJobs,
   }) async {
@@ -950,6 +960,7 @@ class WorkerOnboardingController extends StateNotifier<WorkerOnboardingState> {
         bankIfsc: bankIfsc.isEmpty ? null : bankIfsc,
         serviceRadiusKm: serviceRadiusKm,
         serviceAreas: serviceAreas,
+        serviceAreaIds: serviceAreaIds,
         workType: workType,
         acceptsUrgentJobs: acceptsUrgentJobs,
         aadhaarNumber: aadhaarNumber.isEmpty ? null : aadhaarNumber,

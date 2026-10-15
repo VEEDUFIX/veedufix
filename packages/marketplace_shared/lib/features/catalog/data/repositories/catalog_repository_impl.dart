@@ -10,8 +10,8 @@ class CatalogRepositoryImpl implements CatalogRepository {
   final CatalogRemoteDataSource remoteDataSource;
 
   @override
-  Future<HomeCatalogResult> getHomeCatalog() async {
-    final data = await remoteDataSource.getHomeCatalog();
+  Future<HomeCatalogResult> getHomeCatalog({String? pincode}) async {
+    final data = await remoteDataSource.getHomeCatalog(pincode: pincode);
     return HomeCatalogResult(
       categories: _decodeList(data['categories'], CatalogCategory.fromJson),
       featured: _decodeList(data['featuredServices'] ?? data['featured'],
@@ -27,8 +27,14 @@ class CatalogRepositoryImpl implements CatalogRepository {
   }
 
   @override
-  Future<CatalogService> getServiceDetails(String slug) async {
-    final data = await remoteDataSource.getServiceDetails(slug);
+  Future<CatalogService> getServiceDetails(
+    String slug, {
+    String? pincode,
+  }) async {
+    final data = await remoteDataSource.getServiceDetails(
+      slug,
+      pincode: pincode,
+    );
     final rawService = data['service'];
     final service = rawService is Map<String, dynamic> ? rawService : data;
     final effectivePrice = data['effectivePrice'];
@@ -49,15 +55,21 @@ class CatalogRepositoryImpl implements CatalogRepository {
   }
 
   @override
-  Future<List<CatalogService>> searchCatalog(String query) async {
-    final data = await remoteDataSource.searchCatalog(query);
+  Future<List<CatalogService>> searchCatalog(
+    String query, {
+    String? pincode,
+  }) async {
+    final data = await remoteDataSource.searchCatalog(
+      query,
+      pincode: pincode,
+    );
     return _decodeList(data['results'] ?? data['data'] ?? data['items'] ?? data,
         CatalogService.fromJson);
   }
 
   @override
-  Future<List<CatalogService>> getTrendingCatalog() async {
-    final data = await remoteDataSource.getTrendingCatalog();
+  Future<List<CatalogService>> getTrendingCatalog({String? pincode}) async {
+    final data = await remoteDataSource.getTrendingCatalog(pincode: pincode);
     return _decodeList(data['data'] ?? data, CatalogService.fromJson);
   }
 

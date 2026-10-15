@@ -10,7 +10,7 @@ import 'package:marketplace_shared/marketplace_shared.dart';
 class MapLocationPickerPage extends StatefulWidget {
   const MapLocationPickerPage({super.key, this.initialPosition});
 
-  /// If provided, the map starts here. Otherwise defaults to Chennai.
+  /// If provided, the map starts here. Otherwise it starts at a neutral India view.
   final LatLng? initialPosition;
 
   @override
@@ -19,13 +19,14 @@ class MapLocationPickerPage extends StatefulWidget {
 
 class _MapLocationPickerPageState extends State<MapLocationPickerPage>
     with SingleTickerProviderStateMixin {
-  static const _defaultCenter = LatLng(13.0827, 80.2707); // Chennai
+  static const _defaultCenter = LatLng(20.5937, 78.9629);
   final AppEnvironment _environment = AppEnvironment.fromDartDefines();
 
   late LatLng _currentCenter;
   bool _isDragging = false;
   bool _isSearching = false;
   bool _isGettingLocation = false;
+  bool _isConfirmingLocation = false;
   bool _isLoadingSuggestions = false;
   bool _hasLocationPermission = false;
   String? _locationLabel;
@@ -77,8 +78,9 @@ class _MapLocationPickerPageState extends State<MapLocationPickerPage>
     LatLng target, {
     bool preserveSuggestionRequest = false,
   }) async {
-    if (!mounted) return;
-    final cameraWillMove = _mapController.isCompleted && target != _currentCenter;
+    if (!mounted || _isConfirmingLocation) return;
+    final cameraWillMove =
+        _mapController.isCompleted && target != _currentCenter;
     setState(() => _currentCenter = target);
     if (_mapController.isCompleted) {
       final controller = await _mapController.future;
@@ -126,6 +128,69 @@ class _MapLocationPickerPageState extends State<MapLocationPickerPage>
     }
 
     return null;
+  }
+
+  Future<String?> _resolveLocationPincode(LatLng target) async {
+    if (_environment.googleMapsApiKey.isEmpty) return null;
+    try {
+      final response =
+          await Dio(
+            BaseOptions(
+              connectTimeout: const Duration(seconds: 5),
+              receiveTimeout: const Duration(seconds: 5),
+            ),
+          ).get<Map<String, dynamic>>(
+            'https://maps.googleapis.com/maps/api/geocode/json',
+            queryParameters: {
+              'latlng': '${target.latitude},${target.longitude}',
+              'key': _environment.googleMapsApiKey,
+            },
+          );
+      final results = response.data?['results'];
+      if (response.data?['status'] != 'OK' || results is! List) return null;
+      for (final result in results.whereType<Map>()) {
+        final components = result['address_components'];
+        if (components is! List) continue;
+        for (final component in components.whereType<Map>()) {
+          final types = component['types'];
+          final value = component['long_name']?.toString().trim();
+          if (types is List &&
+              types.contains('postal_code') &&
+              value != null &&
+              RegExp(r'^[1-9][0-9]{5}$').hasMatch(value)) {
+            return value;
+          }
+        }
+      }
+    } catch (_) {
+      // Coordinate selection remains usable if postal-code lookup is offline.
+    }
+    return null;
+  }
+
+  Future<void> _confirmLocation() async {
+    if (_isConfirmingLocation ||
+        _isSearching ||
+        _isGettingLocation ||
+        _isDragging) {
+      return;
+    }
+    final selectedCenter = _currentCenter;
+    final selectedLabel = _locationLabel;
+    setState(() => _isConfirmingLocation = true);
+    try {
+      final pincode = await _resolveLocationPincode(selectedCenter);
+      if (!mounted) return;
+      context.pop(
+        MapLocationSelection(
+          location: selectedCenter,
+          label: selectedLabel,
+          pincode: pincode,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _isConfirmingLocation = false);
+    }
   }
 
   String _newAutocompleteSessionToken() {
@@ -267,10 +332,7 @@ class _MapLocationPickerPageState extends State<MapLocationPickerPage>
       }
 
       final formattedAddress = first['formatted_address']?.toString().trim();
-      await _animateTo(
-        LatLng(lat, lon),
-        preserveSuggestionRequest: true,
-      );
+      await _animateTo(LatLng(lat, lon), preserveSuggestionRequest: true);
       if (formattedAddress != null &&
           formattedAddress.isNotEmpty &&
           mounted &&
@@ -350,7 +412,7 @@ class _MapLocationPickerPageState extends State<MapLocationPickerPage>
   }
 
   Future<void> _centerOnCurrentLocation() async {
-    if (_isGettingLocation) return;
+    if (_isGettingLocation || _isConfirmingLocation) return;
     setState(() => _isGettingLocation = true);
     try {
       final serviceEnabled = await Geolocator.isLocationServiceEnabled();
@@ -413,7 +475,7 @@ class _MapLocationPickerPageState extends State<MapLocationPickerPage>
 
   Future<void> _searchLocation() async {
     final query = _searchController.text.trim();
-    if (query.isEmpty || _isSearching) return;
+    if (query.isEmpty || _isSearching || _isConfirmingLocation) return;
 
     if (_environment.googleMapsApiKey.isEmpty) {
       if (!mounted) return;
@@ -553,13 +615,17 @@ class _MapLocationPickerPageState extends State<MapLocationPickerPage>
           GoogleMap(
             initialCameraPosition: CameraPosition(
               target: _currentCenter,
-              zoom: 16,
+              zoom: widget.initialPosition == null ? 5 : 16,
             ),
             onMapCreated: (controller) {
-              if (!_mapController.isCompleted) {
+              if (mounted && !_mapController.isCompleted) {
                 _mapController.complete(controller);
               }
             },
+            scrollGesturesEnabled: !_isConfirmingLocation,
+            zoomGesturesEnabled: !_isConfirmingLocation,
+            rotateGesturesEnabled: !_isConfirmingLocation,
+            tiltGesturesEnabled: !_isConfirmingLocation,
             onCameraMoveStarted: () {
               if (_preserveSuggestionRequestForCameraMove) {
                 _preserveSuggestionRequestForCameraMove = false;
@@ -655,6 +721,7 @@ class _MapLocationPickerPageState extends State<MapLocationPickerPage>
                   Expanded(
                     child: TextField(
                       controller: _searchController,
+                      enabled: !_isConfirmingLocation,
                       textInputAction: TextInputAction.search,
                       focusNode: _searchFocusNode,
                       onChanged: _onSearchChanged,
@@ -672,7 +739,9 @@ class _MapLocationPickerPageState extends State<MapLocationPickerPage>
                     ),
                   ),
                   TapScale(
-                    onTap: _isSearching ? null : _searchLocation,
+                    onTap: _isSearching || _isConfirmingLocation
+                        ? null
+                        : _searchLocation,
                     child: _isSearching
                         ? SizedBox(
                             width: 20,
@@ -728,7 +797,9 @@ class _MapLocationPickerPageState extends State<MapLocationPickerPage>
                               subtitle: suggestion.secondaryLabel == null
                                   ? null
                                   : Text(suggestion.secondaryLabel!),
-                              onTap: () => _applySuggestion(suggestion),
+                              onTap: _isConfirmingLocation
+                                  ? null
+                                  : () => _applySuggestion(suggestion),
                             );
                           },
                         ),
@@ -741,9 +812,11 @@ class _MapLocationPickerPageState extends State<MapLocationPickerPage>
             right: 16,
             bottom: 200,
             child: TapScale(
-              onTap: () async {
-                await _centerOnCurrentLocation();
-              },
+              onTap: _isConfirmingLocation
+                  ? null
+                  : () async {
+                      await _centerOnCurrentLocation();
+                    },
               child: Container(
                 width: 48,
                 height: 48,
@@ -817,12 +890,13 @@ class _MapLocationPickerPageState extends State<MapLocationPickerPage>
                   ),
                   const SizedBox(height: 20),
                   TapScale(
-                    onTap: () => context.pop(
-                      MapLocationSelection(
-                        location: _currentCenter,
-                        label: _locationLabel,
-                      ),
-                    ),
+                    onTap:
+                        _isConfirmingLocation ||
+                            _isSearching ||
+                            _isGettingLocation ||
+                            _isDragging
+                        ? null
+                        : _confirmLocation,
                     child: Container(
                       width: double.infinity,
                       height: 56,
@@ -834,13 +908,17 @@ class _MapLocationPickerPageState extends State<MapLocationPickerPage>
                         boxShadow: AbzioTheme.eliteShadow,
                       ),
                       child: Center(
-                        child: Text(
-                          'Confirm Location',
-                          style: tt.titleMedium?.copyWith(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
+                        child: _isConfirmingLocation
+                            ? const CircularProgressIndicator(
+                                color: Colors.white,
+                              )
+                            : Text(
+                                'Confirm Location',
+                                style: tt.titleMedium?.copyWith(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
                       ),
                     ),
                   ),
@@ -867,10 +945,15 @@ class _LocationSuggestion {
 }
 
 class MapLocationSelection {
-  const MapLocationSelection({required this.location, this.label});
+  const MapLocationSelection({
+    required this.location,
+    this.label,
+    this.pincode,
+  });
 
   final LatLng location;
   final String? label;
+  final String? pincode;
 
   double get latitude => location.latitude;
 

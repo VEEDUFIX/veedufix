@@ -67,19 +67,6 @@ class RealtimeService {
     );
   }
 
-  void sendLocationUpdate(double lat, double lng) {
-    if (_trackingChannel != null) {
-      final msg = jsonEncode({
-        'type': 'location.update',
-        'payload': {
-          'lat': lat,
-          'lng': lng,
-        },
-      });
-      _trackingChannel!.sink.add(msg);
-    }
-  }
-
   Future<void> disconnectTracking() async {
     await _trackingChannel?.sink.close();
     _trackingChannel = null;

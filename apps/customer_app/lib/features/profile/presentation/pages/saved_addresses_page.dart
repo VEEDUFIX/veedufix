@@ -97,8 +97,8 @@ class _SavedAddressesPageState extends ConsumerState<SavedAddressesPage> {
           ? await _api.createAddress(result.toJson())
           : await _api.updateAddress(existing.id, result.toJson());
       final currentLocation = ref.read(selectedLocationProvider);
-      final wasSelected = existing != null &&
-          _isSelectedAddress(currentLocation, existing);
+      final wasSelected =
+          existing != null && _isSelectedAddress(currentLocation, existing);
       if (savedAddress.isDefault || wasSelected) {
         await ref
             .read(selectedLocationProvider.notifier)
@@ -107,6 +107,7 @@ class _SavedAddressesPageState extends ConsumerState<SavedAddressesPage> {
               longitude: savedAddress.lng,
               label: '${savedAddress.addressLine1}, ${savedAddress.city}',
               addressId: savedAddress.id,
+              pincode: savedAddress.pincode,
             );
       }
       await _loadAddresses();
@@ -176,6 +177,7 @@ class _SavedAddressesPageState extends ConsumerState<SavedAddressesPage> {
                   longitude: replacement.lng,
                   label: '${replacement.addressLine1}, ${replacement.city}',
                   addressId: replacement.id,
+                  pincode: replacement.pincode,
                 );
           }
         } catch (_) {
@@ -213,6 +215,7 @@ class _SavedAddressesPageState extends ConsumerState<SavedAddressesPage> {
             longitude: selectedAddress.lng,
             label: '${selectedAddress.addressLine1}, ${selectedAddress.city}',
             addressId: selectedAddress.id,
+            pincode: selectedAddress.pincode,
           );
       await _loadAddresses();
     } catch (error) {
@@ -417,10 +420,9 @@ class _AddressCard extends StatelessWidget {
                   width: 40,
                   height: 40,
                   decoration: BoxDecoration(
-                    color: Theme.of(context)
-                        .colorScheme
-                        .primaryContainer
-                        .withValues(alpha: 0.65),
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.primaryContainer.withValues(alpha: 0.65),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Icon(
@@ -750,12 +752,22 @@ class _SavedAddressEditorSheetState extends State<_SavedAddressEditorSheet> {
     try {
       final lat = double.tryParse(_latController.text.trim());
       final lng = double.tryParse(_lngController.text.trim());
-      final initial = (lat != null && lng != null)
+      final initial =
+          lat != null &&
+              lng != null &&
+              lat.isFinite &&
+              lng.isFinite &&
+              lat >= -90 &&
+              lat <= 90 &&
+              lng >= -180 &&
+              lng <= 180
           ? LatLng(lat, lng)
-          : const LatLng(13.0827, 80.2707);
+          : null;
 
       final picked = await context.push<MapLocationSelection>(
-        '/map-picker?lat=${initial.latitude}&lng=${initial.longitude}',
+        initial == null
+            ? '/map-picker'
+            : '/map-picker?lat=${initial.latitude}&lng=${initial.longitude}',
       );
       if (picked == null || !mounted) return;
 

@@ -12,8 +12,9 @@ import {
 import { recordBookingTimelineEvent } from "../../lib/booking-timeline.js";
 import { dispatchBookingAfterPayment } from "../matching/matching.service.js";
 import { raiseOpsAlert } from "../ops/ops.service.js";
-import { settleRefundFromProvider } from "../refund/refund.service.js";
+import { isBookingFullyRefunded, settleRefundFromProvider } from "../refund/refund.service.js";
 import { settleWalletPayoutFromProvider } from "../wallet/wallet.service.js";
+import { settleCustomQuotePayment } from "../bookings/custom-quote-payment.service.js";
 
 type RazorpayWebhookEvent = {
   event?: string;
@@ -232,6 +233,17 @@ export async function updatePaymentForWebhook(
     return null;
   }
 
+  if (payment.customQuoteRevisionId) {
+    if (status === PaymentStatus.REFUNDED) {
+      logger.warn(
+        { paymentId: payment.id, orderId },
+        "Ignoring payment-level refund status for custom quote; use the refund entity event"
+      );
+      return payment;
+    }
+    return settleCustomQuotePayment(payment.id, status, capturedAmountPaise, notes);
+  }
+
   // Razorpay captures only the non-wallet portion of the booking total.
   const expectedAmountPaise = toPaise(payment.amount);
   const recordedAmountPaise = toPaise(payment.amount);
@@ -431,7 +443,7 @@ async function updatePaymentForRefundWebhook(
   status: PaymentStatus,
   notes: Record<string, unknown>
 ) {
-  const payment = await findPaymentForRazorpayPaymentId(paymentId);
+  let payment = await findPaymentForRazorpayPaymentId(paymentId);
 
   if (!payment) {
     logger.warn({ paymentId, status }, "Refund webhook received for unknown payment");
@@ -496,15 +508,22 @@ async function updatePaymentForRefundWebhook(
     }
   }
 
-  const processedRefunds = await prisma.refund.aggregate({
-    where: { bookingId: payment.bookingId, status: "processed" },
-    _sum: { amount: true }
-  });
+  if (status === PaymentStatus.REFUNDED && payment.customQuoteRevisionId) {
+    // Settle the quote ledger only after any internal refund attempt has passed
+    // the provider-attempt validation above. Untracked refunds still originate
+    // from the authenticated Razorpay webhook event.
+    await settleCustomQuotePayment(payment.id, PaymentStatus.REFUNDED, undefined, notes);
+    payment = await findPaymentForRazorpayPaymentId(paymentId) ?? payment;
+  }
+
   const untrackedRefundAmount = matchedRefund
     ? 0
     : Math.max(0, Number(notes.refundAmount ?? 0) / 100);
-  const refundedAmount = Number(processedRefunds._sum.amount ?? 0) + untrackedRefundAmount;
-  const fullyRefunded = refundedAmount >= Number(payment.booking.totalAmount);
+  const fullyRefunded = await isBookingFullyRefunded(
+    payment.bookingId,
+    prisma,
+    matchedRefund || payment.customQuoteRevisionId ? 0 : untrackedRefundAmount
+  );
 
   const updatedPayment = await prisma.payment.update({
     where: { id: payment.id },

@@ -1,9 +1,13 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:dio/dio.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:marketplace_shared/marketplace_shared.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class AdminBookingDetailPage extends ConsumerStatefulWidget {
   const AdminBookingDetailPage({
@@ -14,27 +18,99 @@ class AdminBookingDetailPage extends ConsumerStatefulWidget {
   final String bookingId;
 
   @override
-  ConsumerState<AdminBookingDetailPage> createState() => _AdminBookingDetailPageState();
+  ConsumerState<AdminBookingDetailPage> createState() =>
+      _AdminBookingDetailPageState();
 }
 
-class _AdminBookingDetailPageState extends ConsumerState<AdminBookingDetailPage> {
-  late final Future<_AdminBookingDetail> _future;
+class _AdminBookingDetailPageState
+    extends ConsumerState<AdminBookingDetailPage> {
+  late Future<_AdminBookingDetail> _future;
+  late Future<Map<String, dynamic>> _trackingFuture;
+  Timer? _trackingFreshnessTimer;
 
   @override
   void initState() {
     super.initState();
     _future = _load();
+    _trackingFuture = _loadTracking();
   }
 
   Future<_AdminBookingDetail> _load() async {
     final api = ref.read(apiClientProvider);
     final data = await api.get('/admin/bookings/${widget.bookingId}');
-    return _AdminBookingDetail.fromJson((data['booking'] as Map<String, dynamic>? ?? const <String, dynamic>{}));
+    return _AdminBookingDetail.fromJson(
+        (data['booking'] as Map<String, dynamic>? ??
+            const <String, dynamic>{}));
+  }
+
+  Future<Map<String, dynamic>> _loadTracking() async {
+    final Map<String, dynamic> data;
+    try {
+      data = await ref
+          .read(apiClientProvider)
+          .get('/bookings/${widget.bookingId}/tracking');
+    } catch (error) {
+      final status = error is DioException ? error.response?.statusCode : null;
+      final permanent = status == 401 || status == 403 || status == 404;
+      _trackingFreshnessTimer?.cancel();
+      if (mounted) {
+        if (!permanent) {
+          _trackingFreshnessTimer =
+              Timer(const Duration(seconds: 30), _refreshTracking);
+        }
+      }
+      rethrow;
+    }
+    if (mounted) {
+      _scheduleTrackingFreshnessRebuild(data);
+    }
+    return data;
+  }
+
+  void _scheduleTrackingFreshnessRebuild(Map<String, dynamic> data) {
+    _trackingFreshnessTimer?.cancel();
+    if (data['active'] != true) {
+      return;
+    }
+    if (data['location'] is! Map) {
+      _trackingFreshnessTimer =
+          Timer(const Duration(seconds: 15), _refreshTracking);
+      return;
+    }
+
+    final location = Map<String, dynamic>.from(data['location'] as Map);
+    final timestamp = DateTime.tryParse(
+      location['timestamp']?.toString() ?? '',
+    );
+    if (timestamp == null) {
+      _trackingFreshnessTimer =
+          Timer(const Duration(seconds: 15), _refreshTracking);
+      return;
+    }
+
+    final expiresAt = timestamp.add(const Duration(minutes: 2));
+    final delay = expiresAt.difference(DateTime.now());
+    _trackingFreshnessTimer = Timer(
+      delay <= Duration.zero ? const Duration(seconds: 15) : delay,
+      _refreshTracking,
+    );
+  }
+
+  void _refreshTracking() {
+    if (!mounted) return;
+    setState(() => _trackingFuture = _loadTracking());
+  }
+
+  @override
+  void dispose() {
+    _trackingFreshnessTimer?.cancel();
+    super.dispose();
   }
 
   Future<void> _reload() async {
     setState(() {
       _future = _load();
+      _trackingFuture = _loadTracking();
     });
     await _future;
   }
@@ -72,7 +148,8 @@ class _AdminBookingDetailPageState extends ConsumerState<AdminBookingDetailPage>
             ),
           ),
         ),
-        title: Text('Booking detail', style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
+        title: Text('Booking detail',
+            style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
         actions: [
           IconButton(
             onPressed: _reload,
@@ -83,7 +160,8 @@ class _AdminBookingDetailPageState extends ConsumerState<AdminBookingDetailPage>
       body: FutureBuilder<_AdminBookingDetail>(
         future: _future,
         builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting && !snapshot.hasData) {
+          if (snapshot.connectionState == ConnectionState.waiting &&
+              !snapshot.hasData) {
             return const Center(child: CircularProgressIndicator());
           }
 
@@ -113,7 +191,9 @@ class _AdminBookingDetailPageState extends ConsumerState<AdminBookingDetailPage>
           }
 
           final customerLookup =
-              (booking.customer.phone ?? '').trim().isNotEmpty ? booking.customer.phone!.trim() : booking.customer.id;
+              (booking.customer.phone ?? '').trim().isNotEmpty
+                  ? booking.customer.phone!.trim()
+                  : booking.customer.id;
 
           return RefreshIndicator(
             onRefresh: _reload,
@@ -144,15 +224,18 @@ class _AdminBookingDetailPageState extends ConsumerState<AdminBookingDetailPage>
                                   const SizedBox(height: 4),
                                   Text(
                                     booking.serviceName,
-                                    style: tt.headlineSmall?.copyWith(fontWeight: FontWeight.w900),
+                                    style: tt.headlineSmall
+                                        ?.copyWith(fontWeight: FontWeight.w900),
                                   ),
                                 ],
                               ),
                             ),
                             Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 12, vertical: 6),
                               decoration: BoxDecoration(
-                                color: _statusColor(booking.status).withValues(alpha: 0.12),
+                                color: _statusColor(booking.status)
+                                    .withValues(alpha: 0.12),
                                 borderRadius: BorderRadius.circular(999),
                               ),
                               child: Text(
@@ -171,33 +254,40 @@ class _AdminBookingDetailPageState extends ConsumerState<AdminBookingDetailPage>
                           runSpacing: 10,
                           children: [
                             OutlinedButton.icon(
-                              onPressed: () => _copyToClipboard(booking.id, 'Booking ID'),
+                              onPressed: () =>
+                                  _copyToClipboard(booking.id, 'Booking ID'),
                               icon: const Icon(Icons.copy_rounded),
                               label: const Text('Copy booking ID'),
                             ),
                             OutlinedButton.icon(
-                              onPressed: () => _copyToClipboard(booking.customer.id, 'Customer ID'),
+                              onPressed: () => _copyToClipboard(
+                                  booking.customer.id, 'Customer ID'),
                               icon: const Icon(Icons.person_outline_rounded),
                               label: const Text('Copy customer ID'),
                             ),
-                            if (booking.worker != null && booking.worker!.id.isNotEmpty)
+                            if (booking.worker != null &&
+                                booking.worker!.id.isNotEmpty)
                               OutlinedButton.icon(
-                                onPressed: () => _copyToClipboard(booking.worker!.id, 'Worker ID'),
+                                onPressed: () => _copyToClipboard(
+                                    booking.worker!.id, 'Worker ID'),
                                 icon: const Icon(Icons.badge_outlined),
                                 label: const Text('Copy worker ID'),
                               ),
                             OutlinedButton.icon(
-                              onPressed: () => context.push('/audit-logs?search=${Uri.encodeComponent(booking.id)}'),
+                              onPressed: () => context.push(
+                                  '/audit-logs?search=${Uri.encodeComponent(booking.id)}'),
                               icon: const Icon(Icons.manage_search_rounded),
                               label: const Text('Audit trail'),
                             ),
                             OutlinedButton.icon(
-                              onPressed: () => context.push('/admin-bookings?search=${Uri.encodeComponent(customerLookup)}'),
+                              onPressed: () => context.push(
+                                  '/admin-bookings?search=${Uri.encodeComponent(customerLookup)}'),
                               icon: const Icon(Icons.receipt_long_rounded),
                               label: const Text('Customer bookings'),
                             ),
                             OutlinedButton.icon(
-                              onPressed: () => context.push('/support-tickets?search=${Uri.encodeComponent(customerLookup)}'),
+                              onPressed: () => context.push(
+                                  '/support-tickets?search=${Uri.encodeComponent(customerLookup)}'),
                               icon: const Icon(Icons.support_agent_rounded),
                               label: const Text('Support'),
                             ),
@@ -210,7 +300,9 @@ class _AdminBookingDetailPageState extends ConsumerState<AdminBookingDetailPage>
                           children: [
                             _Chip(label: booking.paymentRecoveryLabel),
                             _Chip(label: booking.paymentStatus),
-                            _Chip(label: DateFormat('d MMM y, h:mm a').format(booking.scheduledAt)),
+                            _Chip(
+                                label: DateFormat('d MMM y, h:mm a')
+                                    .format(booking.scheduledAt)),
                           ],
                         ),
                         const SizedBox(height: 18),
@@ -219,7 +311,8 @@ class _AdminBookingDetailPageState extends ConsumerState<AdminBookingDetailPage>
                             Expanded(
                               child: _MetricCard(
                                 label: 'Total',
-                                value: '₹${booking.totalAmount.toStringAsFixed(0)}',
+                                value:
+                                    '₹${booking.totalAmount.toStringAsFixed(0)}',
                                 icon: Icons.currency_rupee_rounded,
                               ),
                             ),
@@ -251,6 +344,143 @@ class _AdminBookingDetailPageState extends ConsumerState<AdminBookingDetailPage>
                   ),
                 ],
                 const SizedBox(height: 16),
+                const _SectionTitle(title: 'Partner tracking'),
+                const SizedBox(height: 10),
+                FutureBuilder<Map<String, dynamic>>(
+                  future: _trackingFuture,
+                  builder: (context, trackingSnapshot) {
+                    if (trackingSnapshot.connectionState ==
+                            ConnectionState.waiting &&
+                        !trackingSnapshot.hasData) {
+                      return const _SurfaceCard(
+                        child: Padding(
+                          padding: EdgeInsets.all(18),
+                          child: Row(children: [
+                            SizedBox.square(
+                                dimension: 18,
+                                child:
+                                    CircularProgressIndicator(strokeWidth: 2)),
+                            SizedBox(width: 12),
+                            Text('Loading tracking state…'),
+                          ]),
+                        ),
+                      );
+                    }
+                    if (trackingSnapshot.hasError) {
+                      return _SurfaceCard(
+                        child: Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: const Text(
+                            'Tracking state is unavailable right now. Refresh to retry.',
+                          ),
+                        ),
+                      );
+                    }
+                    final data =
+                        trackingSnapshot.data ?? const <String, dynamic>{};
+                    final location = data['location'] is Map
+                        ? Map<String, dynamic>.from(data['location'] as Map)
+                        : null;
+                    final timestamp = DateTime.tryParse(
+                        location?['timestamp']?.toString() ?? '');
+                    final age = timestamp == null
+                        ? null
+                        : DateTime.now().difference(timestamp);
+                    final isFresh = age != null &&
+                        age >= const Duration(seconds: -30) &&
+                        age <= const Duration(minutes: 2);
+                    final latitude = (location?['lat'] as num?)?.toDouble();
+                    final longitude = (location?['lng'] as num?)?.toDouble();
+                    final status = (data['status'] as String? ?? 'Unknown')
+                        .replaceAll('_', ' ');
+                    final trackingLabel = data['active'] == true
+                        ? (isFresh
+                            ? 'Live location available'
+                            : 'Waiting for a fresh update')
+                        : 'Tracking inactive · $status';
+                    return _SurfaceCard(
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(children: [
+                              Icon(
+                                  isFresh
+                                      ? Icons.location_on_rounded
+                                      : Icons.location_searching_rounded,
+                                  color: isFresh
+                                      ? const Color(0xFF168C6A)
+                                      : cs.onSurfaceVariant),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                  child: Text(trackingLabel,
+                                      style: tt.titleSmall?.copyWith(
+                                          fontWeight: FontWeight.w800))),
+                            ]),
+                            if (latitude != null &&
+                                longitude != null &&
+                                timestamp != null) ...[
+                              const SizedBox(height: 10),
+                              Text(
+                                  'Partner location: ${latitude.toStringAsFixed(5)}, ${longitude.toStringAsFixed(5)}',
+                                  style: tt.bodySmall),
+                              const SizedBox(height: 4),
+                              Text(
+                                  'Updated ${DateFormat('MMM d, h:mm a').format(timestamp.toLocal())}',
+                                  style: tt.bodySmall
+                                      ?.copyWith(color: cs.onSurfaceVariant)),
+                              if (isFresh && data['etaMinutes'] is num) ...[
+                                const SizedBox(height: 4),
+                                Text('Road ETA: ${data['etaMinutes']} min',
+                                    style: tt.bodySmall),
+                              ],
+                              if (isFresh)
+                                Align(
+                                  alignment: Alignment.centerRight,
+                                  child: TextButton.icon(
+                                    onPressed: () async {
+                                      final opened = await launchUrl(
+                                        Uri.https(
+                                            'www.google.com', '/maps/search/', {
+                                          'api': '1',
+                                          'query': '$latitude,$longitude',
+                                        }),
+                                        mode: LaunchMode.externalApplication,
+                                      );
+                                      if (!opened && context.mounted) {
+                                        ScaffoldMessenger.of(context)
+                                            .showSnackBar(
+                                          const SnackBar(
+                                            content:
+                                                Text('Could not open the map.'),
+                                          ),
+                                        );
+                                      }
+                                    },
+                                    icon: const Icon(Icons.map_outlined),
+                                    label: const Text('Open map'),
+                                  ),
+                                ),
+                            ] else ...[
+                              const SizedBox(height: 6),
+                              Text(
+                                  'No recent coordinates are retained. Live location snapshots expire automatically.',
+                                  style: tt.bodySmall
+                                      ?.copyWith(color: cs.onSurfaceVariant)),
+                            ],
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
+                const SizedBox(height: 16),
+                const _SectionTitle(title: 'Customer issue photos'),
+                const SizedBox(height: 10),
+                BookingDiagnosticPhotosSection(
+                    bookingId: booking.id, showEmpty: true),
+                const SizedBox(height: 16),
                 const _SectionTitle(title: 'People'),
                 const SizedBox(height: 10),
                 _SurfaceCard(
@@ -261,15 +491,22 @@ class _AdminBookingDetailPageState extends ConsumerState<AdminBookingDetailPage>
                         _DetailRow(
                           label: 'Customer',
                           value: booking.customer.name,
-                          onTap: booking.customer.id.isEmpty ? null : () => context.push('/customers/${booking.customer.id}'),
+                          onTap: booking.customer.id.isEmpty
+                              ? null
+                              : () => context
+                                  .push('/customers/${booking.customer.id}'),
                         ),
-                        _DetailRow(label: 'Phone', value: booking.customer.phone ?? 'Not provided'),
+                        _DetailRow(
+                            label: 'Phone',
+                            value: booking.customer.phone ?? 'Not provided'),
                         _DetailRow(
                           label: 'Worker',
                           value: booking.worker?.fullName ?? 'Unassigned',
-                          onTap: booking.worker == null || booking.worker!.id.isEmpty
+                          onTap: booking.worker == null ||
+                                  booking.worker!.id.isEmpty
                               ? null
-                              : () => context.push('/workers/${booking.worker!.id}'),
+                              : () => context
+                                  .push('/workers/${booking.worker!.id}'),
                         ),
                       ],
                     ),
@@ -283,9 +520,15 @@ class _AdminBookingDetailPageState extends ConsumerState<AdminBookingDetailPage>
                     padding: const EdgeInsets.all(16),
                     child: Column(
                       children: [
-                        _DetailRow(label: 'Address', value: booking.address?.label ?? 'Not provided'),
-                        _DetailRow(label: 'Line 1', value: booking.address?.line1 ?? 'Not provided'),
-                        _DetailRow(label: 'City', value: booking.address?.cityName ?? 'Not provided'),
+                        _DetailRow(
+                            label: 'Address',
+                            value: booking.address?.label ?? 'Not provided'),
+                        _DetailRow(
+                            label: 'Line 1',
+                            value: booking.address?.line1 ?? 'Not provided'),
+                        _DetailRow(
+                            label: 'City',
+                            value: booking.address?.cityName ?? 'Not provided'),
                       ],
                     ),
                   ),
@@ -326,7 +569,8 @@ class _AdminBookingDetailPageState extends ConsumerState<AdminBookingDetailPage>
                                 value: service.serviceName,
                                 onTap: service.serviceId == null
                                     ? null
-                                    : () => context.push('/catalog/services/${service.serviceId}'),
+                                    : () => context.push(
+                                        '/catalog/services/${service.serviceId}'),
                               ),
                             ),
                           )
@@ -416,13 +660,17 @@ class _AdminBookingDetail {
       code: json['code'] as String? ?? '',
       status: json['status'] as String? ?? 'PENDING',
       paymentStatus: json['paymentStatus'] as String? ?? 'PENDING',
-      paymentRecoveryLabel: json['paymentRecoveryLabel'] as String? ?? 'Pending',
-      customer: _AdminBookingCustomer.fromJson(json['customer'] as Map<String, dynamic>? ?? const <String, dynamic>{}),
+      paymentRecoveryLabel:
+          json['paymentRecoveryLabel'] as String? ?? 'Pending',
+      customer: _AdminBookingCustomer.fromJson(
+          json['customer'] as Map<String, dynamic>? ??
+              const <String, dynamic>{}),
       worker: json['worker'] is Map<String, dynamic>
           ? _AdminBookingWorker.fromJson(json['worker'] as Map<String, dynamic>)
           : null,
       serviceName: json['serviceName'] as String? ?? 'Service',
-      scheduledAt: DateTime.tryParse(json['scheduledAt'] as String? ?? '') ?? DateTime.now(),
+      scheduledAt: DateTime.tryParse(json['scheduledAt'] as String? ?? '') ??
+          DateTime.now(),
       totalAmount: (json['totalAmount'] as num?)?.toDouble() ?? 0,
       payments: (json['payments'] as List<dynamic>? ?? const [])
           .whereType<Map<String, dynamic>>()
@@ -437,7 +685,8 @@ class _AdminBookingDetail {
           .map(_AdminBookingTimelineEvent.fromJson)
           .toList(growable: false),
       address: json['address'] is Map<String, dynamic>
-          ? _AdminBookingAddress.fromJson(json['address'] as Map<String, dynamic>)
+          ? _AdminBookingAddress.fromJson(
+              json['address'] as Map<String, dynamic>)
           : null,
       customQuoteStatus: json['customQuoteStatus'] as String?,
       customQuoteAmount: (json['customQuoteAmount'] as num?)?.toDouble(),
@@ -534,7 +783,8 @@ class _AdminBookingPayment {
       gateway: json['gateway'] as String?,
       gatewayPaymentId: json['gatewayPaymentId'] as String?,
       gatewayOrderId: json['gatewayOrderId'] as String?,
-      updatedAt: DateTime.tryParse(json['updatedAt'] as String? ?? '') ?? DateTime.now(),
+      updatedAt: DateTime.tryParse(json['updatedAt'] as String? ?? '') ??
+          DateTime.now(),
     );
   }
 }
@@ -574,7 +824,8 @@ class _AdminBookingTimelineEvent {
       status: json['status'] as String? ?? '',
       title: json['title'] as String? ?? 'Event',
       description: json['description'] as String? ?? '',
-      createdAt: DateTime.tryParse(json['createdAt'] as String? ?? '') ?? DateTime.now(),
+      createdAt: DateTime.tryParse(json['createdAt'] as String? ?? '') ??
+          DateTime.now(),
     );
   }
 }
@@ -607,12 +858,15 @@ class _PaymentRow extends StatelessWidget {
             '${payment.gateway ?? 'Gateway'} • ${DateFormat('d MMM y, h:mm a').format(payment.updatedAt)}',
             style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant),
           ),
-          if (payment.gatewayPaymentId != null || payment.gatewayOrderId != null) ...[
+          if (payment.gatewayPaymentId != null ||
+              payment.gatewayOrderId != null) ...[
             const SizedBox(height: 6),
             Text(
               [
-                if (payment.gatewayPaymentId != null) 'Payment ID: ${payment.gatewayPaymentId}',
-                if (payment.gatewayOrderId != null) 'Order ID: ${payment.gatewayOrderId}',
+                if (payment.gatewayPaymentId != null)
+                  'Payment ID: ${payment.gatewayPaymentId}',
+                if (payment.gatewayOrderId != null)
+                  'Order ID: ${payment.gatewayOrderId}',
               ].join(' • '),
               style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant),
             ),
@@ -650,9 +904,11 @@ class _TimelineEventRow extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(event.title, style: tt.titleSmall?.copyWith(fontWeight: FontWeight.w800)),
+              Text(event.title,
+                  style: tt.titleSmall?.copyWith(fontWeight: FontWeight.w800)),
               const SizedBox(height: 2),
-              Text(event.description, style: tt.bodyMedium?.copyWith(color: cs.onSurfaceVariant)),
+              Text(event.description,
+                  style: tt.bodyMedium?.copyWith(color: cs.onSurfaceVariant)),
               const SizedBox(height: 2),
               Text(
                 DateFormat('d MMM y, h:mm a').format(event.createdAt),
@@ -694,8 +950,10 @@ class _MetricCard extends StatelessWidget {
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(label, style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
-              Text(value, style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
+              Text(label,
+                  style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
+              Text(value,
+                  style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
             ],
           ),
         ],
@@ -718,7 +976,8 @@ class _Chip extends StatelessWidget {
         color: cs.primaryContainer.withValues(alpha: 0.4),
         borderRadius: BorderRadius.circular(999),
       ),
-      child: Text(label, style: tt.labelMedium?.copyWith(fontWeight: FontWeight.w700)),
+      child: Text(label,
+          style: tt.labelMedium?.copyWith(fontWeight: FontWeight.w700)),
     );
   }
 }
@@ -752,7 +1011,10 @@ class _SectionTitle extends StatelessWidget {
   Widget build(BuildContext context) {
     return Text(
       title,
-      style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900),
+      style: Theme.of(context)
+          .textTheme
+          .titleLarge
+          ?.copyWith(fontWeight: FontWeight.w900),
     );
   }
 }
@@ -877,9 +1139,109 @@ class _CustomQuoteCard extends ConsumerWidget {
                 ),
               ),
             ),
-            const SizedBox(height: 16),
+            TextButton.icon(
+              onPressed: () async {
+                try {
+                  final response = await ref.read(apiClientProvider).get(
+                        '/bookings/$bookingId/custom-quote',
+                      );
+                  final quote = response['quote'] as Map<String, dynamic>?;
+                  final history =
+                      (quote?['history'] as List<dynamic>? ?? const [])
+                          .whereType<Map>()
+                          .map((row) => Map<String, dynamic>.from(row))
+                          .toList(growable: false);
+                  if (!context.mounted) return;
+                  await showDialog<void>(
+                    context: context,
+                    builder: (dialogContext) => AlertDialog(
+                      title: const Text('Quote history'),
+                      content: SizedBox(
+                        width: 520,
+                        height: 360,
+                        child: history.isEmpty
+                            ? const Center(child: Text('No quote history yet.'))
+                            : ListView.separated(
+                                itemCount: history.length,
+                                separatorBuilder: (_, __) => const Divider(),
+                                itemBuilder: (_, index) {
+                                  final revision = history[index];
+                                  final createdAt = DateTime.tryParse(
+                                    revision['createdAt']?.toString() ?? '',
+                                  );
+                                  final requestedAt = DateTime.tryParse(
+                                    revision['requestedAt']?.toString() ?? '',
+                                  );
+                                  final submitted = DateTime.tryParse(
+                                      revision['submittedAt']?.toString() ??
+                                          '');
+                                  final responded = DateTime.tryParse(
+                                      revision['respondedAt']?.toString() ??
+                                          '');
+                                  final rawAmount = revision['amount'];
+                                  final amount = rawAmount is num
+                                      ? rawAmount.toDouble()
+                                      : double.tryParse(
+                                          rawAmount?.toString() ?? '');
+                                  final dateFormat =
+                                      DateFormat('d MMM y, h:mm a');
+                                  final when = <String>[
+                                    if (createdAt != null)
+                                      'Created ${dateFormat.format(createdAt.toLocal())}',
+                                    if (requestedAt != null)
+                                      'Requested ${dateFormat.format(requestedAt.toLocal())}',
+                                    if (submitted != null)
+                                      'Submitted ${dateFormat.format(submitted.toLocal())}',
+                                    if (responded != null)
+                                      'Responded ${dateFormat.format(responded.toLocal())}',
+                                  ].join(' · ');
+                                  final versionLabel =
+                                      revision['version']?.toString() ??
+                                          '${index + 1}';
+                                  final rawStatus =
+                                      revision['status']?.toString().trim();
+                                  final statusLabel =
+                                      rawStatus == null || rawStatus.isEmpty
+                                          ? 'unknown'
+                                          : rawStatus
+                                              .replaceAll('_', ' ')
+                                              .toLowerCase();
+                                  return ListTile(
+                                    contentPadding: EdgeInsets.zero,
+                                    title: Text(
+                                        'Revision $versionLabel · $statusLabel'),
+                                    subtitle: Text([
+                                      if (when.isNotEmpty) when,
+                                      if (revision['paymentStatus'] != null)
+                                        'Payment ${revision['paymentStatus']}'
+                                    ].join('\n')),
+                                    trailing: amount == null
+                                        ? null
+                                        : Text('₹${amount.toStringAsFixed(2)}'),
+                                  );
+                                },
+                              ),
+                      ),
+                      actions: [
+                        TextButton(
+                            onPressed: () => Navigator.pop(dialogContext),
+                            child: const Text('Close'))
+                      ],
+                    ),
+                  );
+                } catch (error) {
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                        content: Text('Could not load quote history: $error')));
+                  }
+                }
+              },
+              icon: const Icon(Icons.history_rounded),
+              label: const Text('View quote history'),
+            ),
             if (status == 'REQUESTED') ...[
-              const Text('The customer has requested a custom quote for this job.'),
+              const Text(
+                  'The customer has requested a custom quote for this job.'),
               const SizedBox(height: 16),
               SizedBox(
                 width: double.infinity,
@@ -887,7 +1249,8 @@ class _CustomQuoteCard extends ConsumerWidget {
                   onPressed: () async {
                     final result = await showDialog<bool>(
                       context: context,
-                      builder: (ctx) => _SubmitQuoteDialog(bookingId: bookingId),
+                      builder: (ctx) =>
+                          _SubmitQuoteDialog(bookingId: bookingId),
                     );
                     if (result == true) {
                       onReload();
@@ -898,20 +1261,29 @@ class _CustomQuoteCard extends ConsumerWidget {
               ),
             ] else if (status == 'SUBMITTED' || status == 'ACCEPTED') ...[
               if (amount != null)
-                _DetailRow(label: 'Total Amount', value: '₹${amount!.toStringAsFixed(0)}'),
+                _DetailRow(
+                    label: 'Total Amount',
+                    value: '₹${amount!.toStringAsFixed(0)}'),
               if (notes != null && notes!.isNotEmpty)
                 _DetailRow(label: 'Notes', value: notes!),
               if (itemized != null && itemized!.isNotEmpty) ...[
                 const SizedBox(height: 8),
-                Text('Itemized Breakdown:', style: tt.bodyMedium?.copyWith(fontWeight: FontWeight.w700)),
+                Text('Itemized Breakdown:',
+                    style:
+                        tt.bodyMedium?.copyWith(fontWeight: FontWeight.w700)),
                 const SizedBox(height: 4),
                 ...itemized!.map((item) {
                   final map = item as Map<String, dynamic>;
                   final label = map['label'] as String? ?? 'Item';
-                  final price = (map['price'] as num?)?.toDouble() ?? 0;
+                  final qty = (map['qty'] as num?)?.toDouble() ?? 1;
+                  final unitPrice = (map['unitPrice'] as num?)?.toDouble() ??
+                      (map['price'] as num?)?.toDouble() ??
+                      0;
+                  final price = qty * unitPrice;
                   return Padding(
                     padding: const EdgeInsets.only(bottom: 4, left: 8),
-                    child: Text('• $label: ₹${price.toStringAsFixed(0)}'),
+                    child: Text(
+                        '• $label${qty != 1 ? ' × ${qty.toStringAsFixed(0)}' : ''}: ₹${price.toStringAsFixed(2)}'),
                   );
                 }),
               ],
@@ -939,7 +1311,7 @@ class _SubmitQuoteDialogState extends ConsumerState<_SubmitQuoteDialog> {
 
   void _addItem() {
     setState(() {
-      _itemized.add({'label': '', 'price': 0.0});
+      _itemized.add({'key': UniqueKey(), 'label': '', 'price': 0.0});
     });
   }
 
@@ -951,22 +1323,66 @@ class _SubmitQuoteDialogState extends ConsumerState<_SubmitQuoteDialog> {
 
   Future<void> _submit() async {
     final amount = double.tryParse(_amountCtrl.text);
-    if (amount == null) return;
+    final hasUnlabeledPricedRow = _itemized.any(
+      (line) =>
+          (line['label'] as String).trim().isEmpty &&
+          (line['price'] as num) != 0,
+    );
+    if (hasUnlabeledPricedRow) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Add a label to every priced item.')),
+      );
+      return;
+    }
+    final lines = _itemized
+        .where((line) => (line['label'] as String).trim().isNotEmpty)
+        .map((line) => {
+              'label': (line['label'] as String).trim(),
+              'qty': 1,
+              'unitPrice': (line['price'] as num).toDouble(),
+            })
+        .toList();
+    if (amount == null ||
+        !amount.isFinite ||
+        lines.any((line) {
+          final price = line['unitPrice'] as double;
+          return !price.isFinite || price < 0;
+        })) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Quote amounts must be valid non-negative numbers.'),
+        ),
+      );
+      return;
+    }
+
+    final itemTotal = lines.fold<double>(
+        0, (sum, line) => sum + (line['unitPrice'] as double));
+    if (amount <= 0 || lines.isEmpty || (amount - itemTotal).abs() > 0.01) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+            content: Text(
+                'Add itemized charges and make their sum match the quote total.')),
+      );
+      return;
+    }
 
     setState(() => _submitting = true);
     try {
       final api = ref.read(apiClientProvider);
-      await api.post('/bookings/${widget.bookingId}/custom-quote/submit', data: {
+      await api
+          .post('/bookings/${widget.bookingId}/custom-quote/submit', data: {
         'amount': amount,
         'notes': _notesCtrl.text,
-        'itemized': _itemized,
+        'itemized': lines,
       });
       if (mounted) {
         Navigator.pop(context, true);
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Error: $e')));
       }
     } finally {
       if (mounted) setState(() => _submitting = false);
@@ -993,7 +1409,8 @@ class _SubmitQuoteDialogState extends ConsumerState<_SubmitQuoteDialog> {
             children: [
               TextField(
                 controller: _amountCtrl,
-                decoration: const InputDecoration(labelText: 'Total Amount (₹)'),
+                decoration:
+                    const InputDecoration(labelText: 'Total Amount (₹)'),
                 keyboardType: TextInputType.number,
               ),
               const SizedBox(height: 16),
@@ -1006,7 +1423,8 @@ class _SubmitQuoteDialogState extends ConsumerState<_SubmitQuoteDialog> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text('Itemized Breakdown', style: TextStyle(fontWeight: FontWeight.bold)),
+                  const Text('Itemized Breakdown',
+                      style: TextStyle(fontWeight: FontWeight.bold)),
                   TextButton(
                     onPressed: _addItem,
                     child: const Text('Add Item'),
@@ -1016,6 +1434,7 @@ class _SubmitQuoteDialogState extends ConsumerState<_SubmitQuoteDialog> {
               ..._itemized.asMap().entries.map((e) {
                 final i = e.key;
                 return Row(
+                  key: _itemized[i]['key'] as Key,
                   children: [
                     Expanded(
                       flex: 2,
@@ -1029,10 +1448,12 @@ class _SubmitQuoteDialogState extends ConsumerState<_SubmitQuoteDialog> {
                     Expanded(
                       flex: 1,
                       child: TextFormField(
-                        initialValue: (_itemized[i]['price'] as double).toString(),
+                        initialValue:
+                            (_itemized[i]['price'] as double).toString(),
                         decoration: const InputDecoration(hintText: 'Price'),
                         keyboardType: TextInputType.number,
-                        onChanged: (v) => _itemized[i]['price'] = double.tryParse(v) ?? 0.0,
+                        onChanged: (v) =>
+                            _itemized[i]['price'] = double.tryParse(v) ?? 0.0,
                       ),
                     ),
                     IconButton(
@@ -1053,7 +1474,9 @@ class _SubmitQuoteDialogState extends ConsumerState<_SubmitQuoteDialog> {
         ),
         FilledButton(
           onPressed: _submitting ? null : _submit,
-          child: _submitting ? const CircularProgressIndicator() : const Text('Submit'),
+          child: _submitting
+              ? const CircularProgressIndicator()
+              : const Text('Submit'),
         ),
       ],
     );

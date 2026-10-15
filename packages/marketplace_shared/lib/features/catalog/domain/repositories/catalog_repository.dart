@@ -17,8 +17,8 @@ class HomeCatalogResult {
 }
 
 abstract class CatalogRepository {
-  Future<HomeCatalogResult> getHomeCatalog();
-  Future<CatalogService> getServiceDetails(String slug);
-  Future<List<CatalogService>> searchCatalog(String query);
-  Future<List<CatalogService>> getTrendingCatalog();
+  Future<HomeCatalogResult> getHomeCatalog({String? pincode});
+  Future<CatalogService> getServiceDetails(String slug, {String? pincode});
+  Future<List<CatalogService>> searchCatalog(String query, {String? pincode});
+  Future<List<CatalogService>> getTrendingCatalog({String? pincode});
 }

@@ -13,12 +13,14 @@ class SelectedLocation {
     required this.longitude,
     this.label,
     this.addressId,
+    this.pincode,
   });
 
   final double latitude;
   final double longitude;
   final String? label;
   final String? addressId;
+  final String? pincode;
 
   LatLng get latLng => LatLng(latitude, longitude);
 
@@ -32,10 +34,13 @@ class SelectedLocation {
         .map((part) => part.trim())
         .where((part) => part.isNotEmpty)
         .toList(growable: false);
-    if (parts.length >= 2) {
-      return '${parts[0]}, ${parts[1]}';
-    }
-    return value;
+    final practicalArea = parts.length >= 2
+        ? '${parts[0]}, ${parts[1]}'
+        : value;
+    final postalCode = pincode?.trim();
+    return postalCode == null || postalCode.isEmpty
+        ? practicalArea
+        : '$practicalArea · $postalCode';
   }
 }
 
@@ -56,6 +61,7 @@ class SelectedLocationController extends StateNotifier<SelectedLocation?> {
           _storageScope = nextScope;
           if (mounted) {
             state = null;
+            ref.read(selectedCatalogPincodeProvider.notifier).state = null;
           }
           _loadFuture = _load(nextScope);
         }
@@ -96,7 +102,9 @@ class SelectedLocationController extends StateNotifier<SelectedLocation?> {
         longitude: lng,
         label: prefs.getString(_key(scope, 'label')),
         addressId: prefs.getString(_key(scope, 'addressId')),
+        pincode: _normalizePincode(prefs.getString(_key(scope, 'pincode'))),
       );
+      ref.read(selectedCatalogPincodeProvider.notifier).state = state?.pincode;
     } catch (_) {
       // The last selected location is a convenience; startup can continue without it.
     }
@@ -118,6 +126,7 @@ class SelectedLocationController extends StateNotifier<SelectedLocation?> {
     await prefs.remove(_key(scope, 'lng'));
     await prefs.remove(_key(scope, 'label'));
     await prefs.remove(_key(scope, 'addressId'));
+    await prefs.remove(_key(scope, 'pincode'));
   }
 
   Future<void> setLocation({
@@ -125,6 +134,7 @@ class SelectedLocationController extends StateNotifier<SelectedLocation?> {
     required double longitude,
     String? label,
     String? addressId,
+    String? pincode,
   }) async {
     if (!_isValidCoordinate(latitude, longitude)) {
       throw ArgumentError('Choose a valid map location.');
@@ -135,6 +145,7 @@ class SelectedLocationController extends StateNotifier<SelectedLocation?> {
       longitude: longitude,
       label: label,
       addressId: addressId,
+      pincode: _normalizePincode(pincode),
     );
     final prefs = await SharedPreferences.getInstance();
     await prefs.setDouble(_key(scope, 'lat'), latitude);
@@ -151,8 +162,16 @@ class SelectedLocationController extends StateNotifier<SelectedLocation?> {
     } else {
       await prefs.setString(_key(scope, 'addressId'), normalizedAddressId);
     }
+    final normalizedPincode = _normalizePincode(pincode);
+    if (normalizedPincode == null) {
+      await prefs.remove(_key(scope, 'pincode'));
+    } else {
+      await prefs.setString(_key(scope, 'pincode'), normalizedPincode);
+    }
     if (mounted && scope == _storageScope) {
       state = next;
+      ref.read(selectedCatalogPincodeProvider.notifier).state =
+          normalizedPincode;
     }
   }
 
@@ -186,11 +205,16 @@ class SelectedLocationController extends StateNotifier<SelectedLocation?> {
         position.latitude,
         position.longitude,
       );
+      final pincode = await _reverseGeocodePincode(
+        position.latitude,
+        position.longitude,
+      );
       if (!mounted || state != null) return;
       await setLocation(
         latitude: position.latitude,
         longitude: position.longitude,
         label: label ?? 'Current location',
+        pincode: pincode,
       );
     } catch (_) {
       // Location is optional; home remains usable with manual selection.
@@ -201,10 +225,16 @@ class SelectedLocationController extends StateNotifier<SelectedLocation?> {
     final apiKey = AppEnvironment.fromDartDefines().googleMapsApiKey;
     if (apiKey.isEmpty) return null;
     try {
-      final response = await Dio().get<Map<String, dynamic>>(
-        'https://maps.googleapis.com/maps/api/geocode/json',
-        queryParameters: {'latlng': '$latitude,$longitude', 'key': apiKey},
-      );
+      final response =
+          await Dio(
+            BaseOptions(
+              connectTimeout: const Duration(seconds: 5),
+              receiveTimeout: const Duration(seconds: 5),
+            ),
+          ).get<Map<String, dynamic>>(
+            'https://maps.googleapis.com/maps/api/geocode/json',
+            queryParameters: {'latlng': '$latitude,$longitude', 'key': apiKey},
+          );
       final results = response.data?['results'];
       if (response.data?['status'] != 'OK' ||
           results is! List ||
@@ -222,6 +252,45 @@ class SelectedLocationController extends StateNotifier<SelectedLocation?> {
     return null;
   }
 
+  Future<String?> _reverseGeocodePincode(
+    double latitude,
+    double longitude,
+  ) async {
+    final apiKey = AppEnvironment.fromDartDefines().googleMapsApiKey;
+    if (apiKey.isEmpty) return null;
+    try {
+      final response =
+          await Dio(
+            BaseOptions(
+              connectTimeout: const Duration(seconds: 5),
+              receiveTimeout: const Duration(seconds: 5),
+            ),
+          ).get<Map<String, dynamic>>(
+            'https://maps.googleapis.com/maps/api/geocode/json',
+            queryParameters: {'latlng': '$latitude,$longitude', 'key': apiKey},
+          );
+      final results = response.data?['results'];
+      if (response.data?['status'] != 'OK' || results is! List) return null;
+      for (final result in results.whereType<Map>()) {
+        final components = result['address_components'];
+        if (components is! List) continue;
+        for (final component in components.whereType<Map>()) {
+          final types = component['types'];
+          final value = component['long_name']?.toString().trim();
+          if (types is List &&
+              types.contains('postal_code') &&
+              value != null &&
+              RegExp(r'^[1-9][0-9]{5}$').hasMatch(value)) {
+            return value;
+          }
+        }
+      }
+    } catch (_) {
+      // Keep the detected coordinates even if postal-code lookup fails.
+    }
+    return null;
+  }
+
   Future<void> clearLocation() async {
     final scope = _storageScope;
     if (mounted) {
@@ -229,5 +298,15 @@ class SelectedLocationController extends StateNotifier<SelectedLocation?> {
     }
     final prefs = await SharedPreferences.getInstance();
     await _removeSavedLocation(prefs, scope);
+    if (mounted && scope == _storageScope) {
+      ref.read(selectedCatalogPincodeProvider.notifier).state = null;
+    }
+  }
+
+  static String? _normalizePincode(String? value) {
+    final pincode = value?.trim();
+    return pincode != null && RegExp(r'^[1-9][0-9]{5}$').hasMatch(pincode)
+        ? pincode
+        : null;
   }
 }

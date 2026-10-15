@@ -27,6 +27,7 @@ class _WorkerDirectoryDetailPageState
   late final WorkerDirectoryApi _api;
   late Future<WorkerDirectoryHistoryResponse> _historyFuture;
   late Future<List<WorkerDirectoryPortfolioPhoto>> _portfolioFuture;
+  late Future<Map<String, dynamic>> _serviceAreasFuture;
   WorkerDirectoryProfile? _profile;
   bool _loading = true;
   String? _loadError;
@@ -39,6 +40,7 @@ class _WorkerDirectoryDetailPageState
     _profile = widget.initialProfile;
     _historyFuture = _loadHistory();
     _portfolioFuture = _api.fetchPortfolioPhotos(widget.profileId);
+    _serviceAreasFuture = _api.fetchServiceAreaAssignments(widget.profileId);
     if (_profile == null) {
       _loadInitialProfile();
     } else {
@@ -77,6 +79,7 @@ class _WorkerDirectoryDetailPageState
       _loading = true;
       _historyFuture = _loadHistory();
       _portfolioFuture = _api.fetchPortfolioPhotos(widget.profileId);
+      _serviceAreasFuture = _api.fetchServiceAreaAssignments(widget.profileId);
     });
     await _loadInitialProfile();
   }
@@ -206,6 +209,240 @@ class _WorkerDirectoryDetailPageState
     }
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('$label copied')),
+    );
+  }
+
+  Future<void> _manageServiceAreas() async {
+    late final Map<String, dynamic> data;
+    try {
+      data = await _serviceAreasFuture;
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Could not load Partner service areas.'),
+          action: SnackBarAction(
+            label: 'Retry',
+            onPressed: () => _retryAndManageServiceAreas(),
+          ),
+        ),
+      );
+      return;
+    }
+    if (!mounted) return;
+    final areas = (data['areas'] as List? ?? const [])
+        .whereType<Map<String, dynamic>>()
+        .toList(growable: false);
+    final assignedAreaIds = (data['assignedAreaIds'] as List? ?? const [])
+        .whereType<String>()
+        .toSet();
+    final activeAreaIds = areas
+        .map((area) => area['id']?.toString() ?? '')
+        .where((id) => id.isNotEmpty)
+        .toSet();
+    final inactiveAssignedAreaIds = assignedAreaIds.difference(activeAreaIds);
+    final inactiveAssignedAreas = (data['assignedAreas'] as List? ?? const [])
+        .whereType<Map<String, dynamic>>()
+        .where(
+            (area) => inactiveAssignedAreaIds.contains(area['id']?.toString()))
+        .toList(growable: false);
+    final inactiveAreaNames = inactiveAssignedAreas
+        .map((area) => area['name']?.toString() ?? 'Inactive area')
+        .join(', ');
+    final assigned = assignedAreaIds.where(activeAreaIds.contains).toSet();
+    final selected = await showDialog<Set<String>>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Partner service areas'),
+          content: SizedBox(
+            width: 560,
+            height: 460,
+            child: areas.isEmpty && inactiveAssignedAreaIds.isEmpty
+                ? const Center(
+                    child: Text('No active service areas configured.'))
+                : ListView(
+                    children: [
+                      if (inactiveAssignedAreaIds.isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 12),
+                          child: Text(
+                            'Inactive assignments will be removed when you confirm this selection${inactiveAreaNames.isEmpty ? '.' : ': $inactiveAreaNames.'}',
+                            style: TextStyle(
+                              color: Theme.of(context).colorScheme.error,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      if (areas.isEmpty)
+                        const Padding(
+                          padding: EdgeInsets.only(bottom: 12),
+                          child: Text('No active service areas configured.'),
+                        ),
+                      const Text(
+                          'Assigned areas control where this Partner may receive jobs. Travel radius remains an additional limit.'),
+                      const SizedBox(height: 10),
+                      for (final area in areas)
+                        Builder(builder: (context) {
+                          final city = area['city'] is Map
+                              ? (area['city'] as Map).cast<String, dynamic>()
+                              : const <String, dynamic>{};
+                          final id = area['id']?.toString() ?? '';
+                          final pincodes =
+                              (area['pincodes'] as List? ?? const [])
+                                  .whereType<String>()
+                                  .join(', ');
+                          return CheckboxListTile(
+                            value: assigned.contains(id),
+                            title: Text(
+                                '${city['state'] ?? ''} · ${city['district'] ?? ''} · ${city['name'] ?? ''} · ${area['name'] ?? ''}'),
+                            subtitle: Text(pincodes.isEmpty
+                                ? 'No pincodes assigned'
+                                : pincodes),
+                            onChanged: (value) => setDialogState(() {
+                              if (value == true) {
+                                assigned.add(id);
+                              } else {
+                                assigned.remove(id);
+                              }
+                            }),
+                          );
+                        }),
+                    ],
+                  ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: areas.isEmpty && inactiveAssignedAreaIds.isEmpty
+                  ? null
+                  : () => Navigator.of(dialogContext).pop(assigned),
+              child: const Text('Review assignment'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (selected == null || !mounted) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Save Partner area assignments?'),
+        content: Text([
+          selected.isEmpty
+              ? 'No service areas are selected. This Partner will not be eligible for jobs until at least one service area is assigned.'
+              : 'This Partner will be eligible only in the ${selected.length} selected active service areas, subject to service qualification, travel radius, online status, and schedule.',
+          if (inactiveAssignedAreaIds.isNotEmpty)
+            '${inactiveAssignedAreaIds.length} inactive assignment(s) will be removed.',
+        ].join('\n\n')),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('Cancel')),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: Text(
+              selected.isEmpty ? 'Remove all assignments' : 'Save assignments',
+            ),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      await _api.updateServiceAreaAssignments(
+          widget.profileId, selected.toList(growable: false));
+      if (!mounted) return;
+      setState(() {
+        _serviceAreasFuture =
+            _api.fetchServiceAreaAssignments(widget.profileId);
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Partner service areas updated')),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Unable to update service areas: $error')),
+      );
+    }
+  }
+
+  Future<void> _retryAndManageServiceAreas() async {
+    if (!mounted) return;
+    setState(() {
+      _serviceAreasFuture = _api.fetchServiceAreaAssignments(widget.profileId);
+    });
+    await _manageServiceAreas();
+  }
+
+  Widget _serviceAreaAssignmentsCard() {
+    return FutureBuilder<Map<String, dynamic>>(
+      future: _serviceAreasFuture,
+      builder: (context, snapshot) {
+        final data = snapshot.data ?? const <String, dynamic>{};
+        final assignedAreas = (data['assignedAreas'] as List? ?? const [])
+            .whereType<Map<String, dynamic>>()
+            .toList(growable: false);
+        return _SurfaceCard(
+          child: Padding(
+            padding: const EdgeInsets.all(18),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(children: [
+                  const Icon(Icons.location_on_outlined),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text('Partner service areas',
+                        style: Theme.of(context)
+                            .textTheme
+                            .titleMedium
+                            ?.copyWith(fontWeight: FontWeight.w800)),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed:
+                        snapshot.connectionState == ConnectionState.waiting
+                            ? null
+                            : _manageServiceAreas,
+                    icon: const Icon(Icons.edit_location_alt_outlined),
+                    label: const Text('Manage areas'),
+                  ),
+                ]),
+                const SizedBox(height: 8),
+                if (snapshot.hasError)
+                  const Text('Could not load Partner area assignments.')
+                else if (snapshot.connectionState == ConnectionState.waiting)
+                  const LinearProgressIndicator()
+                else if (assignedAreas.isEmpty)
+                  const Text(
+                      'No areas assigned. This Partner is not location eligible.')
+                else
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: assignedAreas.map((area) {
+                      final city = area['city'] is Map
+                          ? (area['city'] as Map).cast<String, dynamic>()
+                          : const <String, dynamic>{};
+                      final pincodes = (area['pincodes'] as List? ?? const [])
+                          .whereType<String>()
+                          .join(', ');
+                      return Chip(
+                        avatar: const Icon(Icons.place_outlined, size: 16),
+                        label: Text(
+                            '${city['state'] ?? ''} · ${city['name'] ?? ''} · ${area['name'] ?? ''}${pincodes.isEmpty ? '' : ' · $pincodes'}'),
+                      );
+                    }).toList(growable: false),
+                  ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -776,6 +1013,8 @@ class _WorkerDirectoryDetailPageState
                       ),
                     ],
                   ),
+                  const SizedBox(height: 16),
+                  _serviceAreaAssignmentsCard(),
                   if (_hasDocumentLinks(worker)) ...[
                     const SizedBox(height: 16),
                     _SurfaceCard(

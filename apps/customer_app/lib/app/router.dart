@@ -31,9 +31,11 @@ import '../features/offers/presentation/pages/offers_page.dart';
 import '../features/profile/presentation/pages/settings_page.dart';
 import '../features/wallet/presentation/pages/wallet_page.dart';
 import '../features/booking/presentation/pages/booking_detail_page.dart';
+import '../features/booking/presentation/pages/rebook_review_page.dart';
 import '../features/booking/presentation/pages/booking_invoice_page.dart';
 import '../features/booking/presentation/pages/custom_quote_page.dart';
 import '../features/cart/presentation/providers/cart_providers.dart';
+import '../features/maintenance/presentation/pages/maintenance_plans_page.dart';
 
 final routerProvider = Provider<GoRouter>((ref) {
   final refresh = _RouterRefreshNotifier(ref);
@@ -73,6 +75,8 @@ final routerProvider = Provider<GoRouter>((ref) {
           location == '/notifications' ||
           location == '/support' ||
           location == '/settings' ||
+          location == '/maintenance-plans' ||
+          location == '/maintenance-plans/create' ||
           location == '/connection-diagnostics' ||
           location == '/arrival-otp' ||
           location == '/completion-otp' ||
@@ -125,11 +129,27 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (context, state) => const SavedAddressesPage(),
       ),
       GoRoute(
+        path: '/maintenance-plans',
+        builder: (context, state) => const MaintenancePlansPage(),
+      ),
+      GoRoute(
+        path: '/maintenance-plans/create',
+        builder: (context, state) => MaintenancePlanCreatePage(
+          serviceId: state.uri.queryParameters['serviceId'] ?? '',
+        ),
+      ),
+      GoRoute(
         path: '/booking/:bookingId',
         builder: (context, state) {
           final bookingId = state.pathParameters['bookingId'] ?? '';
           return BookingDetailPage(bookingId: bookingId);
         },
+      ),
+      GoRoute(
+        path: '/booking/:bookingId/rebook',
+        builder: (context, state) => RebookReviewPage(
+          bookingId: state.pathParameters['bookingId'] ?? '',
+        ),
       ),
       GoRoute(
         path: '/invoice/:bookingId',
@@ -173,7 +193,17 @@ final routerProvider = Provider<GoRouter>((ref) {
             final cityId = extra['cityId'] as String? ?? '';
             final rawItems = extra['items'] as List<dynamic>? ?? [];
             final items = rawItems.whereType<CheckoutItem>().toList();
-            return CheckoutPage(cityId: cityId, items: items);
+            return CheckoutPage(
+              cityId: cityId,
+              items: items,
+              maintenanceOccurrenceId:
+                  extra['maintenanceOccurrenceId'] as String?,
+              maintenanceDueAt: extra['maintenanceDueAt'] as DateTime?,
+              preferredAddressId: extra['preferredAddressId'] as String?,
+              maintenancePreferredTime:
+                  extra['maintenancePreferredTime'] as String?,
+              rebookSourceBookingId: extra['rebookSourceBookingId'] as String?,
+            );
           }
 
           final cartItems = ref.read(cartProvider);

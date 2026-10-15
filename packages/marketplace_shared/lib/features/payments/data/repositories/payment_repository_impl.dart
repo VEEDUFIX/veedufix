@@ -7,6 +7,11 @@ final paymentRepositoryProvider = Provider<PaymentRepository>((ref) {
 });
 
 abstract class PaymentRepository {
+  Future<String> getOrderStatus({
+    required String bookingId,
+    required String razorpayOrderId,
+  });
+
   Future<Map<String, dynamic>> createOrder({
     required String cityId,
     required List<Map<String, dynamic>> items,
@@ -27,6 +32,21 @@ class PaymentRepositoryImpl implements PaymentRepository {
   PaymentRepositoryImpl(this._apiClient);
 
   final ApiClient _apiClient;
+
+  @override
+  Future<String> getOrderStatus({
+    required String bookingId,
+    required String razorpayOrderId,
+  }) async {
+    final response = await _apiClient.dio.get<Map<String, dynamic>>(
+      '/payments/order-status/$bookingId/$razorpayOrderId',
+    );
+    final status = response.data?['status'];
+    if (status is! String || status.isEmpty) {
+      throw const FormatException('Payment status response is invalid');
+    }
+    return status;
+  }
 
   @override
   Future<Map<String, dynamic>> createOrder({

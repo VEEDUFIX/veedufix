@@ -55,3 +55,6 @@ export 'features/catalog/presentation/providers/home_professionals_provider.dart
 export 'features/ai/presentation/providers/ai_assistant_provider.dart';
 
 export 'core/utils/image_utils.dart';
+
+export 'features/bookings/presentation/providers/booking_diagnostic_photos_provider.dart';
+export 'features/bookings/presentation/widgets/booking_diagnostic_photos_section.dart';

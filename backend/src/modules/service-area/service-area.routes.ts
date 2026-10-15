@@ -7,6 +7,8 @@ import {
   listServiceAreasQuerySchema,
   serviceAreaCheckSchema,
   serviceAreaIdParamsSchema,
+  updateWorkerServiceAreasSchema,
+  workerServiceAreasParamsSchema,
   updateMarketSchema,
   updateServiceAreaSchema
 } from "./service-area.schemas.js";
@@ -17,8 +19,10 @@ import {
   deleteServiceAreaHandler,
   listServiceAreasHandler,
   listAvailableCitiesHandler,
+  getWorkerServiceAreasHandler,
   updateMarketHandler,
-  updateServiceAreaHandler
+  updateServiceAreaHandler,
+  updateWorkerServiceAreasHandler
 } from "./service-area.controller.js";
 
 export const serviceAreaRouter = Router();
@@ -31,6 +35,8 @@ adminServiceAreaRouter.use(requireAuth, requireRole("ADMIN"));
 adminServiceAreaRouter.post("/markets", validate(createMarketSchema), createMarketHandler);
 adminServiceAreaRouter.patch("/markets/:id", validate(updateMarketSchema), updateMarketHandler);
 adminServiceAreaRouter.get("/service-areas", validate(listServiceAreasQuerySchema), listServiceAreasHandler);
+adminServiceAreaRouter.get("/workers/:workerProfileId/service-areas", validate(workerServiceAreasParamsSchema), getWorkerServiceAreasHandler);
+adminServiceAreaRouter.put("/workers/:workerProfileId/service-areas", validate(updateWorkerServiceAreasSchema), updateWorkerServiceAreasHandler);
 adminServiceAreaRouter.post("/service-areas", validate(createServiceAreaSchema), createServiceAreaHandler);
 adminServiceAreaRouter.patch("/service-areas/:id", validate(serviceAreaIdParamsSchema), validate(updateServiceAreaSchema), updateServiceAreaHandler);
 adminServiceAreaRouter.delete("/service-areas/:id", validate(serviceAreaIdParamsSchema), deleteServiceAreaHandler);

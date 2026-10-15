@@ -133,6 +133,13 @@ const homeSectionAdminInclude = {
   },
 };
 
+const publicHomeSectionsQuerySchema = z.object({
+  query: z.object({
+    cityId: z.string().trim().min(1).max(128).optional(),
+    pincode: z.string().regex(/^[1-9][0-9]{5}$/).optional()
+  })
+});
+
 async function validateHomeSectionServices(serviceIds: string[]): Promise<boolean> {
   if (serviceIds.length === 0) return true;
   const count = await prisma.service.count({
@@ -166,9 +173,9 @@ homeBannersRouter.get("/home-banners", async (_request, response) => {
   response.status(200).json({ banners });
 });
 
-homeBannersRouter.get("/home-sections", async (request, response) => {
-  const { cityId } = request.query as { cityId?: string };
-  const sections = await catalogService.resolveHomeServiceSections(cityId);
+homeBannersRouter.get("/home-sections", validate(publicHomeSectionsQuerySchema), async (request, response) => {
+  const { cityId, pincode } = request.query as { cityId?: string; pincode?: string };
+  const sections = await catalogService.resolveHomeServiceSections(cityId, pincode);
   response.status(200).json({ sections });
 });
 

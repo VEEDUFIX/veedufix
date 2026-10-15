@@ -12,6 +12,8 @@ services:
         value: production
       - key: PORT
         value: 10000
+      - key: TRUST_PROXY_HOPS
+        value: 2
       - key: DATABASE_URL
         sync: false
       - key: DIRECT_URL

@@ -47,6 +47,7 @@ import '../features/admin/presentation/pages/global_search_page.dart';
 import '../features/admin/presentation/pages/support_tickets_page.dart';
 import '../features/admin/presentation/pages/platform_settings_page.dart';
 import '../features/shell/presentation/pages/app_shell_page.dart';
+import '../features/maintenance/presentation/pages/maintenance_plans_admin_page.dart';
 
 final routerProvider = Provider<GoRouter>((ref) {
   final refresh = _RouterRefreshNotifier(ref);
@@ -161,6 +162,9 @@ final routerProvider = Provider<GoRouter>((ref) {
             path: '/service-areas',
             builder: (context, state) => const ServiceAreaManagerPage(),
           ),
+          GoRoute(
+              path: '/maintenance-plans',
+              builder: (context, state) => const MaintenancePlansAdminPage()),
           GoRoute(
             path: '/service-areas/:areaId',
             builder: (context, state) {

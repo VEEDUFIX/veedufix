@@ -14,14 +14,14 @@ export const submitCustomQuoteSchema = z.object({
       label: z.string().min(1),
       qty: z.number().int().min(1).default(1),
       unitPrice: z.number().positive()
-    })).optional()
+    })).min(1).optional()
   }),
   params: z.object({ bookingId: z.string().min(1) }),
   query: z.object({}).strict()
 });
 
 export const respondCustomQuoteSchema = z.object({
-  body: z.object({ accept: z.boolean() }),
+  body: z.object({ accept: z.boolean() }).strict(),
   params: z.object({ bookingId: z.string().min(1) }),
   query: z.object({}).strict()
 });

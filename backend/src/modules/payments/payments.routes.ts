@@ -2,11 +2,13 @@ import { Router } from "express";
 import { requireAuth, requireRole } from "../../middleware/auth.js";
 import { validate } from "../../middleware/validate.js";
 import { createPaymentOrderSchema, verifyPaymentSchema } from "./payments.schemas.js";
-import { createPaymentOrderHandler, verifyPaymentHandler } from "./payments.controller.js";
+import { createPaymentOrderHandler, paymentOrderStatusHandler, verifyPaymentHandler } from "./payments.controller.js";
 
 export const paymentsRouter = Router();
 
 const customerOnly = [requireAuth, requireRole("CUSTOMER")] as const;
+
+paymentsRouter.get("/order-status/:bookingId/:orderId", ...customerOnly, paymentOrderStatusHandler);
 
 paymentsRouter.post(
   "/create-order",

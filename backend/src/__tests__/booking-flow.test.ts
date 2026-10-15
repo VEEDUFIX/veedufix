@@ -4,11 +4,12 @@ import { Prisma } from '@prisma/client';
 
 // ─── Mock all external modules BEFORE importing ───────────────────────────────
 
-const { mockRazorpayOrderCreate, mockRazorpayPaymentFetch, mockOpsAlert, mockDispatch } = vi.hoisted(() => ({
+const { mockRazorpayOrderCreate, mockRazorpayPaymentFetch, mockOpsAlert, mockDispatch, mockHasAvailablePartners } = vi.hoisted(() => ({
   mockRazorpayOrderCreate: vi.fn(),
   mockRazorpayPaymentFetch: vi.fn(),
   mockOpsAlert: vi.fn(),
   mockDispatch: vi.fn(),
+  mockHasAvailablePartners: vi.fn(),
 }));
 const { mockGetCustomerScheduleSlots } = vi.hoisted(() => ({
   mockGetCustomerScheduleSlots: vi.fn(),
@@ -21,11 +22,12 @@ vi.mock('../lib/prisma.js', () => ({
     city: { findUnique: vi.fn(), findFirst: vi.fn() },
     savedAddress: { findFirst: vi.fn() },
     serviceArea: { findFirst: vi.fn() },
-    address: { findFirst: vi.fn(), create: vi.fn() },
+    customQuoteRevision: { findFirst: vi.fn() },
+    address: { findFirst: vi.fn(), findUnique: vi.fn(), create: vi.fn() },
     service: { findMany: vi.fn() },
     coupon: { findFirst: vi.fn() },
     payment: { create: vi.fn(), updateMany: vi.fn(), update: vi.fn(), findFirst: vi.fn() },
-    booking: { findUnique: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
+    booking: { findUnique: vi.fn(), findFirst: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
     jobExecution: { upsert: vi.fn(), update: vi.fn(), updateMany: vi.fn(), findUnique: vi.fn() },
     walletTransaction: { create: vi.fn() },
     bookingService: { createMany: vi.fn() },
@@ -79,7 +81,10 @@ vi.mock('../modules/payout/payout.service.js', () => ({
 }));
 
 vi.mock('../modules/ops/ops.service.js', () => ({ raiseOpsAlert: mockOpsAlert }));
-vi.mock('../modules/matching/matching.service.js', () => ({ dispatchBookingAfterPayment: mockDispatch }));
+vi.mock('../modules/matching/matching.service.js', () => ({
+  dispatchBookingAfterPayment: mockDispatch,
+  hasAvailablePartnersForInstantBooking: mockHasAvailablePartners,
+}));
 
 vi.mock('../modules/service-area/service-area.service.js', () => ({
   assertServiceablePincode: vi.fn(),
@@ -126,18 +131,39 @@ import { prisma } from '../lib/prisma.js';
 import { redis } from '../lib/redis.js';
 import { AppError } from '../lib/app-error.js';
 import { IncompleteJobError } from '../modules/job-execution/job-execution.service.js';
+import { assertServiceablePincode } from '../modules/service-area/service-area.service.js';
+import { publishTrackingEvent } from '../lib/realtime.js';
 
 describe('Booking Flow', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(prisma.customQuoteRevision.findFirst).mockResolvedValue(null);
     mockGetCustomerScheduleSlots.mockResolvedValue([]);
+    mockHasAvailablePartners.mockResolvedValue(true);
     mockRazorpayOrderCreate.mockResolvedValue({ id: 'order_123' });
     mockRazorpayPaymentFetch.mockResolvedValue({
       id: 'pay_123', order_id: 'order_123', amount: 5000, currency: 'INR', status: 'captured',
     });
     vi.mocked(prisma.savedAddress.findFirst).mockResolvedValue(null);
     vi.mocked(prisma.serviceArea.findFirst).mockResolvedValue(null);
+    vi.mocked(assertServiceablePincode).mockResolvedValue({
+      id: 'area-chennai-central',
+      name: 'Chennai Central',
+      slug: 'chennai-central',
+      cityId: 'c1',
+      cityName: 'Chennai',
+      pincodeRangeStart: null,
+      pincodeRangeEnd: null,
+      pincode: '600001',
+      pincodes: ['600001'],
+      serviceAreaIds: ['area-chennai-central'],
+    } as any);
     vi.mocked(prisma.address.findFirst).mockResolvedValue({ id: 'a1', userId: 'u1', pincode: '600001' } as any);
+    vi.mocked(prisma.address.findUnique).mockResolvedValue({
+      latitude: 13.0827,
+      longitude: 80.2707,
+      pincode: '600001',
+    } as any);
   });
 
   describe('Suite 1: Booking Creation (createPaymentOrder)', () => {
@@ -153,9 +179,9 @@ describe('Booking Flow', () => {
       vi.mocked(prisma.city.findFirst).mockResolvedValue({ id: 'chennai', name: 'Chennai' } as any);
       vi.mocked(prisma.address.findFirst).mockResolvedValue({ id: 'legacy-1', userId: 'u1', pincode: '600001' } as any);
       vi.mocked(prisma.service.findMany).mockResolvedValue([{
-        id: 's1', name: 'AC Repair', isActive: true,
+        id: 's1', name: 'AC Repair', updatedAt: new Date('2026-10-10T00:00:00.000Z'), isActive: true, bookingEnabled: true, availabilityMode: 'INHERITED', serviceAreaAssignments: [], variants: [], addons: [],
         startingPrice: new Prisma.Decimal(500), gstRate: new Prisma.Decimal(18),
-        gstApplicable: true, sacCode: '9987', subcategory: { id: 'sub1', name: 'AC' }, pricingRules: [],
+        gstApplicable: true, sacCode: '9987', subcategory: { id: 'sub1', name: 'AC', availabilityMode: 'INHERITED', serviceAreaAssignments: [], category: { availabilityMode: 'INHERITED', serviceAreaAssignments: [] } }, pricingRules: [],
       }] as any);
 
       const scheduledFor = new Date(Date.now() + 24 * 60 * 60 * 1000);
@@ -192,9 +218,9 @@ describe('Booking Flow', () => {
         .mockResolvedValueOnce({ id: 'legacy-1', userId: 'u1', pincode: '600001' } as any);
       vi.mocked(prisma.address.create).mockResolvedValue({ id: 'legacy-1' } as any);
       vi.mocked(prisma.service.findMany).mockResolvedValue([{
-        id: 's1', name: 'AC Repair', isActive: true,
+        id: 's1', name: 'AC Repair', updatedAt: new Date('2026-10-10T00:00:00.000Z'), isActive: true, bookingEnabled: true, availabilityMode: 'INHERITED', serviceAreaAssignments: [], variants: [], addons: [],
         startingPrice: new Prisma.Decimal(500), gstRate: new Prisma.Decimal(18),
-        gstApplicable: true, sacCode: '9987', subcategory: { id: 'sub1', name: 'AC' }, pricingRules: [],
+        gstApplicable: true, sacCode: '9987', subcategory: { id: 'sub1', name: 'AC', availabilityMode: 'INHERITED', serviceAreaAssignments: [], category: { availabilityMode: 'INHERITED', serviceAreaAssignments: [] } }, pricingRules: [],
       }] as any);
       prismaMockTx.booking.create.mockResolvedValue({ id: 'b1', code: 'BK-123' });
 
@@ -218,8 +244,8 @@ describe('Booking Flow', () => {
       vi.mocked(prisma.address.findFirst).mockResolvedValue({ id: 'a1', userId: 'u1', pincode: '600001' } as any);
       
       const mockService = {
-        id: 's1', name: 'AC Repair', isActive: true, startingPrice: new Prisma.Decimal(500), gstRate: new Prisma.Decimal(18),
-        gstApplicable: true, sacCode: '9987', subcategory: { id: 'sub1', name: 'AC' }, pricingRules: []
+        id: 's1', name: 'AC Repair', updatedAt: new Date('2026-10-10T00:00:00.000Z'), isActive: true, bookingEnabled: true, availabilityMode: 'INHERITED', serviceAreaAssignments: [], variants: [], addons: [], startingPrice: new Prisma.Decimal(500), gstRate: new Prisma.Decimal(18),
+        gstApplicable: true, sacCode: '9987', subcategory: { id: 'sub1', name: 'AC', availabilityMode: 'INHERITED', serviceAreaAssignments: [], category: { availabilityMode: 'INHERITED', serviceAreaAssignments: [] } }, pricingRules: []
       };
       vi.mocked(prisma.service.findMany).mockResolvedValue([mockService] as any);
       
@@ -244,6 +270,91 @@ describe('Booking Flow', () => {
           }),
         }),
       }));
+    });
+
+    it('keeps an idempotent pending checkout when local finalization fails after Razorpay creates an order', async () => {
+      vi.mocked(prisma.user.findUnique).mockResolvedValue({ id: 'u1', cityId: 'c1', name: 'Test', email: null, phone: null } as any);
+      vi.mocked(prisma.city.findUnique).mockResolvedValue({ id: 'c1', name: 'City' } as any);
+      vi.mocked(prisma.address.findFirst).mockResolvedValue({ id: 'a1', userId: 'u1', pincode: '600001' } as any);
+      vi.mocked(prisma.service.findMany).mockResolvedValue([{
+        id: 's1', name: 'AC Repair', updatedAt: new Date('2026-10-10T00:00:00.000Z'), isActive: true,
+        bookingEnabled: true, availabilityMode: 'INHERITED', serviceAreaAssignments: [], variants: [], addons: [],
+        startingPrice: new Prisma.Decimal(500), gstRate: new Prisma.Decimal(18), gstApplicable: true,
+        sacCode: '9987', subcategory: { id: 'sub1', name: 'AC', availabilityMode: 'INHERITED', serviceAreaAssignments: [], category: { availabilityMode: 'INHERITED', serviceAreaAssignments: [] } }, pricingRules: []
+      }] as any);
+      prismaMockTx.booking.create.mockResolvedValue({ id: 'b-after-order', code: 'BK-AFTER-ORDER' });
+      vi.mocked(publishTrackingEvent).mockRejectedValueOnce(new Error('Realtime unavailable'));
+
+      await expect(createPaymentOrder({
+        userId: 'u1', cityId: 'c1', idempotencyKey: 'stable-checkout-key',
+        items: [{ serviceId: 's1', quantity: 1 }]
+      })).rejects.toThrow('Realtime unavailable');
+
+      const bookingData = prismaMockTx.booking.create.mock.calls[0][0].data as Record<string, unknown>;
+      expect(bookingData.clientRequestKey).toBe('stable-checkout-key');
+      expect(prisma.payment.updateMany).toHaveBeenLastCalledWith({
+        where: { bookingId: 'b-after-order', provider: 'RAZORPAY', status: 'PENDING' },
+        data: { providerRef: 'order_123' }
+      });
+      expect(prismaMockTx.booking.update).not.toHaveBeenCalled();
+      expect(prismaMockTx.user.update).not.toHaveBeenCalled();
+    });
+
+    it('returns the existing payment order on a repeated checkout request key', async () => {
+      vi.mocked(prisma.savedAddress.findFirst).mockResolvedValue({
+        id: 'a1', userId: 'u1', label: 'Home', addressLine1: 'Main road',
+        addressLine2: null, landmark: null, city: 'Chennai', pincode: '600001',
+        lat: 13.08, lng: 80.27, isDefault: true,
+      } as any);
+      vi.mocked(prisma.user.findUnique).mockResolvedValue({ id: 'u1', cityId: 'c1', name: 'Test', email: null, phone: null } as any);
+      vi.mocked(prisma.city.findUnique).mockResolvedValue({ id: 'c1', name: 'City' } as any);
+      vi.mocked(prisma.address.findFirst).mockResolvedValue({ id: 'a1', userId: 'u1', pincode: '600001' } as any);
+      vi.mocked(prisma.service.findMany).mockResolvedValue([{
+        id: 's1', name: 'AC Repair', updatedAt: new Date('2026-10-10T00:00:00.000Z'), isActive: true, bookingEnabled: true, availabilityMode: 'INHERITED', serviceAreaAssignments: [], variants: [], addons: [], startingPrice: new Prisma.Decimal(500), gstRate: new Prisma.Decimal(18),
+        gstApplicable: true, sacCode: '9987', subcategory: { id: 'sub1', name: 'AC', availabilityMode: 'INHERITED', serviceAreaAssignments: [], category: { availabilityMode: 'INHERITED', serviceAreaAssignments: [] } }, pricingRules: []
+      }] as any);
+      vi.mocked(prisma.booking.findFirst).mockResolvedValueOnce(null);
+      prismaMockTx.booking.create.mockResolvedValue({ id: 'b-rebook', code: 'BK-REBOOK' });
+
+      const input = {
+        userId: 'u1', cityId: 'c1', addressId: 'a1',
+        idempotencyKey: 'rebook-request-123',
+        items: [{ serviceId: 's1', quantity: 1 }]
+      };
+      const firstOrder = await createPaymentOrder(input);
+      const created = prismaMockTx.booking.create.mock.calls[0][0].data as Record<string, unknown>;
+      expect(created.clientRequestKey).toBe(input.idempotencyKey);
+      vi.mocked(prisma.booking.findFirst).mockResolvedValueOnce({
+        id: 'b-rebook', code: 'BK-REBOOK', status: 'PENDING',
+        clientRequestHash: created.clientRequestHash,
+        payments: [{ providerRef: 'order_123', status: 'PENDING', amount: new Prisma.Decimal(500), currency: 'INR' }]
+      } as any);
+
+      const repeatedOrder = await createPaymentOrder(input);
+
+      expect(repeatedOrder).toEqual(firstOrder);
+      expect(prismaMockTx.booking.create).toHaveBeenCalledTimes(1);
+      expect(mockRazorpayOrderCreate).toHaveBeenCalledTimes(1);
+
+      vi.mocked(prisma.booking.findFirst).mockResolvedValueOnce({
+        id: 'b-rebook', code: 'BK-REBOOK', status: 'PENDING',
+        clientRequestHash: created.clientRequestHash,
+        payments: [{ providerRef: 'order_123', status: 'PENDING', amount: new Prisma.Decimal(500), currency: 'INR' }]
+      } as any);
+      await expect(createPaymentOrder({ ...input, useWalletBalance: true }))
+        .rejects.toSatisfy((error: any) => error instanceof AppError && error.statusCode === 409);
+    });
+
+    it('rejects reuse of a checkout request key with changed selections', async () => {
+      vi.mocked(prisma.booking.findFirst).mockResolvedValue({
+        id: 'b-existing', code: 'BK-EXISTING', status: 'PENDING',
+        clientRequestHash: 'different-request-hash', payments: []
+      } as any);
+      await expect(createPaymentOrder({
+        userId: 'u1', idempotencyKey: 'rebook-request-123',
+        items: [{ serviceId: 'different-service', quantity: 1 }]
+      })).rejects.toSatisfy((error: any) => error instanceof AppError && error.statusCode === 409);
+      expect(prismaMockTx.booking.create).not.toHaveBeenCalled();
     });
 
     it('throws AppError.notFound when service not found', async () => {
@@ -274,9 +385,9 @@ describe('Booking Flow', () => {
       vi.mocked(prisma.city.findUnique).mockResolvedValue({ id: 'c1', name: 'City' } as any);
       vi.mocked(prisma.address.findFirst).mockResolvedValue({ id: 'a1', userId: 'u1', pincode: '600001' } as any);
       vi.mocked(prisma.service.findMany).mockResolvedValue([{
-        id: 's1', name: 'AC Repair', isActive: true,
+        id: 's1', name: 'AC Repair', updatedAt: new Date('2026-10-10T00:00:00.000Z'), isActive: true, bookingEnabled: true, availabilityMode: 'INHERITED', serviceAreaAssignments: [], variants: [], addons: [],
         startingPrice: new Prisma.Decimal(500), gstRate: new Prisma.Decimal(18),
-        gstApplicable: true, sacCode: '9987', subcategory: { id: 'sub1', name: 'AC' }, pricingRules: [],
+        gstApplicable: true, sacCode: '9987', subcategory: { id: 'sub1', name: 'AC', availabilityMode: 'INHERITED', serviceAreaAssignments: [], category: { availabilityMode: 'INHERITED', serviceAreaAssignments: [] } }, pricingRules: [],
       }] as any);
       prismaMockTx.booking.create.mockResolvedValue({ id: 'b1', code: 'BK-123' });
       prismaMockTx.user.updateMany.mockResolvedValueOnce({ count: 1 });
@@ -293,7 +404,7 @@ describe('Booking Flow', () => {
 
       expect(prismaMockTx.booking.update).toHaveBeenCalledWith({
         where: { id: 'b1' },
-        data: { status: 'CANCELLED' },
+        data: { status: 'CANCELLED', clientRequestKey: null, clientRequestHash: null },
       });
       expect(prismaMockTx.user.update).toHaveBeenLastCalledWith({
         where: { id: 'u1' },
@@ -321,9 +432,9 @@ describe('Booking Flow', () => {
       vi.mocked(prisma.city.findUnique).mockResolvedValue({ id: 'c1', name: 'City' } as any);
       vi.mocked(prisma.address.findFirst).mockResolvedValue({ id: 'a1', userId: 'u1', pincode: '600001' } as any);
       vi.mocked(prisma.service.findMany).mockResolvedValue([{
-        id: 's1', name: 'AC Repair', isActive: true,
+        id: 's1', name: 'AC Repair', updatedAt: new Date('2026-10-10T00:00:00.000Z'), isActive: true, bookingEnabled: true, availabilityMode: 'INHERITED', serviceAreaAssignments: [], variants: [], addons: [],
         startingPrice: new Prisma.Decimal(500), gstRate: new Prisma.Decimal(18),
-        gstApplicable: true, sacCode: '9987', subcategory: { id: 'sub1', name: 'AC' }, pricingRules: [],
+        gstApplicable: true, sacCode: '9987', subcategory: { id: 'sub1', name: 'AC', availabilityMode: 'INHERITED', serviceAreaAssignments: [], category: { availabilityMode: 'INHERITED', serviceAreaAssignments: [] } }, pricingRules: [],
       }] as any);
       prismaMockTx.booking.create.mockResolvedValue({ id: 'b-wallet-race', code: 'BK-RACE' });
       prismaMockTx.user.updateMany.mockResolvedValueOnce({ count: 0 });
@@ -345,8 +456,8 @@ describe('Booking Flow', () => {
       vi.mocked(prisma.address.findFirst).mockResolvedValue({ id: 'a1', userId: 'u1', pincode: '600001' } as any);
       
       const mockService = {
-        id: 's1', name: 'AC Repair', isActive: true, startingPrice: new Prisma.Decimal(1000), gstRate: new Prisma.Decimal(18),
-        gstApplicable: true, sacCode: '9987', subcategory: { id: 'sub1', name: 'AC' }, pricingRules: []
+        id: 's1', name: 'AC Repair', updatedAt: new Date('2026-10-10T00:00:00.000Z'), isActive: true, bookingEnabled: true, availabilityMode: 'INHERITED', serviceAreaAssignments: [], variants: [], addons: [], startingPrice: new Prisma.Decimal(1000), gstRate: new Prisma.Decimal(18),
+        gstApplicable: true, sacCode: '9987', subcategory: { id: 'sub1', name: 'AC', availabilityMode: 'INHERITED', serviceAreaAssignments: [], category: { availabilityMode: 'INHERITED', serviceAreaAssignments: [] } }, pricingRules: []
       };
       vi.mocked(prisma.service.findMany).mockResolvedValue([mockService] as any);
       
@@ -374,8 +485,8 @@ describe('Booking Flow', () => {
       
       const now = new Date();
       const mockService = {
-        id: 's1', name: 'AC Repair', isActive: true, startingPrice: new Prisma.Decimal(500), gstRate: new Prisma.Decimal(18),
-        gstApplicable: true, sacCode: '9987', subcategory: { id: 'sub1', name: 'AC' }, 
+        id: 's1', name: 'AC Repair', updatedAt: new Date('2026-10-10T00:00:00.000Z'), isActive: true, bookingEnabled: true, availabilityMode: 'INHERITED', serviceAreaAssignments: [], variants: [], addons: [], startingPrice: new Prisma.Decimal(500), gstRate: new Prisma.Decimal(18),
+        gstApplicable: true, sacCode: '9987', subcategory: { id: 'sub1', name: 'AC', availabilityMode: 'INHERITED', serviceAreaAssignments: [], category: { availabilityMode: 'INHERITED', serviceAreaAssignments: [] } },
         pricingRules: [
           // Low priority rule
           { id: 'r1', cityId: 'c1', type: 'BASE', priority: 1, price: new Prisma.Decimal(600), startsAt: null, endsAt: null, createdAt: now },
@@ -406,8 +517,8 @@ describe('Booking Flow', () => {
       const time2 = new Date('2026-06-01'); // Newer
       
       const mockService = {
-        id: 's1', name: 'AC Repair', isActive: true, startingPrice: new Prisma.Decimal(500), gstRate: new Prisma.Decimal(18),
-        gstApplicable: true, sacCode: '9987', subcategory: { id: 'sub1', name: 'AC' }, 
+        id: 's1', name: 'AC Repair', updatedAt: new Date('2026-10-10T00:00:00.000Z'), isActive: true, bookingEnabled: true, availabilityMode: 'INHERITED', serviceAreaAssignments: [], variants: [], addons: [], startingPrice: new Prisma.Decimal(500), gstRate: new Prisma.Decimal(18),
+        gstApplicable: true, sacCode: '9987', subcategory: { id: 'sub1', name: 'AC', availabilityMode: 'INHERITED', serviceAreaAssignments: [], category: { availabilityMode: 'INHERITED', serviceAreaAssignments: [] } },
         pricingRules: [
           // Same priority, older
           { id: 'r1', cityId: 'c1', type: 'BASE', priority: 5, price: new Prisma.Decimal(600), startsAt: null, endsAt: null, createdAt: time1 },
@@ -557,7 +668,29 @@ describe('Booking Flow', () => {
       expect(prismaMockTx.booking.updateMany).toHaveBeenCalledWith(expect.objectContaining({ data: { status: 'ARRIVED' } }));
     });
 
-    it('verifyArrivalOtp transitions booking to IN_PROGRESS', async () => {
+    it('allows arrival OTP after the Partner has started the trip', async () => {
+      vi.mocked(prisma.booking.findUnique).mockResolvedValue({
+        ...mockBooking,
+        status: 'EN_ROUTE',
+      } as any);
+      prismaMockTx.booking.updateMany.mockResolvedValue({ count: 1 } as any);
+      prismaMockTx.jobExecution.upsert.mockResolvedValue({ ...mockExecution, status: 'arrived' } as any);
+
+      const result = await generateArrivalOtp('b1', 'w1');
+
+      expect(result.status).toBe('arrived');
+      expect(prismaMockTx.booking.updateMany).toHaveBeenCalledWith(expect.objectContaining({
+        where: { id: 'b1', status: { in: ['WORKER_ASSIGNED', 'EN_ROUTE', 'ARRIVED'] } },
+        data: { status: 'ARRIVED' },
+      }));
+    });
+
+    it('verifyArrivalOtp transitions booking to IN_PROGRESS even when a quote is unpaid', async () => {
+      vi.mocked(prisma.customQuoteRevision.findFirst).mockResolvedValue({
+        status: 'SUBMITTED',
+        paymentStatus: 'PENDING',
+        expiresAt: new Date(Date.now() + 60_000),
+      } as any);
       vi.mocked(prisma.booking.findUnique).mockResolvedValue({
         ...mockBooking,
         status: 'ARRIVED',
@@ -568,6 +701,7 @@ describe('Booking Flow', () => {
       
       const result = await verifyArrivalOtp('b1', 'w1', '1234');
       expect(result.status).toBe('in_progress');
+      expect(prisma.customQuoteRevision.findFirst).not.toHaveBeenCalled();
       expect(prismaMockTx.booking.updateMany).toHaveBeenCalledWith(expect.objectContaining({ data: { status: 'IN_PROGRESS' } }));
     });
 

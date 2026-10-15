@@ -6,6 +6,8 @@ import '../../domain/entities/service_catalog_entities.dart';
 import '../../domain/entities/worker_public_profile.dart';
 import '../../domain/repositories/catalog_repository.dart';
 
+final selectedCatalogPincodeProvider = StateProvider<String?>((ref) => null);
+
 final catalogRemoteDataSourceProvider =
     Provider<CatalogRemoteDataSource>((ref) {
   return CatalogRemoteDataSource(ref.watch(apiClientProvider).dio);
@@ -19,13 +21,17 @@ final catalogRepositoryProvider = Provider<CatalogRepository>((ref) {
 
 final homeCatalogProvider =
     FutureProvider.autoDispose<HomeCatalogResult>((ref) async {
-  return ref.watch(catalogRepositoryProvider).getHomeCatalog();
+  final pincode = ref.watch(selectedCatalogPincodeProvider);
+  return ref.watch(catalogRepositoryProvider).getHomeCatalog(pincode: pincode);
 });
 
 final homeCatalogSectionsProvider =
     FutureProvider.autoDispose<List<HomeCatalogSection>>((ref) async {
-  final response =
-      await ref.watch(apiClientProvider).get('/catalog/home-sections');
+  final pincode = ref.watch(selectedCatalogPincodeProvider);
+  final response = await ref.watch(apiClientProvider).get(
+    '/catalog/home-sections',
+    queryParameters: {if (pincode != null) 'pincode': pincode},
+  );
   final sections = response['sections'];
   if (sections is! List) return const [];
   return sections
@@ -36,9 +42,11 @@ final homeCatalogSectionsProvider =
 
 final catalogCategoryProvider = FutureProvider.autoDispose
     .family<CatalogCategory, String>((ref, slug) async {
+  final pincode = ref.watch(selectedCatalogPincodeProvider);
   final payload = await ref.watch(apiClientProvider).get(
-        '/catalog/categories/${Uri.encodeComponent(slug)}',
-      );
+    '/catalog/categories/${Uri.encodeComponent(slug)}',
+    queryParameters: {if (pincode != null) 'pincode': pincode},
+  );
   final category = payload['category'];
   if (category is! Map<String, dynamic>) {
     throw const FormatException('The catalog category response was invalid.');
@@ -48,6 +56,7 @@ final catalogCategoryProvider = FutureProvider.autoDispose
 
 final catalogSubcategoryServicesProvider = FutureProvider.autoDispose
     .family<CatalogServicePage, CatalogServiceQuery>((ref, query) async {
+  final pincode = ref.watch(selectedCatalogPincodeProvider);
   final payload = await ref.watch(apiClientProvider).get(
     '/catalog/search',
     queryParameters: {
@@ -56,6 +65,7 @@ final catalogSubcategoryServicesProvider = FutureProvider.autoDispose
       'page': query.page,
       'pageSize': query.pageSize,
       if (query.search.trim().isNotEmpty) 'q': query.search.trim(),
+      if (pincode != null) 'pincode': pincode,
     },
   );
   final rawItems = payload['items'];
@@ -114,7 +124,10 @@ class CatalogServicePage {
 
 final serviceDetailProvider = FutureProvider.autoDispose
     .family<CatalogService, String>((ref, slug) async {
-  return ref.watch(catalogRepositoryProvider).getServiceDetails(slug);
+  final pincode = ref.watch(selectedCatalogPincodeProvider);
+  return ref
+      .watch(catalogRepositoryProvider)
+      .getServiceDetails(slug, pincode: pincode);
 });
 
 final workerProfileProvider =
@@ -128,10 +141,16 @@ final workerProfileProvider =
 final searchCatalogProvider = FutureProvider.autoDispose
     .family<List<CatalogService>, String>((ref, query) async {
   if (query.isEmpty) return const [];
-  return ref.watch(catalogRepositoryProvider).searchCatalog(query);
+  final pincode = ref.watch(selectedCatalogPincodeProvider);
+  return ref
+      .watch(catalogRepositoryProvider)
+      .searchCatalog(query, pincode: pincode);
 });
 
 final trendingCatalogProvider =
     FutureProvider.autoDispose<List<CatalogService>>((ref) async {
-  return ref.watch(catalogRepositoryProvider).getTrendingCatalog();
+  final pincode = ref.watch(selectedCatalogPincodeProvider);
+  return ref
+      .watch(catalogRepositoryProvider)
+      .getTrendingCatalog(pincode: pincode);
 });

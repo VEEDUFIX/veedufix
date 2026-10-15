@@ -184,9 +184,10 @@ class _EarningsPageState extends ConsumerState<EarningsPage> {
     if (summary == null) {
       return const Scaffold(body: SizedBox.shrink());
     }
-    final payoutProfile =
-        payoutProfileAsync.valueOrNull ?? const <String, dynamic>{};
-    final userMap = (payoutProfile['user'] as Map<String, dynamic>?) ??
+    final payoutProfile = payoutProfileAsync.valueOrNull;
+    final hasPayoutProfile =
+        !payoutProfileAsync.hasError && payoutProfile != null;
+    final userMap = (payoutProfile?['user'] as Map<String, dynamic>?) ??
         const <String, dynamic>{};
     final workerProfile = (userMap['workerProfile'] as Map<String, dynamic>?) ??
         const <String, dynamic>{};
@@ -194,13 +195,26 @@ class _EarningsPageState extends ConsumerState<EarningsPage> {
     final hasBank = _nonEmpty(workerProfile['bankAccountNumber']) != null &&
         _nonEmpty(workerProfile['bankIfsc']) != null;
     final hasPayoutMethod = hasUpi || hasBank;
-    final payoutSetupLabel =
-        hasPayoutMethod ? 'Payout details on file' : 'Add UPI or bank details';
-    final payoutSetupSubtitle = hasUpi
-        ? 'UPI is available for wallet withdrawals.'
-        : hasBank
-            ? 'Bank details are saved. Verification and payout readiness are not confirmed here.'
-            : 'Complete onboarding to enable worker payouts.';
+    final payoutSetupLabel = payoutProfileAsync.hasError
+        ? 'Payout details unavailable'
+        : !hasPayoutProfile
+            ? payoutProfileAsync.isLoading
+                ? 'Loading payout details'
+                : 'Payout details unavailable'
+            : hasPayoutMethod
+                ? 'Payout details on file'
+                : 'Add UPI or bank details';
+    final payoutSetupSubtitle = payoutProfileAsync.hasError
+        ? 'We could not refresh your payout profile. Retry to check again.'
+        : !hasPayoutProfile
+            ? payoutProfileAsync.isLoading
+                ? 'Checking your saved payout method.'
+                : 'We could not load your payout profile. Retry to check again.'
+            : hasUpi
+                ? 'UPI is available for wallet withdrawals.'
+                : hasBank
+                    ? 'Bank details are saved. Verification and payout readiness are not confirmed here.'
+                    : 'Complete onboarding to enable worker payouts.';
     final latestStatus =
         _transactions.isNotEmpty ? _transactions.first.status : 'pending';
     final recentPayouts = _transactions
@@ -307,12 +321,18 @@ class _EarningsPageState extends ConsumerState<EarningsPage> {
                                     borderRadius: BorderRadius.circular(16),
                                   ),
                                   child: Icon(
-                                    hasPayoutMethod
-                                        ? Icons.account_balance_rounded
-                                        : Icons.warning_rounded,
-                                    color: hasPayoutMethod
-                                        ? const Color(0xFFC2A15E)
-                                        : const Color(0xFFF59E0B),
+                                    !hasPayoutProfile
+                                        ? Icons.info_outline_rounded
+                                        : hasPayoutMethod
+                                            ? Icons.account_balance_rounded
+                                            : Icons.warning_rounded,
+                                    color: !hasPayoutProfile
+                                        ? Theme.of(context)
+                                            .colorScheme
+                                            .onSurfaceVariant
+                                        : hasPayoutMethod
+                                            ? const Color(0xFFC2A15E)
+                                            : const Color(0xFFF59E0B),
                                   ),
                                 ),
                                 const SizedBox(width: 14),
@@ -347,7 +367,25 @@ class _EarningsPageState extends ConsumerState<EarningsPage> {
                                 ),
                               ],
                             ),
-                            if (!hasUpi && !hasBank) ...[
+                            if (payoutProfileAsync.hasError) ...[
+                              const SizedBox(height: 14),
+                              Align(
+                                alignment: Alignment.centerRight,
+                                child: Wrap(
+                                  alignment: WrapAlignment.end,
+                                  spacing: 8,
+                                  children: [
+                                    TextButton(
+                                      onPressed: () => ref
+                                          .invalidate(workerPayoutProfileProvider),
+                                      child: const Text('Retry'),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ] else if (hasPayoutProfile &&
+                                !hasUpi &&
+                                !hasBank) ...[
                               const SizedBox(height: 14),
                               Align(
                                 alignment: Alignment.centerRight,
@@ -368,7 +406,13 @@ class _EarningsPageState extends ConsumerState<EarningsPage> {
                         Expanded(
                           child: _MiniMetric(
                             title: 'Payout ready',
-                            value: hasPayoutMethod ? 'On file' : 'No',
+                            value: !hasPayoutProfile
+                                ? payoutProfileAsync.isLoading
+                                    ? 'Checking'
+                                    : 'Unavailable'
+                                : hasPayoutMethod
+                                    ? 'On file'
+                                    : 'No',
                             icon: Icons.account_balance_wallet_rounded,
                           ),
                         ),

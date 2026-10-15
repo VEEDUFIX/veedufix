@@ -10,16 +10,149 @@ import 'package:marketplace_shared/marketplace_shared.dart';
 
 import '../../../../core/widgets/admin_image_picker_field.dart';
 
+bool _customAvailabilityHasNoLocations(
+        String mode, Set<String> serviceAreaIds) =>
+    mode == 'CUSTOM' && serviceAreaIds.isEmpty;
+
+({
+  String stateId,
+  String districtId,
+  String cityId,
+  String areaId,
+  String pincode,
+}) _effectiveCatalogLocationFilters(
+  _CatalogSnapshot snapshot, {
+  required String stateId,
+  required String districtId,
+  required String cityId,
+  required String areaId,
+  required String pincode,
+}) {
+  final activeAreas = snapshot.serviceAreas
+      .where((area) =>
+          area.isActive && area.cityIsActive && area.stateId.isNotEmpty)
+      .toList(growable: false);
+  final stateIds = activeAreas.map((area) => area.stateId).toSet();
+  final effectiveStateId =
+      stateId == 'all' || stateIds.contains(stateId) ? stateId : 'all';
+  final stateAreas = activeAreas.where(
+    (area) => effectiveStateId == 'all' || area.stateId == effectiveStateId,
+  );
+  final districtIds = stateAreas
+      .where((area) => area.districtId.isNotEmpty)
+      .map((area) => area.districtId)
+      .toSet();
+  final effectiveDistrictId =
+      districtId == 'all' || districtIds.contains(districtId)
+          ? districtId
+          : 'all';
+  final districtAreas = stateAreas.where(
+    (area) =>
+        effectiveDistrictId == 'all' || area.districtId == effectiveDistrictId,
+  );
+  final cityIds = districtAreas
+      .where((area) => area.cityId.isNotEmpty)
+      .map((area) => area.cityId)
+      .toSet();
+  final effectiveCityId =
+      cityId == 'all' || cityIds.contains(cityId) ? cityId : 'all';
+  final cityAreas = districtAreas.where(
+    (area) => effectiveCityId == 'all' || area.cityId == effectiveCityId,
+  );
+  final areaIds = cityAreas.map((area) => area.id).toSet();
+  final effectiveAreaId =
+      areaId == 'all' || areaIds.contains(areaId) ? areaId : 'all';
+  final pincodeAreas = cityAreas.where(
+    (area) => effectiveAreaId == 'all' || area.id == effectiveAreaId,
+  );
+  final pincodes = pincodeAreas.expand((area) => area.pincodes).toSet();
+  final effectivePincode =
+      pincode == 'all' || pincodes.contains(pincode) ? pincode : 'all';
+
+  return (
+    stateId: effectiveStateId,
+    districtId: effectiveDistrictId,
+    cityId: effectiveCityId,
+    areaId: effectiveAreaId,
+    pincode: effectivePincode,
+  );
+}
+
+String _variantAvailabilityKey(
+  List<_AdminServiceOption> existingVariants,
+  int index,
+  String name, {
+  Iterable<String> allNames = const [],
+}) {
+  final normalizedName = name.trim().toLowerCase();
+  final matchingVariant = existingVariants
+      .where((variant) => variant.name.trim().toLowerCase() == normalizedName)
+      .firstOrNull;
+  final claimedNames =
+      allNames.map((value) => value.trim().toLowerCase()).toSet();
+  final candidate =
+      index < existingVariants.length ? existingVariants[index] : null;
+  final variantAtIndex = candidate != null &&
+          !claimedNames.contains(candidate.name.trim().toLowerCase())
+      ? candidate
+      : null;
+  final variant = matchingVariant?.id.isNotEmpty == true
+      ? matchingVariant
+      : variantAtIndex?.id.isNotEmpty == true
+          ? variantAtIndex
+          : null;
+  return variant?.id ?? 'draft:$normalizedName';
+}
+
+bool _hasUncoveredCustomVariant(
+  String variantsText,
+  List<_AdminServiceOption> existingVariants,
+  Map<String, String> availabilityModes,
+  Map<String, Set<String>> serviceAreaIds,
+) {
+  final variantNames = variantsText
+      .split('\n')
+      .map((line) => line.split('|').first.trim())
+      .where((name) => name.isNotEmpty)
+      .toList(growable: false);
+  return variantNames.asMap().entries.any((entry) {
+    final key = _variantAvailabilityKey(
+      existingVariants,
+      entry.key,
+      entry.value,
+      allNames: variantNames,
+    );
+    return availabilityModes[key] == 'CUSTOM' &&
+        (serviceAreaIds[key]?.isEmpty ?? true);
+  });
+}
+
+void _showCustomAvailabilityValidationError(BuildContext context,
+    {bool isVariant = false}) {
+  ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+    SnackBar(
+      content: Text(
+        isVariant
+            ? 'Choose at least one location for every custom variant.'
+            : 'Choose at least one location for custom availability.',
+      ),
+    ),
+  );
+}
+
 Widget _buildPublicationControls({
   required BuildContext context,
   required _CatalogSnapshot snapshot,
   required String publicationStatus,
   required DateTime? publishStartsAt,
   required DateTime? publishEndsAt,
+  required String availabilityMode,
+  required String availabilityKey,
   required Set<String> serviceAreaIds,
   required ValueChanged<String> onPublicationStatusChanged,
   required ValueChanged<DateTime?> onPublishStartsAtChanged,
   required ValueChanged<DateTime?> onPublishEndsAtChanged,
+  required ValueChanged<String> onAvailabilityModeChanged,
   required ValueChanged<String> onServiceAreaToggled,
   String? dateError,
 }) {
@@ -65,6 +198,15 @@ Widget _buildPublicationControls({
           if (value != null) onPublicationStatusChanged(value);
         },
       ),
+      const SizedBox(height: 12),
+      _AvailabilitySettingsEditor(
+        snapshot: snapshot,
+        mode: availabilityMode,
+        availabilityKey: availabilityKey,
+        selectedAreaIds: serviceAreaIds,
+        onModeChanged: onAvailabilityModeChanged,
+        onAreaToggled: onServiceAreaToggled,
+      ),
       const SizedBox(height: 8),
       Wrap(
         spacing: 8,
@@ -103,35 +245,98 @@ Widget _buildPublicationControls({
           ),
         ),
       const SizedBox(height: 12),
-      Text('Service areas', style: Theme.of(context).textTheme.titleSmall),
-      const Text('Leave all areas unselected to make this service global.'),
-      if (snapshot.serviceAreas.isEmpty)
-        const Padding(
-          padding: EdgeInsets.symmetric(vertical: 8),
-          child: Text('No service areas are configured yet.'),
-        )
-      else
-        Wrap(
-          spacing: 8,
-          runSpacing: 4,
-          children: snapshot.serviceAreas
-              .where(
-                  (area) => area.isActive || serviceAreaIds.contains(area.id))
-              .map((area) {
-            final selected = serviceAreaIds.contains(area.id);
-            final city = area.cityName.isEmpty ? '' : ' · ${area.cityName}';
-            final inactive = area.isActive ? '' : ' (inactive)';
-            return FilterChip(
-              label: Text('${area.name}$city$inactive'),
-              selected: selected,
-              onSelected: area.isActive || selected
-                  ? (_) => onServiceAreaToggled(area.id)
-                  : null,
-            );
-          }).toList(growable: false),
-        ),
     ],
   );
+}
+
+class _AvailabilitySettingsEditor extends StatelessWidget {
+  const _AvailabilitySettingsEditor({
+    required this.snapshot,
+    required this.mode,
+    required this.availabilityKey,
+    required this.selectedAreaIds,
+    required this.onModeChanged,
+    required this.onAreaToggled,
+    this.inheritedHelp = 'Uses the parent category or subcategory locations.',
+  });
+
+  final _CatalogSnapshot snapshot;
+  final String mode;
+  final String availabilityKey;
+  final Set<String> selectedAreaIds;
+  final ValueChanged<String> onModeChanged;
+  final ValueChanged<String> onAreaToggled;
+  final String inheritedHelp;
+
+  @override
+  Widget build(BuildContext context) {
+    final visibleAreas = snapshot.serviceAreas
+        .where((area) => area.isActive || selectedAreaIds.contains(area.id))
+        .toList(growable: false);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        DropdownButtonFormField<String>(
+          key: ValueKey('availability-mode:$availabilityKey:$mode'),
+          initialValue: mode,
+          decoration: const InputDecoration(labelText: 'Location availability'),
+          items: const [
+            DropdownMenuItem(value: 'INHERITED', child: Text('Inherited')),
+            DropdownMenuItem(value: 'CUSTOM', child: Text('Custom')),
+          ],
+          onChanged: (value) {
+            if (value != null) onModeChanged(value);
+          },
+        ),
+        const SizedBox(height: 6),
+        Text(
+          mode == 'INHERITED'
+              ? inheritedHelp
+              : 'Only the selected service areas will be bookable.',
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
+        if (mode == 'CUSTOM') ...[
+          const SizedBox(height: 8),
+          if (visibleAreas.isEmpty)
+            Text(
+              'No active service areas are configured yet.',
+              style: TextStyle(color: Theme.of(context).colorScheme.error),
+            )
+          else
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 220),
+              child: SingleChildScrollView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    for (final area in visibleAreas)
+                      CheckboxListTile(
+                        dense: true,
+                        contentPadding: EdgeInsets.zero,
+                        value: selectedAreaIds.contains(area.id),
+                        title: Text(
+                          '${area.cityName} · ${area.name}${area.pincodes.isEmpty ? '' : ' · ${area.pincodes.join(', ')}'}',
+                        ),
+                        subtitle: Text(
+                          area.isActive
+                              ? area.stateName
+                              : '${area.stateName} · Inactive',
+                        ),
+                        onChanged: (_) => onAreaToggled(area.id),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          if (visibleAreas.isNotEmpty && selectedAreaIds.isEmpty)
+            Text(
+              'Choose at least one location. A custom item without locations cannot be booked.',
+              style: TextStyle(color: Theme.of(context).colorScheme.error),
+            ),
+        ],
+      ],
+    );
+  }
 }
 
 class CatalogManagerPage extends ConsumerStatefulWidget {
@@ -150,6 +355,14 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
   String _catalogQuery = '';
   String _selectedCategoryId = '';
   _CatalogFilter _catalogFilter = _CatalogFilter.all;
+  String _stateFilter = 'all';
+  String _districtFilter = 'all';
+  String _cityFilter = 'all';
+  String _areaFilter = 'all';
+  String _pincodeFilter = 'all';
+  String _subcategoryFilter = 'all';
+  String _serviceFilter = 'all';
+  String _availabilityFilter = 'all';
 
   @override
   void initState() {
@@ -187,8 +400,104 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
     );
   }
 
+  ({String subcategoryId, String serviceId}) _effectiveCatalogFilters(
+    _CatalogSnapshot snapshot,
+  ) {
+    final subcategoryIds =
+        snapshot.subcategories.map((item) => item.id).toSet();
+    final subcategoryId = _subcategoryFilter == 'all' ||
+            subcategoryIds.contains(_subcategoryFilter)
+        ? _subcategoryFilter
+        : 'all';
+    final availableServices = _filteredServices(
+      snapshot,
+      _catalogQuery,
+      _catalogFilter,
+    ).where((service) =>
+        subcategoryId == 'all' || service.subcategoryId == subcategoryId);
+    final serviceId = _serviceFilter == 'all' ||
+            availableServices.any((service) => service.id == _serviceFilter)
+        ? _serviceFilter
+        : 'all';
+    return (subcategoryId: subcategoryId, serviceId: serviceId);
+  }
+
+  List<_AdminService> _visibleCatalogServices(_CatalogSnapshot snapshot) {
+    final filters = _effectiveCatalogFilters(snapshot);
+    final locationFilters = _effectiveCatalogLocationFilters(
+      snapshot,
+      stateId: _stateFilter,
+      districtId: _districtFilter,
+      cityId: _cityFilter,
+      areaId: _areaFilter,
+      pincode: _pincodeFilter,
+    );
+    final base = _filteredServices(snapshot, _catalogQuery, _catalogFilter);
+    final hasLocationFilter = locationFilters.stateId != 'all' ||
+        locationFilters.districtId != 'all' ||
+        locationFilters.cityId != 'all' ||
+        locationFilters.areaId != 'all' ||
+        locationFilters.pincode != 'all';
+    final matchingAreas = snapshot.serviceAreas.where((area) {
+      return area.isActive &&
+          area.cityIsActive &&
+          (locationFilters.stateId == 'all' ||
+              area.stateId == locationFilters.stateId) &&
+          (locationFilters.districtId == 'all' ||
+              area.districtId == locationFilters.districtId) &&
+          (locationFilters.cityId == 'all' ||
+              area.cityId == locationFilters.cityId) &&
+          (locationFilters.areaId == 'all' ||
+              area.id == locationFilters.areaId) &&
+          (locationFilters.pincode == 'all' ||
+              area.pincodes.contains(locationFilters.pincode));
+    }).toList(growable: false);
+    final targetAreaIds = matchingAreas.map((area) => area.id).toSet();
+
+    return base.where((service) {
+      if (filters.subcategoryId != 'all' &&
+          service.subcategoryId != filters.subcategoryId) {
+        return false;
+      }
+      if (filters.serviceId != 'all' && service.id != filters.serviceId) {
+        return false;
+      }
+
+      final subcategory = snapshot.subcategoryById(service.subcategoryId);
+      final category = snapshot.categoryById(service.categoryId);
+      final effectiveAreaIds = service.availabilityMode == 'CUSTOM'
+          ? service.serviceAreaIds
+          : subcategory?.availabilityMode == 'CUSTOM'
+              ? subcategory!.serviceAreaIds
+              : category?.availabilityMode == 'CUSTOM'
+                  ? category!.serviceAreaIds
+                  : null;
+      final available = effectiveAreaIds == null
+          ? targetAreaIds.isNotEmpty
+          : effectiveAreaIds.any(targetAreaIds.contains);
+
+      if (_availabilityFilter == 'INHERITED' &&
+          service.availabilityMode != 'INHERITED') {
+        return false;
+      }
+      if (_availabilityFilter == 'CUSTOM' &&
+          service.availabilityMode != 'CUSTOM') {
+        return false;
+      }
+      final shouldRequireAvailable = _availabilityFilter == 'AVAILABLE' ||
+          (hasLocationFilter && _availabilityFilter != 'UNAVAILABLE');
+      if (shouldRequireAvailable && !available) {
+        return false;
+      }
+      if (_availabilityFilter == 'UNAVAILABLE' && available) {
+        return false;
+      }
+      return true;
+    }).toList(growable: false);
+  }
+
   Future<void> _createCategory() async {
-    final payload = await _showCategoryEditor();
+    final payload = await _showCategoryEditor(await _snapshotFuture);
     if (payload == null) return;
     try {
       await _api.createCategory(payload);
@@ -200,7 +509,8 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
   }
 
   Future<void> _editCategory(_AdminCategory category) async {
-    final payload = await _showCategoryEditor(existing: category);
+    final payload =
+        await _showCategoryEditor(await _snapshotFuture, existing: category);
     if (payload == null) return;
     try {
       await _api.updateCategory(category.id, payload);
@@ -377,6 +687,296 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
         ids: services.map((item) => item.id),
         isActive: isActive,
       );
+
+  Future<void> _bulkUpdateAvailability(
+      _CatalogSnapshot snapshot, List<_AdminService> visibleServices) async {
+    final payload =
+        await _showBulkAvailabilityDialog(snapshot, visibleServices);
+    if (payload == null || !mounted) return;
+    final summary = switch (payload['action']) {
+      'APPLY_LOCATIONS' =>
+        'Apply ${((payload['serviceIds'] as List?) ?? []).length} selected services to ${((payload['serviceAreaIds'] as List?) ?? []).length} locations?',
+      'REMOVE_LOCATIONS' =>
+        'Remove selected locations from ${((payload['serviceIds'] as List?) ?? []).length} services?',
+      'COPY_SERVICE' =>
+        'Replace the selected services\' location rules with the source service rules?',
+      'APPLY_CATEGORY' =>
+        'Make every subcategory, service, and variant in this category inherit the category availability?',
+      _ => 'Copy the source category availability to the target category?'
+    };
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Confirm bulk availability change'),
+        content:
+            Text('$summary This action may replace existing custom rules.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Confirm change'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    try {
+      final result = await _api.bulkUpdateAvailability(payload);
+      await _reload();
+      await _showMessage(
+          'Availability updated for ${result['updatedCount'] ?? 0} records');
+    } catch (error) {
+      await _showMessage('Unable to update availability: $error');
+    }
+  }
+
+  Future<Map<String, dynamic>?> _showBulkAvailabilityDialog(
+    _CatalogSnapshot snapshot,
+    List<_AdminService> visibleServices,
+  ) async {
+    const actions = <String, String>{
+      'APPLY_LOCATIONS': 'Apply locations to services',
+      'COPY_SERVICE': 'Copy availability from a service',
+      'APPLY_CATEGORY': 'Apply category availability to children',
+      'REMOVE_LOCATIONS': 'Remove locations from services',
+      'COPY_CATEGORY': 'Copy availability between categories',
+    };
+    var action = 'APPLY_LOCATIONS';
+    var sourceServiceId = snapshot.services.firstOrNull?.id ?? '';
+    final scopedCategoryId = _selectedCategoryId.isNotEmpty &&
+            snapshot.categoryById(_selectedCategoryId) != null
+        ? _selectedCategoryId
+        : snapshot.categories.firstOrNull?.id ?? '';
+    var categoryId = scopedCategoryId;
+    var sourceCategoryId = scopedCategoryId;
+    var targetCategoryId = snapshot.categories
+            .where((item) => item.id != sourceCategoryId)
+            .firstOrNull
+            ?.id ??
+        '';
+    final targetServiceIds = visibleServices.map((item) => item.id).toSet();
+    final areaIds = <String>{};
+
+    return showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          final locationAction =
+              action == 'APPLY_LOCATIONS' || action == 'REMOVE_LOCATIONS';
+          final serviceCopy = action == 'COPY_SERVICE';
+          final categoryAction =
+              action == 'APPLY_CATEGORY' || action == 'COPY_CATEGORY';
+          final sourceService = snapshot.services
+              .where((item) => item.id == sourceServiceId)
+              .firstOrNull;
+          final targetServices = visibleServices
+              .where((item) => !serviceCopy || item.id != sourceServiceId)
+              .toList(growable: false);
+          final body = <String, dynamic>{'action': action};
+          if (locationAction || serviceCopy) {
+            body['serviceIds'] = targetServices
+                .where((item) => targetServiceIds.contains(item.id))
+                .map((item) => item.id)
+                .toList(growable: false);
+          }
+          if (locationAction) body['serviceAreaIds'] = areaIds.toList();
+          if (serviceCopy) body['sourceServiceId'] = sourceServiceId;
+          if (action == 'APPLY_CATEGORY') body['categoryId'] = categoryId;
+          if (action == 'COPY_CATEGORY') {
+            body['sourceCategoryId'] = sourceCategoryId;
+            body['targetCategoryId'] = targetCategoryId;
+          }
+          final valid = switch (action) {
+            'APPLY_LOCATIONS' ||
+            'REMOVE_LOCATIONS' =>
+              (body['serviceIds'] as List).isNotEmpty && areaIds.isNotEmpty,
+            'COPY_SERVICE' =>
+              sourceService != null && (body['serviceIds'] as List).isNotEmpty,
+            'APPLY_CATEGORY' => categoryId.isNotEmpty,
+            _ => sourceCategoryId.isNotEmpty &&
+                targetCategoryId.isNotEmpty &&
+                sourceCategoryId != targetCategoryId,
+          };
+
+          Widget checkboxList<T>(
+              List<T> items,
+              String Function(T) idOf,
+              String Function(T) labelOf,
+              Set<String> selected,
+              ValueChanged<String> toggle) {
+            if (items.isEmpty) return const Text('No matching options.');
+            return SizedBox(
+              height: 190,
+              child: ListView.builder(
+                itemCount: items.length,
+                itemBuilder: (context, index) {
+                  final item = items[index];
+                  final id = idOf(item);
+                  return CheckboxListTile(
+                    dense: true,
+                    value: selected.contains(id),
+                    title: Text(labelOf(item)),
+                    onChanged: (_) => toggle(id),
+                  );
+                },
+              ),
+            );
+          }
+
+          return AlertDialog(
+            title: const Text('Bulk location availability'),
+            content: SizedBox(
+              width: 560,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    DropdownButtonFormField<String>(
+                      initialValue: action,
+                      decoration: const InputDecoration(labelText: 'Action'),
+                      items: actions.entries
+                          .map((entry) => DropdownMenuItem(
+                                value: entry.key,
+                                child: Text(entry.value),
+                              ))
+                          .toList(growable: false),
+                      onChanged: (value) => setDialogState(
+                          () => action = value ?? 'APPLY_LOCATIONS'),
+                    ),
+                    if (locationAction || serviceCopy) ...[
+                      const SizedBox(height: 14),
+                      Text(serviceCopy ? 'Source service' : 'Target services'),
+                      if (serviceCopy)
+                        DropdownButtonFormField<String>(
+                          initialValue:
+                              sourceServiceId.isEmpty ? null : sourceServiceId,
+                          items: snapshot.services
+                              .map((item) => DropdownMenuItem(
+                                    value: item.id,
+                                    child: Text(item.name),
+                                  ))
+                              .toList(growable: false),
+                          onChanged: (value) => setDialogState(
+                              () => sourceServiceId = value ?? ''),
+                        ),
+                      checkboxList(
+                        targetServices,
+                        (item) => item.id,
+                        (item) => item.name,
+                        targetServiceIds,
+                        (id) => setDialogState(() {
+                          if (!targetServiceIds.add(id)) {
+                            targetServiceIds.remove(id);
+                          }
+                        }),
+                      ),
+                    ],
+                    if (locationAction) ...[
+                      const SizedBox(height: 14),
+                      const Text('Locations'),
+                      checkboxList(
+                        snapshot.serviceAreas
+                            .where((item) => item.isActive)
+                            .toList(growable: false),
+                        (item) => item.id,
+                        (item) =>
+                            '${item.cityName} · ${item.name} (${item.pincodes.join(', ')})',
+                        areaIds,
+                        (id) => setDialogState(() {
+                          if (!areaIds.add(id)) areaIds.remove(id);
+                        }),
+                      ),
+                    ],
+                    if (categoryAction) ...[
+                      const SizedBox(height: 14),
+                      if (action == 'APPLY_CATEGORY')
+                        DropdownButtonFormField<String>(
+                          initialValue: categoryId.isEmpty ? null : categoryId,
+                          decoration:
+                              const InputDecoration(labelText: 'Category'),
+                          items: snapshot.categories
+                              .map((item) => DropdownMenuItem(
+                                    value: item.id,
+                                    child: Text(item.name),
+                                  ))
+                              .toList(growable: false),
+                          onChanged: (value) =>
+                              setDialogState(() => categoryId = value ?? ''),
+                        )
+                      else ...[
+                        DropdownButtonFormField<String>(
+                          initialValue: sourceCategoryId.isEmpty
+                              ? null
+                              : sourceCategoryId,
+                          decoration: const InputDecoration(
+                              labelText: 'Copy from category'),
+                          items: snapshot.categories
+                              .map((item) => DropdownMenuItem(
+                                    value: item.id,
+                                    child: Text(item.name),
+                                  ))
+                              .toList(growable: false),
+                          onChanged: (value) => setDialogState(() {
+                            sourceCategoryId = value ?? '';
+                            if (targetCategoryId == sourceCategoryId) {
+                              targetCategoryId = snapshot.categories
+                                      .where(
+                                          (item) => item.id != sourceCategoryId)
+                                      .firstOrNull
+                                      ?.id ??
+                                  '';
+                            }
+                          }),
+                        ),
+                        DropdownButtonFormField<String>(
+                          key: ValueKey(
+                            'copy-target:$sourceCategoryId:$targetCategoryId',
+                          ),
+                          initialValue: targetCategoryId.isEmpty ||
+                                  targetCategoryId == sourceCategoryId
+                              ? null
+                              : targetCategoryId,
+                          decoration: const InputDecoration(
+                              labelText: 'Copy to category'),
+                          items: snapshot.categories
+                              .where((item) => item.id != sourceCategoryId)
+                              .map((item) => DropdownMenuItem(
+                                    value: item.id,
+                                    child: Text(item.name),
+                                  ))
+                              .toList(growable: false),
+                          onChanged: (value) => setDialogState(
+                              () => targetCategoryId = value ?? ''),
+                        ),
+                      ],
+                    ],
+                    const SizedBox(height: 10),
+                    const Text(
+                        'Bulk changes replace custom assignments in the selected scope. A separate confirmation is required before saving.'),
+                  ],
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed:
+                    valid ? () => Navigator.of(dialogContext).pop(body) : null,
+                child: const Text('Review change'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
 
   Future<void> _reorderCategories(_CatalogSnapshot snapshot) async {
     final ordered = snapshot.categories.toList(growable: true);
@@ -830,7 +1430,7 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
     }
   }
 
-  Future<Map<String, dynamic>?> _showCategoryEditor(
+  Future<Map<String, dynamic>?> _showCategoryEditor(_CatalogSnapshot snapshot,
       {_AdminCategory? existing}) {
     final formKey = GlobalKey<FormState>();
     final nameController = TextEditingController(text: existing?.name ?? '');
@@ -841,6 +1441,8 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
     final sortOrderController =
         TextEditingController(text: (existing?.sortOrder ?? 0).toString());
     bool isActive = existing?.isActive ?? true;
+    String availabilityMode = existing?.availabilityMode ?? 'INHERITED';
+    final serviceAreaIds = <String>{...existing?.serviceAreaIds ?? const []};
     bool featured = existing?.featured ?? false;
     bool popular = existing?.popular ?? false;
 
@@ -905,6 +1507,21 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
                         onChanged: (value) => setState(() => popular = value),
                         title: const Text('Popular'),
                       ),
+                      _AvailabilitySettingsEditor(
+                        snapshot: snapshot,
+                        mode: availabilityMode,
+                        availabilityKey: existing?.id ?? 'draft-category',
+                        selectedAreaIds: serviceAreaIds,
+                        onModeChanged: (value) =>
+                            setState(() => availabilityMode = value),
+                        inheritedHelp:
+                            'Available in every active service area.',
+                        onAreaToggled: (id) => setState(() {
+                          if (!serviceAreaIds.add(id)) {
+                            serviceAreaIds.remove(id);
+                          }
+                        }),
+                      ),
                     ],
                   ),
                 ),
@@ -916,6 +1533,13 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
                 ),
                 FilledButton(
                   onPressed: () {
+                    if (_customAvailabilityHasNoLocations(
+                      availabilityMode,
+                      serviceAreaIds,
+                    )) {
+                      _showCustomAvailabilityValidationError(dialogContext);
+                      return;
+                    }
                     if (!formKey.currentState!.validate()) return;
                     Navigator.of(dialogContext).pop({
                       'name': nameController.text.trim(),
@@ -931,6 +1555,10 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
                       'isActive': isActive,
                       'featured': featured,
                       'popular': popular,
+                      'availabilityMode': availabilityMode,
+                      'serviceAreaIds': availabilityMode == 'CUSTOM'
+                          ? serviceAreaIds.toList(growable: false)
+                          : const <String>[],
                     });
                   },
                   child: const Text('Save'),
@@ -966,6 +1594,8 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
     final sortOrderController =
         TextEditingController(text: (existing?.sortOrder ?? 0).toString());
     bool isActive = existing?.isActive ?? true;
+    String availabilityMode = existing?.availabilityMode ?? 'INHERITED';
+    final serviceAreaIds = <String>{...existing?.serviceAreaIds ?? const []};
 
     return showDialog<Map<String, dynamic>>(
       context: context,
@@ -1044,6 +1674,19 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
                         onChanged: (value) => setState(() => isActive = value),
                         title: const Text('Active'),
                       ),
+                      _AvailabilitySettingsEditor(
+                        snapshot: snapshot,
+                        mode: availabilityMode,
+                        availabilityKey: existing?.id ?? 'draft-subcategory',
+                        selectedAreaIds: serviceAreaIds,
+                        onModeChanged: (value) =>
+                            setState(() => availabilityMode = value),
+                        onAreaToggled: (id) => setState(() {
+                          if (!serviceAreaIds.add(id)) {
+                            serviceAreaIds.remove(id);
+                          }
+                        }),
+                      ),
                     ],
                   ),
                 ),
@@ -1055,6 +1698,13 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
                 ),
                 FilledButton(
                   onPressed: () {
+                    if (_customAvailabilityHasNoLocations(
+                      availabilityMode,
+                      serviceAreaIds,
+                    )) {
+                      _showCustomAvailabilityValidationError(dialogContext);
+                      return;
+                    }
                     if (!formKey.currentState!.validate()) return;
                     Navigator.of(dialogContext).pop({
                       'categoryId': categoryIdController.value,
@@ -1071,6 +1721,10 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
                       'sortOrder':
                           int.tryParse(sortOrderController.text.trim()) ?? 0,
                       'isActive': isActive,
+                      'availabilityMode': availabilityMode,
+                      'serviceAreaIds': availabilityMode == 'CUSTOM'
+                          ? serviceAreaIds.toList(growable: false)
+                          : const <String>[],
                     });
                   },
                   child: const Text('Save'),
@@ -1146,6 +1800,21 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
         TextEditingController(text: existing?.cancellationPolicy ?? '');
     final warrantyTextController =
         TextEditingController(text: existing?.warrantyText ?? '');
+    final guaranteeWindowController = TextEditingController(
+        text: (existing?.guaranteeClaimWindowDays ?? 0).toString());
+    final guaranteeCategoriesController = TextEditingController(
+        text: existing?.guaranteeIssueCategories.join('\n') ?? '');
+    final guaranteeTermsController =
+        TextEditingController(text: existing?.guaranteeTerms ?? '');
+    final guaranteeExclusionsController =
+        TextEditingController(text: existing?.guaranteeExclusions ?? '');
+    final guaranteeRemediesController = TextEditingController(
+        text: existing?.guaranteeResolutionTypes.join('\n') ?? '');
+    bool guaranteeEnabled = existing?.guaranteeEnabled ?? false;
+    bool guaranteeRequiresPartnerReview =
+        existing?.guaranteeRequiresPartnerReview ?? false;
+    bool guaranteeEvidenceRequired =
+        existing?.guaranteeEvidenceRequired ?? false;
     final requirementsController =
         TextEditingController(text: existing?.requirements.join('\n') ?? '');
     final variantsController = TextEditingController(
@@ -1162,12 +1831,30 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
       for (final option in existing?.addons ?? const <_AdminServiceOption>[])
         option.name.trim().toLowerCase(): option.imageUrl,
     };
+    final existingVariants =
+        existing?.variants ?? const <_AdminServiceOption>[];
+    final variantAvailabilityModes = <String, String>{
+      for (final entry in existingVariants.asMap().entries)
+        _variantAvailabilityKey(existingVariants, entry.key, entry.value.name):
+            entry.value.availabilityMode,
+    };
+    final variantServiceAreaIds = <String, Set<String>>{
+      for (final entry in existingVariants.asMap().entries)
+        _variantAvailabilityKey(existingVariants, entry.key, entry.value.name):
+            {...entry.value.serviceAreaIds},
+    };
     final ctaLabelController =
         TextEditingController(text: existing?.ctaLabel ?? 'Book service');
     final ratingController = TextEditingController(
         text: existing == null ? '0' : existing.rating.toStringAsFixed(2));
     final reviewCountController = TextEditingController(
         text: existing == null ? '0' : existing.reviewCount.toString());
+    final maintenanceIntervalsController = TextEditingController(
+      text: existing?.maintenanceIntervalsMonths.join(', ') ?? '',
+    );
+    final maintenanceReminderController = TextEditingController(
+      text: (existing?.maintenanceReminderHours ?? 24).toString(),
+    );
     bool featured = existing?.featured ?? false;
     bool popular = existing?.popular ?? false;
     bool emergency = existing?.emergencyAvailable ?? false;
@@ -1175,11 +1862,13 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
     bool requiresSiteVisit = existing?.requiresSiteVisit ?? false;
     bool isActive = existing?.isActive ?? true;
     bool bookingEnabled = existing?.bookingEnabled ?? true;
+    bool maintenanceEnabled = existing?.maintenanceEnabled ?? false;
     bool gstApplicable = existing?.gstApplicable ?? true;
     String priceType = existing?.priceType ?? 'FROM';
     String publicationStatus = existing?.publicationStatus ?? 'DRAFT';
     DateTime? publishStartsAt = existing?.publishStartsAt;
     DateTime? publishEndsAt = existing?.publishEndsAt;
+    String availabilityMode = existing?.availabilityMode ?? 'INHERITED';
     final serviceAreaIds = <String>{
       ...(existing?.serviceAreaIds ?? const <String>[])
     };
@@ -1359,6 +2048,62 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
                             labelText: 'Warranty terms (optional)'),
                         maxLines: 3,
                       ),
+                      const Divider(height: 28),
+                      SwitchListTile(
+                        contentPadding: EdgeInsets.zero,
+                        value: guaranteeEnabled,
+                        onChanged: (value) =>
+                            setState(() => guaranteeEnabled = value),
+                        title: const Text('Enable service guarantee claims'),
+                        subtitle: const Text(
+                            'Only enable after business policy approval. No refund or free rework is promised automatically.'),
+                      ),
+                      if (guaranteeEnabled) ...[
+                        TextFormField(
+                            controller: guaranteeWindowController,
+                            decoration: const InputDecoration(
+                                labelText:
+                                    'Claim window after completion (days)'),
+                            keyboardType: TextInputType.number),
+                        TextFormField(
+                            controller: guaranteeCategoriesController,
+                            decoration: const InputDecoration(
+                                labelText: 'Eligible issue categories',
+                                helperText:
+                                    'One per line; e.g. incomplete work, poor workmanship, damage'),
+                            maxLines: 3),
+                        TextFormField(
+                            controller: guaranteeTermsController,
+                            decoration: const InputDecoration(
+                                labelText: 'Guarantee terms'),
+                            maxLines: 3),
+                        TextFormField(
+                            controller: guaranteeExclusionsController,
+                            decoration: const InputDecoration(
+                                labelText: 'Guarantee exclusions'),
+                            maxLines: 3),
+                        TextFormField(
+                            controller: guaranteeRemediesController,
+                            validator: _validateGuaranteeRemedies,
+                            decoration: const InputDecoration(
+                                labelText: 'Permitted resolution types',
+                                helperText:
+                                    'Use REWORK, REVISIT, or REFUND_REVIEW (one per line)'),
+                            maxLines: 3),
+                        SwitchListTile(
+                            contentPadding: EdgeInsets.zero,
+                            value: guaranteeRequiresPartnerReview,
+                            onChanged: (value) => setState(
+                                () => guaranteeRequiresPartnerReview = value),
+                            title: const Text(
+                                'Request Partner response during review')),
+                        SwitchListTile(
+                            contentPadding: EdgeInsets.zero,
+                            value: guaranteeEvidenceRequired,
+                            onChanged: (value) => setState(
+                                () => guaranteeEvidenceRequired = value),
+                            title: const Text('Require supporting photos')),
+                      ],
                       TextFormField(
                         controller: requirementsController,
                         decoration: const InputDecoration(
@@ -1387,6 +2132,15 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
                         uploadImage: (bytes, fileName) =>
                             _uploadCatalogImage(_api, bytes, fileName),
                       ),
+                      _buildServiceOptionAvailabilityEditors(
+                        context: context,
+                        snapshot: snapshot,
+                        controller: variantsController,
+                        existingVariants: existingVariants,
+                        modes: variantAvailabilityModes,
+                        areaIds: variantServiceAreaIds,
+                        setState: setState,
+                      ),
                       TextFormField(
                         controller: addonsController,
                         decoration: const InputDecoration(
@@ -1411,12 +2165,16 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
                         context: context,
                         snapshot: snapshot,
                         publicationStatus: publicationStatus,
+                        availabilityMode: availabilityMode,
+                        availabilityKey: existing?.id ?? 'draft-service',
                         publishStartsAt: publishStartsAt,
                         publishEndsAt: publishEndsAt,
                         serviceAreaIds: serviceAreaIds,
                         dateError: publicationDateError,
                         onPublicationStatusChanged: (value) =>
                             setState(() => publicationStatus = value),
+                        onAvailabilityModeChanged: (value) =>
+                            setState(() => availabilityMode = value),
                         onPublishStartsAtChanged: (value) => setState(() {
                           publishStartsAt = value;
                           publicationDateError = null;
@@ -1475,8 +2233,11 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
                       ),
                       TextFormField(
                         controller: seoKeywordsController,
-                        decoration:
-                            const InputDecoration(labelText: 'SEO keywords'),
+                        decoration: const InputDecoration(
+                          labelText: 'Search aliases / SEO keywords',
+                          helperText:
+                              'Comma-separated service names and phrases customers may search for.',
+                        ),
                       ),
                       TextFormField(
                         controller: cancellationPolicyController,
@@ -1537,6 +2298,54 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
                         subtitle: const Text(
                             'Disable temporarily without hiding the service.'),
                       ),
+                      SwitchListTile(
+                        value: maintenanceEnabled,
+                        onChanged: (value) =>
+                            setState(() => maintenanceEnabled = value),
+                        title: const Text('Recurring maintenance plans'),
+                        subtitle: const Text(
+                            'Eligible customers can create a plan. Each visit still requires customer confirmation and checkout.'),
+                      ),
+                      if (maintenanceEnabled) ...[
+                        TextFormField(
+                          controller: maintenanceIntervalsController,
+                          decoration: const InputDecoration(
+                              labelText: 'Allowed intervals (months)',
+                              hintText: '1, 3, 6, 12'),
+                          validator: (value) {
+                            if (!maintenanceEnabled) return null;
+                            final tokens = (value ?? '')
+                                .split(',')
+                                .map((item) => item.trim())
+                                .where((item) => item.isNotEmpty)
+                                .toList();
+                            final values = tokens
+                                .map((item) => int.tryParse(item))
+                                .whereType<int>()
+                                .toList();
+                            if (tokens.isEmpty ||
+                                values.length != tokens.length ||
+                                values.any((item) => item < 1 || item > 24) ||
+                                values.toSet().length != values.length) {
+                              return 'Enter unique month intervals from 1 to 24.';
+                            }
+                            return null;
+                          },
+                        ),
+                        TextFormField(
+                          controller: maintenanceReminderController,
+                          decoration: const InputDecoration(
+                              labelText: 'Reminder lead time (hours)'),
+                          keyboardType: TextInputType.number,
+                          validator: (value) {
+                            if (!maintenanceEnabled) return null;
+                            final hours = int.tryParse(value ?? '');
+                            return hours == null || hours < 1 || hours > 720
+                                ? 'Enter 1 to 720 hours.'
+                                : null;
+                          },
+                        ),
+                      ],
                     ],
                   ),
                 ),
@@ -1549,6 +2358,25 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
                 FilledButton(
                   onPressed: () {
                     if (!formKey.currentState!.validate()) return;
+                    if (_customAvailabilityHasNoLocations(
+                      availabilityMode,
+                      serviceAreaIds,
+                    )) {
+                      _showCustomAvailabilityValidationError(dialogContext);
+                      return;
+                    }
+                    if (_hasUncoveredCustomVariant(
+                      variantsController.text,
+                      existingVariants,
+                      variantAvailabilityModes,
+                      variantServiceAreaIds,
+                    )) {
+                      _showCustomAvailabilityValidationError(
+                        dialogContext,
+                        isVariant: true,
+                      );
+                      return;
+                    }
                     if (publishStartsAt != null &&
                         publishEndsAt != null &&
                         !publishEndsAt!.isAfter(publishStartsAt!)) {
@@ -1596,6 +2424,29 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
                       'warrantyText': warrantyTextController.text.trim().isEmpty
                           ? null
                           : warrantyTextController.text.trim(),
+                      'guaranteeEnabled': guaranteeEnabled,
+                      'guaranteeClaimWindowDays': guaranteeEnabled
+                          ? (int.tryParse(
+                                  guaranteeWindowController.text.trim()) ??
+                              0)
+                          : 0,
+                      'guaranteeIssueCategories':
+                          _serviceLines(guaranteeCategoriesController.text),
+                      'guaranteeTerms':
+                          guaranteeTermsController.text.trim().isEmpty
+                              ? null
+                              : guaranteeTermsController.text.trim(),
+                      'guaranteeExclusions':
+                          guaranteeExclusionsController.text.trim().isEmpty
+                              ? null
+                              : guaranteeExclusionsController.text.trim(),
+                      'guaranteeResolutionTypes':
+                          _serviceLines(guaranteeRemediesController.text)
+                              .map((value) => value.toUpperCase())
+                              .toList(growable: false),
+                      'guaranteeRequiresPartnerReview':
+                          guaranteeRequiresPartnerReview,
+                      'guaranteeEvidenceRequired': guaranteeEvidenceRequired,
                       'requirements': requirementsController.text
                           .split('\n')
                           .map((item) => item.trim())
@@ -1606,6 +2457,8 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
                         existing?.variants ?? const [],
                         isVariant: true,
                         imageUrls: variantImageUrls,
+                        availabilityModes: variantAvailabilityModes,
+                        serviceAreaIds: variantServiceAreaIds,
                       ),
                       'addons': _serviceOptionRows(
                         addonsController.text,
@@ -1648,7 +2501,21 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
                       'publishStartsAt':
                           publishStartsAt?.toUtc().toIso8601String(),
                       'publishEndsAt': publishEndsAt?.toUtc().toIso8601String(),
-                      'serviceAreaIds': serviceAreaIds.toList(growable: false),
+                      'serviceAreaIds': availabilityMode == 'CUSTOM'
+                          ? serviceAreaIds.toList(growable: false)
+                          : const <String>[],
+                      'availabilityMode': availabilityMode,
+                      'maintenanceEnabled': maintenanceEnabled,
+                      'maintenanceIntervalsMonths': maintenanceEnabled
+                          ? maintenanceIntervalsController.text
+                              .split(',')
+                              .map((item) => int.tryParse(item.trim()))
+                              .whereType<int>()
+                              .toList()
+                          : <int>[],
+                      'maintenanceReminderHours': int.tryParse(
+                              maintenanceReminderController.text.trim()) ??
+                          24,
                     });
                   },
                   child: const Text('Save'),
@@ -1681,12 +2548,19 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
       seoKeywordsController.dispose();
       cancellationPolicyController.dispose();
       warrantyTextController.dispose();
+      guaranteeWindowController.dispose();
+      guaranteeCategoriesController.dispose();
+      guaranteeTermsController.dispose();
+      guaranteeExclusionsController.dispose();
+      guaranteeRemediesController.dispose();
       requirementsController.dispose();
       variantsController.dispose();
       addonsController.dispose();
       ctaLabelController.dispose();
       ratingController.dispose();
       reviewCountController.dispose();
+      maintenanceIntervalsController.dispose();
+      maintenanceReminderController.dispose();
     });
   }
 
@@ -1815,7 +2689,10 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
                       _selectedCategoryId.isEmpty ||
                       selectedCategory == null
                   ? data
-                  : _CatalogSnapshot(categories: [selectedCategory]);
+                  : _CatalogSnapshot(
+                      categories: [selectedCategory],
+                      serviceAreas: data.serviceAreas,
+                    );
               final visibleCategories = scopedSnapshot == null
                   ? const <_AdminCategory>[]
                   : _filteredCategories(
@@ -1826,201 +2703,259 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
                       scopedSnapshot, _catalogQuery, _catalogFilter);
               final visibleServices = scopedSnapshot == null
                   ? const <_AdminService>[]
-                  : _filteredServices(
-                      scopedSnapshot, _catalogQuery, _catalogFilter);
+                  : _visibleCatalogServices(scopedSnapshot);
+              final catalogFilters = scopedSnapshot == null
+                  ? null
+                  : _effectiveCatalogFilters(scopedSnapshot);
 
-              return Column(
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    'Catalog Manager',
-                                    style: GoogleFonts.outfit(
-                                      fontSize: 32,
-                                      fontWeight: FontWeight.w800,
-                                      color: Colors.black87,
-                                      letterSpacing: -0.5,
+              return NestedScrollView(
+                headerSliverBuilder: (context, innerBoxIsScrolled) => [
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'Catalog Manager',
+                                      style: GoogleFonts.outfit(
+                                        fontSize: 32,
+                                        fontWeight: FontWeight.w800,
+                                        color: Colors.black87,
+                                        letterSpacing: -0.5,
+                                      ),
                                     ),
-                                  ),
-                                  const SizedBox(height: 8),
-                                  Text(
-                                    'Manage categories, services, pricing, images, and bulk imports without code changes.',
-                                    style: GoogleFonts.outfit(
-                                      color: Colors.black54,
-                                      fontSize: 16,
+                                    const SizedBox(height: 8),
+                                    Text(
+                                      'Manage categories, services, pricing, images, and bulk imports without code changes.',
+                                      style: GoogleFonts.outfit(
+                                        color: Colors.black54,
+                                        fontSize: 16,
+                                      ),
                                     ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            IconButton(
-                              onPressed: loading ? null : _reload,
-                              icon: const Icon(Icons.refresh_rounded),
-                            ),
-                            const SizedBox(width: 8),
-                            FilledButton.icon(
-                              onPressed: loading
-                                  ? null
-                                  : () => _createService(
-                                      data ?? const _CatalogSnapshot.empty()),
-                              icon: const Icon(Icons.add_rounded),
-                              label: const Text('New service'),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 18),
-                        _SearchBar(
-                          controller: _searchController,
-                          onChanged: (value) =>
-                              setState(() => _catalogQuery = value.trim()),
-                        ),
-                        const SizedBox(height: 10),
-                        DropdownButtonFormField<String>(
-                          initialValue: selectedCategory == null
-                              ? ''
-                              : selectedCategory.id,
-                          isExpanded: true,
-                          decoration: const InputDecoration(
-                            labelText: 'Category scope',
-                            prefixIcon: Icon(Icons.account_tree_outlined),
-                            border: OutlineInputBorder(),
-                            isDense: true,
-                          ),
-                          items: [
-                            const DropdownMenuItem(
-                                value: '', child: Text('All categories')),
-                            ...?data?.categories.map(
-                              (category) => DropdownMenuItem(
-                                value: category.id,
-                                child: Text(category.name,
-                                    overflow: TextOverflow.ellipsis),
-                              ),
-                            ),
-                          ],
-                          onChanged: data == null
-                              ? null
-                              : (value) => setState(
-                                  () => _selectedCategoryId = value ?? ''),
-                        ),
-                        const SizedBox(height: 12),
-                        Wrap(
-                          spacing: 8,
-                          runSpacing: 8,
-                          children: _CatalogFilter.values
-                              .map(
-                                (filter) => ChoiceChip(
-                                  label: Text(filter.label),
-                                  selected: _catalogFilter == filter,
-                                  onSelected: (_) =>
-                                      setState(() => _catalogFilter = filter),
+                                  ],
                                 ),
-                              )
-                              .toList(growable: false),
-                        ),
-                        const SizedBox(height: 12),
-                        if (!loading && data != null)
-                          _OverviewMetrics(snapshot: data),
-                        const SizedBox(height: 18),
-                        const TabBar(
-                          isScrollable: true,
-                          tabs: [
-                            Tab(text: 'Categories'),
-                            Tab(text: 'Subcategories'),
-                            Tab(text: 'Services'),
-                            Tab(text: 'Pricing'),
-                            Tab(text: 'Import/Export'),
-                          ],
-                        ),
-                      ],
+                              ),
+                              const SizedBox(width: 12),
+                              IconButton(
+                                onPressed: loading ? null : _reload,
+                                icon: const Icon(Icons.refresh_rounded),
+                              ),
+                              const SizedBox(width: 8),
+                              FilledButton.icon(
+                                onPressed: loading
+                                    ? null
+                                    : () => _createService(
+                                        data ?? const _CatalogSnapshot.empty()),
+                                icon: const Icon(Icons.add_rounded),
+                                label: const Text('New service'),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 18),
+                          _SearchBar(
+                            controller: _searchController,
+                            onChanged: (value) =>
+                                setState(() => _catalogQuery = value.trim()),
+                          ),
+                          const SizedBox(height: 10),
+                          DropdownButtonFormField<String>(
+                            key: ValueKey(
+                              'category-scope:${selectedCategory?.id ?? ''}',
+                            ),
+                            initialValue: selectedCategory == null
+                                ? ''
+                                : selectedCategory.id,
+                            isExpanded: true,
+                            decoration: const InputDecoration(
+                              labelText: 'Category scope',
+                              prefixIcon: Icon(Icons.account_tree_outlined),
+                              border: OutlineInputBorder(),
+                              isDense: true,
+                            ),
+                            items: [
+                              const DropdownMenuItem(
+                                  value: '', child: Text('All categories')),
+                              ...?data?.categories.map(
+                                (category) => DropdownMenuItem(
+                                  value: category.id,
+                                  child: Text(category.name,
+                                      overflow: TextOverflow.ellipsis),
+                                ),
+                              ),
+                            ],
+                            onChanged: data == null
+                                ? null
+                                : (value) => setState(() {
+                                      _selectedCategoryId = value ?? '';
+                                      _subcategoryFilter = 'all';
+                                      _serviceFilter = 'all';
+                                    }),
+                          ),
+                          const SizedBox(height: 12),
+                          if (scopedSnapshot != null && catalogFilters != null)
+                            _CatalogLocationFilterBar(
+                              snapshot: scopedSnapshot,
+                              categoryId: selectedCategory?.id ?? 'all',
+                              stateId: _stateFilter,
+                              districtId: _districtFilter,
+                              cityId: _cityFilter,
+                              areaId: _areaFilter,
+                              pincode: _pincodeFilter,
+                              subcategoryId: catalogFilters.subcategoryId,
+                              serviceId: catalogFilters.serviceId,
+                              availability: _availabilityFilter,
+                              onChanged: (key, value) => setState(() {
+                                switch (key) {
+                                  case 'state':
+                                    _stateFilter = value;
+                                    _districtFilter = 'all';
+                                    _cityFilter = 'all';
+                                    _areaFilter = 'all';
+                                    _pincodeFilter = 'all';
+                                  case 'district':
+                                    _districtFilter = value;
+                                    _cityFilter = 'all';
+                                    _areaFilter = 'all';
+                                    _pincodeFilter = 'all';
+                                  case 'city':
+                                    _cityFilter = value;
+                                    _areaFilter = 'all';
+                                    _pincodeFilter = 'all';
+                                  case 'area':
+                                    _areaFilter = value;
+                                    _pincodeFilter = 'all';
+                                  case 'pincode':
+                                    _pincodeFilter = value;
+                                  case 'subcategory':
+                                    _subcategoryFilter = value;
+                                    _serviceFilter = 'all';
+                                  case 'service':
+                                    _serviceFilter = value;
+                                  case 'availability':
+                                    _availabilityFilter = value;
+                                }
+                              }),
+                              onClear: () => setState(() {
+                                _stateFilter = 'all';
+                                _districtFilter = 'all';
+                                _cityFilter = 'all';
+                                _areaFilter = 'all';
+                                _pincodeFilter = 'all';
+                                _subcategoryFilter = 'all';
+                                _serviceFilter = 'all';
+                                _availabilityFilter = 'all';
+                              }),
+                            ),
+                          const SizedBox(height: 12),
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: _CatalogFilter.values
+                                .map(
+                                  (filter) => ChoiceChip(
+                                    label: Text(filter.label),
+                                    selected: _catalogFilter == filter,
+                                    onSelected: (_) =>
+                                        setState(() => _catalogFilter = filter),
+                                  ),
+                                )
+                                .toList(growable: false),
+                          ),
+                          const SizedBox(height: 12),
+                          if (!loading && data != null)
+                            _OverviewMetrics(snapshot: data),
+                          const SizedBox(height: 18),
+                        ],
+                      ),
                     ),
                   ),
-                  const SizedBox(height: 16),
-                  Expanded(
-                    child: loading && data == null
-                        ? const Center(child: CircularProgressIndicator())
-                        : data == null
-                            ? _ErrorState(onRetry: _reload)
-                            : TabBarView(
-                                children: [
-                                  _CategoriesTab(
-                                    snapshot: scopedSnapshot ?? data,
-                                    query: _catalogQuery,
-                                    filter: _catalogFilter,
-                                    visibleCount: visibleCategories.length,
-                                    onCreate: _createCategory,
-                                    onEdit: _editCategory,
-                                    onDisable: _toggleCategory,
-                                    onReorder: () => _reorderCategories(data),
-                                    onBulkEnable: () => _bulkUpdateCategories(
-                                        visibleCategories,
-                                        isActive: true),
-                                    onBulkDisable: () => _bulkUpdateCategories(
-                                        visibleCategories,
-                                        isActive: false),
-                                  ),
-                                  _SubcategoriesTab(
-                                    snapshot: scopedSnapshot ?? data,
-                                    query: _catalogQuery,
-                                    filter: _catalogFilter,
-                                    visibleCount: visibleSubcategories.length,
-                                    onCreate: () => _createSubcategory(data),
-                                    onEdit: (subcategory) =>
-                                        _editSubcategory(data, subcategory),
-                                    onDisable: _toggleSubcategory,
-                                    onReorder: () =>
-                                        _reorderSubcategories(data),
-                                    onBulkEnable: () =>
-                                        _bulkUpdateSubcategories(
-                                            visibleSubcategories,
-                                            isActive: true),
-                                    onBulkDisable: () =>
-                                        _bulkUpdateSubcategories(
-                                            visibleSubcategories,
-                                            isActive: false),
-                                  ),
-                                  _ServicesTab(
-                                    snapshot: scopedSnapshot ?? data,
-                                    query: _catalogQuery,
-                                    filter: _catalogFilter,
-                                    visibleCount: visibleServices.length,
-                                    onCreate: () => _createService(data),
-                                    onEdit: (service) =>
-                                        _editService(data, service),
-                                    onDisable: _toggleService,
-                                    onPricingRule: _addPricingRule,
-                                    onReorder: () => _reorderServices(data),
-                                    onBulkEnable: () => _bulkUpdateServices(
-                                        visibleServices,
-                                        isActive: true),
-                                    onBulkDisable: () => _bulkUpdateServices(
-                                        visibleServices,
-                                        isActive: false),
-                                  ),
-                                  _PricingTab(
-                                    snapshot: scopedSnapshot ?? data,
-                                    query: _catalogQuery,
-                                    filter: _catalogFilter,
-                                    onPricingRule: _addPricingRule,
-                                  ),
-                                  _ImportExportTab(
-                                    onImport: _importCatalog,
-                                    onExport: _exportCatalog,
-                                    onAddStarter: _addStarterCatalog,
-                                  ),
-                                ],
-                              ),
+                  SliverPersistentHeader(
+                    pinned: true,
+                    delegate: _CatalogTabBarDelegate(),
                   ),
                 ],
+                body: loading && data == null
+                    ? const Center(child: CircularProgressIndicator())
+                    : data == null
+                        ? _ErrorState(onRetry: _reload)
+                        : TabBarView(
+                            children: [
+                              _CategoriesTab(
+                                snapshot: scopedSnapshot ?? data,
+                                query: _catalogQuery,
+                                filter: _catalogFilter,
+                                visibleCount: visibleCategories.length,
+                                onCreate: _createCategory,
+                                onEdit: _editCategory,
+                                onDisable: _toggleCategory,
+                                onReorder: () => _reorderCategories(data),
+                                onBulkEnable: () => _bulkUpdateCategories(
+                                    visibleCategories,
+                                    isActive: true),
+                                onBulkDisable: () => _bulkUpdateCategories(
+                                    visibleCategories,
+                                    isActive: false),
+                              ),
+                              _SubcategoriesTab(
+                                snapshot: scopedSnapshot ?? data,
+                                query: _catalogQuery,
+                                filter: _catalogFilter,
+                                visibleCount: visibleSubcategories.length,
+                                onCreate: () => _createSubcategory(data),
+                                onEdit: (subcategory) =>
+                                    _editSubcategory(data, subcategory),
+                                onDisable: _toggleSubcategory,
+                                onReorder: () => _reorderSubcategories(data),
+                                onBulkEnable: () => _bulkUpdateSubcategories(
+                                    visibleSubcategories,
+                                    isActive: true),
+                                onBulkDisable: () => _bulkUpdateSubcategories(
+                                    visibleSubcategories,
+                                    isActive: false),
+                              ),
+                              _ServicesTab(
+                                snapshot: scopedSnapshot ?? data,
+                                services: visibleServices,
+                                query: _catalogQuery,
+                                filter: _catalogFilter,
+                                visibleCount: visibleServices.length,
+                                onCreate: () => _createService(data),
+                                onEdit: (service) =>
+                                    _editService(data, service),
+                                onDisable: _toggleService,
+                                onPricingRule: _addPricingRule,
+                                onReorder: () => _reorderServices(data),
+                                onBulkEnable: () => _bulkUpdateServices(
+                                    visibleServices,
+                                    isActive: true),
+                                onBulkDisable: () => _bulkUpdateServices(
+                                    visibleServices,
+                                    isActive: false),
+                                onBulkAvailability: () =>
+                                    _bulkUpdateAvailability(
+                                        data, visibleServices),
+                              ),
+                              _PricingTab(
+                                snapshot: scopedSnapshot ?? data,
+                                services: visibleServices,
+                                query: _catalogQuery,
+                                filter: _catalogFilter,
+                                onPricingRule: _addPricingRule,
+                              ),
+                              _ImportExportTab(
+                                onImport: _importCatalog,
+                                onExport: _exportCatalog,
+                                onAddStarter: _addStarterCatalog,
+                              ),
+                            ],
+                          ),
               );
             },
           ),
@@ -2028,6 +2963,38 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
       ),
     );
   }
+}
+
+class _CatalogTabBarDelegate extends SliverPersistentHeaderDelegate {
+  @override
+  double get minExtent => 48;
+
+  @override
+  double get maxExtent => 48;
+
+  @override
+  Widget build(
+    BuildContext context,
+    double shrinkOffset,
+    bool overlapsContent,
+  ) {
+    return Material(
+      color: Theme.of(context).scaffoldBackgroundColor,
+      child: const TabBar(
+        isScrollable: true,
+        tabs: [
+          Tab(text: 'Categories'),
+          Tab(text: 'Subcategories'),
+          Tab(text: 'Services'),
+          Tab(text: 'Pricing'),
+          Tab(text: 'Import/Export'),
+        ],
+      ),
+    );
+  }
+
+  @override
+  bool shouldRebuild(covariant _CatalogTabBarDelegate oldDelegate) => false;
 }
 
 class _SearchBar extends StatelessWidget {
@@ -2259,6 +3226,7 @@ class _CategoriesTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ListView(
+      primary: true,
       padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
       children: [
         Column(
@@ -2328,7 +3296,7 @@ class _CategoriesTab extends StatelessWidget {
           (category) => _CatalogCard(
             title: category.name,
             subtitle:
-                'Order ${category.sortOrder} · ${category.subcategories.length} subcategories · ${category.serviceCount} services',
+                'Order ${category.sortOrder} · ${category.subcategories.length} subcategories · ${category.serviceCount} services · ${category.availabilityMode == 'INHERITED' ? 'Inherited' : 'Custom'} availability',
             tag: category.isActive ? 'Active' : 'Disabled',
             imageUrl: category.iconUrl,
             accent: category.featured
@@ -2372,6 +3340,7 @@ class _SubcategoriesTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ListView(
+      primary: true,
       padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
       children: [
         Column(
@@ -2441,7 +3410,7 @@ class _SubcategoriesTab extends StatelessWidget {
             return _CatalogCard(
               title: subcategory.name,
               subtitle:
-                  '${category?.name ?? 'Category'} · Order ${subcategory.sortOrder} · ${subcategory.serviceCount} services · ₹${subcategory.basePrice.toStringAsFixed(0)} base',
+                  '${category?.name ?? 'Category'} · Order ${subcategory.sortOrder} · ${subcategory.serviceCount} services · ₹${subcategory.basePrice.toStringAsFixed(0)} base · ${subcategory.availabilityMode == 'INHERITED' ? 'Inherited' : 'Custom'} availability',
               tag: subcategory.isActive ? 'Active' : 'Disabled',
               imageUrl: subcategory.iconUrl,
               accent: AbzioTheme.accentColor,
@@ -2460,6 +3429,7 @@ class _SubcategoriesTab extends StatelessWidget {
 class _ServicesTab extends StatelessWidget {
   const _ServicesTab({
     required this.snapshot,
+    required this.services,
     required this.query,
     required this.filter,
     required this.visibleCount,
@@ -2470,9 +3440,11 @@ class _ServicesTab extends StatelessWidget {
     required this.onReorder,
     required this.onBulkEnable,
     required this.onBulkDisable,
+    required this.onBulkAvailability,
   });
 
   final _CatalogSnapshot snapshot;
+  final List<_AdminService> services;
   final String query;
   final _CatalogFilter filter;
   final int visibleCount;
@@ -2483,10 +3455,12 @@ class _ServicesTab extends StatelessWidget {
   final VoidCallback onReorder;
   final VoidCallback onBulkEnable;
   final VoidCallback onBulkDisable;
+  final VoidCallback onBulkAvailability;
 
   @override
   Widget build(BuildContext context) {
     return ListView(
+      primary: true,
       padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
       children: [
         Column(
@@ -2536,33 +3510,21 @@ class _ServicesTab extends StatelessWidget {
             ),
           ],
         ),
+        const SizedBox(height: 8),
+        OutlinedButton.icon(
+          onPressed: visibleCount == 0 ? null : onBulkAvailability,
+          icon: const Icon(Icons.location_on_outlined),
+          label: const Text('Bulk location availability'),
+        ),
         const SizedBox(height: 16),
-        ...snapshot.services.where((service) {
-          final category = snapshot.categoryById(service.categoryId);
-          final subcategory = snapshot.subcategoryById(service.subcategoryId);
-          return _matchesCatalogFilter(
-                isActive: service.isActive,
-                featured: service.featured,
-                popular: service.popular,
-                filter: filter,
-              ) &&
-              _matchesQuery([
-                service.name,
-                service.slug,
-                service.code ?? '',
-                service.description ?? '',
-                service.shortDescription ?? '',
-                category?.name ?? '',
-                subcategory?.name ?? '',
-              ], query);
-        }).map(
+        ...services.map(
           (service) {
             final category = snapshot.categoryById(service.categoryId);
             final subcategory = snapshot.subcategoryById(service.subcategoryId);
             return _CatalogCard(
               title: service.name,
               subtitle:
-                  '${category?.name ?? 'Category'} / ${subcategory?.name ?? 'Subcategory'} - ₹${service.startingPrice.toStringAsFixed(0)} - GST ${service.gstRate.toStringAsFixed(2)}% - SAC ${service.sacCode} - ${service.estimatedDurationMins} mins',
+                  '${category?.name ?? 'Category'} / ${subcategory?.name ?? 'Subcategory'} - ₹${service.startingPrice.toStringAsFixed(0)} - GST ${service.gstRate.toStringAsFixed(2)}% - SAC ${service.sacCode} - ${service.estimatedDurationMins} mins - ${service.availabilityMode == 'INHERITED' ? 'Inherited' : 'Custom'} availability',
               tag: service.isActive ? 'Active' : 'Disabled',
               imageUrl: service.iconUrl,
               accent: service.featured
@@ -2602,12 +3564,14 @@ class _ServicesTab extends StatelessWidget {
 class _PricingTab extends StatelessWidget {
   const _PricingTab({
     required this.snapshot,
+    required this.services,
     required this.query,
     required this.filter,
     required this.onPricingRule,
   });
 
   final _CatalogSnapshot snapshot;
+  final List<_AdminService> services;
   final String query;
   final _CatalogFilter filter;
   final ValueChanged<_AdminService> onPricingRule;
@@ -2615,6 +3579,7 @@ class _PricingTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ListView(
+      primary: true,
       padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
       children: [
         Column(
@@ -2639,19 +3604,7 @@ class _PricingTab extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 12),
-        ...snapshot.services.where((service) {
-          return _matchesCatalogFilter(
-                isActive: service.isActive,
-                featured: service.featured,
-                popular: service.popular,
-                filter: filter,
-              ) &&
-              _matchesQuery([
-                service.name,
-                service.slug,
-                snapshot.subcategoryById(service.subcategoryId)?.name ?? '',
-              ], query);
-        }).map(
+        ...services.map(
           (service) => _CatalogCard(
             title: service.name,
             subtitle:
@@ -2660,8 +3613,7 @@ class _PricingTab extends StatelessWidget {
             accent: AbzioTheme.accentColor,
             onTap: () => context.push('/catalog/services/${service.id}'),
             onEdit: () => onPricingRule(service),
-            onDisable: () {},
-            secondaryLabel: 'Add rule',
+            onDisable: null,
           ),
         ),
       ],
@@ -2683,6 +3635,7 @@ class _ImportExportTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ListView(
+      primary: true,
       padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
       children: [
         Column(
@@ -2769,7 +3722,7 @@ class _CatalogCard extends StatelessWidget {
   final Color accent;
   final VoidCallback onTap;
   final VoidCallback onEdit;
-  final VoidCallback onDisable;
+  final VoidCallback? onDisable;
   final Widget? trailing;
   final String? imageUrl;
   final String secondaryLabel;
@@ -2827,11 +3780,12 @@ class _CatalogCard extends StatelessWidget {
                     icon: const Icon(Icons.edit_rounded),
                     tooltip: 'Edit',
                   ),
-                  IconButton(
-                    onPressed: onDisable,
-                    icon: const Icon(Icons.visibility_off_rounded),
-                    tooltip: secondaryLabel,
-                  ),
+                  if (onDisable != null)
+                    IconButton(
+                      onPressed: onDisable,
+                      icon: const Icon(Icons.visibility_off_rounded),
+                      tooltip: secondaryLabel,
+                    ),
                 ],
               ),
         ),
@@ -2915,7 +3869,11 @@ class _CategoryDetailPageState extends ConsumerState<CategoryDetailPage> {
         .showSnackBar(SnackBar(content: Text(message)));
   }
 
-  Future<Map<String, dynamic>?> _showCategoryEditor(_AdminCategory existing) {
+  Future<Map<String, dynamic>?> _showCategoryEditor(
+      _AdminCategory existing) async {
+    final loaded = await _future;
+    if (!mounted || loaded == null) return null;
+    final snapshot = loaded.snapshot;
     final formKey = GlobalKey<FormState>();
     final nameController = TextEditingController(text: existing.name);
     final slugController = TextEditingController(text: existing.slug);
@@ -2931,6 +3889,8 @@ class _CategoryDetailPageState extends ConsumerState<CategoryDetailPage> {
     var featured = existing.featured;
     var popular = existing.popular;
     var isActive = existing.isActive;
+    var availabilityMode = existing.availabilityMode;
+    final serviceAreaIds = <String>{...existing.serviceAreaIds};
 
     return showDialog<Map<String, dynamic>>(
       context: context,
@@ -3003,6 +3963,21 @@ class _CategoryDetailPageState extends ConsumerState<CategoryDetailPage> {
                         onChanged: (value) => setState(() => isActive = value),
                         title: const Text('Active'),
                       ),
+                      _AvailabilitySettingsEditor(
+                        snapshot: snapshot,
+                        mode: availabilityMode,
+                        availabilityKey: existing.id,
+                        selectedAreaIds: serviceAreaIds,
+                        onModeChanged: (value) =>
+                            setState(() => availabilityMode = value),
+                        inheritedHelp:
+                            'Available in every active service area.',
+                        onAreaToggled: (id) => setState(() {
+                          if (!serviceAreaIds.add(id)) {
+                            serviceAreaIds.remove(id);
+                          }
+                        }),
+                      ),
                     ],
                   ),
                 ),
@@ -3014,6 +3989,13 @@ class _CategoryDetailPageState extends ConsumerState<CategoryDetailPage> {
                 ),
                 FilledButton(
                   onPressed: () {
+                    if (_customAvailabilityHasNoLocations(
+                      availabilityMode,
+                      serviceAreaIds,
+                    )) {
+                      _showCustomAvailabilityValidationError(dialogContext);
+                      return;
+                    }
                     if (!formKey.currentState!.validate()) return;
                     Navigator.of(dialogContext).pop({
                       'name': nameController.text.trim(),
@@ -3036,6 +4018,10 @@ class _CategoryDetailPageState extends ConsumerState<CategoryDetailPage> {
                       'featured': featured,
                       'popular': popular,
                       'isActive': isActive,
+                      'availabilityMode': availabilityMode,
+                      'serviceAreaIds': availabilityMode == 'CUSTOM'
+                          ? serviceAreaIds.toList(growable: false)
+                          : const <String>[],
                     });
                   },
                   child: const Text('Save'),
@@ -3333,6 +4319,8 @@ class _SubcategoryDetailPageState extends ConsumerState<SubcategoryDetailPage> {
     final reviewCountController =
         TextEditingController(text: existing.reviewCount.toString());
     var isActive = existing.isActive;
+    var availabilityMode = existing.availabilityMode;
+    final serviceAreaIds = <String>{...existing.serviceAreaIds};
 
     return showDialog<Map<String, dynamic>>(
       context: context,
@@ -3432,6 +4420,19 @@ class _SubcategoryDetailPageState extends ConsumerState<SubcategoryDetailPage> {
                         onChanged: (value) => setState(() => isActive = value),
                         title: const Text('Active'),
                       ),
+                      _AvailabilitySettingsEditor(
+                        snapshot: snapshot,
+                        mode: availabilityMode,
+                        availabilityKey: existing.id,
+                        selectedAreaIds: serviceAreaIds,
+                        onModeChanged: (value) =>
+                            setState(() => availabilityMode = value),
+                        onAreaToggled: (id) => setState(() {
+                          if (!serviceAreaIds.add(id)) {
+                            serviceAreaIds.remove(id);
+                          }
+                        }),
+                      ),
                     ],
                   ),
                 ),
@@ -3443,6 +4444,13 @@ class _SubcategoryDetailPageState extends ConsumerState<SubcategoryDetailPage> {
                 ),
                 FilledButton(
                   onPressed: () {
+                    if (_customAvailabilityHasNoLocations(
+                      availabilityMode,
+                      serviceAreaIds,
+                    )) {
+                      _showCustomAvailabilityValidationError(dialogContext);
+                      return;
+                    }
                     if (!formKey.currentState!.validate()) return;
                     Navigator.of(dialogContext).pop({
                       'categoryId': categoryIdController.value,
@@ -3470,6 +4478,10 @@ class _SubcategoryDetailPageState extends ConsumerState<SubcategoryDetailPage> {
                       'reviewCount':
                           int.tryParse(reviewCountController.text.trim()) ?? 0,
                       'isActive': isActive,
+                      'availabilityMode': availabilityMode,
+                      'serviceAreaIds': availabilityMode == 'CUSTOM'
+                          ? serviceAreaIds.toList(growable: false)
+                          : const <String>[],
                     });
                   },
                   child: const Text('Save'),
@@ -3768,6 +4780,7 @@ class _ServiceDetailPageState extends ConsumerState<ServiceDetailPage> {
   Future<void> _manageServiceImages(_AdminService service) async {
     final saved = await showDialog<bool>(
       context: context,
+      barrierDismissible: false,
       builder: (dialogContext) {
         final images = service.images
             .map((image) => <String, dynamic>{
@@ -3781,6 +4794,22 @@ class _ServiceDetailPageState extends ConsumerState<ServiceDetailPage> {
 
         return StatefulBuilder(
           builder: (context, setDialogState) {
+            void moveGalleryImage(int fromIndex, int toIndex) {
+              if (saving ||
+                  fromIndex < 0 ||
+                  fromIndex >= images.length ||
+                  toIndex < 0 ||
+                  toIndex >= images.length ||
+                  fromIndex == toIndex) {
+                return;
+              }
+              setDialogState(() {
+                final moved = images.removeAt(fromIndex);
+                images.insert(toIndex, moved);
+                error = null;
+              });
+            }
+
             Future<void> editGalleryImage({int? replaceIndex}) async {
               final current =
                   replaceIndex == null ? null : images[replaceIndex];
@@ -3917,6 +4946,7 @@ class _ServiceDetailPageState extends ConsumerState<ServiceDetailPage> {
                                             initialValue:
                                                 item['altText']?.toString() ??
                                                     '',
+                                            enabled: !saving,
                                             decoration: const InputDecoration(
                                                 labelText: 'Alt text',
                                                 isDense: true),
@@ -3929,17 +4959,48 @@ class _ServiceDetailPageState extends ConsumerState<ServiceDetailPage> {
                                             crossAxisAlignment:
                                                 WrapCrossAlignment.center,
                                             children: [
+                                              IconButton(
+                                                tooltip: 'Move image earlier',
+                                                onPressed: saving ||
+                                                        imageIndex == 0
+                                                    ? null
+                                                    : () => moveGalleryImage(
+                                                          imageIndex,
+                                                          imageIndex - 1,
+                                                        ),
+                                                icon: const Icon(
+                                                  Icons.arrow_upward_rounded,
+                                                ),
+                                              ),
+                                              IconButton(
+                                                tooltip: 'Move image later',
+                                                onPressed: saving ||
+                                                        imageIndex ==
+                                                            images.length - 1
+                                                    ? null
+                                                    : () => moveGalleryImage(
+                                                          imageIndex,
+                                                          imageIndex + 1,
+                                                        ),
+                                                icon: const Icon(
+                                                  Icons.arrow_downward_rounded,
+                                                ),
+                                              ),
                                               if (!isPrimary)
                                                 TextButton.icon(
-                                                  onPressed: () =>
-                                                      setDialogState(() {
-                                                    for (final image
-                                                        in images) {
-                                                      image['isPrimary'] =
-                                                          false;
-                                                    }
-                                                    item['isPrimary'] = true;
-                                                  }),
+                                                  onPressed: saving
+                                                      ? null
+                                                      : () => setDialogState(
+                                                            () {
+                                                              for (final image
+                                                                  in images) {
+                                                                image['isPrimary'] =
+                                                                    false;
+                                                              }
+                                                              item['isPrimary'] =
+                                                                  true;
+                                                            },
+                                                          ),
                                                   icon: const Icon(Icons
                                                       .star_border_rounded),
                                                   label:
@@ -4020,45 +5081,50 @@ class _ServiceDetailPageState extends ConsumerState<ServiceDetailPage> {
                                                       .drive_folder_upload_outlined)),
                                               IconButton(
                                                 tooltip: 'Remove image',
-                                                onPressed: () async {
-                                                  final confirmed = await showDialog<
-                                                          bool>(
-                                                      context: context,
-                                                      builder: (confirmContext) =>
-                                                          AlertDialog(
-                                                              title: const Text(
-                                                                  'Remove this image?'),
-                                                              content: const Text(
-                                                                  'It will be removed from the gallery when you save.'),
-                                                              actions: [
-                                                                TextButton(
-                                                                    onPressed: () =>
-                                                                        Navigator.pop(
-                                                                            confirmContext,
-                                                                            false),
-                                                                    child: const Text(
-                                                                        'Cancel')),
-                                                                FilledButton(
-                                                                    onPressed: () =>
-                                                                        Navigator.pop(
-                                                                            confirmContext,
-                                                                            true),
-                                                                    child: const Text(
-                                                                        'Remove'))
-                                                              ]));
-                                                  if (confirmed != true) return;
-                                                  setDialogState(() {
-                                                    final removedPrimary =
-                                                        item['isPrimary'] ==
-                                                            true;
-                                                    images.removeAt(imageIndex);
-                                                    if (removedPrimary &&
-                                                        images.isNotEmpty) {
-                                                      images.first[
-                                                          'isPrimary'] = true;
-                                                    }
-                                                  });
-                                                },
+                                                onPressed: saving
+                                                    ? null
+                                                    : () async {
+                                                        final confirmed = await showDialog<
+                                                                bool>(
+                                                            context: context,
+                                                            builder: (confirmContext) =>
+                                                                AlertDialog(
+                                                                    title: const Text(
+                                                                        'Remove this image?'),
+                                                                    content:
+                                                                        const Text(
+                                                                            'It will be removed from the gallery when you save.'),
+                                                                    actions: [
+                                                                      TextButton(
+                                                                          onPressed: () => Navigator.pop(
+                                                                              confirmContext,
+                                                                              false),
+                                                                          child:
+                                                                              const Text('Cancel')),
+                                                                      FilledButton(
+                                                                          onPressed: () => Navigator.pop(
+                                                                              confirmContext,
+                                                                              true),
+                                                                          child:
+                                                                              const Text('Remove'))
+                                                                    ]));
+                                                        if (confirmed != true)
+                                                          return;
+                                                        setDialogState(() {
+                                                          final removedPrimary =
+                                                              item['isPrimary'] ==
+                                                                  true;
+                                                          images.removeAt(
+                                                              imageIndex);
+                                                          if (removedPrimary &&
+                                                              images
+                                                                  .isNotEmpty) {
+                                                            images.first[
+                                                                    'isPrimary'] =
+                                                                true;
+                                                          }
+                                                        });
+                                                      },
                                                 icon: const Icon(Icons
                                                     .delete_outline_rounded),
                                               ),
@@ -4069,15 +5135,12 @@ class _ServiceDetailPageState extends ConsumerState<ServiceDetailPage> {
                                     ),
                                   );
                                   return DragTarget<int>(
+                                    key: ObjectKey(item),
                                     onAcceptWithDetails: (details) =>
-                                        setDialogState(() {
-                                      final moved =
-                                          images.removeAt(details.data);
-                                      final target = details.data < imageIndex
-                                          ? imageIndex - 1
-                                          : imageIndex;
-                                      images.insert(target, moved);
-                                    }),
+                                        moveGalleryImage(
+                                      details.data,
+                                      imageIndex,
+                                    ),
                                     builder: (context, candidates, _) =>
                                         LongPressDraggable<int>(
                                       data: imageIndex,
@@ -4216,6 +5279,20 @@ class _ServiceDetailPageState extends ConsumerState<ServiceDetailPage> {
         TextEditingController(text: existing.cancellationPolicy ?? '');
     final warrantyTextController =
         TextEditingController(text: existing.warrantyText ?? '');
+    final guaranteeWindowController = TextEditingController(
+        text: existing.guaranteeClaimWindowDays.toString());
+    final guaranteeCategoriesController = TextEditingController(
+        text: existing.guaranteeIssueCategories.join('\n'));
+    final guaranteeTermsController =
+        TextEditingController(text: existing.guaranteeTerms ?? '');
+    final guaranteeExclusionsController =
+        TextEditingController(text: existing.guaranteeExclusions ?? '');
+    final guaranteeRemediesController = TextEditingController(
+        text: existing.guaranteeResolutionTypes.join('\n'));
+    bool guaranteeEnabled = existing.guaranteeEnabled;
+    bool guaranteeRequiresPartnerReview =
+        existing.guaranteeRequiresPartnerReview;
+    bool guaranteeEvidenceRequired = existing.guaranteeEvidenceRequired;
     final requirementsController =
         TextEditingController(text: existing.requirements.join('\n'));
     final variantsController = TextEditingController(
@@ -4232,11 +5309,28 @@ class _ServiceDetailPageState extends ConsumerState<ServiceDetailPage> {
       for (final option in existing.addons)
         option.name.trim().toLowerCase(): option.imageUrl,
     };
+    final existingVariants = existing.variants;
+    final variantAvailabilityModes = <String, String>{
+      for (final entry in existingVariants.asMap().entries)
+        _variantAvailabilityKey(existingVariants, entry.key, entry.value.name):
+            entry.value.availabilityMode,
+    };
+    final variantServiceAreaIds = <String, Set<String>>{
+      for (final entry in existingVariants.asMap().entries)
+        _variantAvailabilityKey(existingVariants, entry.key, entry.value.name):
+            {...entry.value.serviceAreaIds},
+    };
     final ctaLabelController = TextEditingController(text: existing.ctaLabel);
     final ratingController =
         TextEditingController(text: existing.rating.toStringAsFixed(2));
     final reviewCountController =
         TextEditingController(text: existing.reviewCount.toString());
+    final maintenanceIntervalsController = TextEditingController(
+      text: existing.maintenanceIntervalsMonths.join(', '),
+    );
+    final maintenanceReminderController = TextEditingController(
+      text: existing.maintenanceReminderHours.toString(),
+    );
     var featured = existing.featured;
     var popular = existing.popular;
     var emergency = existing.emergencyAvailable;
@@ -4244,11 +5338,13 @@ class _ServiceDetailPageState extends ConsumerState<ServiceDetailPage> {
     var requiresSiteVisit = existing.requiresSiteVisit;
     var isActive = existing.isActive;
     var bookingEnabled = existing.bookingEnabled;
+    var maintenanceEnabled = existing.maintenanceEnabled;
     var gstApplicable = existing.gstApplicable;
     var priceType = existing.priceType;
     var publicationStatus = existing.publicationStatus;
     DateTime? publishStartsAt = existing.publishStartsAt;
     DateTime? publishEndsAt = existing.publishEndsAt;
+    var availabilityMode = existing.availabilityMode;
     final serviceAreaIds = <String>{...existing.serviceAreaIds};
     String? publicationDateError;
 
@@ -4427,6 +5523,60 @@ class _ServiceDetailPageState extends ConsumerState<ServiceDetailPage> {
                             labelText: 'Warranty terms (optional)'),
                         maxLines: 3,
                       ),
+                      const Divider(height: 28),
+                      SwitchListTile(
+                          contentPadding: EdgeInsets.zero,
+                          value: guaranteeEnabled,
+                          onChanged: (value) =>
+                              setState(() => guaranteeEnabled = value),
+                          title: const Text('Enable service guarantee claims'),
+                          subtitle: const Text(
+                              'Only enable after business policy approval; no remedy is automatic.')),
+                      if (guaranteeEnabled) ...[
+                        TextFormField(
+                            controller: guaranteeWindowController,
+                            decoration: const InputDecoration(
+                                labelText:
+                                    'Claim window after completion (days)'),
+                            keyboardType: TextInputType.number),
+                        TextFormField(
+                            controller: guaranteeCategoriesController,
+                            decoration: const InputDecoration(
+                                labelText: 'Eligible issue categories',
+                                helperText: 'One per line'),
+                            maxLines: 3),
+                        TextFormField(
+                            controller: guaranteeTermsController,
+                            decoration: const InputDecoration(
+                                labelText: 'Guarantee terms'),
+                            maxLines: 3),
+                        TextFormField(
+                            controller: guaranteeExclusionsController,
+                            decoration: const InputDecoration(
+                                labelText: 'Guarantee exclusions'),
+                            maxLines: 3),
+                        TextFormField(
+                            controller: guaranteeRemediesController,
+                            validator: _validateGuaranteeRemedies,
+                            decoration: const InputDecoration(
+                                labelText: 'Permitted resolution types',
+                                helperText:
+                                    'REWORK, REVISIT, REFUND_REVIEW; one per line'),
+                            maxLines: 3),
+                        SwitchListTile(
+                            contentPadding: EdgeInsets.zero,
+                            value: guaranteeRequiresPartnerReview,
+                            onChanged: (value) => setState(
+                                () => guaranteeRequiresPartnerReview = value),
+                            title: const Text(
+                                'Request Partner response during review')),
+                        SwitchListTile(
+                            contentPadding: EdgeInsets.zero,
+                            value: guaranteeEvidenceRequired,
+                            onChanged: (value) => setState(
+                                () => guaranteeEvidenceRequired = value),
+                            title: const Text('Require supporting photos')),
+                      ],
                       TextFormField(
                         controller: requirementsController,
                         decoration: const InputDecoration(
@@ -4455,6 +5605,15 @@ class _ServiceDetailPageState extends ConsumerState<ServiceDetailPage> {
                         uploadImage: (bytes, fileName) =>
                             _uploadCatalogImage(_api, bytes, fileName),
                       ),
+                      _buildServiceOptionAvailabilityEditors(
+                        context: context,
+                        snapshot: snapshot,
+                        controller: variantsController,
+                        existingVariants: existingVariants,
+                        modes: variantAvailabilityModes,
+                        areaIds: variantServiceAreaIds,
+                        setState: setState,
+                      ),
                       TextFormField(
                         controller: addonsController,
                         decoration: const InputDecoration(
@@ -4479,12 +5638,16 @@ class _ServiceDetailPageState extends ConsumerState<ServiceDetailPage> {
                         context: context,
                         snapshot: snapshot,
                         publicationStatus: publicationStatus,
+                        availabilityMode: availabilityMode,
+                        availabilityKey: existing.id,
                         publishStartsAt: publishStartsAt,
                         publishEndsAt: publishEndsAt,
                         serviceAreaIds: serviceAreaIds,
                         dateError: publicationDateError,
                         onPublicationStatusChanged: (value) =>
                             setState(() => publicationStatus = value),
+                        onAvailabilityModeChanged: (value) =>
+                            setState(() => availabilityMode = value),
                         onPublishStartsAtChanged: (value) => setState(() {
                           publishStartsAt = value;
                           publicationDateError = null;
@@ -4543,8 +5706,11 @@ class _ServiceDetailPageState extends ConsumerState<ServiceDetailPage> {
                       ),
                       TextFormField(
                         controller: seoKeywordsController,
-                        decoration:
-                            const InputDecoration(labelText: 'SEO keywords'),
+                        decoration: const InputDecoration(
+                          labelText: 'Search aliases / SEO keywords',
+                          helperText:
+                              'Comma-separated service names and phrases customers may search for.',
+                        ),
                       ),
                       TextFormField(
                         controller: cancellationPolicyController,
@@ -4605,6 +5771,54 @@ class _ServiceDetailPageState extends ConsumerState<ServiceDetailPage> {
                         subtitle: const Text(
                             'Disable temporarily without hiding the service.'),
                       ),
+                      SwitchListTile(
+                        value: maintenanceEnabled,
+                        onChanged: (value) =>
+                            setState(() => maintenanceEnabled = value),
+                        title: const Text('Recurring maintenance plans'),
+                        subtitle: const Text(
+                            'Every visit remains customer-confirmed and uses checkout.'),
+                      ),
+                      if (maintenanceEnabled) ...[
+                        TextFormField(
+                          controller: maintenanceIntervalsController,
+                          decoration: const InputDecoration(
+                              labelText: 'Allowed intervals (months)',
+                              hintText: '1, 3, 6, 12'),
+                          validator: (value) {
+                            if (!maintenanceEnabled) return null;
+                            final tokens = (value ?? '')
+                                .split(',')
+                                .map((item) => item.trim())
+                                .where((item) => item.isNotEmpty)
+                                .toList();
+                            final values = tokens
+                                .map((item) => int.tryParse(item))
+                                .whereType<int>()
+                                .toList();
+                            if (tokens.isEmpty ||
+                                values.length != tokens.length ||
+                                values.any((item) => item < 1 || item > 24) ||
+                                values.toSet().length != values.length) {
+                              return 'Enter unique month intervals from 1 to 24.';
+                            }
+                            return null;
+                          },
+                        ),
+                        TextFormField(
+                          controller: maintenanceReminderController,
+                          decoration: const InputDecoration(
+                              labelText: 'Reminder lead time (hours)'),
+                          keyboardType: TextInputType.number,
+                          validator: (value) {
+                            if (!maintenanceEnabled) return null;
+                            final hours = int.tryParse(value ?? '');
+                            return hours == null || hours < 1 || hours > 720
+                                ? 'Enter 1 to 720 hours.'
+                                : null;
+                          },
+                        ),
+                      ],
                     ],
                   ),
                 ),
@@ -4617,6 +5831,25 @@ class _ServiceDetailPageState extends ConsumerState<ServiceDetailPage> {
                 FilledButton(
                   onPressed: () {
                     if (!formKey.currentState!.validate()) return;
+                    if (_customAvailabilityHasNoLocations(
+                      availabilityMode,
+                      serviceAreaIds,
+                    )) {
+                      _showCustomAvailabilityValidationError(dialogContext);
+                      return;
+                    }
+                    if (_hasUncoveredCustomVariant(
+                      variantsController.text,
+                      existingVariants,
+                      variantAvailabilityModes,
+                      variantServiceAreaIds,
+                    )) {
+                      _showCustomAvailabilityValidationError(
+                        dialogContext,
+                        isVariant: true,
+                      );
+                      return;
+                    }
                     if (publishStartsAt != null &&
                         publishEndsAt != null &&
                         !publishEndsAt!.isAfter(publishStartsAt!)) {
@@ -4664,6 +5897,29 @@ class _ServiceDetailPageState extends ConsumerState<ServiceDetailPage> {
                       'warrantyText': warrantyTextController.text.trim().isEmpty
                           ? null
                           : warrantyTextController.text.trim(),
+                      'guaranteeEnabled': guaranteeEnabled,
+                      'guaranteeClaimWindowDays': guaranteeEnabled
+                          ? (int.tryParse(
+                                  guaranteeWindowController.text.trim()) ??
+                              0)
+                          : 0,
+                      'guaranteeIssueCategories':
+                          _serviceLines(guaranteeCategoriesController.text),
+                      'guaranteeTerms':
+                          guaranteeTermsController.text.trim().isEmpty
+                              ? null
+                              : guaranteeTermsController.text.trim(),
+                      'guaranteeExclusions':
+                          guaranteeExclusionsController.text.trim().isEmpty
+                              ? null
+                              : guaranteeExclusionsController.text.trim(),
+                      'guaranteeResolutionTypes':
+                          _serviceLines(guaranteeRemediesController.text)
+                              .map((value) => value.toUpperCase())
+                              .toList(growable: false),
+                      'guaranteeRequiresPartnerReview':
+                          guaranteeRequiresPartnerReview,
+                      'guaranteeEvidenceRequired': guaranteeEvidenceRequired,
                       'requirements': requirementsController.text
                           .split('\n')
                           .map((item) => item.trim())
@@ -4674,6 +5930,8 @@ class _ServiceDetailPageState extends ConsumerState<ServiceDetailPage> {
                         existing.variants,
                         isVariant: true,
                         imageUrls: variantImageUrls,
+                        availabilityModes: variantAvailabilityModes,
+                        serviceAreaIds: variantServiceAreaIds,
                       ),
                       'addons': _serviceOptionRows(
                         addonsController.text,
@@ -4712,11 +5970,25 @@ class _ServiceDetailPageState extends ConsumerState<ServiceDetailPage> {
                       'requiresSiteVisit': requiresSiteVisit,
                       'isActive': isActive,
                       'bookingEnabled': bookingEnabled,
+                      'maintenanceEnabled': maintenanceEnabled,
+                      'maintenanceIntervalsMonths': maintenanceEnabled
+                          ? maintenanceIntervalsController.text
+                              .split(',')
+                              .map((item) => int.tryParse(item.trim()))
+                              .whereType<int>()
+                              .toList()
+                          : <int>[],
+                      'maintenanceReminderHours': int.tryParse(
+                              maintenanceReminderController.text.trim()) ??
+                          24,
                       'publicationStatus': publicationStatus,
                       'publishStartsAt':
                           publishStartsAt?.toUtc().toIso8601String(),
                       'publishEndsAt': publishEndsAt?.toUtc().toIso8601String(),
-                      'serviceAreaIds': serviceAreaIds.toList(growable: false),
+                      'serviceAreaIds': availabilityMode == 'CUSTOM'
+                          ? serviceAreaIds.toList(growable: false)
+                          : const <String>[],
+                      'availabilityMode': availabilityMode,
                     });
                   },
                   child: const Text('Save'),
@@ -4749,12 +6021,19 @@ class _ServiceDetailPageState extends ConsumerState<ServiceDetailPage> {
       seoKeywordsController.dispose();
       cancellationPolicyController.dispose();
       warrantyTextController.dispose();
+      guaranteeWindowController.dispose();
+      guaranteeCategoriesController.dispose();
+      guaranteeTermsController.dispose();
+      guaranteeExclusionsController.dispose();
+      guaranteeRemediesController.dispose();
       requirementsController.dispose();
       variantsController.dispose();
       addonsController.dispose();
       ctaLabelController.dispose();
       ratingController.dispose();
       reviewCountController.dispose();
+      maintenanceIntervalsController.dispose();
+      maintenanceReminderController.dispose();
     });
   }
 
@@ -5009,7 +6288,8 @@ class _ServiceDetailPageState extends ConsumerState<ServiceDetailPage> {
               ],
               if ((service.seoKeywords ?? '').trim().isNotEmpty) ...[
                 _DetailLine(
-                    label: 'SEO keywords', value: service.seoKeywords!.trim()),
+                    label: 'Search aliases',
+                    value: service.seoKeywords!.trim()),
                 const SizedBox(height: 8),
               ],
               if ((service.cancellationPolicy ?? '').trim().isNotEmpty) ...[
@@ -5317,6 +6597,15 @@ class _CatalogAdminApi {
     return response.data ?? <String, dynamic>{};
   }
 
+  Future<Map<String, dynamic>> bulkUpdateAvailability(
+      Map<String, dynamic> data) async {
+    final response = await _dio.post<Map<String, dynamic>>(
+      '/admin/catalog/availability/bulk',
+      data: data,
+    );
+    return response.data ?? <String, dynamic>{};
+  }
+
   Future<Map<String, dynamic>> addStarterCatalog() async {
     final response =
         await _dio.post<Map<String, dynamic>>('/admin/catalog/starter');
@@ -5368,6 +6657,194 @@ class _CatalogSnapshot {
   }
 }
 
+class _CatalogLocationFilterBar extends StatelessWidget {
+  const _CatalogLocationFilterBar({
+    required this.snapshot,
+    required this.categoryId,
+    required this.stateId,
+    required this.districtId,
+    required this.cityId,
+    required this.areaId,
+    required this.pincode,
+    required this.subcategoryId,
+    required this.serviceId,
+    required this.availability,
+    required this.onChanged,
+    required this.onClear,
+  });
+
+  final _CatalogSnapshot snapshot;
+  final String categoryId;
+  final String stateId;
+  final String districtId;
+  final String cityId;
+  final String areaId;
+  final String pincode;
+  final String subcategoryId;
+  final String serviceId;
+  final String availability;
+  final void Function(String key, String value) onChanged;
+  final VoidCallback onClear;
+
+  @override
+  Widget build(BuildContext context) {
+    final locationFilters = _effectiveCatalogLocationFilters(
+      snapshot,
+      stateId: stateId,
+      districtId: districtId,
+      cityId: cityId,
+      areaId: areaId,
+      pincode: pincode,
+    );
+    final stateAreas = snapshot.serviceAreas
+        .where((area) =>
+            area.isActive && area.cityIsActive && area.stateId.isNotEmpty)
+        .toList(growable: false);
+    final districtAreas = stateAreas.where((area) =>
+        locationFilters.stateId == 'all' ||
+        area.stateId == locationFilters.stateId);
+    final cityAreas = districtAreas.where((area) =>
+        locationFilters.districtId == 'all' ||
+        area.districtId == locationFilters.districtId);
+    final selectedCityAreas = cityAreas.where((area) =>
+        locationFilters.cityId == 'all' ||
+        area.cityId == locationFilters.cityId);
+    final stateOptions = _uniqueOptions(
+        stateAreas.map((area) => (area.stateId, area.stateName)));
+    final districtOptions = _uniqueOptions(
+        districtAreas.map((area) => (area.districtId, area.districtName)));
+    final cityOptions =
+        _uniqueOptions(cityAreas.map((area) => (area.cityId, area.cityName)));
+    final areaOptions =
+        _uniqueOptions(selectedCityAreas.map((area) => (area.id, area.name)));
+    final pincodeAreas = selectedCityAreas.where(
+      (area) =>
+          locationFilters.areaId == 'all' || area.id == locationFilters.areaId,
+    );
+    final pincodeOptions = _uniqueOptions(pincodeAreas
+        .expand((area) => area.pincodes.map((code) => (code, code))));
+    final subcategories = snapshot.subcategories
+        .where((item) => categoryId == 'all' || item.categoryId == categoryId)
+        .toList(growable: false);
+    final services = snapshot.services
+        .where((item) =>
+            (categoryId == 'all' || item.categoryId == categoryId) &&
+            (subcategoryId == 'all' || item.subcategoryId == subcategoryId))
+        .toList(growable: false);
+
+    Widget selector(String key, String label, String selected,
+        List<(String, String)> values, String allLabel) {
+      final entries = _uniqueOptions(values);
+      final validSelected =
+          selected == 'all' || entries.any((entry) => entry.$1 == selected);
+      final effectiveSelected = validSelected ? selected : 'all';
+      return SizedBox(
+        width: 172,
+        child: DropdownButtonFormField<String>(
+          key: ValueKey('$key:$effectiveSelected'),
+          initialValue: effectiveSelected,
+          isExpanded: true,
+          decoration: InputDecoration(
+            labelText: label,
+            border: const OutlineInputBorder(),
+            isDense: true,
+          ),
+          items: [
+            DropdownMenuItem(value: 'all', child: Text(allLabel)),
+            ...entries.map((entry) => DropdownMenuItem(
+                  value: entry.$1,
+                  child: Text(entry.$2, overflow: TextOverflow.ellipsis),
+                )),
+          ],
+          onChanged: (value) => onChanged(key, value ?? 'all'),
+        ),
+      );
+    }
+
+    return Wrap(
+      spacing: 10,
+      runSpacing: 10,
+      children: [
+        selector(
+          'state',
+          'State',
+          locationFilters.stateId,
+          stateOptions,
+          'All states',
+        ),
+        selector(
+          'district',
+          'District',
+          locationFilters.districtId,
+          districtOptions,
+          'All districts',
+        ),
+        selector(
+          'city',
+          'City',
+          locationFilters.cityId,
+          cityOptions,
+          'All cities',
+        ),
+        selector(
+          'area',
+          'Area',
+          locationFilters.areaId,
+          areaOptions,
+          'All areas',
+        ),
+        selector(
+          'pincode',
+          'Pincode',
+          locationFilters.pincode,
+          pincodeOptions,
+          'All pincodes',
+        ),
+        selector(
+            'subcategory',
+            'Subcategory',
+            subcategoryId,
+            subcategories.map((item) => (item.id, item.name)).toList(),
+            'All subcategories'),
+        selector(
+            'service',
+            'Service',
+            serviceId,
+            services.map((item) => (item.id, item.name)).toList(),
+            'All services'),
+        selector(
+            'availability',
+            'Availability',
+            availability,
+            const [
+              ('INHERITED', 'Inherited'),
+              ('CUSTOM', 'Custom'),
+              ('AVAILABLE', 'Available here'),
+              ('UNAVAILABLE', 'Unavailable here'),
+            ],
+            'Any availability'),
+        TextButton.icon(
+          onPressed: onClear,
+          icon: const Icon(Icons.clear_rounded),
+          label: const Text('Clear location filters'),
+        ),
+      ],
+    );
+  }
+
+  static List<(String, String)> _uniqueOptions(
+      Iterable<(String, String)> values) {
+    final unique = <String, String>{};
+    for (final (id, name) in values) {
+      if (id.isNotEmpty && name.isNotEmpty) unique[id] = name;
+    }
+    return unique.entries
+        .map((entry) => (entry.key, entry.value))
+        .toList(growable: false)
+      ..sort((left, right) => left.$2.compareTo(right.$2));
+  }
+}
+
 Future<String> _uploadCatalogImage(
   _CatalogAdminApi api,
   Uint8List bytes,
@@ -5415,24 +6892,58 @@ class _AdminCatalogServiceArea {
   const _AdminCatalogServiceArea({
     required this.id,
     required this.name,
+    required this.cityId,
     required this.cityName,
+    required this.stateId,
+    required this.stateName,
+    required this.districtId,
+    required this.districtName,
+    required this.pincodes,
     required this.isActive,
+    required this.cityIsActive,
   });
 
   final String id;
   final String name;
+  final String cityId;
   final String cityName;
+  final String stateId;
+  final String stateName;
+  final String districtId;
+  final String districtName;
+  final List<String> pincodes;
   final bool isActive;
+  final bool cityIsActive;
 
   factory _AdminCatalogServiceArea.fromJson(Map<String, dynamic> json) {
     final city = json['city'] is Map<String, dynamic>
         ? json['city'] as Map<String, dynamic>
         : const <String, dynamic>{};
+    final stateId = (city['stateId'] as String?)?.trim().isNotEmpty == true
+        ? (city['stateId'] as String).trim()
+        : (city['state'] as String? ?? '').trim();
+    final districtId =
+        (city['districtId'] as String?)?.trim().isNotEmpty == true
+            ? (city['districtId'] as String).trim()
+            : (city['district'] as String? ?? '').trim();
+    final pincodes = (json['assignedPincodes'] as List? ?? const [])
+        .whereType<Map<String, dynamic>>()
+        .map((item) => item['pincode'] as String? ?? '')
+        .where((pincode) => pincode.isNotEmpty)
+        .toSet()
+        .toList(growable: false);
     return _AdminCatalogServiceArea(
       id: json['id'] as String? ?? '',
       name: json['name'] as String? ?? '',
+      cityId: json['cityId'] as String? ?? '',
       cityName: city['name'] as String? ?? '',
+      stateId: stateId,
+      stateName: city['state'] as String? ?? '',
+      districtId: districtId,
+      districtName: city['district'] as String? ?? '',
+      pincodes: pincodes,
       isActive: json['isActive'] as bool? ?? true,
+      cityIsActive: city['isActive'] as bool? ?? true,
     );
   }
 }
@@ -5460,6 +6971,8 @@ class _AdminCategory {
     required this.iconUrl,
     required this.seoTitle,
     required this.seoDescription,
+    required this.availabilityMode,
+    required this.serviceAreaIds,
     required this.subcategories,
   });
 
@@ -5474,6 +6987,8 @@ class _AdminCategory {
   final String? iconUrl;
   final String? seoTitle;
   final String? seoDescription;
+  final String availabilityMode;
+  final List<String> serviceAreaIds;
   final List<_AdminSubcategory> subcategories;
 
   int get serviceCount => subcategories.fold<int>(
@@ -5499,6 +7014,8 @@ class _AdminCategory {
       seoTitle: json['seoTitle'] as String? ?? fallback?.seoTitle,
       seoDescription:
           json['seoDescription'] as String? ?? fallback?.seoDescription,
+      availabilityMode: json['availabilityMode'] as String? ?? 'INHERITED',
+      serviceAreaIds: _assignmentAreaIds(json['serviceAreaAssignments']),
       subcategories: subcategories,
     );
   }
@@ -5519,6 +7036,8 @@ class _AdminSubcategory {
     required this.seoDescription,
     required this.rating,
     required this.reviewCount,
+    required this.availabilityMode,
+    required this.serviceAreaIds,
     required this.services,
   });
 
@@ -5535,6 +7054,8 @@ class _AdminSubcategory {
   final String? seoDescription;
   final double rating;
   final int reviewCount;
+  final String availabilityMode;
+  final List<String> serviceAreaIds;
   final List<_AdminService> services;
 
   int get serviceCount => services.length;
@@ -5557,6 +7078,8 @@ class _AdminSubcategory {
       seoDescription: json['seoDescription'] as String?,
       rating: _toDouble(json['rating']),
       reviewCount: (json['reviewCount'] as num?)?.toInt() ?? 0,
+      availabilityMode: json['availabilityMode'] as String? ?? 'INHERITED',
+      serviceAreaIds: _assignmentAreaIds(json['serviceAreaAssignments']),
       services: servicesJson
           .whereType<Map<String, dynamic>>()
           .map(_AdminService.fromJson)
@@ -5580,6 +7103,7 @@ class _AdminService {
     required this.estimatedDurationMins,
     required this.isActive,
     required this.publicationStatus,
+    required this.availabilityMode,
     required this.publishStartsAt,
     required this.publishEndsAt,
     required this.serviceAreaIds,
@@ -5589,6 +7113,9 @@ class _AdminService {
     required this.homeVisit,
     required this.requiresSiteVisit,
     required this.bookingEnabled,
+    required this.maintenanceEnabled,
+    required this.maintenanceIntervalsMonths,
+    required this.maintenanceReminderHours,
     required this.priceType,
     required this.ctaLabel,
     required this.warrantyText,
@@ -5599,6 +7126,14 @@ class _AdminService {
     required this.requiredTools,
     required this.requiredDocuments,
     required this.warrantyDays,
+    required this.guaranteeEnabled,
+    required this.guaranteeClaimWindowDays,
+    required this.guaranteeIssueCategories,
+    required this.guaranteeTerms,
+    required this.guaranteeExclusions,
+    required this.guaranteeResolutionTypes,
+    required this.guaranteeRequiresPartnerReview,
+    required this.guaranteeEvidenceRequired,
     required this.description,
     required this.shortDescription,
     required this.iconUrl,
@@ -5627,6 +7162,7 @@ class _AdminService {
   final int estimatedDurationMins;
   final bool isActive;
   final String publicationStatus;
+  final String availabilityMode;
   final DateTime? publishStartsAt;
   final DateTime? publishEndsAt;
   final List<String> serviceAreaIds;
@@ -5636,6 +7172,9 @@ class _AdminService {
   final bool homeVisit;
   final bool requiresSiteVisit;
   final bool bookingEnabled;
+  final bool maintenanceEnabled;
+  final List<int> maintenanceIntervalsMonths;
+  final int maintenanceReminderHours;
   final String priceType;
   final String ctaLabel;
   final String? warrantyText;
@@ -5646,6 +7185,14 @@ class _AdminService {
   final List<String> requiredTools;
   final List<String> requiredDocuments;
   final int warrantyDays;
+  final bool guaranteeEnabled;
+  final int guaranteeClaimWindowDays;
+  final List<String> guaranteeIssueCategories;
+  final String? guaranteeTerms;
+  final String? guaranteeExclusions;
+  final List<String> guaranteeResolutionTypes;
+  final bool guaranteeRequiresPartnerReview;
+  final bool guaranteeEvidenceRequired;
   final String? description;
   final String? shortDescription;
   final String? iconUrl;
@@ -5678,6 +7225,7 @@ class _AdminService {
           (json['estimatedDurationMins'] as num?)?.toInt() ?? 0,
       isActive: json['isActive'] as bool? ?? true,
       publicationStatus: json['publicationStatus'] as String? ?? 'PUBLISHED',
+      availabilityMode: json['availabilityMode'] as String? ?? 'INHERITED',
       publishStartsAt:
           DateTime.tryParse(json['publishStartsAt'] as String? ?? '')
               ?.toLocal(),
@@ -5694,6 +7242,14 @@ class _AdminService {
       homeVisit: json['homeVisit'] as bool? ?? true,
       requiresSiteVisit: json['requiresSiteVisit'] as bool? ?? false,
       bookingEnabled: json['bookingEnabled'] as bool? ?? true,
+      maintenanceEnabled: json['maintenanceEnabled'] as bool? ?? false,
+      maintenanceIntervalsMonths:
+          (json['maintenanceIntervalsMonths'] as List? ?? const <dynamic>[])
+              .whereType<num>()
+              .map((value) => value.toInt())
+              .toList(growable: false),
+      maintenanceReminderHours:
+          (json['maintenanceReminderHours'] as num?)?.toInt() ?? 24,
       priceType: json['priceType'] as String? ?? 'FROM',
       ctaLabel: json['ctaLabel'] as String? ?? 'Book service',
       warrantyText: json['warrantyText'] as String?,
@@ -5706,6 +7262,23 @@ class _AdminService {
       requiredTools: _serviceRequirementNames(json['requiredTools']),
       requiredDocuments: _serviceRequirementNames(json['requiredDocuments']),
       warrantyDays: (json['warrantyDays'] as num?)?.toInt() ?? 0,
+      guaranteeEnabled: json['guaranteeEnabled'] as bool? ?? false,
+      guaranteeClaimWindowDays:
+          (json['guaranteeClaimWindowDays'] as num?)?.toInt() ?? 0,
+      guaranteeIssueCategories:
+          (json['guaranteeIssueCategories'] as List? ?? const [])
+              .whereType<String>()
+              .toList(growable: false),
+      guaranteeTerms: json['guaranteeTerms'] as String?,
+      guaranteeExclusions: json['guaranteeExclusions'] as String?,
+      guaranteeResolutionTypes:
+          (json['guaranteeResolutionTypes'] as List? ?? const [])
+              .whereType<String>()
+              .toList(growable: false),
+      guaranteeRequiresPartnerReview:
+          json['guaranteeRequiresPartnerReview'] as bool? ?? false,
+      guaranteeEvidenceRequired:
+          json['guaranteeEvidenceRequired'] as bool? ?? false,
       description: json['description'] as String?,
       shortDescription: json['shortDescription'] as String?,
       iconUrl: json['iconUrl'] as String?,
@@ -5770,6 +7343,8 @@ class _AdminServiceOption {
     this.originalPrice,
     this.durationMins,
     this.isActive = true,
+    this.availabilityMode = 'INHERITED',
+    this.serviceAreaIds = const [],
   });
 
   final String id;
@@ -5780,6 +7355,8 @@ class _AdminServiceOption {
   final double? originalPrice;
   final int? durationMins;
   final bool isActive;
+  final String availabilityMode;
+  final List<String> serviceAreaIds;
 
   factory _AdminServiceOption.fromJson(
     Map<String, dynamic> json, {
@@ -5798,8 +7375,20 @@ class _AdminServiceOption {
         isActive: isVariant
             ? json['isAvailable'] as bool? ?? true
             : json['isActive'] as bool? ?? true,
+        availabilityMode: isVariant
+            ? json['availabilityMode'] as String? ?? 'INHERITED'
+            : 'INHERITED',
+        serviceAreaIds: isVariant
+            ? _assignmentAreaIds(json['serviceAreaAssignments'])
+            : const [],
       );
 }
+
+List<String> _assignmentAreaIds(dynamic value) => (value as List? ?? const [])
+    .whereType<Map<String, dynamic>>()
+    .map((assignment) => assignment['serviceAreaId'] as String? ?? '')
+    .where((id) => id.isNotEmpty)
+    .toList(growable: false);
 
 class _AdminPricingRule {
   const _AdminPricingRule({
@@ -5876,6 +7465,17 @@ String? _validateServiceOptionLines(String? value) {
     }
   }
   return null;
+}
+
+String? _validateGuaranteeRemedies(String? value) {
+  const allowed = {'REWORK', 'REVISIT', 'REFUND_REVIEW'};
+  final invalid = _serviceLines(value ?? '')
+      .map((item) => item.toUpperCase())
+      .where((item) => !allowed.contains(item))
+      .toList(growable: false);
+  return invalid.isEmpty
+      ? null
+      : 'Unknown resolution type: ${invalid.first}. Use REWORK, REVISIT, or REFUND_REVIEW.';
 }
 
 Future<Map<String, dynamic>?> _showServiceGalleryImagePicker({
@@ -6001,26 +7601,157 @@ Widget _buildServiceOptionImageEditors({
   );
 }
 
+Widget _buildServiceOptionAvailabilityEditors({
+  required BuildContext context,
+  required _CatalogSnapshot snapshot,
+  required TextEditingController controller,
+  required List<_AdminServiceOption> existingVariants,
+  required Map<String, String> modes,
+  required Map<String, Set<String>> areaIds,
+  required StateSetter setState,
+}) {
+  final names = controller.text
+      .split('\n')
+      .map((line) => line.split('|').first.trim())
+      .where((name) => name.isNotEmpty)
+      .toList(growable: false);
+  if (names.isEmpty) return const SizedBox.shrink();
+  final activeDraftKeys = names
+      .asMap()
+      .entries
+      .map((entry) => _variantAvailabilityKey(
+            existingVariants,
+            entry.key,
+            entry.value,
+            allNames: names,
+          ))
+      .where((key) => key.startsWith('draft:'))
+      .toSet();
+  modes.removeWhere(
+      (key, _) => key.startsWith('draft:') && !activeDraftKeys.contains(key));
+  areaIds.removeWhere(
+      (key, _) => key.startsWith('draft:') && !activeDraftKeys.contains(key));
+
+  return Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      Text('Variant availability',
+          style: Theme.of(context).textTheme.titleSmall),
+      const Text(
+          'Each variant inherits the service location rules by default. Existing variant rules stay with the variant when its name changes.'),
+      ...names.asMap().entries.map((entry) {
+        final name = entry.value;
+        final key = _variantAvailabilityKey(
+          existingVariants,
+          entry.key,
+          name,
+          allNames: names,
+        );
+        final mode = modes[key] ??= 'INHERITED';
+        final selectedIds = areaIds.putIfAbsent(key, () => <String>{});
+        final visibleAreas = snapshot.serviceAreas
+            .where((area) => area.isActive || selectedIds.contains(area.id))
+            .toList(growable: false);
+        return Padding(
+          padding: const EdgeInsets.only(top: 10),
+          child: Card(
+            margin: EdgeInsets.zero,
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(name, style: Theme.of(context).textTheme.titleSmall),
+                  DropdownButtonFormField<String>(
+                    key: ValueKey('variant-mode:$key:$mode'),
+                    initialValue: mode,
+                    decoration: const InputDecoration(
+                      labelText: 'Availability',
+                      isDense: true,
+                    ),
+                    items: const [
+                      DropdownMenuItem(
+                          value: 'INHERITED', child: Text('Inherited')),
+                      DropdownMenuItem(value: 'CUSTOM', child: Text('Custom')),
+                    ],
+                    onChanged: (value) {
+                      if (value == null) return;
+                      setState(() => modes[key] = value);
+                    },
+                  ),
+                  if (mode == 'CUSTOM') ...[
+                    const SizedBox(height: 8),
+                    for (final area in visibleAreas)
+                      CheckboxListTile(
+                        dense: true,
+                        contentPadding: EdgeInsets.zero,
+                        value: selectedIds.contains(area.id),
+                        title: Text('${area.cityName} · ${area.name}'),
+                        subtitle: Text(area.pincodes.join(', ')),
+                        onChanged: (_) => setState(() {
+                          if (!selectedIds.add(area.id)) {
+                            selectedIds.remove(area.id);
+                          }
+                        }),
+                      ),
+                    if (selectedIds.isEmpty)
+                      Text(
+                        'Select at least one location for a custom variant.',
+                        style: TextStyle(
+                            color: Theme.of(context).colorScheme.error),
+                      ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        );
+      }),
+      const SizedBox(height: 12),
+    ],
+  );
+}
+
 List<Map<String, dynamic>> _serviceOptionRows(
   String value,
   List<_AdminServiceOption> existing, {
   required bool isVariant,
   Map<String, String?> imageUrls = const {},
+  Map<String, String> availabilityModes = const {},
+  Map<String, Set<String>> serviceAreaIds = const {},
 }) {
   final existingByName = {
     for (final option in existing) option.name.trim().toLowerCase(): option,
   };
-  return value
+  final lines = value
       .split('\n')
       .map((line) => line.trim())
       .where((line) => line.isNotEmpty)
-      .toList(growable: false)
-      .asMap()
-      .entries
-      .map((entry) {
+      .toList(growable: false);
+  final currentNames =
+      lines.map((line) => line.split('|').first.trim()).toList(growable: false);
+  return lines.asMap().entries.map((entry) {
     final parts = entry.value.split('|').map((part) => part.trim()).toList();
     final name = parts[0];
-    final previous = existingByName[name.toLowerCase()];
+    final normalizedName = name.toLowerCase();
+    final candidate = entry.key < existing.length ? existing[entry.key] : null;
+    final candidateClaimedByAnotherRow = candidate != null &&
+        candidate.name.trim().toLowerCase() != normalizedName &&
+        currentNames.any(
+          (rowName) =>
+              rowName.trim().toLowerCase() ==
+              candidate.name.trim().toLowerCase(),
+        );
+    final previous = existingByName[normalizedName] ??
+        (candidateClaimedByAnotherRow ? null : candidate);
+    final availabilityKey = isVariant
+        ? _variantAvailabilityKey(
+            existing,
+            entry.key,
+            name,
+            allNames: currentNames,
+          )
+        : normalizedName;
     final duration = parts.length > 2 && parts[2].isNotEmpty
         ? int.tryParse(parts[2])
         : previous?.durationMins;
@@ -6043,6 +7774,17 @@ List<Map<String, dynamic>> _serviceOptionRows(
       if (isVariant) ...{
         'originalPrice': previous?.originalPrice,
         'isAvailable': status,
+        'availabilityMode': availabilityModes[availabilityKey] ??
+            previous?.availabilityMode ??
+            'INHERITED',
+        'serviceAreaIds': (availabilityModes[availabilityKey] ??
+                    previous?.availabilityMode ??
+                    'INHERITED') ==
+                'CUSTOM'
+            ? serviceAreaIds[availabilityKey]?.toList() ??
+                previous?.serviceAreaIds ??
+                const <String>[]
+            : const <String>[],
       } else
         'isActive': status,
     };

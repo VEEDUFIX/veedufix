@@ -1,5 +1,11 @@
 import 'dart:async';
+import 'dart:math';
+import 'dart:typed_data';
 
+import 'package:image_picker/image_picker.dart';
+
+import '../../data/diagnostic_photo_validation.dart';
+import '../../data/checkout_request_key_store.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -146,7 +152,10 @@ class _CheckoutNotifier extends StateNotifier<AsyncValue<void>> {
     required String addressId,
     required List<CheckoutItem> items,
     DateTime? scheduledFor,
+    String? maintenanceOccurrenceId,
+    required String idempotencyKey,
     String? couponCode,
+    List<String> diagnosticPhotoIds = const <String>[],
   }) async {
     state = const AsyncValue.loading();
     try {
@@ -154,14 +163,19 @@ class _CheckoutNotifier extends StateNotifier<AsyncValue<void>> {
       final data = await api.post(
         '/payments/create-order',
         data: {
+          'idempotencyKey': idempotencyKey,
           if (cityId.isNotEmpty) 'cityId': cityId,
           'addressId': addressId,
           'items': items.map((i) => i.toJson()).toList(),
+          if (diagnosticPhotoIds.isNotEmpty)
+            'diagnosticPhotoIds': diagnosticPhotoIds,
           if (couponCode != null && couponCode.isNotEmpty)
             'couponCode': couponCode,
           'bookingType': scheduledFor == null ? 'instant' : 'scheduled',
           if (scheduledFor != null)
             'scheduledFor': scheduledFor.toUtc().toIso8601String(),
+          if (maintenanceOccurrenceId != null)
+            'maintenanceOccurrenceId': maintenanceOccurrenceId,
         },
       );
       final order = PaymentOrder.fromJson(
@@ -205,19 +219,54 @@ class _CheckoutNotifier extends StateNotifier<AsyncValue<void>> {
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
+class _CheckoutDiagnosticPhoto {
+  _CheckoutDiagnosticPhoto({
+    required this.clientUploadId,
+    required this.file,
+    required this.bytes,
+  });
+  final String clientUploadId;
+  final XFile file;
+  final Uint8List bytes;
+  String? photoId;
+  double progress = 0;
+  bool uploading = false;
+  String? error;
+}
+
 class CheckoutPage extends ConsumerStatefulWidget {
-  const CheckoutPage({super.key, required this.cityId, required this.items});
+  const CheckoutPage({
+    super.key,
+    required this.cityId,
+    required this.items,
+    this.maintenanceOccurrenceId,
+    this.maintenanceDueAt,
+    this.preferredAddressId,
+    this.maintenancePreferredTime,
+    this.rebookSourceBookingId,
+  });
 
   final String cityId;
   final List<CheckoutItem> items;
+  final String? maintenanceOccurrenceId;
+  final DateTime? maintenanceDueAt;
+  final String? preferredAddressId;
+  final String? maintenancePreferredTime;
+  final String? rebookSourceBookingId;
 
   @override
   ConsumerState<CheckoutPage> createState() => _CheckoutPageState();
 }
 
 class _CheckoutPageState extends ConsumerState<CheckoutPage> {
+  late final String _bookingRequestKey =
+      '${DateTime.now().microsecondsSinceEpoch}-${Random.secure().nextInt(1 << 32)}';
   final _couponController = TextEditingController();
   final _razorpay = Razorpay();
+  final CheckoutRequestKeyStore _rebookRequestKeys = CheckoutRequestKeyStore(
+    storage: FlutterSecureCheckoutRequestKeyStorage(),
+  );
+  String? _rebookRequestCustomerId;
   bool _couponApplied = false;
   bool _promoExpanded = false;
   bool _isLaunchingPayment = false;
@@ -232,10 +281,21 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
   DateTime _selectedScheduleDate = DateTime.now();
   String? _selectedScheduleSlot;
   PaymentOrder? _activeOrder;
+  bool _isPickingDiagnosticPhotos = false;
+  final List<_CheckoutDiagnosticPhoto> _diagnosticPhotos =
+      <_CheckoutDiagnosticPhoto>[];
 
   @override
   void initState() {
     super.initState();
+    _selectedAddressId = widget.preferredAddressId;
+    if (widget.maintenanceOccurrenceId != null) {
+      _scheduleForLater = true;
+      final dueAt = widget.maintenanceDueAt;
+      _selectedScheduleDate = dueAt == null
+          ? _maintenancePlanTime(DateTime.now())
+          : DateTime.utc(dueAt.year, dueAt.month, dueAt.day);
+    }
     _razorpay.on(Razorpay.EVENT_PAYMENT_SUCCESS, _onPaymentSuccess);
     _razorpay.on(Razorpay.EVENT_PAYMENT_ERROR, _onPaymentError);
     _razorpay.on(Razorpay.EVENT_EXTERNAL_WALLET, _onExternalWallet);
@@ -260,9 +320,25 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
     final addressesState = ref.watch(cartCheckoutAddressesProvider);
     final addresses = addressesState.valueOrNull ?? const <SavedAddressItem>[];
     final selectedAddress = _resolveSelectedAddress(addresses);
+    final dueAt = widget.maintenanceDueAt;
+    final isMaintenanceCheckout = widget.maintenanceOccurrenceId != null;
+    final scheduleAnchor = isMaintenanceCheckout && dueAt != null
+        ? DateTime.utc(dueAt.year, dueAt.month, dueAt.day)
+        : isMaintenanceCheckout
+        ? _maintenancePlanTime(DateTime.now())
+        : DateTime.now();
     final scheduleDays = List<DateTime>.generate(7, (index) {
-      final today = DateTime.now();
-      return DateTime(today.year, today.month, today.day + index);
+      return isMaintenanceCheckout
+          ? DateTime.utc(
+              scheduleAnchor.year,
+              scheduleAnchor.month,
+              scheduleAnchor.day + index,
+            )
+          : DateTime(
+              scheduleAnchor.year,
+              scheduleAnchor.month,
+              scheduleAnchor.day + index,
+            );
     }, growable: false);
     final scheduleKey = selectedAddress == null
         ? null
@@ -274,12 +350,34 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
         (slotsState?.valueOrNull ?? const <CustomerScheduleSlot>[])
             .where(
               (slot) =>
-                  _dateKey(slot.scheduledFor) ==
-                      _dateKey(_selectedScheduleDate) &&
+                  _dateKey(
+                        widget.maintenanceOccurrenceId != null
+                            ? _maintenancePlanTime(slot.scheduledFor)
+                            : slot.scheduledFor,
+                      ) ==
+                      _dateKey(
+                        isMaintenanceCheckout
+                            ? DateTime.utc(
+                                _selectedScheduleDate.year,
+                                _selectedScheduleDate.month,
+                                _selectedScheduleDate.day,
+                              )
+                            : _selectedScheduleDate,
+                      ) &&
                   slot.availableProviders > 0 &&
                   slot.scheduledFor.isAfter(DateTime.now()),
             )
             .toList(growable: false);
+    final preferredSlot = slotsForDay.isEmpty
+        ? null
+        : slotsForDay.firstWhere((slot) {
+            final preferredTime = widget.maintenancePreferredTime;
+            if (preferredTime == null) return false;
+            final scheduledTime = _maintenancePlanTime(slot.scheduledFor);
+            final timeLabel =
+                '${scheduledTime.hour.toString().padLeft(2, '0')}:${scheduledTime.minute.toString().padLeft(2, '0')}';
+            return timeLabel == preferredTime;
+          }, orElse: () => slotsForDay.first);
     final selectedSlotIso =
         slotsForDay.any(
           (slot) =>
@@ -287,9 +385,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
               _selectedScheduleSlot,
         )
         ? _selectedScheduleSlot
-        : (slotsForDay.isEmpty
-              ? null
-              : slotsForDay.first.scheduledFor.toUtc().toIso8601String());
+        : preferredSlot?.scheduledFor.toUtc().toIso8601String();
     final needsNewOrder = _activeOrder == null;
 
     return Scaffold(
@@ -457,6 +553,8 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
                   ),
                 ),
                 const SizedBox(height: 20),
+                _buildDiagnosticPhotosSection(orderLocked),
+                const SizedBox(height: 20),
 
                 const _SectionHeader(title: 'Service address'),
                 const SizedBox(height: 10),
@@ -601,7 +699,8 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
                     ButtonSegment(value: true, label: Text('Schedule')),
                   ],
                   selected: {_scheduleForLater},
-                  onSelectionChanged: orderLocked
+                  onSelectionChanged:
+                      orderLocked || widget.maintenanceOccurrenceId != null
                       ? null
                       : (selection) => setState(() {
                           _scheduleForLater = selection.first;
@@ -632,11 +731,26 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
                           label: Column(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              Text(index == 0 ? 'Today' : _weekdayShort(date)),
+                              Text(
+                                _dateKey(date) ==
+                                        _dateKey(
+                                          isMaintenanceCheckout
+                                              ? _maintenancePlanTime(
+                                                  DateTime.now(),
+                                                )
+                                              : DateTime.now(),
+                                        )
+                                    ? 'Today'
+                                    : _weekdayShort(date),
+                              ),
                               Text('${date.day}/${date.month}'),
                             ],
                           ),
-                          onSelected: orderLocked
+                          onSelected:
+                              orderLocked ||
+                                  (widget.maintenanceOccurrenceId != null &&
+                                      _dateKey(date) !=
+                                          _dateKey(scheduleAnchor))
                               ? null
                               : (_) => setState(() {
                                   _selectedScheduleDate = date;
@@ -686,8 +800,12 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
                                 .toUtc()
                                 .toIso8601String();
                             final selected = slotIso == selectedSlotIso;
+                            final slotTime =
+                                widget.maintenanceOccurrenceId != null
+                                ? _maintenancePlanTime(slot.scheduledFor)
+                                : slot.scheduledFor;
                             final time = TimeOfDay.fromDateTime(
-                              slot.scheduledFor,
+                              slotTime,
                             ).format(context);
                             return ChoiceChip(
                               selected: selected,
@@ -1058,6 +1176,383 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
     );
   }
 
+  Widget _buildDiagnosticPhotosSection(bool orderLocked) {
+    final colors = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const _SectionHeader(title: 'Add photos of the issue'),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Help your service partner understand the problem before arriving.',
+                    style: textTheme.bodySmall?.copyWith(
+                      color: colors.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Text(
+              'Optional',
+              style: textTheme.labelSmall?.copyWith(
+                color: colors.onSurfaceVariant,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        PremiumGlassCard(
+          child: Padding(
+            padding: const EdgeInsets.all(14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (_diagnosticPhotos.isEmpty)
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(
+                      vertical: 20,
+                      horizontal: 12,
+                    ),
+                    decoration: BoxDecoration(
+                      color: colors.surfaceContainerLow,
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: colors.outlineVariant),
+                    ),
+                    child: Column(
+                      children: [
+                        Icon(
+                          Icons.add_a_photo_outlined,
+                          size: 26,
+                          color: colors.onSurfaceVariant,
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          'No photos added',
+                          style: textTheme.bodyMedium?.copyWith(
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          'You can continue without photos.',
+                          style: textTheme.bodySmall?.copyWith(
+                            color: colors.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
+                    ),
+                  )
+                else
+                  Wrap(
+                    spacing: 10,
+                    runSpacing: 10,
+                    children: [
+                      for (final photo in _diagnosticPhotos)
+                        _buildDiagnosticPhotoTile(photo, colors, orderLocked),
+                    ],
+                  ),
+                if (_diagnosticPhotos.length < 5) ...[
+                  const SizedBox(height: 10),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      OutlinedButton.icon(
+                        onPressed: orderLocked || _isPickingDiagnosticPhotos
+                            ? null
+                            : () => _pickDiagnosticPhotos(ImageSource.gallery),
+                        icon: const Icon(
+                          Icons.photo_library_outlined,
+                          size: 18,
+                        ),
+                        label: const Text('Gallery'),
+                      ),
+                      OutlinedButton.icon(
+                        onPressed: orderLocked || _isPickingDiagnosticPhotos
+                            ? null
+                            : () => _pickDiagnosticPhotos(ImageSource.camera),
+                        icon: const Icon(Icons.camera_alt_outlined, size: 18),
+                        label: const Text('Camera'),
+                      ),
+                    ],
+                  ),
+                ],
+                const SizedBox(height: 4),
+                Text(
+                  '${_diagnosticPhotos.length}/5 photos · JPEG or PNG · up to 10 MB each',
+                  style: textTheme.labelSmall?.copyWith(
+                    color: colors.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDiagnosticPhotoTile(
+    _CheckoutDiagnosticPhoto photo,
+    ColorScheme colors,
+    bool orderLocked,
+  ) {
+    return SizedBox(
+      width: 88,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Stack(
+            children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(13),
+                child: Image.memory(
+                  photo.bytes,
+                  width: 88,
+                  height: 88,
+                  fit: BoxFit.cover,
+                ),
+              ),
+              if (photo.uploading)
+                Positioned.fill(
+                  child: ColoredBox(
+                    color: Colors.black38,
+                    child: Center(
+                      child: SizedBox(
+                        width: 28,
+                        height: 28,
+                        child: CircularProgressIndicator(
+                          value: photo.progress > 0 ? photo.progress : null,
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              if (photo.error != null)
+                Positioned.fill(
+                  child: Semantics(
+                    label: photo.error ?? 'Photo upload failed',
+                    child: const ColoredBox(
+                      color: Colors.black45,
+                      child: Center(
+                        child: Icon(
+                          Icons.error_outline_rounded,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          if (photo.uploading) ...[
+            const SizedBox(height: 4),
+            LinearProgressIndicator(
+              value: photo.progress > 0 ? photo.progress : null,
+              minHeight: 3,
+            ),
+          ],
+          if (photo.error != null)
+            Center(
+              child: IconButton(
+                tooltip: 'Retry upload',
+                onPressed: orderLocked || photo.uploading
+                    ? null
+                    : () => _uploadDiagnosticPhoto(photo),
+                constraints: const BoxConstraints.tightFor(
+                  width: 48,
+                  height: 48,
+                ),
+                color: colors.error,
+                icon: const Icon(Icons.refresh_rounded),
+              ),
+            ),
+          if (!photo.uploading)
+            Center(
+              child: IconButton(
+                tooltip: 'Remove photo',
+                onPressed: orderLocked
+                    ? null
+                    : () => _removeDiagnosticPhoto(photo),
+                constraints: const BoxConstraints.tightFor(
+                  width: 48,
+                  height: 48,
+                ),
+                icon: const Icon(Icons.close_rounded),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _pickDiagnosticPhotos(ImageSource source) async {
+    if (_activeOrder != null ||
+        _diagnosticPhotos.length >= 5 ||
+        _isPickingDiagnosticPhotos) {
+      return;
+    }
+    setState(() => _isPickingDiagnosticPhotos = true);
+    final picker = ImagePicker();
+    try {
+      final List<XFile> files;
+      if (source == ImageSource.camera) {
+        final photo = await picker.pickImage(
+          source: source,
+          imageQuality: 82,
+          maxWidth: 1600,
+          maxHeight: 1600,
+        );
+        files = photo == null ? <XFile>[] : <XFile>[photo];
+      } else {
+        files = await picker.pickMultiImage(
+          imageQuality: 82,
+          maxWidth: 1600,
+          maxHeight: 1600,
+        );
+      }
+      if (!mounted) return;
+      var skippedExtraFiles = false;
+      for (final file in files) {
+        if (_diagnosticPhotos.length >= 5) {
+          skippedExtraFiles = true;
+          break;
+        }
+        final bytes = await file.readAsBytes();
+        if (!mounted) return;
+        final validationError = validateDiagnosticPhotoBytes(bytes);
+        if (validationError != null) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(validationError),
+                backgroundColor: Theme.of(context).colorScheme.error,
+              ),
+            );
+          }
+          continue;
+        }
+        final photo = _CheckoutDiagnosticPhoto(
+          clientUploadId:
+              '${DateTime.now().microsecondsSinceEpoch}-${Random.secure().nextInt(1 << 32)}',
+          file: file,
+          bytes: bytes,
+        );
+        setState(() => _diagnosticPhotos.add(photo));
+        await _uploadDiagnosticPhoto(photo);
+      }
+      if (skippedExtraFiles && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Only five photos can be attached. Extra selections were skipped.',
+            ),
+          ),
+        );
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Could not access that photo. Check permissions and try again.',
+            ),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isPickingDiagnosticPhotos = false);
+    }
+  }
+
+  Future<void> _uploadDiagnosticPhoto(_CheckoutDiagnosticPhoto photo) async {
+    if (!mounted) return;
+    setState(() {
+      photo.uploading = true;
+      photo.error = null;
+      photo.progress = 0;
+    });
+    try {
+      final isPng =
+          photo.bytes.length >= 8 &&
+          photo.bytes.take(8).join(',') == '137,80,78,71,13,10,26,10';
+      final extension = isPng ? 'png' : 'jpg';
+      final response = await ref
+          .read(apiClientProvider)
+          .dio
+          .post<Map<String, dynamic>>(
+            '/media/booking-diagnostic-photos',
+            data: FormData.fromMap({
+              'clientUploadId': photo.clientUploadId,
+              'file': MultipartFile.fromBytes(
+                photo.bytes,
+                filename: 'issue.$extension',
+                contentType: DioMediaType(
+                  'image',
+                  extension == 'jpg' ? 'jpeg' : 'png',
+                ),
+              ),
+            }),
+            onSendProgress: (sent, total) {
+              if (mounted && total > 0) {
+                setState(() => photo.progress = sent / total);
+              }
+            },
+          );
+      final record = response.data?['photo'];
+      if (record is! Map || record['id'] is! String) {
+        throw StateError('Photo upload response was incomplete.');
+      }
+      if (!mounted) return;
+      setState(() {
+        photo.photoId = record['id'] as String;
+        photo.uploading = false;
+        photo.progress = 1;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        photo.uploading = false;
+        photo.error = 'Upload failed';
+      });
+    }
+  }
+
+  Future<void> _removeDiagnosticPhoto(_CheckoutDiagnosticPhoto photo) async {
+    if (photo.uploading) return;
+    if (photo.photoId != null) {
+      try {
+        await ref
+            .read(apiClientProvider)
+            .delete(
+              '/media/booking-diagnostic-photos/${Uri.encodeComponent(photo.photoId!)}',
+            );
+      } catch (_) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Could not remove the uploaded photo. Please retry.',
+              ),
+            ),
+          );
+        }
+        return;
+      }
+    }
+    if (mounted) setState(() => _diagnosticPhotos.remove(photo));
+  }
+
   void _applyCoupon() {
     final code = _couponController.text.trim().toUpperCase();
     if (code.isEmpty) return;
@@ -1103,6 +1598,23 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
   Future<void> _pay(String addressId, {DateTime? scheduledFor}) async {
     if (_isLaunchingPayment || _paymentVerificationFailed) return;
 
+    final pendingPhotos = _diagnosticPhotos
+        .where(
+          (photo) =>
+              photo.uploading || photo.error != null || photo.photoId == null,
+        )
+        .isNotEmpty;
+    if (_activeOrder == null && (pendingPhotos || _isPickingDiagnosticPhotos)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Wait for your photos to finish uploading, or remove the failed photos to continue.',
+          ),
+        ),
+      );
+      return;
+    }
+
     final existingOrder = _activeOrder;
     if (existingOrder != null) {
       final confirmed = await showDialog<bool>(
@@ -1131,6 +1643,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
 
     setState(() => _isLaunchingPayment = true);
     try {
+      final requestKey = await _requestKeyForCheckout();
       final order = await ref
           .read(checkoutProvider.notifier)
           .createOrder(
@@ -1138,7 +1651,12 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
             addressId: addressId,
             items: widget.items,
             scheduledFor: scheduledFor,
+            maintenanceOccurrenceId: widget.maintenanceOccurrenceId,
+            idempotencyKey: requestKey,
             couponCode: _couponApplied ? _couponController.text.trim() : null,
+            diagnosticPhotoIds: _diagnosticPhotos
+                .map((photo) => photo.photoId!)
+                .toList(growable: false),
           );
 
       if (order == null || !mounted) {
@@ -1153,15 +1671,67 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
       }
       setState(() => _activeOrder = order);
       await _launchPaymentCheckout(order);
-    } catch (_) {
+    } catch (error) {
       if (!mounted) return;
       setState(() => _isLaunchingPayment = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Could not open payment. Please try again.'),
-        ),
-      );
+      var changedDetailsKeyCleared = false;
+      final responseBody = error is DioException ? error.response?.data : null;
+      final responseMessage = responseBody is Map
+          ? responseBody['message']?.toString()
+          : null;
+      if (widget.rebookSourceBookingId != null &&
+          error is DioException &&
+          error.response?.statusCode == 409 &&
+          responseMessage?.contains(
+                'checkout request key was already used for different booking details',
+              ) ==
+              true) {
+        final customerId = _rebookRequestCustomerId;
+        if (customerId != null) {
+          try {
+            await _rebookRequestKeys.clear(
+              customerId: customerId,
+              sourceBookingId: widget.rebookSourceBookingId!,
+            );
+            changedDetailsKeyCleared = true;
+          } catch (_) {
+            // Keep the key if secure storage cannot be updated safely.
+          }
+        }
+      }
+      if (!mounted) return;
+      final message =
+          widget.rebookSourceBookingId != null &&
+              error is DioException &&
+              error.response?.statusCode == 409
+          ? changedDetailsKeyCleared
+                ? 'Your rebooking details changed. The saved checkout key was cleared; tap Continue to submit the updated details again.'
+                : 'A rebooking request already exists, or its details changed and the checkout key could not be reset. Check your bookings before trying again.'
+          : widget.rebookSourceBookingId != null && error is StateError
+          ? 'We could not safely resume this rebooking. Sign in again or check your connection, then retry.'
+          : 'Could not open payment. Please try again.';
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(message)));
     }
+  }
+
+  Future<String> _requestKeyForCheckout() async {
+    final sourceBookingId = widget.rebookSourceBookingId;
+    if (sourceBookingId == null || sourceBookingId.isEmpty) {
+      return _bookingRequestKey;
+    }
+
+    final customerId = ref.read(authControllerProvider).valueOrNull?.user.id;
+    if (customerId == null || customerId.isEmpty) {
+      throw StateError('Sign in again to continue this rebooking.');
+    }
+
+    _rebookRequestCustomerId = customerId;
+    return _rebookRequestKeys.getOrCreate(
+      customerId: customerId,
+      sourceBookingId: sourceBookingId,
+    );
   }
 
   Future<void> _launchPaymentCheckout(PaymentOrder order) async {
@@ -1263,6 +1833,20 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
     if (!mounted) return;
 
     if (success) {
+      final sourceBookingId = widget.rebookSourceBookingId;
+      final customerId = _rebookRequestCustomerId;
+      if (sourceBookingId != null && customerId != null) {
+        try {
+          await _rebookRequestKeys.clear(
+            customerId: customerId,
+            sourceBookingId: sourceBookingId,
+          );
+        } catch (_) {
+          // The confirmed backend booking remains authoritative. A retained key
+          // cannot create another order because the source rebook is consumed.
+        }
+      }
+      if (!mounted) return;
       setState(() {
         _isVerifyingPayment = false;
         _paymentVerificationFailed = false;
@@ -1331,6 +1915,10 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
 
   String _checkoutErrorMessage(Object? error) {
     if (error is DioException) {
+      if (widget.rebookSourceBookingId != null &&
+          error.response?.statusCode == 409) {
+        return 'A rebooking request already exists or its details changed. Check your bookings before trying again.';
+      }
       if (error.response?.statusCode == 400 && _couponApplied) {
         return 'That promo code could not be applied. Check the code or remove it to continue.';
       }
@@ -1340,6 +1928,11 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
     }
     return 'We could not prepare your payment. Check your connection and try again.';
   }
+}
+
+DateTime _maintenancePlanTime(DateTime scheduledFor) {
+  // Maintenance plans currently use Asia/Kolkata, which has no DST changes.
+  return scheduledFor.toUtc().add(const Duration(hours: 5, minutes: 30));
 }
 
 // ─── Supporting widgets ───────────────────────────────────────────────────────

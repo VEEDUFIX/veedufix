@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -7,6 +9,7 @@ import 'package:marketplace_shared/marketplace_shared.dart';
 import 'package:razorpay_flutter/razorpay_flutter.dart';
 import 'package:share_plus/share_plus.dart';
 
+import '../../data/custom_quote_api.dart';
 import '../../../profile/data/saved_addresses_api.dart';
 import '../../../../core/payments/razorpay_service.dart';
 
@@ -180,7 +183,7 @@ class _BookingDetailBody extends ConsumerWidget {
       'IN_PROGRESS',
     ].contains(booking.status);
     final canCancel = isActive;
-    final canRebook = !isActive;
+    final canRebook = booking.status.toUpperCase() == 'COMPLETED';
 
     return RefreshIndicator(
       onRefresh: () async {
@@ -587,7 +590,11 @@ class _BookingDetailBody extends ConsumerWidget {
                   children: [
                     const _SectionLabel(label: 'Refund tracking'),
                     const SizedBox(height: 14),
-                    for (var index = 0; index < booking.refunds.length; index++) ...[
+                    for (
+                      var index = 0;
+                      index < booking.refunds.length;
+                      index++
+                    ) ...[
                       _RefundStatusRow(refund: booking.refunds[index]),
                       if (index < booking.refunds.length - 1)
                         const Divider(height: 24),
@@ -604,6 +611,8 @@ class _BookingDetailBody extends ConsumerWidget {
             _JobPhotoGallery(booking: booking),
             const SizedBox(height: 12),
           ],
+
+          BookingDiagnosticPhotosSection(bookingId: booking.id),
 
           // ─── Timeline ─────────────────────────────────────────────────────
           PremiumGlassCard(
@@ -1270,13 +1279,7 @@ Future<void> _confirmCancelBooking(
 }
 
 void _openRebookBooking(BuildContext context, BookingDetail booking) {
-  final serviceSlug = booking.serviceSlug;
-  if (serviceSlug != null && serviceSlug.isNotEmpty) {
-    context.push('/service?id=${Uri.encodeComponent(serviceSlug)}');
-    return;
-  }
-
-  context.push('/search?q=${Uri.encodeComponent(booking.serviceName)}');
+  context.push('/booking/${booking.id}/rebook');
 }
 
 String _errorMessageFromDio(DioException error) {
@@ -1307,11 +1310,37 @@ String _cancellationInformationForBooking(BookingDetail booking) {
 
 // ─── Supporting widgets ───────────────────────────────────────────────────────
 
+final Map<String, String> _disputeSubmissionKeys = {};
+
 Future<void> _raiseDisputeDialog(
   BuildContext context,
   WidgetRef ref,
   BookingDetail booking,
 ) async {
+  try {
+    final existing = await ref.read(
+      bookingDisputeStatusProvider(booking.id).future,
+    );
+    if (existing != null) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('A claim already exists for this booking.'),
+        ),
+      );
+      ref.invalidate(bookingDisputeStatusProvider(booking.id));
+      return;
+    }
+  } catch (_) {
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Could not check claim status. Please try again.'),
+      ),
+    );
+    return;
+  }
+  if (!context.mounted) return;
   final reasonController = TextEditingController();
 
   final confirmed = await showModalBottomSheet<bool>(
@@ -1479,10 +1508,22 @@ Future<void> _raiseDisputeDialog(
     return;
   }
 
+  final previousRequest = _disputeSubmissionKeys[booking.id];
+  final requestKey =
+      previousRequest ??
+      'claim-${booking.id}-${DateTime.now().microsecondsSinceEpoch}';
+  _disputeSubmissionKeys[booking.id] = requestKey;
+
   try {
     await ref
         .read(apiClientProvider)
-        .post('/bookings/${booking.id}/dispute', data: {'reason': reason});
+        .post(
+          '/bookings/${booking.id}/dispute',
+          data: {'reason': reason, 'idempotencyKey': requestKey},
+        );
+    if (_disputeSubmissionKeys[booking.id] == requestKey) {
+      _disputeSubmissionKeys.remove(booking.id);
+    }
     ref.invalidate(bookingDetailPageProvider(booking.id));
     ref.invalidate(bookingDisputeStatusProvider(booking.id));
     if (!context.mounted) return;
@@ -1495,10 +1536,33 @@ Future<void> _raiseDisputeDialog(
       ),
     );
   } catch (error) {
+    final statusCode = error is DioException
+        ? error.response?.statusCode
+        : null;
+    if (statusCode != null &&
+        statusCode >= 400 &&
+        statusCode < 500 &&
+        statusCode != 409) {
+      if (_disputeSubmissionKeys[booking.id] == requestKey) {
+        _disputeSubmissionKeys.remove(booking.id);
+      }
+    }
+    if (statusCode == 409) {
+      ref.invalidate(bookingDetailPageProvider(booking.id));
+      ref.invalidate(bookingDisputeStatusProvider(booking.id));
+    }
     if (!context.mounted) return;
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text('Could not submit dispute.')));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          statusCode == 409
+              ? 'A claim may already exist. Refresh the booking to check its status.'
+              : statusCode != null && statusCode >= 400 && statusCode < 500
+              ? 'The claim was not accepted. Review the details and try again.'
+              : 'Could not confirm claim submission. Check your connection and retry.',
+        ),
+      ),
+    );
   }
 }
 
@@ -2000,12 +2064,23 @@ class _RefundStatusRow extends StatelessWidget {
     final theme = Theme.of(context);
     final status = refund.status.toLowerCase();
     final (label, color, icon) = switch (status) {
-      'processed' => ('Completed', const Color(0xFF15803D), Icons.check_circle_rounded),
-      'failed' => ('Needs attention', theme.colorScheme.error, Icons.error_rounded),
+      'processed' => (
+        'Completed',
+        const Color(0xFF15803D),
+        Icons.check_circle_rounded,
+      ),
+      'failed' => (
+        'Needs attention',
+        theme.colorScheme.error,
+        Icons.error_rounded,
+      ),
       _ => ('Processing', const Color(0xFF2563EB), Icons.hourglass_top_rounded),
     };
-    final gatewayAmount = refund.gatewayAmount ??
-        (refund.amount - refund.walletAmount).clamp(0, refund.amount).toDouble();
+    final gatewayAmount =
+        refund.gatewayAmount ??
+        (refund.amount - refund.walletAmount)
+            .clamp(0, refund.amount)
+            .toDouble();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -2033,7 +2108,9 @@ class _RefundStatusRow extends StatelessWidget {
         ),
         const SizedBox(height: 6),
         if (gatewayAmount > 0)
-          Text('Refund to original payment: ₹${gatewayAmount.toStringAsFixed(2)}'),
+          Text(
+            'Refund to original payment: ₹${gatewayAmount.toStringAsFixed(2)}',
+          ),
         if (refund.walletAmount > 0)
           Text(
             refund.walletCreditedAt != null
@@ -2273,7 +2350,12 @@ class _JobPhotoGallery extends StatelessWidget {
             const _SectionLabel(label: 'Work photos'),
             const SizedBox(height: 14),
             if (booking.beforePhotoUrls.isNotEmpty) ...[
-              Text('Before', style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800)),
+              Text(
+                'Before',
+                style: theme.textTheme.titleSmall?.copyWith(
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
               const SizedBox(height: 8),
               _PhotoStrip(urls: booking.beforePhotoUrls),
             ],
@@ -2281,7 +2363,12 @@ class _JobPhotoGallery extends StatelessWidget {
                 booking.afterPhotoUrls.isNotEmpty)
               const SizedBox(height: 16),
             if (booking.afterPhotoUrls.isNotEmpty) ...[
-              Text('After', style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800)),
+              Text(
+                'After',
+                style: theme.textTheme.titleSmall?.copyWith(
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
               const SizedBox(height: 8),
               _PhotoStrip(urls: booking.afterPhotoUrls),
             ],
@@ -2336,7 +2423,9 @@ class _PhotoStrip extends StatelessWidget {
                         width: MediaQuery.sizeOf(dialogContext).width,
                         height: MediaQuery.sizeOf(dialogContext).height,
                         fit: BoxFit.contain,
-                        backgroundColor: Theme.of(dialogContext).colorScheme.surface,
+                        backgroundColor: Theme.of(
+                          dialogContext,
+                        ).colorScheme.surface,
                       ),
                     ),
                   ),
@@ -2352,7 +2441,9 @@ class _PhotoStrip extends StatelessWidget {
                 fit: BoxFit.cover,
                 cloudinaryWidth: 240,
                 cloudinaryHeight: 240,
-                backgroundColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+                backgroundColor: Theme.of(
+                  context,
+                ).colorScheme.surfaceContainerHighest,
               ),
             ),
           ),
@@ -2467,9 +2558,9 @@ class BookingDetail {
         : null,
     refunds: (json['refunds'] as List<dynamic>? ?? const [])
         .whereType<Map>()
-        .map((refund) => BookingRefund.fromJson(
-              Map<String, dynamic>.from(refund),
-            ))
+        .map(
+          (refund) => BookingRefund.fromJson(Map<String, dynamic>.from(refund)),
+        )
         .toList(growable: false),
     timeline: (json['timeline'] as List<dynamic>? ?? [])
         .map(
@@ -2524,17 +2615,19 @@ class BookingRefund {
   final DateTime? walletCreditedAt;
 
   factory BookingRefund.fromJson(Map<String, dynamic> json) => BookingRefund(
-        id: json['id'] as String? ?? '',
-        amount: (json['amount'] as num?)?.toDouble() ?? 0,
-        gatewayAmount: (json['gatewayAmount'] as num?)?.toDouble(),
-        walletAmount: (json['walletAmount'] as num?)?.toDouble() ?? 0,
-        status: json['status'] as String? ?? 'pending',
-        createdAt: DateTime.tryParse(json['createdAt'] as String? ?? '') ?? DateTime.now(),
-        updatedAt: DateTime.tryParse(json['updatedAt'] as String? ?? '') ?? DateTime.now(),
-        walletCreditedAt: json['walletCreditedAt'] is String
-            ? DateTime.tryParse(json['walletCreditedAt'] as String)
-            : null,
-      );
+    id: json['id'] as String? ?? '',
+    amount: (json['amount'] as num?)?.toDouble() ?? 0,
+    gatewayAmount: (json['gatewayAmount'] as num?)?.toDouble(),
+    walletAmount: (json['walletAmount'] as num?)?.toDouble() ?? 0,
+    status: json['status'] as String? ?? 'pending',
+    createdAt:
+        DateTime.tryParse(json['createdAt'] as String? ?? '') ?? DateTime.now(),
+    updatedAt:
+        DateTime.tryParse(json['updatedAt'] as String? ?? '') ?? DateTime.now(),
+    walletCreditedAt: json['walletCreditedAt'] is String
+        ? DateTime.tryParse(json['walletCreditedAt'] as String)
+        : null,
+  );
 }
 
 class BookingTimelineEvent {
@@ -2598,7 +2691,12 @@ class _SparePartsBannerState extends ConsumerState<_SparePartsBanner> {
   }
 
   Future<void> _handlePaymentSuccess(PaymentSuccessResponse response) async {
-    final orderId = response.orderId ?? _pendingOrderId ?? '';
+    final pendingOrderId = _pendingOrderId;
+    if (pendingOrderId == null ||
+        (response.orderId != null && response.orderId != pendingOrderId)) {
+      return;
+    }
+    final orderId = response.orderId ?? pendingOrderId;
     final paymentId = response.paymentId ?? '';
     final signature = response.signature ?? '';
     setState(() => _loading = true);
@@ -2904,19 +3002,249 @@ class _CustomQuoteBanner extends ConsumerStatefulWidget {
 
 class _CustomQuoteBannerState extends ConsumerState<_CustomQuoteBanner> {
   bool _loading = false;
+  bool _paymentLoading = false;
+  bool _verifying = false;
+  bool _checkoutOpen = false;
+  bool _paymentOrderCreating = false;
+  Map<String, dynamic>? _quoteSnapshot;
+  late final RazorpayService _razorpayService;
+  String? _pendingOrderId;
 
-  Future<void> _respond(String action) async {
+  @override
+  void initState() {
+    super.initState();
+    _razorpayService = RazorpayService.create();
+    _razorpayService.registerCallbacks(
+      onSuccess: _handlePaymentSuccess,
+      onError: _handlePaymentError,
+      onExternalWallet: (_) {
+        if (!mounted) return;
+        _checkoutOpen = false;
+        unawaited(
+          _reconcilePayment(
+            'External wallet selected. Check the quote payment status before retrying.',
+          ),
+        );
+      },
+    );
+    unawaited(_refreshQuote());
+  }
+
+  @override
+  void dispose() {
+    _razorpayService.dispose();
+    super.dispose();
+  }
+
+  CustomQuoteApi get _quoteApi => CustomQuoteApi(ref.read(apiClientProvider));
+
+  Future<String?> _refreshQuote() async {
+    try {
+      final response = await _quoteApi.getQuote(widget.booking.id);
+      final quote = response['quote'];
+      if (mounted && quote is Map) {
+        final snapshot = Map<String, dynamic>.from(quote);
+        final history = snapshot['history'];
+        final latest =
+            history is List && history.isNotEmpty && history.first is Map
+            ? Map<String, dynamic>.from(history.first as Map)
+            : null;
+        final paymentStatus = latest?['paymentStatus'] as String?;
+        setState(() {
+          _quoteSnapshot = snapshot;
+          if (_pendingOrderId != null &&
+              const {
+                'PAID',
+                'PAYMENT_FAILED',
+                'REFUNDED',
+              }.contains(paymentStatus)) {
+            _pendingOrderId = null;
+            if (!_verifying) _paymentLoading = false;
+          } else if (!_checkoutOpen && !_paymentOrderCreating && !_verifying) {
+            // The provider UI has returned without a terminal server state.
+            // Allow a retry while retaining the order ID so the backend can
+            // reconcile/reuse the same pending payment order.
+            _paymentLoading = false;
+          }
+        });
+        return paymentStatus;
+      }
+    } catch (_) {
+      // Keep the booking snapshot visible; a later explicit refresh/payment
+      // attempt can reconcile an uncertain response with authoritative state.
+    }
+    return null;
+  }
+
+  Map<String, dynamic>? get _latestRevision {
+    final history = _quoteSnapshot?['history'];
+    // The API returns revisions ordered newest first.
+    if (history is List && history.isNotEmpty && history.first is Map) {
+      return Map<String, dynamic>.from(history.first as Map);
+    }
+    return null;
+  }
+
+  double? _quoteNumber(dynamic value) => value is num
+      ? value.toDouble()
+      : value is String
+      ? double.tryParse(value)
+      : null;
+
+  String? _quoteDateLabel(String prefix, dynamic value) {
+    if (value is! String) return null;
+    final date = DateTime.tryParse(value);
+    return date == null
+        ? null
+        : '$prefix ${DateFormat.yMMMd().add_jm().format(date.toLocal())}';
+  }
+
+  double _quoteLineAmount(Map<String, dynamic> item) {
+    final amount = _quoteNumber(item['amount']);
+    if (amount != null) return amount;
+    final unitPrice = _quoteNumber(item['unitPrice']) ?? 0;
+    final quantity = _quoteNumber(item['qty'] ?? item['quantity']) ?? 1;
+    return unitPrice * quantity;
+  }
+
+  Future<void> _handlePaymentSuccess(PaymentSuccessResponse response) async {
+    if (!mounted) return;
+    final pendingOrderId = _pendingOrderId;
+    if (pendingOrderId == null ||
+        (response.orderId != null && response.orderId != pendingOrderId)) {
+      return;
+    }
+    setState(() => _verifying = true);
+    try {
+      _checkoutOpen = false;
+      final orderId = response.orderId ?? _pendingOrderId ?? '';
+      final paymentId = response.paymentId ?? '';
+      final signature = response.signature ?? '';
+      if (orderId.isEmpty || paymentId.isEmpty || signature.isEmpty) {
+        await _reconcilePayment(
+          'Payment was submitted, but confirmation details are incomplete. Refresh the quote status before retrying.',
+        );
+        return;
+      }
+
+      if (mounted) setState(() => _paymentLoading = true);
+      try {
+        await _quoteApi.verifyPayment(
+          widget.booking.id,
+          orderId: orderId,
+          paymentId: paymentId,
+          signature: signature,
+        );
+        await _refreshQuote();
+        if (mounted) {
+          ref.invalidate(bookingDetailPageProvider(widget.booking.id));
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Quote payment confirmed by VeeduFix.'),
+            ),
+          );
+        }
+      } catch (_) {
+        await _reconcilePayment(
+          'Payment was submitted, but confirmation is still pending. Refresh the quote status before trying again.',
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _verifying = false;
+          if (!_checkoutOpen && !_paymentOrderCreating) {
+            _paymentLoading = false;
+          }
+        });
+      }
+    }
+  }
+
+  Future<void> _reconcilePayment(String message) async {
+    await _refreshQuote();
+    if (mounted) {
+      ref.invalidate(bookingDetailPageProvider(widget.booking.id));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(message)));
+    }
+  }
+
+  void _handlePaymentError(PaymentFailureResponse response) {
+    if (!mounted) return;
+    _checkoutOpen = false;
+    unawaited(
+      _reconcilePayment(
+        'Payment was not confirmed${response.message?.trim().isNotEmpty == true ? ': ${response.message}' : ''}. Check the quote status, then retry if payment is still due.',
+      ),
+    );
+  }
+
+  Future<void> _payAcceptedQuote() async {
+    if (_paymentLoading || _loading) return;
+    setState(() {
+      _paymentLoading = true;
+      _paymentOrderCreating = true;
+    });
+    try {
+      final order = await _quoteApi.createPaymentOrder(widget.booking.id);
+      _paymentOrderCreating = false;
+      final keyId = order['keyId'] as String? ?? '';
+      final orderId = order['orderId'] as String? ?? '';
+      final amountValue = order['amountPaise'];
+      final amountPaise = amountValue is num ? amountValue.toInt() : null;
+      if (keyId.isEmpty ||
+          orderId.isEmpty ||
+          amountPaise == null ||
+          amountPaise <= 0) {
+        throw StateError('The quote payment order response was incomplete.');
+      }
+
+      _pendingOrderId = orderId;
+      _checkoutOpen = true;
+      _razorpayService.openCheckout(
+        keyId: keyId,
+        orderId: orderId,
+        bookingCode: order['bookingCode'] as String? ?? widget.booking.code,
+        customerName: order['customerName'] as String? ?? 'Customer',
+        email: order['customerEmail'] as String? ?? '',
+        phone: order['customerPhone'] as String? ?? '',
+        amountInPaise: amountPaise,
+      );
+      // Keep the busy state until the provider callback returns.
+    } catch (_) {
+      _paymentOrderCreating = false;
+      _checkoutOpen = false;
+      _pendingOrderId = null;
+      await _refreshQuote();
+      if (mounted) {
+        setState(() => _paymentLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Could not start quote payment. Refresh the quote status and try again.',
+            ),
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _respond({required bool accept}) async {
+    if (_loading) return;
+    final bookingId = widget.booking.id;
     setState(() => _loading = true);
     try {
-      final api = ref.read(apiClientProvider);
-      await api.post('/bookings/${widget.booking.id}/$action-quote');
-      ref.invalidate(bookingDetailPageProvider(widget.booking.id));
+      await _quoteApi.respond(bookingId, accept: accept);
+      await _refreshQuote();
       if (mounted) {
+        ref.invalidate(bookingDetailPageProvider(bookingId));
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              action == 'accept'
-                  ? '✅ Quote accepted! Proceed to payment.'
+              accept
+                  ? 'Quote accepted. Payment is required before the additional work can proceed.'
                   : 'Quote rejected.',
             ),
           ),
@@ -2924,8 +3252,13 @@ class _CustomQuoteBannerState extends ConsumerState<_CustomQuoteBanner> {
       }
     } catch (_) {
       if (mounted) {
+        ref.invalidate(bookingDetailPageProvider(bookingId));
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Unable to complete verification.')),
+          const SnackBar(
+            content: Text(
+              'Could not respond to this quote. Refresh and try again.',
+            ),
+          ),
         );
       }
     } finally {
@@ -2937,29 +3270,98 @@ class _CustomQuoteBannerState extends ConsumerState<_CustomQuoteBanner> {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final tt = Theme.of(context).textTheme;
-    final status = widget.booking.customQuoteStatus ?? 'PENDING';
-    final amount = widget.booking.customQuoteAmount ?? 0.0;
-    final items = widget.booking.customQuoteItemized ?? [];
-    final notes = widget.booking.customQuoteNotes;
+    final revision = _latestRevision;
+    final status =
+        (_quoteSnapshot?['customQuoteStatus'] as String?) ??
+        widget.booking.customQuoteStatus ??
+        'PENDING';
+    final amount =
+        _quoteNumber(revision?['amount']) ??
+        _quoteNumber(_quoteSnapshot?['customQuoteAmount']) ??
+        widget.booking.customQuoteAmount ??
+        0.0;
+    final rawItems =
+        revision?['itemized'] ?? _quoteSnapshot?['customQuoteItemized'];
+    final items = rawItems is List
+        ? rawItems
+              .whereType<Map>()
+              .map((item) => Map<String, dynamic>.from(item))
+              .toList()
+        : widget.booking.customQuoteItemized ?? <Map<String, dynamic>>[];
+    final notes =
+        revision?['notes'] as String? ??
+        _quoteSnapshot?['customQuoteNotes'] as String? ??
+        widget.booking.customQuoteNotes;
+    final paymentStatus = revision?['paymentStatus'] as String?;
+    final workAuthorized =
+        status == 'ACCEPTED' &&
+        (paymentStatus == 'PAID' ||
+            paymentStatus == 'LEGACY_UNVERIFIED' ||
+            (revision != null && paymentStatus == 'NOT_REQUIRED'));
+    final paymentFailed =
+        status == 'ACCEPTED' && paymentStatus == 'PAYMENT_FAILED';
+    final paymentDue =
+        status == 'ACCEPTED' && revision != null && !workAuthorized;
+    final canRespond = status == 'SUBMITTED';
 
     final (borderColor, bgColor, icon, label) = switch (status) {
       'ACCEPTED' => (
-        AbzioTheme.successColor,
-        AbzioTheme.successColor,
-        Icons.check_circle_rounded,
-        'Quote Accepted',
+        paymentFailed
+            ? cs.error
+            : workAuthorized
+            ? AbzioTheme.successColor
+            : AbzioTheme.warningColor,
+        paymentFailed
+            ? cs.error
+            : workAuthorized
+            ? AbzioTheme.successColor
+            : AbzioTheme.warningColor,
+        paymentFailed
+            ? Icons.error_rounded
+            : workAuthorized
+            ? Icons.check_circle_rounded
+            : Icons.pending_actions_rounded,
+        paymentStatus == 'PAID'
+            ? 'Quote Payment Confirmed'
+            : paymentStatus == 'LEGACY_UNVERIFIED'
+            ? 'Quote Accepted — Work Authorized'
+            : revision == null
+            ? 'Quote Accepted — Checking Status'
+            : paymentStatus == 'NOT_REQUIRED'
+            ? 'Quote Accepted — Work Authorized'
+            : paymentStatus == 'PAYMENT_FAILED'
+            ? 'Quote Accepted — Payment Failed'
+            : 'Quote Accepted — Payment Pending',
       ),
-      'REJECTED' => (
+      'DECLINED' || 'REJECTED' => (
         cs.outline,
         cs.outlineVariant,
         Icons.cancel_rounded,
         'Quote Rejected',
       ),
-      _ => (
+      'EXPIRED' => (
+        cs.outline,
+        cs.surfaceContainerHighest,
+        Icons.schedule_rounded,
+        'Quote Expired',
+      ),
+      'REQUESTED' => (
+        cs.outline,
+        cs.surfaceContainerHighest,
+        Icons.hourglass_top_rounded,
+        'Quote Being Prepared',
+      ),
+      'SUBMITTED' => (
         AbzioTheme.warningColor,
         AbzioTheme.warningColor,
         Icons.request_quote_rounded,
         'Quote Received — Review Required',
+      ),
+      _ => (
+        cs.outline,
+        cs.surfaceContainerHighest,
+        Icons.info_outline_rounded,
+        'Quote Status Unavailable',
       ),
     };
 
@@ -3011,12 +3413,14 @@ class _CustomQuoteBannerState extends ConsumerState<_CustomQuoteBanner> {
                     children: [
                       Expanded(
                         child: Text(
-                          item['label'] as String? ?? '',
+                          item['label'] as String? ??
+                              item['description'] as String? ??
+                              'Additional work',
                           style: tt.bodyMedium,
                         ),
                       ),
                       Text(
-                        '₹${(item['amount'] as num).toStringAsFixed(0)}',
+                        '₹${_quoteLineAmount(item).toStringAsFixed(2)}',
                         style: tt.bodyMedium?.copyWith(
                           fontWeight: FontWeight.w700,
                         ),
@@ -3058,14 +3462,82 @@ class _CustomQuoteBannerState extends ConsumerState<_CustomQuoteBanner> {
               ),
             ],
 
-            // Accept / Reject buttons — only when PENDING
-            if (status == 'PENDING') ...[
+            if (_quoteDateLabel(
+                      'Submitted',
+                      revision?['submittedAt'] ?? revision?['createdAt'],
+                    ) !=
+                    null ||
+                _quoteDateLabel('Expires', revision?['expiresAt']) != null) ...[
+              const SizedBox(height: 8),
+              Text(
+                [
+                  if (_quoteDateLabel(
+                        'Submitted',
+                        revision?['submittedAt'] ?? revision?['createdAt'],
+                      )
+                      case final submitted?)
+                    submitted,
+                  if (_quoteDateLabel('Expires', revision?['expiresAt'])
+                      case final expires?)
+                    expires,
+                ].join(' · '),
+                style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+              ),
+            ],
+
+            if (status == 'ACCEPTED') ...[
+              const SizedBox(height: 12),
+              Text(
+                workAuthorized
+                    ? 'Payment is confirmed. The approved additional work is authorized.'
+                    : revision == null
+                    ? 'Checking the quote payment status. Refresh this booking before continuing with additional work.'
+                    : 'The approved quote must be paid before the additional work can proceed.',
+                style: tt.bodySmall?.copyWith(
+                  color: workAuthorized
+                      ? AbzioTheme.successColor
+                      : cs.onSurfaceVariant,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              if (paymentDue) ...[
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton.icon(
+                    onPressed: _paymentLoading ? null : _payAcceptedQuote,
+                    icon: _paymentLoading
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : const Icon(Icons.lock_rounded, size: 18),
+                    label: Text(
+                      _paymentLoading
+                          ? 'Waiting for payment confirmation…'
+                          : paymentStatus == 'PAYMENT_FAILED'
+                          ? 'Retry quote payment · ₹${amount.toStringAsFixed(2)}'
+                          : 'Pay approved quote · ₹${amount.toStringAsFixed(2)}',
+                    ),
+                  ),
+                ),
+              ],
+            ],
+
+            // Only a currently submitted quote can be answered.
+            if (canRespond) ...[
               const SizedBox(height: 16),
               Row(
                 children: [
                   Expanded(
                     child: OutlinedButton(
-                      onPressed: _loading ? null : () => _respond('reject'),
+                      onPressed: _loading
+                          ? null
+                          : () => _respond(accept: false),
                       style: OutlinedButton.styleFrom(
                         foregroundColor: cs.error,
                         side: BorderSide(
@@ -3086,7 +3558,7 @@ class _CustomQuoteBannerState extends ConsumerState<_CustomQuoteBanner> {
                   Expanded(
                     flex: 2,
                     child: FilledButton.icon(
-                      onPressed: _loading ? null : () => _respond('accept'),
+                      onPressed: _loading ? null : () => _respond(accept: true),
                       icon: _loading
                           ? const SizedBox(
                               width: 16,

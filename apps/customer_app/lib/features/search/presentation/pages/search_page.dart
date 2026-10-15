@@ -1,19 +1,25 @@
 import 'dart:async';
 
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:marketplace_shared/marketplace_shared.dart';
 import '../../../../core/widgets/shimmer_placeholder.dart';
+import '../../data/search_history_store.dart';
 
 class _SearchFilters {
   const _SearchFilters({
     required this.query,
+    this.page = 1,
+    this.pincode,
     this.categorySlug,
     this.subcategorySlug,
   });
 
   final String query;
+  final int page;
+  final String? pincode;
   final String? categorySlug;
   final String? subcategorySlug;
 
@@ -21,47 +27,109 @@ class _SearchFilters {
   bool operator ==(Object other) {
     return other is _SearchFilters &&
         other.query == query &&
+        other.page == page &&
+        other.pincode == pincode &&
         other.categorySlug == categorySlug &&
         other.subcategorySlug == subcategorySlug;
   }
 
   @override
-  int get hashCode => Object.hash(query, categorySlug, subcategorySlug);
+  int get hashCode =>
+      Object.hash(query, page, pincode, categorySlug, subcategorySlug);
+}
+
+class CatalogSearchPageResult {
+  const CatalogSearchPageResult({
+    required this.items,
+    required this.total,
+    this.resultLimit,
+  });
+
+  final List<CatalogService> items;
+  final int total;
+  final int? resultLimit;
 }
 
 final searchCatalogFilteredProvider = FutureProvider.autoDispose
-    .family<List<CatalogService>, _SearchFilters>((ref, filters) async {
+    .family<CatalogSearchPageResult, _SearchFilters>((ref, filters) async {
       if (filters.query.trim().isEmpty &&
           filters.categorySlug == null &&
           filters.subcategorySlug == null) {
-        return const [];
+        return const CatalogSearchPageResult(items: [], total: 0);
       }
 
       final apiClient = ref.watch(apiClientProvider);
+      final cancelToken = CancelToken();
+      ref.onDispose(() => cancelToken.cancel('Search results query changed'));
       final queryParameters = <String, dynamic>{
         if (filters.query.trim().isNotEmpty) 'q': filters.query,
+        'page': filters.page,
+        'pageSize': 20,
         if (filters.categorySlug != null && filters.categorySlug!.isNotEmpty)
           'categorySlug': filters.categorySlug,
         if (filters.subcategorySlug != null &&
             filters.subcategorySlug!.isNotEmpty)
           'subcategorySlug': filters.subcategorySlug,
+        if (filters.pincode != null) 'pincode': filters.pincode,
       };
-      final response = await apiClient.get(
+      final response = await apiClient.dio.get<Map<String, dynamic>>(
         '/catalog/search',
         queryParameters: queryParameters,
+        cancelToken: cancelToken,
       );
+      final payloadData = response.data ?? const <String, dynamic>{};
       final payload =
-          response['items'] ??
-          response['results'] ??
-          response['data'] ??
+          payloadData['items'] ??
+          payloadData['results'] ??
+          payloadData['data'] ??
           const [];
       if (payload is! List) {
-        return const [];
+        return const CatalogSearchPageResult(items: [], total: 0);
       }
-      return payload
+      final items = payload
           .whereType<Map<String, dynamic>>()
           .map(CatalogService.fromJson)
           .toList(growable: false);
+      return CatalogSearchPageResult(
+        items: items,
+        total: (payloadData['total'] as num?)?.toInt() ?? items.length,
+        resultLimit: (payloadData['resultLimit'] as num?)?.toInt(),
+      );
+    });
+
+final searchAutocompleteProvider = FutureProvider.autoDispose
+    .family<List<CatalogSearchSuggestion>, String>((ref, rawQuery) async {
+      final query = rawQuery.trim();
+      if (query.length < 2) return const [];
+
+      final cancelToken = CancelToken();
+      ref.onDispose(() => cancelToken.cancel('Search query changed'));
+      final pincode = ref.watch(selectedCatalogPincodeProvider);
+      final response = await ref
+          .watch(apiClientProvider)
+          .dio
+          .get<Map<String, dynamic>>(
+            '/catalog/autocomplete',
+            queryParameters: {
+              'q': query,
+              'limit': 8,
+              if (pincode != null) 'pincode': pincode,
+            },
+            cancelToken: cancelToken,
+          );
+      final data = response.data ?? const <String, dynamic>{};
+      final suggestions = <CatalogSearchSuggestion>[];
+      for (final key in const ['services', 'categories', 'subcategories']) {
+        final rawItems = data[key];
+        if (rawItems is! List) continue;
+        for (final rawItem in rawItems.whereType<Map>().take(4)) {
+          final suggestion = CatalogSearchSuggestion.fromJson(
+            rawItem.cast<String, dynamic>(),
+          );
+          if (suggestion.label.trim().isNotEmpty) suggestions.add(suggestion);
+        }
+      }
+      return suggestions.take(12).toList(growable: false);
     });
 
 class SearchPage extends ConsumerStatefulWidget {
@@ -83,12 +151,18 @@ class SearchPage extends ConsumerStatefulWidget {
 class _SearchPageState extends ConsumerState<SearchPage> {
   final TextEditingController _controller = TextEditingController();
   String _query = '';
+  int _page = 1;
+  String? _pagePincode;
   String _inputQuery = '';
+  String _suggestionQuery = '';
   Timer? _searchDebounce;
+  Timer? _suggestionDebounce;
+  final FocusNode _searchFocusNode = FocusNode();
+  bool _searchHasFocus = false;
   String? _selectedCategorySlug;
   String? _selectedSubcategorySlug;
 
-  // Session-scoped recent searches — mutable so clear/add works live
+  final CustomerSearchHistoryStore _historyStore = CustomerSearchHistoryStore();
   final List<String> _recent = [];
 
   @override
@@ -99,6 +173,8 @@ class _SearchPageState extends ConsumerState<SearchPage> {
     _inputQuery = widget.initialQuery;
     _selectedCategorySlug = widget.initialCategorySlug;
     _selectedSubcategorySlug = widget.initialSubcategorySlug;
+    _searchFocusNode.addListener(_onFocusChanged);
+    unawaited(_loadRecentSearches());
   }
 
   @override
@@ -114,6 +190,8 @@ class _SearchPageState extends ConsumerState<SearchPage> {
       );
       _inputQuery = widget.initialQuery;
       _query = widget.initialQuery;
+      _page = 1;
+      _suggestionQuery = widget.initialQuery;
       _selectedCategorySlug = widget.initialCategorySlug;
       _selectedSubcategorySlug = widget.initialSubcategorySlug;
     }
@@ -128,31 +206,57 @@ class _SearchPageState extends ConsumerState<SearchPage> {
       TextPosition(offset: query.length),
     );
     _addToRecent(query);
+    _searchFocusNode.unfocus();
     setState(() {
       _inputQuery = query;
       _query = query;
+      _page = 1;
+      _suggestionQuery = '';
     });
   }
 
+  void _onFocusChanged() {
+    if (!mounted) return;
+    setState(() => _searchHasFocus = _searchFocusNode.hasFocus);
+  }
+
   void _onQueryChanged(String value) {
-    setState(() => _inputQuery = value);
+    setState(() {
+      _inputQuery = value;
+      _suggestionQuery = '';
+    });
     _searchDebounce?.cancel();
+    _suggestionDebounce?.cancel();
     if (value.trim().isEmpty) {
-      setState(() => _query = '');
+      setState(() {
+        _query = '';
+        _page = 1;
+        _suggestionQuery = '';
+      });
       return;
     }
+    _suggestionDebounce = Timer(const Duration(milliseconds: 180), () {
+      if (!mounted) return;
+      setState(() => _suggestionQuery = value.trim());
+    });
     _searchDebounce = Timer(const Duration(milliseconds: 350), () {
       if (!mounted) return;
-      setState(() => _query = _inputQuery);
+      setState(() {
+        _query = _inputQuery;
+        _page = 1;
+      });
     });
   }
 
   void _clearSearch() {
     _searchDebounce?.cancel();
+    _suggestionDebounce?.cancel();
     _controller.clear();
     setState(() {
       _inputQuery = '';
       _query = '';
+      _page = 1;
+      _suggestionQuery = '';
       _selectedCategorySlug = null;
       _selectedSubcategorySlug = null;
     });
@@ -162,9 +266,84 @@ class _SearchPageState extends ConsumerState<SearchPage> {
   void _addToRecent(String q) {
     final trimmed = q.trim();
     if (trimmed.isEmpty) return;
-    _recent.remove(trimmed);
+    _recent.removeWhere(
+      (value) => value.toLowerCase() == trimmed.toLowerCase(),
+    );
     _recent.insert(0, trimmed);
-    if (_recent.length > 8) _recent.removeLast();
+    if (_recent.length > CustomerSearchHistoryStore.maxEntries) {
+      _recent.removeRange(
+        CustomerSearchHistoryStore.maxEntries,
+        _recent.length,
+      );
+    }
+    unawaited(_persistRecentSearches());
+  }
+
+  Future<void> _loadRecentSearches() async {
+    try {
+      final values = await _historyStore.load();
+      if (!mounted) return;
+      setState(() {
+        _recent
+          ..clear()
+          ..addAll(values.where((value) => value.trim().isNotEmpty).take(8));
+      });
+    } catch (_) {
+      // Search remains usable when local history storage is unavailable.
+    }
+  }
+
+  Future<void> _persistRecentSearches() async {
+    try {
+      await _historyStore.replace(_recent);
+    } catch (_) {
+      // Local history is optional and never blocks search.
+    }
+  }
+
+  void _removeRecentSearch(String query) {
+    setState(() => _recent.remove(query));
+    unawaited(_historyStore.remove(query));
+  }
+
+  void _clearRecentSearches() {
+    setState(_recent.clear);
+    unawaited(_historyStore.clear());
+  }
+
+  void _selectSuggestion(CatalogSearchSuggestion suggestion) {
+    _searchDebounce?.cancel();
+    _suggestionDebounce?.cancel();
+    _addToRecent(suggestion.label);
+    _controller.value = TextEditingValue(
+      text: suggestion.label,
+      selection: TextSelection.collapsed(offset: suggestion.label.length),
+    );
+    _searchFocusNode.unfocus();
+    setState(() {
+      _inputQuery = suggestion.label;
+      _suggestionQuery = '';
+      if (suggestion.kind == 'CATEGORY') {
+        _controller.clear();
+        _inputQuery = '';
+        _query = '';
+        _page = 1;
+        _selectedCategorySlug = suggestion.slug;
+        _selectedSubcategorySlug = null;
+      } else if (suggestion.kind == 'SUBCATEGORY') {
+        _controller.clear();
+        _inputQuery = '';
+        _query = '';
+        _page = 1;
+        _selectedCategorySlug = suggestion.categorySlug;
+        _selectedSubcategorySlug = suggestion.slug;
+      } else {
+        _query = suggestion.label;
+        _page = 1;
+        _selectedCategorySlug = null;
+        _selectedSubcategorySlug = null;
+      }
+    });
   }
 
   void _goToSearch({
@@ -196,16 +375,29 @@ class _SearchPageState extends ConsumerState<SearchPage> {
   @override
   void dispose() {
     _searchDebounce?.cancel();
+    _suggestionDebounce?.cancel();
+    _searchFocusNode.removeListener(_onFocusChanged);
+    _searchFocusNode.dispose();
     _controller.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    ref.listen(selectedCatalogPincodeProvider, (previous, next) {
+      if (previous != next) {
+        _page = 1;
+        _pagePincode = next;
+      }
+    });
+    final selectedPincode = ref.watch(selectedCatalogPincodeProvider);
+    final resultsPage = _pagePincode == selectedPincode ? _page : 1;
     final cs = Theme.of(context).colorScheme;
     final tt = Theme.of(context).textTheme;
     final searchFilters = _SearchFilters(
       query: _query,
+      page: resultsPage,
+      pincode: selectedPincode,
       categorySlug: _selectedCategorySlug,
       subcategorySlug: _selectedSubcategorySlug,
     );
@@ -233,29 +425,24 @@ class _SearchPageState extends ConsumerState<SearchPage> {
     ];
     final showResults = _inputQuery.trim().isNotEmpty || _hasBrowseSelection;
     final isDebouncing = _inputQuery.trim() != _query.trim();
-    final trendingItems = [
-      ...catalogCategories.take(6).toList().asMap().entries.map((e) {
-        final cat = e.value;
-        return _SearchItem(
-          title: cat.name,
-          subtitle: '${cat.subcategories.length} subcategories',
-          icon: Icons.home_repair_service_rounded,
-          accent: AbzioTheme.accentColor,
-          categorySlug: cat.slug,
-        );
-      }),
-      ...catalogSubcategories.take(6).toList().asMap().entries.map((e) {
-        final subcategory = e.value;
-        return _SearchItem(
-          title: subcategory.name,
-          subtitle: '${subcategory.serviceCount} services',
-          icon: Icons.view_module_rounded,
-          accent: AbzioTheme.accentColor,
-          categorySlug: categorySlugById[subcategory.categoryId],
-          subcategorySlug: subcategory.slug,
-        );
-      }),
-    ];
+    final popularServices =
+        catalogAsync.valueOrNull?.trending.isNotEmpty == true
+        ? catalogAsync.valueOrNull!.trending
+        : catalogAsync.valueOrNull?.popular ?? const <CatalogService>[];
+    final trendingItems = popularServices
+        .take(8)
+        .map((service) {
+          return _SearchItem(
+            title: service.name,
+            subtitle: service.hierarchyLabel,
+            icon: Icons.home_repair_service_rounded,
+            accent: AbzioTheme.accentColor,
+            categorySlug:
+                service.category?.slug ?? categorySlugById[service.categoryId],
+            subcategorySlug: service.subcategory?.slug,
+          );
+        })
+        .toList(growable: false);
 
     return Scaffold(
       backgroundColor: cs.surface,
@@ -286,7 +473,9 @@ class _SearchPageState extends ConsumerState<SearchPage> {
           ),
           child: TextField(
             controller: _controller,
+            focusNode: _searchFocusNode,
             autofocus: true,
+            maxLength: 120,
             textInputAction: TextInputAction.search,
             onChanged: (v) {
               _onQueryChanged(v);
@@ -295,6 +484,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
             decoration: InputDecoration(
               hintText: 'Search for services…',
               hintStyle: tt.bodyLarge?.copyWith(color: cs.onSurfaceVariant),
+              counterText: '',
               prefixIcon: Icon(
                 Icons.search_rounded,
                 color: cs.onSurfaceVariant,
@@ -316,7 +506,45 @@ class _SearchPageState extends ConsumerState<SearchPage> {
           ),
         ),
       ),
-      body: !showResults
+      body:
+          _searchHasFocus &&
+              _inputQuery.trim().length >= 2 &&
+              (_inputQuery.trim() != _query.trim() ||
+                  _suggestionQuery.trim() == _inputQuery.trim())
+          ? _suggestionQuery.isEmpty
+                ? const _SearchLoadingState()
+                : ref
+                      .watch(searchAutocompleteProvider(_suggestionQuery))
+                      .when(
+                        data: (suggestions) => suggestions.isEmpty
+                            ? _SearchSuggestionEmpty(
+                                query: _suggestionQuery,
+                                onBrowse: _clearSearch,
+                              )
+                            : _AutocompleteResults(
+                                suggestions: suggestions,
+                                onTap: _selectSuggestion,
+                              ),
+                        loading: () => const _SearchLoadingState(),
+                        error: (error, stackTrace) => PremiumRetryState(
+                          title: 'Could not load suggestions',
+                          subtitle:
+                              'Your search still works. Retry suggestions or submit the query.',
+                          onRetry: () => ref.invalidate(
+                            searchAutocompleteProvider(_suggestionQuery),
+                          ),
+                          onRefresh: () async {
+                            await ref
+                                .refresh(
+                                  searchAutocompleteProvider(
+                                    _suggestionQuery,
+                                  ).future,
+                                )
+                                .then<void>((_) {});
+                          },
+                        ),
+                      )
+          : !showResults
           ? catalogAsync.when(
               data: (_) => _SearchHome(
                 recent: _recent,
@@ -336,11 +564,13 @@ class _SearchPageState extends ConsumerState<SearchPage> {
                           : subcategorySlug,
                     ),
                 onTrendingTap: (item) => _goToSearch(
+                  query: item.title,
                   categorySlug: item.categorySlug,
                   subcategorySlug: item.subcategorySlug,
                 ),
                 onQueryTap: _setQuery,
-                onClearRecent: () => setState(() => _recent.clear()),
+                onClearRecent: _clearRecentSearches,
+                onRemoveRecent: _removeRecentSearch,
               ),
               loading: () => const _SearchLoadingState(),
               error: (error, stackTrace) => PremiumRetryState(
@@ -357,10 +587,20 @@ class _SearchPageState extends ConsumerState<SearchPage> {
           : isDebouncing
           ? const _SearchLoadingState()
           : searchAsync.when(
-              data: (results) => _SearchResults(
-                results: results,
+              data: (resultPage) => _SearchResults(
+                results: resultPage.items,
+                total: resultPage.total,
+                resultLimit: resultPage.resultLimit,
+                page: resultsPage,
+                onPageChanged: (nextPage) => setState(() {
+                  _page = nextPage;
+                  _pagePincode = selectedPincode;
+                }),
                 query: _query,
                 activeFilters: activeFilterLabels,
+                relatedServices: trendingItems,
+                selectedPincode: ref.read(selectedCatalogPincodeProvider),
+                onRelatedTap: _setQuery,
                 onResultTap: _addToRecent,
                 onClearSearch: _clearSearch,
               ),
@@ -393,6 +633,77 @@ class _SearchPageState extends ConsumerState<SearchPage> {
   }
 }
 
+class _AutocompleteResults extends StatelessWidget {
+  const _AutocompleteResults({required this.suggestions, required this.onTap});
+
+  final List<CatalogSearchSuggestion> suggestions;
+  final ValueChanged<CatalogSearchSuggestion> onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return ListView.separated(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+      itemCount: suggestions.length,
+      separatorBuilder: (_, __) => const Divider(height: 1, indent: 52),
+      itemBuilder: (context, index) {
+        final suggestion = suggestions[index];
+        final kindLabel = switch (suggestion.kind.toUpperCase()) {
+          'CATEGORY' => 'Category',
+          'SUBCATEGORY' => 'Subcategory',
+          'SERVICE' => 'Service',
+          _ => 'Suggestion',
+        };
+        final icon = switch (suggestion.kind) {
+          'CATEGORY' => Icons.grid_view_rounded,
+          'SUBCATEGORY' => Icons.home_repair_service_outlined,
+          _ => Icons.search_rounded,
+        };
+        return ListTile(
+          minVerticalPadding: 8,
+          leading: CircleAvatar(
+            backgroundColor: colors.primary.withValues(alpha: 0.08),
+            foregroundColor: colors.primary,
+            child: Icon(icon, size: 20),
+          ),
+          title: Text(
+            suggestion.label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          subtitle: Text(kindLabel),
+          trailing: const Icon(Icons.north_west_rounded, size: 17),
+          onTap: () => onTap(suggestion),
+        );
+      },
+    );
+  }
+}
+
+class _SearchSuggestionEmpty extends StatelessWidget {
+  const _SearchSuggestionEmpty({required this.query, required this.onBrowse});
+
+  final String query;
+  final VoidCallback onBrowse;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: PremiumEmptyState(
+          icon: Icons.search_off_rounded,
+          title: 'No suggestions for "$query"',
+          subtitle:
+              'You can still submit this search to see matching services.',
+          actionLabel: 'Browse all services',
+          onAction: onBrowse,
+        ),
+      ),
+    );
+  }
+}
+
 class _SearchHome extends StatelessWidget {
   const _SearchHome({
     required this.recent,
@@ -405,6 +716,7 @@ class _SearchHome extends StatelessWidget {
     required this.onTrendingTap,
     required this.onQueryTap,
     required this.onClearRecent,
+    required this.onRemoveRecent,
   });
   final List<String> recent;
   final List<_SearchItem> trending;
@@ -417,6 +729,7 @@ class _SearchHome extends StatelessWidget {
   final ValueChanged<_SearchItem> onTrendingTap;
   final ValueChanged<String> onQueryTap;
   final VoidCallback onClearRecent;
+  final ValueChanged<String> onRemoveRecent;
 
   @override
   Widget build(BuildContext context) {
@@ -511,41 +824,30 @@ class _SearchHome extends StatelessWidget {
             runSpacing: 8,
             children: recent
                 .map(
-                  (r) => TapScale(
-                    onTap: () => onQueryTap(r),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 14,
-                        vertical: 8,
-                      ),
-                      decoration: BoxDecoration(
-                        color: cs.surfaceContainerHighest,
-                        borderRadius: BorderRadius.circular(
-                          AbzioTheme.cardRadius,
+                  (r) => InputChip(
+                    avatar: Icon(
+                      Icons.history_rounded,
+                      size: 16,
+                      color: cs.onSurfaceVariant,
+                    ),
+                    label: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 180),
+                      child: Text(
+                        r,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: tt.labelLarge?.copyWith(
+                          fontWeight: FontWeight.w600,
                         ),
                       ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            Icons.history_rounded,
-                            size: 14,
-                            color: cs.onSurfaceVariant,
-                          ),
-                          const SizedBox(width: 6),
-                          ConstrainedBox(
-                            constraints: const BoxConstraints(maxWidth: 180),
-                            child: Text(
-                              r,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: tt.labelLarge?.copyWith(
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
+                    ),
+                    onPressed: () => onQueryTap(r),
+                    onDeleted: () => onRemoveRecent(r),
+                    deleteButtonTooltipMessage: 'Remove $r',
+                    deleteIcon: const Icon(Icons.close_rounded, size: 16),
+                    backgroundColor: cs.surfaceContainerHighest,
+                    side: BorderSide(
+                      color: cs.outlineVariant.withValues(alpha: 0.5),
                     ),
                   ),
                 )
@@ -554,7 +856,7 @@ class _SearchHome extends StatelessWidget {
           const SizedBox(height: 32),
         ],
         Text(
-          'Explore',
+          'Trending services',
           style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w800),
         ),
         const SizedBox(height: 16),
@@ -641,14 +943,28 @@ class _SearchHome extends StatelessWidget {
 class _SearchResults extends StatelessWidget {
   const _SearchResults({
     required this.results,
+    required this.total,
+    required this.resultLimit,
+    required this.page,
+    required this.onPageChanged,
     required this.query,
     required this.activeFilters,
+    required this.relatedServices,
+    required this.selectedPincode,
+    required this.onRelatedTap,
     this.onResultTap,
     required this.onClearSearch,
   });
   final List<CatalogService> results;
+  final int total;
+  final int? resultLimit;
+  final int page;
+  final ValueChanged<int> onPageChanged;
   final String query;
   final List<String> activeFilters;
+  final List<_SearchItem> relatedServices;
+  final String? selectedPincode;
+  final ValueChanged<String> onRelatedTap;
   final ValueChanged<String>? onResultTap;
   final VoidCallback onClearSearch;
 
@@ -656,10 +972,10 @@ class _SearchResults extends StatelessWidget {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     if (results.isEmpty) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: PremiumGlassCard(
+      return ListView(
+        padding: const EdgeInsets.all(20),
+        children: [
+          PremiumGlassCard(
             child: Padding(
               padding: const EdgeInsets.all(20),
               child: Column(
@@ -690,7 +1006,9 @@ class _SearchResults extends StatelessWidget {
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    'Try a different search or clear your filters.',
+                    selectedPincode?.isNotEmpty == true
+                        ? 'No matching service is available in $selectedPincode right now. Try another search or browse these available services.'
+                        : 'Try a different search or clear your filters.',
                     textAlign: TextAlign.center,
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                       color: cs.onSurfaceVariant,
@@ -703,20 +1021,59 @@ class _SearchResults extends StatelessWidget {
                     icon: const Icon(Icons.close_rounded),
                     label: const Text('Clear search'),
                   ),
+                  if (page > 1) ...[
+                    const SizedBox(height: 8),
+                    TextButton.icon(
+                      onPressed: () => onPageChanged(1),
+                      icon: const Icon(Icons.first_page_rounded),
+                      label: const Text('Return to first page'),
+                    ),
+                  ],
                 ],
               ),
             ),
           ),
-        ),
+          if (relatedServices.isNotEmpty) ...[
+            const SizedBox(height: 16),
+            Text(
+              'Available services you can explore',
+              style: Theme.of(
+                context,
+              ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: relatedServices
+                  .take(8)
+                  .map((service) {
+                    return ActionChip(
+                      label: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 180),
+                        child: Text(
+                          service.title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      onPressed: () => onRelatedTap(service.title),
+                    );
+                  })
+                  .toList(growable: false),
+            ),
+          ],
+        ],
       );
     }
     return ListView.separated(
+      key: ValueKey<int>(page),
       padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
-      itemCount: results.length + 1,
+      itemCount: results.length + 2,
       separatorBuilder: (_, __) => const SizedBox(height: 12),
       itemBuilder: (context, i) {
         if (i == 0) {
-          final countLabel = results.length == 1 ? 'service' : 'services';
+          final countLabel = total == 1 ? 'service' : 'services';
           return Padding(
             padding: const EdgeInsets.only(bottom: 2),
             child: Column(
@@ -726,7 +1083,9 @@ class _SearchResults extends StatelessWidget {
                   children: [
                     Expanded(
                       child: Text(
-                        '${results.length} $countLabel found',
+                        total > (resultLimit ?? total)
+                            ? 'Showing top $resultLimit of $total $countLabel · Page $page'
+                            : '$total $countLabel found · Page $page',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: Theme.of(context).textTheme.titleSmall?.copyWith(
@@ -793,6 +1152,36 @@ class _SearchResults extends StatelessWidget {
                 ],
               ],
             ),
+          );
+        }
+
+        if (i == results.length + 1) {
+          final visibleTotal = resultLimit == null
+              ? total
+              : total.clamp(0, resultLimit!);
+          final pageCount = (visibleTotal / 20).ceil();
+          if (pageCount <= 1) return const SizedBox.shrink();
+          return Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              TextButton.icon(
+                onPressed: page > 1 ? () => onPageChanged(page - 1) : null,
+                icon: const Icon(Icons.chevron_left_rounded),
+                label: const Text('Previous'),
+              ),
+              Text(
+                '$page of $pageCount',
+                style: Theme.of(context).textTheme.labelMedium,
+              ),
+              TextButton.icon(
+                onPressed: page < pageCount
+                    ? () => onPageChanged(page + 1)
+                    : null,
+                icon: const Icon(Icons.chevron_right_rounded),
+                label: const Text('Next'),
+                iconAlignment: IconAlignment.end,
+              ),
+            ],
           );
         }
 

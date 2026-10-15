@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:marketplace_shared/marketplace_shared.dart';
@@ -7,12 +8,16 @@ import '../../../checkout/presentation/pages/checkout_page.dart';
 import '../../../../core/widgets/shimmer_placeholder.dart';
 import '../../../favorites/presentation/providers/favorites_providers.dart';
 import '../../../home/presentation/widgets/home_service_card.dart';
+import '../../../profile/presentation/pages/map_location_picker_page.dart';
+import '../../../profile/presentation/providers/selected_location_provider.dart';
 
 final serviceReviewsProvider = FutureProvider.autoDispose
     .family<Map<String, dynamic>, String>((ref, slug) async {
       final apiClient = ref.watch(apiClientProvider);
+      final pincode = ref.watch(selectedCatalogPincodeProvider);
       final payload = await apiClient.get(
         '/catalog/services/${Uri.encodeComponent(slug)}/reviews',
+        queryParameters: {if (pincode != null) 'pincode': pincode},
       );
       final reviews = payload['reviews'];
       return reviews is Map<String, dynamic> ? reviews : const {};
@@ -21,11 +26,16 @@ final serviceReviewsProvider = FutureProvider.autoDispose
 final relatedCatalogServicesProvider = FutureProvider.autoDispose
     .family<List<CatalogService>, String>((ref, categorySlug) async {
       if (categorySlug.trim().isEmpty) return const [];
+      final pincode = ref.watch(selectedCatalogPincodeProvider);
       final payload = await ref
           .watch(apiClientProvider)
           .get(
             '/catalog/search',
-            queryParameters: {'categorySlug': categorySlug, 'pageSize': 8},
+            queryParameters: {
+              'categorySlug': categorySlug,
+              'pageSize': 8,
+              if (pincode != null) 'pincode': pincode,
+            },
           );
       final raw = payload['items'] ?? payload['results'] ?? payload['services'];
       if (raw is! List) return const [];
@@ -44,6 +54,12 @@ class ServiceDetailPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final serviceAsync = ref.watch(serviceDetailProvider(serviceId));
     final colorScheme = Theme.of(context).colorScheme;
+    final serviceError = serviceAsync.error;
+    final errorData = serviceError is DioException
+        ? serviceError.response?.data
+        : null;
+    final unavailable =
+        errorData is Map && errorData['code'] == 'SERVICE_UNAVAILABLE_IN_AREA';
 
     return serviceAsync.when(
       loading: () => _ServiceDetailLoading(colorScheme: colorScheme),
@@ -64,32 +80,68 @@ class ServiceDetailPage extends ConsumerWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Icon(
-                  Icons.cloud_off_rounded,
+                  unavailable
+                      ? Icons.location_off_rounded
+                      : Icons.cloud_off_rounded,
                   size: 48,
                   color: colorScheme.onSurfaceVariant,
                 ),
                 const SizedBox(height: 12),
                 Text(
-                  "Couldn't load this service.",
+                  unavailable
+                      ? 'Not available in your area yet'
+                      : "Couldn't load this service.",
                   style: Theme.of(
                     context,
                   ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'Please try again.',
+                  unavailable
+                      ? 'Try changing your location to see services available there.'
+                      : 'Please try again.',
                   textAlign: TextAlign.center,
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                     color: colorScheme.onSurfaceVariant,
                   ),
                 ),
                 const SizedBox(height: 20),
-                FilledButton.icon(
-                  onPressed: () =>
-                      ref.invalidate(serviceDetailProvider(serviceId)),
-                  icon: const Icon(Icons.refresh_rounded),
-                  label: const Text('Try again'),
-                ),
+                if (unavailable)
+                  FilledButton.icon(
+                    onPressed: () async {
+                      final selection = await context
+                          .push<MapLocationSelection>('/map-picker');
+                      if (selection == null || !context.mounted) return;
+                      try {
+                        await ref
+                            .read(selectedLocationProvider.notifier)
+                            .setLocation(
+                              latitude: selection.latitude,
+                              longitude: selection.longitude,
+                              label: selection.label,
+                              pincode: selection.pincode,
+                            );
+                      } catch (_) {
+                        if (!context.mounted) return;
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text(
+                              'Could not save this location. Please try again.',
+                            ),
+                          ),
+                        );
+                      }
+                    },
+                    icon: const Icon(Icons.edit_location_alt_rounded),
+                    label: const Text('Change location'),
+                  )
+                else
+                  FilledButton.icon(
+                    onPressed: () =>
+                        ref.invalidate(serviceDetailProvider(serviceId)),
+                    icon: const Icon(Icons.refresh_rounded),
+                    label: const Text('Try again'),
+                  ),
               ],
             ),
           ),
@@ -270,7 +322,9 @@ class _ServiceDetailViewState extends ConsumerState<_ServiceDetailView> {
                             vertical: 6,
                           ),
                           decoration: BoxDecoration(
-                            color: VeeduFixDesignSystem.ink.withValues(alpha: 0.54),
+                            color: VeeduFixDesignSystem.ink.withValues(
+                              alpha: 0.54,
+                            ),
                             borderRadius: BorderRadius.circular(20),
                           ),
                           child: Text(
@@ -359,6 +413,48 @@ class _ServiceDetailViewState extends ConsumerState<_ServiceDetailView> {
                       ),
                   ],
                 ),
+                if (service.maintenanceEnabled &&
+                    service.maintenanceIntervalsMonths.isNotEmpty) ...[
+                  const SizedBox(height: 18),
+                  VeeduFixCard(
+                    padding: const EdgeInsets.all(16),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.event_repeat_outlined,
+                          color: colorScheme.primary,
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Plan regular maintenance',
+                                style: textTheme.titleSmall?.copyWith(
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                              const SizedBox(height: 3),
+                              Text(
+                                'Choose a frequency. Confirm and pay for each visit.',
+                                style: textTheme.bodySmall?.copyWith(
+                                  color: colorScheme.onSurfaceVariant,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        TextButton(
+                          onPressed: () => context.push(
+                            '/maintenance-plans/create?serviceId=${Uri.encodeComponent(service.id)}',
+                          ),
+                          child: const Text('Set up'),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
                 if (service.variants.isNotEmpty) ...[
                   const SizedBox(height: 24),
                   _SectionCard(

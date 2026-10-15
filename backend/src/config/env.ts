@@ -33,6 +33,7 @@ const prodStr = (fallback = "") =>
 const envSchema = z.object({
   // ── Runtime ──────────────────────────────────────────────────────────────
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
+  TRUST_PROXY_HOPS: z.coerce.number().int().nonnegative().default(0),
   EXPOSE_DEV_OTP: z.enum(["true", "false"]).default("false").transform((value) => value === "true"),
   PORT: z.coerce.number().int().positive().default(4000),
 
@@ -150,6 +151,17 @@ const envSchema = z.object({
 
   // In production, placeholders / default stub values are not acceptable.
   if (value.NODE_ENV !== "production") return;
+
+  if (
+    process.env.TRUST_PROXY_HOPS === undefined ||
+    process.env.TRUST_PROXY_HOPS.trim() === ""
+  ) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["TRUST_PROXY_HOPS"],
+      message: "TRUST_PROXY_HOPS must be set in production",
+    });
+  }
 
   const notAllowed = ["not-configured", "not_configured", "rzp_test_not_configured"];
 

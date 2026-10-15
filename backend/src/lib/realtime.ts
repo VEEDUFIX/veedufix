@@ -28,6 +28,10 @@ type TrackingPayload = {
   photoFolder?: string;
   lat?: number;
   lng?: number;
+  heading?: number;
+  etaMinutes?: number | null;
+  locationUpdatedAt?: string;
+  timestamp?: string;
 };
 
 type NotificationPayload = {
@@ -158,6 +162,16 @@ async function authorizeConnection(
   return { auth, kind, subscriber };
 }
 
+async function canReceiveTracking(auth: RealtimeAuth, bookingId: string): Promise<boolean> {
+  const booking = await prisma.booking.findUnique({
+    where: { id: bookingId },
+    select: { customerId: true, worker: { select: { userId: true } } }
+  });
+  if (!booking) return false;
+  return auth.role === "ADMIN" || booking.customerId === auth.userId ||
+    booking.worker?.userId === auth.userId;
+}
+
 async function bindTrackingSocket(socket: WebSocket, request: IncomingMessage) {
   const context = await authorizeConnection("tracking", request);
   const bookingId = parseBookingId(request);
@@ -167,10 +181,22 @@ async function bindTrackingSocket(socket: WebSocket, request: IncomingMessage) {
   const channel = channelForTracking(bookingId);
   await context.subscriber.subscribe(channel);
 
+  let authorizedCache: boolean | null = null;
+  let authorizedUntil = 0;
+  let deliveryChain: Promise<void> = Promise.resolve();
   context.subscriber.on("message", (_channel, message) => {
-    if (socket.readyState === WebSocket.OPEN) {
-      socket.send(message);
-    }
+    deliveryChain = deliveryChain.then(async () => {
+      if (socket.readyState !== WebSocket.OPEN) return;
+      if (authorizedCache === null || Date.now() >= authorizedUntil) {
+        authorizedCache = await canReceiveTracking(context.auth, bookingId);
+        authorizedUntil = Date.now() + 5_000;
+      }
+      if (socket.readyState !== WebSocket.OPEN) return;
+      if (authorizedCache) socket.send(message);
+      else socket.close(1008, "Booking access changed");
+    }).catch((error) => {
+      logger.warn({ error, bookingId }, "Tracking event delivery authorization failed");
+    });
   });
 
   socket.send(
@@ -196,13 +222,6 @@ async function bindTrackingSocket(socket: WebSocket, request: IncomingMessage) {
           channel: "tracking",
           timestamp: new Date().toISOString(),
           payload: {}
-        });
-      } else if (data.type === "location.update" && context.auth.role === "WORKER") {
-        void emitTrackingEvent({
-          bookingId,
-          actorRole: "WORKER",
-          lat: data.payload?.lat,
-          lng: data.payload?.lng,
         });
       }
     } catch {

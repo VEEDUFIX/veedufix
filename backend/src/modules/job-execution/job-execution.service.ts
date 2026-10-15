@@ -10,6 +10,7 @@ import { validateChecklistCompletion } from "../checklist/checklist.service.js";
 import { isWorkerEligible } from "../worker-onboarding/worker-onboarding.service.js";
 import { recordBookingTimelineEvent } from "../../lib/booking-timeline.js";
 import { AppError } from "../../lib/app-error.js";
+import { clearBookingTracking } from "../tracking/tracking.routes.js";
 
 export class UnauthorizedError extends Error {
   constructor(message = "Unauthorized") {
@@ -229,6 +230,7 @@ async function requireCustomerBooking(bookingId: string, customerId: string) {
   return { booking, execution };
 }
 
+
 function resolveServiceId(booking: Awaited<ReturnType<typeof getBookingWithExecution>>): string {
   const serviceId = booking.services.find((item: any) => item.serviceId)?.serviceId;
   if (!serviceId) {
@@ -252,7 +254,7 @@ export async function generateArrivalOtp(
   input: ArrivalOtpInput = {}
 ): Promise<{ bookingId: string; status: string; otpExpiresAt: Date }> {
   const { booking, execution } = await requireWorkerBooking(bookingId, workerId);
-  if (![BookingStatus.WORKER_ASSIGNED, BookingStatus.ARRIVED].includes(booking.status)) {
+  if (![BookingStatus.WORKER_ASSIGNED, BookingStatus.EN_ROUTE, BookingStatus.ARRIVED].includes(booking.status)) {
     throw new JobStateConflictError("Arrival can only be recorded for an assigned job");
   }
   const otpStart = generateOtp();
@@ -261,7 +263,7 @@ export async function generateArrivalOtp(
   const arrivedAt = now();
   const updated = await prisma.$transaction(async (tx) => {
     const bookingTransition = await tx.booking.updateMany({
-      where: { id: bookingId, status: { in: [BookingStatus.WORKER_ASSIGNED, BookingStatus.ARRIVED] } },
+      where: { id: bookingId, status: { in: [BookingStatus.WORKER_ASSIGNED, BookingStatus.EN_ROUTE, BookingStatus.ARRIVED] } },
       data: { status: BookingStatus.ARRIVED }
     });
     if (bookingTransition.count !== 1) {
@@ -298,6 +300,7 @@ export async function generateArrivalOtp(
     });
   });
   await redis.del(otpAttemptKey(bookingId, workerId, "arrival"));
+  await clearBookingTracking(bookingId, BookingStatus.ARRIVED);
   void recordBookingTimelineEvent({
     bookingId,
     status: BookingStatus.ARRIVED,
@@ -388,6 +391,7 @@ export async function verifyArrivalOtp(
     }
   });
   await redis.del(attemptKey);
+  await clearBookingTracking(bookingId, BookingStatus.IN_PROGRESS);
   void recordBookingTimelineEvent({
     bookingId,
     status: BookingStatus.IN_PROGRESS,

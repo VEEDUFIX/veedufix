@@ -6,10 +6,7 @@ import '../data/booking_otp_api.dart';
 import '../widgets/otp_security_notice.dart';
 
 class ArrivalOtpPage extends ConsumerStatefulWidget {
-  const ArrivalOtpPage({
-    super.key,
-    required this.bookingId,
-  });
+  const ArrivalOtpPage({super.key, required this.bookingId});
 
   final String bookingId;
 
@@ -59,9 +56,7 @@ class _ArrivalOtpPageState extends ConsumerState<ArrivalOtpPage> {
         future: _future,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(
-              child: CircularProgressIndicator(),
-            );
+            return const Center(child: CircularProgressIndicator());
           }
 
           if (snapshot.hasError) {
@@ -88,7 +83,8 @@ class _ArrivalOtpPageState extends ConsumerState<ArrivalOtpPage> {
             children: [
               const PremiumSectionHeader(
                 title: 'Arrival code',
-                subtitle: 'Verify your professional’s arrival and start the job.',
+                subtitle:
+                    'Verify your professional’s arrival and start the job.',
               ),
               const SizedBox(height: 12),
               const OtpSecurityNotice(
@@ -116,23 +112,28 @@ class _ArrivalOtpPageState extends ConsumerState<ArrivalOtpPage> {
                               children: [
                                 Text(
                                   data.details.workerName,
-                                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                        fontWeight: FontWeight.w900,
-                                      ),
+                                  style: Theme.of(context).textTheme.titleMedium
+                                      ?.copyWith(fontWeight: FontWeight.w900),
                                 ),
                                 const SizedBox(height: 2),
                                 Text(
                                   data.details.serviceName,
-                                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                  style: Theme.of(context).textTheme.bodyMedium
+                                      ?.copyWith(
+                                        color: Theme.of(
+                                          context,
+                                        ).colorScheme.onSurfaceVariant,
                                       ),
                                 ),
                                 if (data.details.locationLabel != null) ...[
                                   const SizedBox(height: 2),
                                   Text(
                                     data.details.locationLabel!,
-                                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                    style: Theme.of(context).textTheme.bodySmall
+                                        ?.copyWith(
+                                          color: Theme.of(
+                                            context,
+                                          ).colorScheme.onSurfaceVariant,
                                         ),
                                   ),
                                 ],
@@ -143,25 +144,35 @@ class _ArrivalOtpPageState extends ConsumerState<ArrivalOtpPage> {
                       ),
                       const SizedBox(height: 24),
                       Container(
-                        padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 20),
+                        padding: const EdgeInsets.symmetric(
+                          vertical: 24,
+                          horizontal: 20,
+                        ),
                         decoration: BoxDecoration(
-                          color: Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.34),
-                          borderRadius: BorderRadius.circular(AbzioTheme.cardRadius),
+                          color: Theme.of(context).colorScheme.primaryContainer
+                              .withValues(alpha: 0.34),
+                          borderRadius: BorderRadius.circular(
+                            AbzioTheme.cardRadius,
+                          ),
                         ),
                         child: Column(
                           children: [
                             Text(
                               'Arrival code',
-                              style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                              style: Theme.of(context).textTheme.labelLarge
+                                  ?.copyWith(
                                     fontWeight: FontWeight.w800,
-                                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                    color: Theme.of(
+                                      context,
+                                    ).colorScheme.onSurfaceVariant,
                                   ),
                             ),
                             const SizedBox(height: 12),
                             SelectableText(
                               data.otpInfo.otp,
                               textAlign: TextAlign.center,
-                              style: Theme.of(context).textTheme.displaySmall?.copyWith(
+                              style: Theme.of(context).textTheme.displaySmall
+                                  ?.copyWith(
                                     fontWeight: FontWeight.w900,
                                     letterSpacing: 8,
                                     height: 1.1,
@@ -178,7 +189,9 @@ class _ArrivalOtpPageState extends ConsumerState<ArrivalOtpPage> {
                               label: 'Booking',
                               value: data.details.bookingCode,
                               icon: Icons.receipt_long_rounded,
-                              accentColor: Theme.of(context).colorScheme.primary,
+                              accentColor: Theme.of(
+                                context,
+                              ).colorScheme.primary,
                             ),
                           ),
                           const SizedBox(width: 12),
@@ -196,7 +209,7 @@ class _ArrivalOtpPageState extends ConsumerState<ArrivalOtpPage> {
                       FilledButton.icon(
                         onPressed: _reload,
                         icon: const Icon(Icons.refresh_rounded),
-                        label: const Text("Didn't get it? Resend"),
+                        label: const Text('Refresh code'),
                       ),
                     ],
                   ),
@@ -211,16 +224,15 @@ class _ArrivalOtpPageState extends ConsumerState<ArrivalOtpPage> {
                     children: [
                       Text(
                         'What happens next',
-                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                              fontWeight: FontWeight.w800,
-                            ),
+                        style: Theme.of(context).textTheme.titleMedium
+                            ?.copyWith(fontWeight: FontWeight.w800),
                       ),
                       const SizedBox(height: 8),
                       Text(
                         'Once your professional enters this code, the job will start and live tracking will continue automatically.',
                         style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                              color: Theme.of(context).colorScheme.onSurfaceVariant,
-                            ),
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
                       ),
                     ],
                   ),
@@ -235,20 +247,14 @@ class _ArrivalOtpPageState extends ConsumerState<ArrivalOtpPage> {
 }
 
 class _ArrivalOtpScreenData {
-  const _ArrivalOtpScreenData({
-    required this.details,
-    required this.otpInfo,
-  });
+  const _ArrivalOtpScreenData({required this.details, required this.otpInfo});
 
   final BookingOtpDetails details;
   final BookingOtpInfo otpInfo;
 }
 
 class _Avatar extends StatelessWidget {
-  const _Avatar({
-    required this.imageUrl,
-    required this.fallbackLabel,
-  });
+  const _Avatar({required this.imageUrl, required this.fallbackLabel});
 
   final String? imageUrl;
   final String fallbackLabel;
@@ -261,12 +267,14 @@ class _Avatar extends StatelessWidget {
       child: MarketplaceNetworkAvatar(
         imageUrl: imageUrl,
         radius: 28,
-        backgroundColor: Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.8),
+        backgroundColor: Theme.of(
+          context,
+        ).colorScheme.primaryContainer.withValues(alpha: 0.8),
         fallback: Text(
           fallbackLabel,
-          style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.w900,
-              ),
+          style: Theme.of(
+            context,
+          ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900),
         ),
       ),
     );
@@ -274,10 +282,7 @@ class _Avatar extends StatelessWidget {
 }
 
 class _ErrorState extends StatelessWidget {
-  const _ErrorState({
-    required this.message,
-    required this.onRetry,
-  });
+  const _ErrorState({required this.message, required this.onRetry});
 
   final String message;
   final VoidCallback onRetry;
@@ -300,10 +305,7 @@ class _ErrorState extends StatelessWidget {
 }
 
 class _MissingBookingPage extends StatelessWidget {
-  const _MissingBookingPage({
-    required this.title,
-    required this.subtitle,
-  });
+  const _MissingBookingPage({required this.title, required this.subtitle});
 
   final String title;
   final String subtitle;
@@ -336,12 +338,17 @@ String _expiryLabel(DateTime? expiry) {
 }
 
 String _initials(String name) {
-  final parts = name.trim().split(RegExp(r'\s+')).where((part) => part.isNotEmpty).toList(growable: false);
+  final parts = name
+      .trim()
+      .split(RegExp(r'\s+'))
+      .where((part) => part.isNotEmpty)
+      .toList(growable: false);
   if (parts.isEmpty) {
     return 'PF';
   }
   if (parts.length == 1) {
     return parts.first.substring(0, 1).toUpperCase();
   }
-  return (parts.first.substring(0, 1) + parts.last.substring(0, 1)).toUpperCase();
+  return (parts.first.substring(0, 1) + parts.last.substring(0, 1))
+      .toUpperCase();
 }

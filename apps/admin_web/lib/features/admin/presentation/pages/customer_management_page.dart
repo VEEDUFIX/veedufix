@@ -216,7 +216,7 @@ class _CustomerManagementPageState extends ConsumerState<CustomerManagementPage>
   void _confirmBan(BuildContext context, WidgetRef ref, AdminCustomer customer, bool ban) {
     showDialog(
       context: context,
-      builder: (_) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         title: Text(ban ? 'Ban Customer?' : 'Unban Customer?'),
         content: Text(
           ban
@@ -224,10 +224,10 @@ class _CustomerManagementPageState extends ConsumerState<CustomerManagementPage>
               : 'This will restore ${customer.name}\'s access.',
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Cancel')),
           FilledButton(
             onPressed: () {
-              Navigator.pop(context);
+              Navigator.pop(dialogContext);
               ref.read(adminBanCustomerProvider.notifier).toggleBan(customer.id, ban);
             },
             style: ban

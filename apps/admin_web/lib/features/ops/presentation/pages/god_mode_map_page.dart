@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -21,12 +22,12 @@ class _GodModeMapPageState extends ConsumerState<GodModeMapPage> {
   bool _loading = true;
   String? _error;
   Timer? _refreshTimer;
+  GoogleMapController? _mapController;
+  String? _lastFittedLocationsKey;
+  String? _fittingLocationsKey;
+  Set<String> _knownLocatedJobIds = <String>{};
 
-  // Chennai city centre — intentional, app is Chennai-only for now.
-  static const CameraPosition _chennaiCenter = CameraPosition(
-    target: LatLng(13.0827, 80.2707),
-    zoom: 11.5,
-  );
+  static const LatLng _neutralMapCenter = LatLng(20.5937, 78.9629);
 
   @override
   void initState() {
@@ -40,6 +41,8 @@ class _GodModeMapPageState extends ConsumerState<GodModeMapPage> {
   @override
   void dispose() {
     _refreshTimer?.cancel();
+    // The GoogleMap widget owns and disposes its controller.
+    _mapController = null;
     super.dispose();
   }
 
@@ -56,12 +59,79 @@ class _GodModeMapPageState extends ConsumerState<GodModeMapPage> {
         _snapshot = data;
         _loading = false;
       });
+      unawaited(_fitLocatedJobs(data));
     } catch (e) {
       if (!mounted) return;
       setState(() {
         _error = e.toString();
         _loading = false;
       });
+    }
+  }
+
+  Future<void> _fitLocatedJobs(OpsOverviewSnapshot snapshot) async {
+    if (!mounted) return;
+    final controller = _mapController;
+    if (controller == null) return;
+    final locations = snapshot.liveJobs
+        .where((job) => job.workerLat != null && job.workerLng != null)
+        .map((job) => LatLng(job.workerLat!, job.workerLng!))
+        .toList(growable: false);
+    if (locations.isEmpty) {
+      _lastFittedLocationsKey = null;
+      return;
+    }
+
+    final locatedJobIds = snapshot.liveJobs
+        .where((job) => job.workerLat != null && job.workerLng != null)
+        .map((job) => job.bookingId)
+        .toSet();
+    final hasNewLocatedJob =
+        locatedJobIds.difference(_knownLocatedJobIds).isNotEmpty;
+    if (_lastFittedLocationsKey != null && !hasNewLocatedJob) return;
+    final sortedJobIds = locatedJobIds.toList()..sort();
+    final key = sortedJobIds.join('|');
+    if (_lastFittedLocationsKey == key || _fittingLocationsKey == key) return;
+    _fittingLocationsKey = key;
+
+    try {
+      if (locations.length == 1) {
+        await controller.animateCamera(
+          CameraUpdate.newLatLngZoom(locations.single, 12),
+        );
+      } else {
+        var south = locations.first.latitude;
+        var north = south;
+        var west = locations.first.longitude;
+        var east = west;
+        for (final location in locations.skip(1)) {
+          south = math.min(south, location.latitude).toDouble();
+          north = math.max(north, location.latitude).toDouble();
+          west = math.min(west, location.longitude).toDouble();
+          east = math.max(east, location.longitude).toDouble();
+        }
+        if (south == north && west == east) {
+          await controller.animateCamera(
+            CameraUpdate.newLatLngZoom(locations.first, 12),
+          );
+        } else {
+          await controller.animateCamera(
+            CameraUpdate.newLatLngBounds(
+              LatLngBounds(
+                southwest: LatLng(south, west),
+                northeast: LatLng(north, east),
+              ),
+              64,
+            ),
+          );
+        }
+      }
+      _lastFittedLocationsKey = key;
+      _knownLocatedJobIds = locatedJobIds;
+    } catch (_) {
+      // Map layout may not be ready during the first callback; a later load can retry.
+    } finally {
+      if (_fittingLocationsKey == key) _fittingLocationsKey = null;
     }
   }
 
@@ -72,7 +142,7 @@ class _GodModeMapPageState extends ConsumerState<GodModeMapPage> {
       if (job.workerLat == null || job.workerLng == null) continue;
 
       // Colour-code by status: in-progress = blue, others = red.
-      final hue = job.status == 'IN_PROGRESS'
+      final hue = job.status.toLowerCase() == 'in_progress'
           ? BitmapDescriptor.hueBlue
           : BitmapDescriptor.hueRed;
 
@@ -95,8 +165,10 @@ class _GodModeMapPageState extends ConsumerState<GodModeMapPage> {
   @override
   Widget build(BuildContext context) {
     final liveCount = _snapshot?.liveJobs.length ?? 0;
-    final inProgress =
-        _snapshot?.liveJobs.where((j) => j.status == 'IN_PROGRESS').length ?? 0;
+    final inProgress = _snapshot?.liveJobs
+            .where((job) => job.status.toLowerCase() == 'in_progress')
+            .length ??
+        0;
 
     return Scaffold(
       backgroundColor: Theme.of(context).colorScheme.surface,
@@ -147,7 +219,15 @@ class _GodModeMapPageState extends ConsumerState<GodModeMapPage> {
           // ── Map layer ──────────────────────────────────────────────────
           if (_snapshot != null)
             GoogleMap(
-              initialCameraPosition: _chennaiCenter,
+              initialCameraPosition: const CameraPosition(
+                target: _neutralMapCenter,
+                zoom: 4.5,
+              ),
+              onMapCreated: (controller) {
+                if (!mounted) return;
+                _mapController = controller;
+                unawaited(_fitLocatedJobs(_snapshot!));
+              },
               markers: _buildMarkers(_snapshot!),
               myLocationEnabled: false,
               zoomControlsEnabled: true,

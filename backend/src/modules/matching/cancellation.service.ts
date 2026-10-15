@@ -117,18 +117,30 @@ export async function cancelBooking(
     throw new CancellationAccessError();
   }
 
-  if (booking.status === BookingStatus.COMPLETED || booking.status === BookingStatus.REFUNDED) {
-    throw new CancellationConflictError("Completed bookings cannot be cancelled");
+  if (
+    booking.status === BookingStatus.CANCELLED ||
+    booking.status === BookingStatus.CANCELLED_MANUAL
+  ) {
+    // A retry after a successful cancellation is safe and must not repeat
+    // notifications or maintenance-occurrence updates.
+    return { bookingId, bookingCode: booking.code, status: booking.status };
   }
 
-  if (booking.status === BookingStatus.CANCELLED || booking.status === BookingStatus.CANCELLED_MANUAL || booking.status === BookingStatus.CANCELLED_NO_SHOW) {
-    throw new CancellationConflictError("This booking is already cancelled");
+  if (
+    booking.status === BookingStatus.COMPLETED ||
+    booking.status === BookingStatus.REFUNDED ||
+    booking.jobExecution?.status.toLowerCase() === "completed"
+  ) {
+    throw new CancellationConflictError("Completed bookings cannot be cancelled");
   }
 
   await prisma.$transaction(async (tx) => {
     const cancellation = await tx.booking.updateMany({
       where: {
         id: bookingId,
+        ...(requestedBy === "customer"
+          ? { customerId: requesterId }
+          : { workerId: booking.workerId }),
         status: {
           notIn: [
             BookingStatus.COMPLETED,
@@ -159,13 +171,41 @@ export async function cancelBooking(
         status: "cancelled"
       }
     });
+    const linkedOccurrences = await tx.maintenanceOccurrence.findMany({
+      where: { bookingId, status: "BOOKING_CREATED" },
+      select: { id: true, planId: true, dueAt: true, sequence: true, plan: { select: { status: true } } }
+    });
+    for (const occurrence of linkedOccurrences) {
+      const occurrenceUpdate = await tx.maintenanceOccurrence.updateMany({
+        where: { id: occurrence.id, bookingId, status: "BOOKING_CREATED" },
+        data: {
+          bookingId: null,
+          status: occurrence.plan.status === "CANCELLED" ? "CANCELLED" : "AWAITING_CONFIRMATION",
+          failureReason: ("Booking cancelled: " + reason).slice(0, 500),
+          respondedAt: new Date()
+        }
+      });
+      if (occurrenceUpdate.count === 1) {
+        await tx.maintenancePlanEvent.create({
+          data: {
+            planId: occurrence.planId,
+            action: "LINKED_BOOKING_CANCELLED",
+            details: { occurrenceId: occurrence.id, bookingId, dueAt: occurrence.dueAt.toISOString(), sequence: occurrence.sequence }
+          }
+        });
+      }
+    }
   });
-  void recordBookingTimelineEvent({
-    bookingId,
-    status: BookingStatus.CANCELLED_MANUAL,
-    title: "Booking cancelled",
-    description: "The booking was cancelled manually."
-  });
+  try {
+    await recordBookingTimelineEvent({
+      bookingId,
+      status: BookingStatus.CANCELLED_MANUAL,
+      title: "Booking cancelled",
+      description: "The booking was cancelled manually."
+    });
+  } catch (error) {
+    logger.warn({ error, bookingId }, "Booking cancelled but timeline recording failed");
+  }
 
   try {
     await notifyOtherParty(booking, requestedBy, reason);

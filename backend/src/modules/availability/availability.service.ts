@@ -3,6 +3,7 @@ import { prisma } from "../../lib/prisma.js";
 import { AppError } from "../../lib/app-error.js";
 import { assertServiceablePincode } from "../service-area/service-area.service.js";
 import { previewCustomerScheduleSlots } from "../matching/matching.service.js";
+import { isAvailableInAreas, type AvailabilityNode } from "../catalog/availability-inheritance.js";
 
 export type WeeklyAvailabilitySlot = {
   dayOfWeek: number;
@@ -203,13 +204,14 @@ export async function getCustomerScheduleSlots(input: {
     where: { isActive: true, name: { equals: addressCity.trim(), mode: "insensitive" } },
     select: { id: true, name: true }
   });
-  const serviceArea = city
+  const pincodeArea = city
     ? null
     : await prisma.serviceArea.findFirst({
         where: {
           isActive: true,
           OR: [
             { pincode },
+            { assignedPincodes: { some: { pincode } } },
             {
               pincodeRangeStart: { lte: pincode },
               pincodeRangeEnd: { gte: pincode }
@@ -218,20 +220,74 @@ export async function getCustomerScheduleSlots(input: {
         },
         select: { city: { select: { id: true, name: true } } }
       });
-  const resolvedCity = city ?? serviceArea?.city;
+  const resolvedCity = city ?? pincodeArea?.city;
   if (!resolvedCity) throw AppError.badRequest("We don't serve this address yet");
 
-  await assertServiceablePincode({ pincode, cityId: resolvedCity.id });
+  const checkedServiceArea = await assertServiceablePincode({
+    pincode,
+    cityId: resolvedCity.id
+  });
+  const at = new Date();
   const services = await prisma.service.findMany({
-    where: { id: { in: input.serviceIds }, isActive: true },
-    select: { id: true, categoryId: true }
+    where: {
+      id: { in: input.serviceIds },
+      isActive: true,
+      bookingEnabled: true,
+      publicationStatus: "PUBLISHED",
+      AND: [
+        { OR: [{ publishStartsAt: null }, { publishStartsAt: { lte: at } }] },
+        { OR: [{ publishEndsAt: null }, { publishEndsAt: { gte: at } }] }
+      ]
+    },
+    select: {
+      id: true,
+      categoryId: true,
+      availabilityMode: true,
+      serviceAreaAssignments: { select: { serviceAreaId: true } },
+      subcategory: {
+        select: {
+          availabilityMode: true,
+          serviceAreaAssignments: { select: { serviceAreaId: true } },
+          category: {
+            select: {
+              availabilityMode: true,
+              serviceAreaAssignments: { select: { serviceAreaId: true } }
+            }
+          }
+        }
+      }
+    }
   });
   if (services.length !== input.serviceIds.length) {
     throw AppError.badRequest("One or more selected services are unavailable in this area");
   }
+  if (services.some((service) => {
+    const categoryAvailability: AvailabilityNode = {
+      availabilityMode: service.subcategory.category.availabilityMode,
+      serviceAreaAssignments: service.subcategory.category.serviceAreaAssignments
+    };
+    const subcategoryAvailability: AvailabilityNode = {
+      availabilityMode: service.subcategory.availabilityMode,
+      serviceAreaAssignments: service.subcategory.serviceAreaAssignments,
+      parent: categoryAvailability
+    };
+    const serviceAvailability: AvailabilityNode = {
+      availabilityMode: service.availabilityMode,
+      serviceAreaAssignments: service.serviceAreaAssignments,
+      parent: subcategoryAvailability
+    };
+    return !isAvailableInAreas(serviceAvailability, checkedServiceArea.serviceAreaIds);
+  })) {
+    throw AppError.badRequest("One or more selected services are unavailable in this area");
+  }
 
   return previewCustomerScheduleSlots({
-    categoryIds: [...new Set(services.map((service) => service.categoryId))],
+    cityId: resolvedCity.id,
+    services: services.map((service) => ({
+      serviceId: service.id,
+      categoryId: service.categoryId
+    })),
+    pincode,
     latitude: savedAddress?.lat ?? Number(bookingAddress?.latitude),
     longitude: savedAddress?.lng ?? Number(bookingAddress?.longitude),
     cityName: resolvedCity.name,

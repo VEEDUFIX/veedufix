@@ -19,6 +19,7 @@ class WorkerJob {
     this.offerId,
     this.expiresAt,
     this.customQuoteStatus,
+    this.isMaintenanceVisit = false,
   });
 
   final String bookingId;
@@ -39,15 +40,15 @@ class WorkerJob {
   final String? offerId;
   final DateTime? expiresAt;
   final String? customQuoteStatus;
+  final bool isMaintenanceVisit;
 
   factory WorkerJob.fromJson(Map<String, dynamic> json) => WorkerJob(
         bookingId: json['bookingId'] as String? ?? '',
         code: json['code'] as String? ?? '',
         status: json['status'] as String? ?? '',
-        scheduledAt:
-            (DateTime.tryParse(json['scheduledAt'] as String? ?? '') ??
-                    DateTime.now())
-                .toLocal(),
+        scheduledAt: (DateTime.tryParse(json['scheduledAt'] as String? ?? '') ??
+                DateTime.now())
+            .toLocal(),
         totalAmount: (json['totalAmount'] as num?)?.toDouble() ?? 0.0,
         serviceId: json['serviceId'] as String?,
         serviceName: json['serviceName'] as String? ?? 'Service',
@@ -73,6 +74,7 @@ class WorkerJob {
             ? DateTime.tryParse(json['expiresAt'] as String)?.toLocal()
             : null,
         customQuoteStatus: json['customQuoteStatus'] as String?,
+        isMaintenanceVisit: json['isMaintenanceVisit'] as bool? ?? false,
       );
 }
 
@@ -105,10 +107,15 @@ class WorkerDashboardStats {
   final List<WorkerJob> todayJobs;
 
   factory WorkerDashboardStats.fromJson(Map<String, dynamic> json) {
-    List<T> decodeList<T>(dynamic val, T Function(Map<String, dynamic>) builder) {
+    List<T> decodeList<T>(
+        dynamic val, T Function(Map<String, dynamic>) builder) {
       if (val is! List) return <T>[];
-      return val.whereType<Map<String, dynamic>>().map(builder).toList(growable: false);
+      return val
+          .whereType<Map<String, dynamic>>()
+          .map(builder)
+          .toList(growable: false);
     }
+
     return WorkerDashboardStats(
       completedJobsCount: (json['completedJobsCount'] as num?)?.toInt() ?? 0,
       averageRating: (json['averageRating'] as num?)?.toDouble() ?? 0.0,

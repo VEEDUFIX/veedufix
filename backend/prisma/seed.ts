@@ -165,24 +165,41 @@ async function seedCities() {
   ];
 
   for (const city of cities) {
+    const state = await prisma.geoState.upsert({
+      where: { name: city.state },
+      update: {},
+      create: { name: city.state }
+    });
+    const district = await prisma.geoDistrict.upsert({
+      where: { stateId_name: { stateId: state.id, name: city.district } },
+      update: {},
+      create: { stateId: state.id, name: city.district }
+    });
     await prisma.city.upsert({
       where: { slug: city.slug },
       update: {
         name: city.name,
         state: city.state,
         district: city.district,
+        stateId: state.id,
+        districtId: district.id,
         country: "India"
       },
       create: {
         name: city.name,
         state: city.state,
         district: city.district,
+        stateId: state.id,
+        districtId: district.id,
         country: "India",
         slug: city.slug,
         isActive: city.isActive
       }
     });
   }
+
+  // New seeded cities get a launch default, while existing admin-managed market
+  // activation remains authoritative across subsequent seed runs.
 }
 
 async function seedServiceAreas() {
@@ -202,8 +219,7 @@ async function seedServiceAreas() {
       name: "Chennai",
       pincode: null,
       pincodeRangeStart: "600001",
-      pincodeRangeEnd: "600123",
-      isActive: true
+      pincodeRangeEnd: "600123"
     },
     create: {
       cityId: chennai.id,
@@ -215,6 +231,7 @@ async function seedServiceAreas() {
       isActive: true
     }
   });
+
 }
 
 async function seedPlatformConfig() {

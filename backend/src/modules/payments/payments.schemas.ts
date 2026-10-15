@@ -5,7 +5,10 @@ export const createPaymentOrderSchema = z.object({
     .object({
       cityId: z.string().min(1).optional(),
       addressId: z.string().trim().min(1).optional(),
+      maintenanceOccurrenceId: z.string().trim().min(1).optional(),
+      idempotencyKey: z.string().trim().min(8).max(120).optional(),
       couponCode: z.string().trim().min(1).max(64).optional(),
+      diagnosticPhotoIds: z.array(z.string().trim().min(1)).max(5).refine((ids) => new Set(ids).size === ids.length, "Diagnostic photos cannot be attached more than once").optional(),
       items: z
         .array(
           z
@@ -27,6 +30,12 @@ export const createPaymentOrderSchema = z.object({
     })
     .strict()
     .superRefine((body, ctx) => {
+      if (body.maintenanceOccurrenceId && body.bookingType !== "scheduled") {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["bookingType"], message: "Maintenance visits must use a scheduled booking" });
+      }
+      if (body.maintenanceOccurrenceId && body.items.length !== 1) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["items"], message: "A maintenance visit must contain exactly one service" });
+      }
       if (body.bookingType === "scheduled") {
         if (!body.scheduledFor) {
           ctx.addIssue({

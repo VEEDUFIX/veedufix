@@ -10,6 +10,7 @@ export type AuditAction =
   | "worker.payout_change_approved"
   | "worker.payout_change_rejected"
   | "dispute.resolved"
+  | "dispute.claim_updated"
   | "payout.retried"
   | "payout.bulk_retried"
   | "payout.pending_released"

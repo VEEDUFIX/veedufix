@@ -11,6 +11,8 @@ export type ServiceAreaMatch = {
   pincodeRangeStart: string | null;
   pincodeRangeEnd: string | null;
   pincode: string | null;
+  pincodes: string[];
+  serviceAreaIds: string[];
 };
 
 const ACTIVE_AREA_MESSAGE = "We don't currently serve this area yet — we're expanding soon!";
@@ -28,12 +30,16 @@ function asPincodeNumber(value: string | null | undefined): number | null {
 function matchesArea(
   area: {
     pincode: string | null;
+    assignedPincodes?: Array<{ pincode: string }>;
     pincodeRangeStart: string | null;
     pincodeRangeEnd: string | null;
   },
   pincode: string
 ): boolean {
   if (area.pincode && area.pincode === pincode) {
+    return true;
+  }
+  if (area.assignedPincodes?.some((item) => item.pincode === pincode)) {
     return true;
   }
 
@@ -47,20 +53,36 @@ function matchesArea(
   return target >= start && target <= end;
 }
 
-export async function findServiceableArea(input: {
+export async function findServiceableAreas(input: {
   pincode: string;
   cityId?: string;
   city?: string;
-}): Promise<ServiceAreaMatch | null> {
+}): Promise<ServiceAreaMatch[]> {
   const pincode = normalizePincode(input.pincode);
   if (!/^[1-9][0-9]{5}$/.test(pincode)) {
-    return null;
+    return [];
   }
 
+  const normalizedCity = input.city?.trim().toLowerCase();
   const where: Prisma.ServiceAreaWhereInput = {
     isActive: true,
-    city: { isActive: true },
-    ...(input.cityId ? { cityId: input.cityId } : {})
+    city: {
+      isActive: true,
+      ...(normalizedCity
+        ? {
+            OR: [
+              { name: { equals: normalizedCity, mode: "insensitive" } },
+              { slug: { equals: normalizedCity, mode: "insensitive" } }
+            ]
+          }
+        : {})
+    },
+    ...(input.cityId ? { cityId: input.cityId } : {}),
+    OR: [
+      { pincode },
+      { assignedPincodes: { some: { pincode } } },
+      { pincodeRangeStart: { lte: pincode }, pincodeRangeEnd: { gte: pincode } }
+    ]
   };
 
   const areas = await prisma.serviceArea.findMany({
@@ -71,6 +93,7 @@ export async function findServiceableArea(input: {
       slug: true,
       cityId: true,
       pincode: true,
+      assignedPincodes: { select: { pincode: true } },
       pincodeRangeStart: true,
       pincodeRangeEnd: true,
       city: {
@@ -87,25 +110,28 @@ export async function findServiceableArea(input: {
     orderBy: [{ createdAt: "asc" }]
   });
 
-  const normalizedCity = input.city?.trim().toLowerCase();
+  const matches: ServiceAreaMatch[] = [];
   for (const area of areas) {
-    if (normalizedCity) {
-      const cityMatches =
-        area.city.name.trim().toLowerCase() === normalizedCity ||
-        area.city.slug.trim().toLowerCase() === normalizedCity;
-      if (!cityMatches) {
-        continue;
-      }
-    }
-
     const serviceArea = area as {
       pincode: string | null;
+      assignedPincodes: Array<{ pincode: string }>;
       pincodeRangeStart: string | null;
       pincodeRangeEnd: string | null;
     };
 
+    // Prisma applies these filters in the database. Keep the check here too so
+    // callers never receive a match from a stale or incomplete query adapter.
+    if (input.cityId && area.cityId !== input.cityId) continue;
+    if (
+      normalizedCity &&
+      area.city.name.trim().toLowerCase() !== normalizedCity &&
+      area.city.slug.trim().toLowerCase() !== normalizedCity
+    ) {
+      continue;
+    }
+
     if (matchesArea(serviceArea, pincode)) {
-      return {
+      matches.push({
         id: area.id,
         name: area.name,
         slug: area.slug,
@@ -113,12 +139,24 @@ export async function findServiceableArea(input: {
         cityName: area.city.name,
         pincodeRangeStart: serviceArea.pincodeRangeStart,
         pincodeRangeEnd: serviceArea.pincodeRangeEnd,
-        pincode: serviceArea.pincode
-      };
+        pincode: serviceArea.pincode,
+        pincodes: (serviceArea.assignedPincodes ?? []).map(
+          (item: { pincode: string }) => item.pincode
+        ),
+        serviceAreaIds: [area.id]
+      });
     }
   }
 
-  return null;
+  return matches;
+}
+
+export async function findServiceableArea(input: {
+  pincode: string;
+  cityId?: string;
+  city?: string;
+}): Promise<ServiceAreaMatch | null> {
+  return (await findServiceableAreas(input))[0] ?? null;
 }
 
 export async function assertServiceablePincode(input: {
@@ -126,11 +164,14 @@ export async function assertServiceablePincode(input: {
   cityId?: string;
   city?: string;
 }): Promise<ServiceAreaMatch> {
-  const area = await findServiceableArea(input);
-  if (!area) {
+  const areas = await findServiceableAreas(input);
+  if (areas.length === 0) {
     throw AppError.badRequest(ACTIVE_AREA_MESSAGE);
   }
-  return area;
+  return {
+    ...areas[0],
+    serviceAreaIds: areas.map((area) => area.id)
+  };
 }
 
 export function getServiceAreaUnavailableMessage(): string {

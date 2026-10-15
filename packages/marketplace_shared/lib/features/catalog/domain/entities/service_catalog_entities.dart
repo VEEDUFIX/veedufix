@@ -460,6 +460,9 @@ class CatalogService {
     this.homeVisit = true,
     this.requiresSiteVisit = false,
     this.bookingEnabled = true,
+    this.maintenanceEnabled = false,
+    this.maintenanceIntervalsMonths = const [],
+    this.maintenanceReminderHours = 24,
     this.priceType = 'FROM',
     this.ctaLabel = 'Book service',
     this.warrantyText,
@@ -505,6 +508,9 @@ class CatalogService {
   final bool homeVisit;
   final bool requiresSiteVisit;
   final bool bookingEnabled;
+  final bool maintenanceEnabled;
+  final List<int> maintenanceIntervalsMonths;
+  final int maintenanceReminderHours;
   final String priceType;
   final String ctaLabel;
   final String? warrantyText;
@@ -552,6 +558,14 @@ class CatalogService {
       homeVisit: json['homeVisit'] as bool? ?? true,
       requiresSiteVisit: json['requiresSiteVisit'] as bool? ?? false,
       bookingEnabled: json['bookingEnabled'] as bool? ?? true,
+      maintenanceEnabled: json['maintenanceEnabled'] as bool? ?? false,
+      maintenanceIntervalsMonths:
+          (json['maintenanceIntervalsMonths'] as List<dynamic>? ?? const [])
+              .whereType<num>()
+              .map((value) => value.toInt())
+              .toList(growable: false),
+      maintenanceReminderHours:
+          (json['maintenanceReminderHours'] as num?)?.toInt() ?? 24,
       priceType: json['priceType'] as String? ?? 'FROM',
       ctaLabel: json['ctaLabel'] as String? ?? 'Book service',
       warrantyText: json['warrantyText'] as String?,
@@ -616,6 +630,9 @@ class CatalogService {
       'homeVisit': homeVisit,
       'requiresSiteVisit': requiresSiteVisit,
       'bookingEnabled': bookingEnabled,
+      'maintenanceEnabled': maintenanceEnabled,
+      'maintenanceIntervalsMonths': maintenanceIntervalsMonths,
+      'maintenanceReminderHours': maintenanceReminderHours,
       'priceType': priceType,
       'ctaLabel': ctaLabel,
       'warrantyText': warrantyText,

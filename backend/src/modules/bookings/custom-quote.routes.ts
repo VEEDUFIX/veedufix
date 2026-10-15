@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { z } from 'zod';
 import { requireAuth, requireRole } from '../../middleware/auth.js';
 import { validate } from '../../middleware/validate.js';
 import {
@@ -10,7 +11,9 @@ import {
   requestCustomQuoteHandler,
   submitCustomQuoteHandler,
   respondCustomQuoteHandler,
-  getCustomQuoteHandler
+  getCustomQuoteHandler,
+  createCustomQuotePaymentOrderHandler,
+  verifyCustomQuotePaymentHandler
 } from './custom-quote.controller.js';
 
 export const customQuoteRouter = Router();
@@ -44,3 +47,6 @@ customQuoteRouter.get(
   requireAuth,
   getCustomQuoteHandler
 );
+
+customQuoteRouter.post('/bookings/:bookingId/custom-quote/payment-order', requireAuth, requireRole('CUSTOMER'), createCustomQuotePaymentOrderHandler);
+customQuoteRouter.post('/bookings/:bookingId/custom-quote/verify-payment', requireAuth, requireRole('CUSTOMER'), validate(z.object({ body: z.object({ razorpayOrderId: z.string().min(1), razorpayPaymentId: z.string().min(1), razorpaySignature: z.string().min(1) }).strict(), params: z.object({ bookingId: z.string().min(1) }), query: z.object({}).strict() })), verifyCustomQuotePaymentHandler);

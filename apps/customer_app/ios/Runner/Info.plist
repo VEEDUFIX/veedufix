@@ -10,6 +10,8 @@
 		<string>VeeduFix</string>
 		<key>NSCameraUsageDescription</key>
 		<string>Take a photo to share a service issue in your booking conversation.</string>
+		<key>NSPhotoLibraryUsageDescription</key>
+		<string>Select photos to help your service partner understand the issue.</string>
 		<key>CFBundleExecutable</key>
 		<string>$(EXECUTABLE_NAME)</string>
 		<key>CFBundleIdentifier</key>

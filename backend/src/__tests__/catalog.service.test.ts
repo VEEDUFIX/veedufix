@@ -5,9 +5,10 @@ import { Prisma } from '@prisma/client';
 
 vi.mock('../lib/prisma.js', () => ({
   prisma: {
-    serviceCategory: { findMany: vi.fn(), findUnique: vi.fn(), create: vi.fn(), count: vi.fn() },
-    serviceSubcategory: { findFirst: vi.fn(), create: vi.fn(), count: vi.fn(), findUnique: vi.fn() },
+    serviceCategory: { findMany: vi.fn(), findFirst: vi.fn(), findUnique: vi.fn(), create: vi.fn(), count: vi.fn() },
+    serviceSubcategory: { findFirst: vi.fn(), findMany: vi.fn(), create: vi.fn(), count: vi.fn(), findUnique: vi.fn() },
     service: { findFirst: vi.fn(), create: vi.fn(), count: vi.fn(), findMany: vi.fn(), findUnique: vi.fn() },
+    serviceArea: { count: vi.fn() },
     $transaction: vi.fn((cb) => cb(prismaMockTx)),
   },
 }));
@@ -15,7 +16,11 @@ vi.mock('../lib/prisma.js', () => ({
 const prismaMockTx = {
   serviceCategory: { create: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
   serviceSubcategory: { create: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
-  service: { create: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
+  service: { create: vi.fn(), update: vi.fn(), updateMany: vi.fn(), count: vi.fn(), findMany: vi.fn(), findUnique: vi.fn() },
+  serviceArea: { count: vi.fn(), findMany: vi.fn() },
+  serviceAreaService: { deleteMany: vi.fn(), createMany: vi.fn() },
+  serviceVariant: { create: vi.fn(), findMany: vi.fn(), deleteMany: vi.fn() },
+  maintenancePlan: { count: vi.fn() },
 };
 
 vi.mock('../lib/redis.js', () => ({
@@ -39,6 +44,52 @@ import { AppError } from '../lib/app-error.js';
 describe('Catalog Service', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  describe('updateService policy validation', () => {
+    const service = {
+      id: 'service-1',
+      slug: 'service',
+      code: 'SVC-1',
+      name: 'Service',
+      publishStartsAt: null,
+      publishEndsAt: null,
+      maintenanceEnabled: true,
+      maintenanceIntervalsMonths: [3],
+      guaranteeEnabled: true,
+      guaranteeClaimWindowDays: 30,
+      guaranteeIssueCategories: ['Installation issue'],
+      guaranteeResolutionTypes: ['REWORK']
+    };
+
+    it('uses saved policy values when enabling a policy with a partial update', async () => {
+      vi.mocked(prisma.service.findUnique)
+        .mockResolvedValueOnce(service as any)
+        .mockResolvedValueOnce({ ...service, guaranteeEnabled: true } as any);
+      vi.mocked(prismaMockTx.service.update).mockResolvedValue({ ...service, guaranteeEnabled: true } as any);
+
+      await expect(catalogService.updateService('service-1', { guaranteeEnabled: true }))
+        .resolves.toMatchObject({ guaranteeEnabled: true });
+      expect(prismaMockTx.service.update).toHaveBeenCalledWith(expect.objectContaining({
+        data: expect.objectContaining({ guaranteeEnabled: true })
+      }));
+    });
+
+    it('rejects clearing the final issue category while the saved guarantee remains enabled', async () => {
+      vi.mocked(prisma.service.findUnique).mockResolvedValueOnce(service as any);
+
+      await expect(catalogService.updateService('service-1', { guaranteeIssueCategories: [] }))
+        .rejects.toMatchObject({ statusCode: 400 });
+      expect(prismaMockTx.service.update).not.toHaveBeenCalled();
+    });
+
+    it('rejects clearing intervals while the saved maintenance policy remains enabled', async () => {
+      vi.mocked(prisma.service.findUnique).mockResolvedValueOnce(service as any);
+
+      await expect(catalogService.updateService('service-1', { maintenanceIntervalsMonths: [] }))
+        .rejects.toMatchObject({ statusCode: 400 });
+      expect(prismaMockTx.service.update).not.toHaveBeenCalled();
+    });
   });
 
   describe('resolveCatalogTree', () => {
@@ -70,18 +121,26 @@ describe('Catalog Service', () => {
   describe('resolveCategoryBySlug', () => {
     it('returns a category if found', async () => {
       const mockCategory = { name: 'Home Repair', slug: 'home-repair', isActive: true, translations: [] };
-      vi.mocked(prisma.serviceCategory.findUnique).mockResolvedValue(mockCategory as any);
+      vi.mocked(prisma.serviceCategory.findFirst).mockResolvedValue(mockCategory as any);
 
       const category = await catalogService.resolveCategoryBySlug('home-repair');
       expect(category.name).toBe('Home Repair');
-      expect(prisma.serviceCategory.findUnique).toHaveBeenCalledWith(
+      expect(prisma.serviceCategory.findFirst).toHaveBeenCalledWith(
         expect.objectContaining({
+          where: expect.objectContaining({
+            slug: 'home-repair',
+            isActive: true,
+            subcategories: expect.objectContaining({
+              some: expect.objectContaining({
+                isActive: true,
+                catalogServices: expect.objectContaining({ some: expect.any(Object) })
+              })
+            })
+          }),
           include: expect.objectContaining({
             subcategories: expect.objectContaining({
-              where: { isActive: true },
-              include: expect.objectContaining({
-                catalogServices: expect.objectContaining({ where: { isActive: true } }),
-              }),
+              where: expect.objectContaining({ isActive: true }),
+              orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
             }),
           }),
         }),
@@ -89,7 +148,7 @@ describe('Catalog Service', () => {
     });
 
     it('returns null if not found', async () => {
-      vi.mocked(prisma.serviceCategory.findUnique).mockResolvedValue(null);
+      vi.mocked(prisma.serviceCategory.findFirst).mockResolvedValue(null);
       const res = await catalogService.resolveCategoryBySlug('invalid');
       expect(res).toBeNull();
     });
@@ -98,11 +157,75 @@ describe('Catalog Service', () => {
   describe('searchCatalog', () => {
     it('returns paginated search results', async () => {
       vi.mocked(prisma.service.count).mockResolvedValue(1);
-      vi.mocked(prisma.service.findMany).mockResolvedValue([{ name: 'AC Cleaning', slug: 'ac-cleaning', isActive: true, translations: [], pricingRules: [] }] as any);
+      vi.mocked(prisma.service.findMany).mockResolvedValue([{ id: 'service-ac-cleaning', name: 'AC Cleaning', slug: 'ac-cleaning', isActive: true, translations: [], pricingRules: [] }] as any);
 
       const results = await catalogService.searchCatalog({ q: 'AC', page: 1, pageSize: 10 });
       expect(results.total).toBe(1);
       expect(results.items[0].name).toBe('AC Cleaning');
+    });
+
+    it('caps the reported total at the ranked text-search result limit', async () => {
+      vi.mocked(prisma.service.count).mockResolvedValue(500);
+      vi.mocked(prisma.service.findMany).mockResolvedValue([
+        { id: 'service-ac-cleaning', name: 'AC Cleaning', slug: 'ac-cleaning', isActive: true, translations: [], pricingRules: [] }
+      ] as any);
+
+      const results = await catalogService.searchCatalog({ q: 'AC', page: 1, pageSize: 10 });
+
+      expect(results.total).toBe(240);
+      expect(results.resultLimit).toBe(240);
+    });
+
+    it('uses aliases and synonyms while keeping exact text relevance ahead of popularity', async () => {
+      vi.mocked(prisma.service.count).mockResolvedValue(2);
+      vi.mocked(prisma.service.findMany).mockResolvedValue([
+        {
+          id: 'home-cleaning', name: 'Home Cleaning', slug: 'home-cleaning', popular: true,
+          featured: true, sortOrder: 0, isActive: true, translations: [], pricingRules: []
+        },
+        {
+          id: 'ac-repair', name: 'AC Repair', slug: 'ac-repair', popular: false,
+          featured: false, sortOrder: 2, isActive: true, translations: [], pricingRules: []
+        }
+      ] as any);
+
+      const results = await catalogService.searchCatalog({
+        q: 'AC not cooling',
+        page: 1,
+        pageSize: 10
+      });
+
+      expect(results.items.map((item) => item.name)).toEqual(['AC Repair', 'Home Cleaning']);
+      const query = vi.mocked(prisma.service.findMany).mock.calls[0][0];
+      expect(query?.take).toBe(960);
+      expect(query?.select).toMatchObject({ id: true, name: true, popular: true });
+      expect(vi.mocked(prisma.service.findMany).mock.calls[1][0]?.include).toBeDefined();
+      expect(query?.where).toMatchObject({ isActive: true, publicationStatus: 'PUBLISHED' });
+      const searchTerms = (query?.where as any).OR;
+      expect(searchTerms).toEqual(expect.arrayContaining([
+        expect.objectContaining({ seoKeywords: { contains: 'ac repair', mode: 'insensitive' } })
+      ]));
+    });
+  });
+
+  describe('getAutocompleteSuggestions', () => {
+    it('bounds matching service candidates before sorting suggestions', async () => {
+      vi.mocked(prisma.service.findMany).mockResolvedValue([
+        {
+          name: 'AC repair', slug: 'ac-repair', popular: true, reviewCount: 10,
+          sortOrder: 0, category: { slug: 'home-services' }, subcategory: { slug: 'air-conditioning' }
+        }
+      ] as any);
+      vi.mocked(prisma.serviceCategory.findMany).mockResolvedValue([] as any);
+      vi.mocked(prisma.serviceSubcategory.findMany).mockResolvedValue([] as any);
+
+      const result = await catalogService.getAutocompleteSuggestions('ac', 10);
+
+      expect(result.services).toHaveLength(1);
+      expect(prisma.service.findMany).toHaveBeenCalledWith(expect.objectContaining({
+        take: 200,
+        orderBy: [{ popular: 'desc' }, { reviewCount: 'desc' }, { sortOrder: 'asc' }]
+      }));
     });
   });
 
@@ -119,6 +242,12 @@ describe('Catalog Service', () => {
           slug: 'plumbing'
         })
       }));
+      const createArgs = vi.mocked(prisma.serviceCategory.create).mock.calls[0]?.[0];
+      expect(createArgs?.include?.subcategories).not.toHaveProperty('where');
+      expect(createArgs?.include?._count?.select).toMatchObject({
+        services: true,
+        subcategories: true
+      });
       expect(res.name).toBe('Plumbing');
     });
 
@@ -164,6 +293,84 @@ describe('Catalog Service', () => {
     });
   });
 
+  describe('updateService variant availability', () => {
+    it('prevents removing variants referenced by maintenance plans', async () => {
+      vi.mocked(prisma.service.findUnique).mockResolvedValueOnce({
+        id: 'service-1',
+        slug: 'service',
+        code: 'SERVICE',
+        name: 'Service',
+        publishStartsAt: null,
+        publishEndsAt: null,
+        maintenanceEnabled: true,
+        maintenanceIntervalsMonths: [3],
+        guaranteeEnabled: false,
+        guaranteeClaimWindowDays: 0,
+        guaranteeIssueCategories: [],
+        guaranteeResolutionTypes: [],
+      } as any);
+      prismaMockTx.serviceVariant.findMany.mockResolvedValueOnce([
+        { id: 'variant-1' },
+      ] as any);
+      prismaMockTx.maintenancePlan.count.mockResolvedValueOnce(1);
+
+      await expect(catalogService.updateService('service-1', { variants: [] }))
+        .rejects.toMatchObject({ statusCode: 409 });
+
+      expect(prismaMockTx.serviceVariant.deleteMany).not.toHaveBeenCalled();
+      expect(prismaMockTx.maintenancePlan.count).toHaveBeenCalledWith({
+        where: { variantId: { in: ['variant-1'] } },
+      });
+    });
+
+    it('creates inherited variants without service-area assignments and preserves custom assignments', async () => {
+      vi.mocked(prisma.service.findUnique)
+        .mockResolvedValueOnce({
+          id: 'service-1',
+          slug: 'service',
+          code: 'SERVICE',
+          name: 'Service',
+          publishStartsAt: null,
+          publishEndsAt: null,
+        } as any)
+        .mockResolvedValueOnce({ id: 'service-1' } as any);
+      vi.mocked(prisma.serviceArea.count).mockResolvedValue(1);
+      prismaMockTx.serviceVariant.create.mockResolvedValue({} as any);
+      prismaMockTx.serviceVariant.findMany.mockResolvedValueOnce([] as any);
+
+      await catalogService.updateService('service-1', {
+        variants: [
+          { name: 'Inherited', price: 100, serviceAreaIds: [] },
+          {
+            name: 'Custom',
+            price: 200,
+            availabilityMode: 'CUSTOM',
+            serviceAreaIds: ['area-1'],
+          },
+        ],
+      });
+
+      expect(prismaMockTx.serviceVariant.create).toHaveBeenNthCalledWith(
+        1,
+        expect.objectContaining({
+          data: expect.objectContaining({
+            availabilityMode: 'INHERITED',
+            serviceAreaAssignments: undefined,
+          }),
+        }),
+      );
+      expect(prismaMockTx.serviceVariant.create).toHaveBeenNthCalledWith(
+        2,
+        expect.objectContaining({
+          data: expect.objectContaining({
+            availabilityMode: 'CUSTOM',
+            serviceAreaAssignments: { create: [{ serviceAreaId: 'area-1' }] },
+          }),
+        }),
+      );
+    });
+  });
+
   describe('bulkSetCatalogActiveStatus', () => {
     it('updates deduplicated service ids in one transaction', async () => {
       prismaMockTx.service.updateMany.mockResolvedValue({ count: 2 } as any);
@@ -179,6 +386,83 @@ describe('Catalog Service', () => {
         data: { isActive: false },
       });
       expect(result).toEqual({ updatedCount: 2 });
+    });
+  });
+
+  describe('bulkUpdateCatalogAvailability', () => {
+    it('materializes inherited parent locations before removing selected areas', async () => {
+      prismaMockTx.service.count.mockResolvedValue(1);
+      prismaMockTx.serviceArea.count.mockResolvedValue(1);
+      prismaMockTx.service.findMany.mockResolvedValue([
+        {
+          id: 'service-1',
+          availabilityMode: 'INHERITED',
+          serviceAreaAssignments: [],
+          subcategory: {
+            availabilityMode: 'INHERITED',
+            serviceAreaAssignments: [],
+            category: {
+              availabilityMode: 'CUSTOM',
+              serviceAreaAssignments: [
+                { serviceAreaId: 'area-remove' },
+                { serviceAreaId: 'area-keep' },
+              ],
+            },
+          },
+        },
+      ] as any);
+      prismaMockTx.serviceAreaService.deleteMany.mockResolvedValue({ count: 0 } as any);
+
+      const result = await catalogService.bulkUpdateCatalogAvailability({
+        action: 'REMOVE_LOCATIONS',
+        serviceIds: ['service-1'],
+        serviceAreaIds: ['area-remove'],
+      });
+
+      expect(prismaMockTx.service.updateMany).toHaveBeenCalledWith({
+        where: { id: { in: ['service-1'] } },
+        data: { availabilityMode: 'CUSTOM' },
+      });
+      expect(prismaMockTx.serviceAreaService.createMany).toHaveBeenCalledWith({
+        data: [{ serviceId: 'service-1', serviceAreaId: 'area-keep' }],
+      });
+      expect(result).toEqual({
+        action: 'REMOVE_LOCATIONS',
+        updatedCount: 1,
+        removedAssignmentCount: 1,
+      });
+    });
+
+    it('rejects materializing an unrestricted inherited service across too many active areas', async () => {
+      prismaMockTx.service.count.mockResolvedValue(1);
+      prismaMockTx.serviceArea.count.mockResolvedValue(1);
+      prismaMockTx.service.findMany.mockResolvedValue([
+        {
+          id: 'service-1',
+          availabilityMode: 'INHERITED',
+          serviceAreaAssignments: [],
+          subcategory: {
+            availabilityMode: 'INHERITED',
+            serviceAreaAssignments: [],
+            category: {
+              availabilityMode: 'INHERITED',
+              serviceAreaAssignments: [],
+            },
+          },
+        },
+      ] as any);
+      prismaMockTx.serviceArea.findMany.mockResolvedValue(
+        Array.from({ length: 1001 }, (_, index) => ({ id: `area-${index}` })) as any,
+      );
+
+      await expect(
+        catalogService.bulkUpdateCatalogAvailability({
+          action: 'REMOVE_LOCATIONS',
+          serviceIds: ['service-1'],
+          serviceAreaIds: ['area-remove'],
+        }),
+      ).rejects.toBeInstanceOf(AppError);
+      expect(prismaMockTx.service.updateMany).not.toHaveBeenCalled();
     });
   });
 });

@@ -7,6 +7,7 @@ vi.mock('../lib/prisma.js', () => ({
     serviceCategory: {
       findMany: vi.fn(),
       findUnique: vi.fn(),
+      findFirst: vi.fn(),
     },
     service: {
       findMany: vi.fn(),
@@ -87,18 +88,18 @@ describe('Catalog API (E2E)', () => {
   describe('GET /api/catalog/categories/:id', () => {
     it('returns a specific category', async () => {
       const mockCategory = { id: 'cat1', slug: 'cleaning', name: 'Cleaning', isActive: true };
-      vi.mocked(prisma.serviceCategory.findUnique).mockResolvedValue(mockCategory as any);
+      vi.mocked(prisma.serviceCategory.findFirst).mockResolvedValue(mockCategory as any);
 
       const res = await request(app).get('/api/catalog/categories/cleaning');
       
       expect(res.status).toBe(200);
       expect(res.body).toHaveProperty('category');
       expect(res.body.category.id).toEqual('cat1');
-      expect(prisma.serviceCategory.findUnique).toHaveBeenCalled();
+      expect(prisma.serviceCategory.findFirst).toHaveBeenCalled();
     });
 
     it('returns 404 if category not found', async () => {
-      vi.mocked(prisma.serviceCategory.findUnique).mockResolvedValue(null);
+      vi.mocked(prisma.serviceCategory.findFirst).mockResolvedValue(null);
 
       const res = await request(app).get('/api/catalog/categories/cleaning');
       

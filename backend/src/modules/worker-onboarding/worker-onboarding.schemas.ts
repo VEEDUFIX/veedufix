@@ -9,6 +9,9 @@ const baseProfileBodySchema = z.object({
   city: z.string().trim().min(2).max(120).optional(),
   pincode: z.string().trim().regex(/^[1-9]\d{5}$/, "Enter a valid 6-digit Indian pincode").optional(),
   serviceAreas: z.string().trim().min(2).max(500).optional(),
+  serviceAreaIds: z.array(z.string().trim().min(1)).min(1).max(500)
+    .refine((ids) => new Set(ids).size === ids.length, "Service areas must be unique")
+    .optional(),
   workType: z.enum(["FULL_TIME", "PART_TIME"]).optional(),
   acceptsUrgentJobs: z.boolean().optional(),
   serviceRadiusKm: z.number().int().min(1).max(100).optional(),

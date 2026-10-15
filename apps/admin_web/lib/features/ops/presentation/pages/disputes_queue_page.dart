@@ -245,6 +245,22 @@ class _DisputesQueuePageState extends ConsumerState<DisputesQueuePage> {
                               child: Text('Under review'),
                             ),
                             DropdownMenuItem(
+                              value: 'action_required',
+                              child: Text('Awaiting information'),
+                            ),
+                            DropdownMenuItem(
+                              value: 'approved',
+                              child: Text('Approved (corrective work)'),
+                            ),
+                            DropdownMenuItem(
+                              value: 'resolved_rework',
+                              child: Text('Corrective work completed'),
+                            ),
+                            DropdownMenuItem(
+                              value: 'closed',
+                              child: Text('Closed'),
+                            ),
+                            DropdownMenuItem(
                               value: 'refund_pending',
                               child: Text('Refund processing'),
                             ),
@@ -303,6 +319,7 @@ class _DisputesQueuePageState extends ConsumerState<DisputesQueuePage> {
                               ? constraints.maxWidth
                               : 800,
                           child: DataTable(
+                            showCheckboxColumn: false,
                             headingRowColor:
                                 const WidgetStatePropertyAll(Color(0xFFF8FAFC)),
                             headingTextStyle: GoogleFonts.outfit(

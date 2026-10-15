@@ -22,6 +22,8 @@ const mocks = vi.hoisted(() => ({
   dispatchBooking: vi.fn(),
   raiseOpsAlert: vi.fn(),
   settleRefund: vi.fn(),
+  isBookingFullyRefunded: vi.fn(),
+  settleCustomQuotePayment: vi.fn(),
 }));
 
 vi.mock('../lib/prisma.js', () => ({
@@ -47,7 +49,13 @@ vi.mock('../lib/realtime.js', () => ({
 vi.mock('../lib/booking-timeline.js', () => ({ recordBookingTimelineEvent: mocks.recordTimeline }));
 vi.mock('../modules/matching/matching.service.js', () => ({ dispatchBookingAfterPayment: mocks.dispatchBooking }));
 vi.mock('../modules/ops/ops.service.js', () => ({ raiseOpsAlert: mocks.raiseOpsAlert }));
-vi.mock('../modules/refund/refund.service.js', () => ({ settleRefundFromProvider: mocks.settleRefund }));
+vi.mock('../modules/refund/refund.service.js', () => ({
+  settleRefundFromProvider: mocks.settleRefund,
+  isBookingFullyRefunded: mocks.isBookingFullyRefunded
+}));
+vi.mock('../modules/bookings/custom-quote-payment.service.js', () => ({
+  settleCustomQuotePayment: mocks.settleCustomQuotePayment
+}));
 
 import { handleRazorpayWebhook, updatePaymentForWebhook } from '../modules/webhooks/webhooks.service.js';
 
@@ -61,6 +69,8 @@ describe('Razorpay webhook handling', () => {
     mocks.notificationCreate.mockResolvedValue(undefined);
     mocks.raiseOpsAlert.mockResolvedValue(undefined);
     mocks.settleRefund.mockResolvedValue(undefined);
+    mocks.settleCustomQuotePayment.mockResolvedValue(undefined);
+    mocks.isBookingFullyRefunded.mockResolvedValue(false);
     mocks.dispatchBooking.mockResolvedValue(undefined);
     mocks.refundAggregate.mockResolvedValue({ _sum: { amount: 0 } });
   });
@@ -166,6 +176,33 @@ describe('Razorpay webhook handling', () => {
     expect(mocks.paymentUpdate).not.toHaveBeenCalled();
     expect(mocks.bookingUpdateMany).not.toHaveBeenCalled();
     expect(mocks.dispatchBooking).not.toHaveBeenCalled();
+  });
+
+  it('does not count a custom-quote refund from a payment-level status update', async () => {
+    const payment = {
+      id: 'quote-payment-1',
+      bookingId: 'booking-quote-1',
+      providerRef: 'order-quote-1',
+      customQuoteRevisionId: 'quote-revision-1',
+      status: PaymentStatus.CAPTURED,
+      amount: new Prisma.Decimal(300),
+      notes: {},
+      booking: {
+        id: 'booking-quote-1',
+        code: 'VF-QUOTE-1',
+        customerId: 'customer-1',
+        status: BookingStatus.ACCEPTED,
+        totalAmount: new Prisma.Decimal(300),
+      },
+    };
+    mocks.paymentFindUnique.mockResolvedValue(payment);
+
+    await updatePaymentForWebhook('order-quote-1', PaymentStatus.REFUNDED, {
+      refundAmount: 15000,
+    }, 15000);
+
+    expect(mocks.settleCustomQuotePayment).not.toHaveBeenCalled();
+    expect(mocks.paymentUpdate).not.toHaveBeenCalled();
   });
 
   it('releases the delivery claim when processing fails so Razorpay can retry', async () => {
@@ -351,5 +388,60 @@ describe('Razorpay webhook handling', () => {
     expect(mocks.settleRefund).not.toHaveBeenCalled();
     expect(mocks.bookingUpdate).not.toHaveBeenCalled();
     expect(mocks.paymentUpdate).not.toHaveBeenCalled();
+  });
+
+  it('does not count a custom-quote refund twice after a base refund', async () => {
+    const payment = {
+      id: 'quote-payment-row',
+      bookingId: 'booking-with-quote',
+      providerRef: 'rzp-quote-payment',
+      customQuoteRevisionId: 'quote-revision-2',
+      status: PaymentStatus.CAPTURED,
+      amount: new Prisma.Decimal(5),
+      notes: {},
+      booking: {
+        id: 'booking-with-quote',
+        code: 'VF-QUOTE-1',
+        customerId: 'customer-quote-1',
+        status: BookingStatus.CANCELLED_MANUAL,
+        totalAmount: new Prisma.Decimal(15),
+      },
+    };
+    mocks.paymentFindMany.mockResolvedValue([payment]);
+    mocks.paymentUpdate.mockImplementation(async ({ data }: { data: { status?: PaymentStatus; notes: unknown } }) => ({
+      ...payment,
+      ...data,
+      status: data.status ?? payment.status,
+    }));
+
+    const body = {
+      event: 'refund.processed',
+      payload: { refund: { entity: {
+        id: 'rfnd-quote-partial',
+        payment_id: 'rzp-quote-payment',
+        status: 'processed',
+        amount: 250,
+        notes: {},
+      } } },
+    };
+    const rawBody = JSON.stringify(body);
+    const signature = createHmac('sha256', 'test-webhook-secret').update(rawBody).digest('hex');
+    await handleRazorpayWebhook(rawBody, signature, body);
+
+    expect(mocks.settleCustomQuotePayment).toHaveBeenCalledWith(
+      'quote-payment-row',
+      PaymentStatus.REFUNDED,
+      undefined,
+      expect.objectContaining({ refundAmount: 250 }),
+    );
+    expect(mocks.isBookingFullyRefunded).toHaveBeenCalledWith(
+      'booking-with-quote',
+      expect.any(Object),
+      0,
+    );
+    expect(mocks.bookingUpdate).not.toHaveBeenCalled();
+    expect(mocks.publishTracking).toHaveBeenCalledWith(expect.objectContaining({
+      status: 'PAYMENT_PARTIALLY_REFUNDED',
+    }));
   });
 });

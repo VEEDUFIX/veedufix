@@ -98,6 +98,7 @@ declare module "@prisma/client" {
     PENDING = "PENDING",
     ACCEPTED = "ACCEPTED",
     WORKER_ASSIGNED = "WORKER_ASSIGNED",
+    EN_ROUTE = "EN_ROUTE",
     ARRIVED = "ARRIVED",
     IN_PROGRESS = "IN_PROGRESS",
     COMPLETED = "COMPLETED",
@@ -152,5 +153,19 @@ declare module "@prisma/client" {
     PENDING = "PENDING",
     PUBLISHED = "PUBLISHED",
     HIDDEN = "HIDDEN"
+  }
+
+  export enum MaintenancePlanStatus {
+    ACTIVE = "ACTIVE",
+    PAUSED = "PAUSED",
+    CANCELLED = "CANCELLED"
+  }
+
+  export enum MaintenanceOccurrenceStatus {
+    AWAITING_CONFIRMATION = "AWAITING_CONFIRMATION",
+    BOOKING_CREATED = "BOOKING_CREATED",
+    SKIPPED = "SKIPPED",
+    FAILED = "FAILED",
+    CANCELLED = "CANCELLED"
   }
 }

@@ -297,6 +297,7 @@ class _DayScheduleCard extends StatelessWidget {
                     (entry) => Padding(
                       padding: const EdgeInsets.only(top: 10),
                       child: _TimeSlotEditor(
+                        dayLabel: _dayLabel(dayOfWeek),
                         label: 'Slot ${entry.key + 1}',
                         slot: entry.value,
                         onChanged: (next) => onUpdateSlot(entry.key, next),
@@ -313,12 +314,14 @@ class _DayScheduleCard extends StatelessWidget {
 
 class _TimeSlotEditor extends StatelessWidget {
   const _TimeSlotEditor({
+    required this.dayLabel,
     required this.label,
     required this.slot,
     required this.onChanged,
     required this.onDelete,
   });
 
+  final String dayLabel;
   final String label;
   final _AvailabilitySlotDraft slot;
   final ValueChanged<_AvailabilitySlotDraft> onChanged;
@@ -342,6 +345,7 @@ class _TimeSlotEditor extends StatelessWidget {
                     style: const TextStyle(fontWeight: FontWeight.w800)),
               ),
               IconButton(
+                tooltip: 'Remove $dayLabel $label',
                 onPressed: onDelete,
                 icon: const Icon(Icons.delete_outline_rounded),
               ),

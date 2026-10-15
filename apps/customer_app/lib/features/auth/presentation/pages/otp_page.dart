@@ -464,8 +464,15 @@ class _OtpPageState extends ConsumerState<OtpPage> {
                                     fontWeight: FontWeight.w500,
                                   ),
                                 )
-                              : GestureDetector(
-                                  onTap: () => _resendOtp(args),
+                              : TextButton(
+                                  onPressed: () => _resendOtp(args),
+                                  style: TextButton.styleFrom(
+                                    minimumSize: const Size(48, 48),
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 12,
+                                      vertical: 12,
+                                    ),
+                                  ),
                                   child: Text(
                                     'Resend OTP',
                                     style: GoogleFonts.outfit(
@@ -514,66 +521,75 @@ class _OtpBoxRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: List.generate(6, (i) {
-        final isFocused = focusNodes[i].hasFocus;
-        final hasDigit = controllers[i].text.isNotEmpty;
-        return Focus(
-          onKeyEvent: (node, event) => onKeyEvent(i, event),
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 160),
-            curve: Curves.easeOutCubic,
-            width: 46,
-            height: 58,
-            decoration: BoxDecoration(
-              color: hasDigit
-                  ? AbzioTheme.accentColor.withValues(alpha: 0.08)
-                  : Colors.white,
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(
-                color: hasError
-                    ? VeeduFixDesignSystem.error
-                    : isFocused
-                    ? AbzioTheme.accentColor
-                    : hasDigit
-                    ? AbzioTheme.accentColor.withValues(alpha: 0.4)
-                    : AbzioTheme.lightBorder,
-                width: isFocused ? 1.8 : 1.2,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final boxWidth = ((constraints.maxWidth - 40) / 6)
+            .clamp(0.0, 46.0)
+            .toDouble();
+        return Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: List.generate(6, (i) {
+            final isFocused = focusNodes[i].hasFocus;
+            final hasDigit = controllers[i].text.isNotEmpty;
+            return Focus(
+              onKeyEvent: (node, event) => onKeyEvent(i, event),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 160),
+                curve: Curves.easeOutCubic,
+                width: boxWidth,
+                height: 58,
+                decoration: BoxDecoration(
+                  color: hasDigit
+                      ? AbzioTheme.accentColor.withValues(alpha: 0.08)
+                      : Colors.white,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(
+                    color: hasError
+                        ? VeeduFixDesignSystem.error
+                        : isFocused
+                        ? AbzioTheme.accentColor
+                        : hasDigit
+                        ? AbzioTheme.accentColor.withValues(alpha: 0.4)
+                        : AbzioTheme.lightBorder,
+                    width: isFocused ? 1.8 : 1.2,
+                  ),
+                  boxShadow: isFocused
+                      ? [
+                          BoxShadow(
+                            color: AbzioTheme.accentColor.withValues(
+                              alpha: 0.18,
+                            ),
+                            blurRadius: 12,
+                            offset: const Offset(0, 4),
+                          ),
+                        ]
+                      : [],
+                ),
+                child: TextField(
+                  controller: controllers[i],
+                  focusNode: focusNodes[i],
+                  textAlign: TextAlign.center,
+                  keyboardType: TextInputType.number,
+                  maxLength: 1,
+                  enabled: !isLoading,
+                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                  style: GoogleFonts.outfit(
+                    fontSize: 22,
+                    fontWeight: FontWeight.w700,
+                    color: AbzioTheme.lightTextPrimary,
+                  ),
+                  decoration: const InputDecoration(
+                    border: InputBorder.none,
+                    counterText: '',
+                    contentPadding: EdgeInsets.zero,
+                  ),
+                  onChanged: (value) => onChanged(i, value),
+                ),
               ),
-              boxShadow: isFocused
-                  ? [
-                      BoxShadow(
-                        color: AbzioTheme.accentColor.withValues(alpha: 0.18),
-                        blurRadius: 12,
-                        offset: const Offset(0, 4),
-                      ),
-                    ]
-                  : [],
-            ),
-            child: TextField(
-              controller: controllers[i],
-              focusNode: focusNodes[i],
-              textAlign: TextAlign.center,
-              keyboardType: TextInputType.number,
-              maxLength: 1,
-              enabled: !isLoading,
-              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-              style: GoogleFonts.outfit(
-                fontSize: 22,
-                fontWeight: FontWeight.w700,
-                color: AbzioTheme.lightTextPrimary,
-              ),
-              decoration: const InputDecoration(
-                border: InputBorder.none,
-                counterText: '',
-                contentPadding: EdgeInsets.zero,
-              ),
-              onChanged: (value) => onChanged(i, value),
-            ),
-          ),
+            );
+          }),
         );
-      }),
+      },
     );
   }
 }

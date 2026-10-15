@@ -11,6 +11,8 @@ import { startLifecycleNotifications } from "./modules/scheduler/lifecycle-notif
 import { startReferralCrediting } from "./modules/scheduler/referral-crediting.js";
 import { startPayoutReleaser } from "./modules/scheduler/payout-releaser.js";
 import { startWalletPayoutProcessor } from "./modules/scheduler/wallet-payout-processor.js";
+import { startBookingDiagnosticPhotoCleanup } from "./modules/scheduler/booking-diagnostic-photo-cleanup.js";
+import { startMaintenancePlanScheduler } from "./modules/maintenance/maintenance.scheduler.js";
 
 const app = createApp();
 const server = createServer(app);
@@ -24,6 +26,8 @@ startLifecycleNotifications();
 startReferralCrediting();
 startPayoutReleaser();
 startWalletPayoutProcessor();
+startBookingDiagnosticPhotoCleanup();
+startMaintenancePlanScheduler();
 
 server.listen(env.PORT, () => {
   logger.info(`API listening on port ${env.PORT}`);

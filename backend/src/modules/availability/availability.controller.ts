@@ -100,7 +100,7 @@ export async function toggleAvailabilityHandler(
     await import("../../lib/prisma.js").then(({ prisma }) =>
       prisma.workerProfile.update({
         where: { id: workerId },
-        data: { isAvailable },
+        data: { isAvailable, isOnline: isAvailable },
       })
     );
     response.status(200).json({ isAvailable });

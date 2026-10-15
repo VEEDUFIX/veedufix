@@ -1,4 +1,3 @@
-import { isIP } from "node:net";
 import rateLimit, { ipKeyGenerator, type Options, type RateLimitRequestHandler } from "express-rate-limit";
 import { RedisStore, type RedisReply } from "rate-limit-redis";
 import type { Request } from "express";
@@ -44,16 +43,16 @@ function createLimiter(options: Partial<Options> & {
 }
 
 export function clientIpKey(request: Request): string {
-  const forwardedFor = request.headers["x-forwarded-for"];
-  const firstForwardedAddress = (Array.isArray(forwardedFor)
-    ? forwardedFor[0]
-    : forwardedFor
-  )?.split(",", 1)[0]?.trim();
-  const clientAddress = firstForwardedAddress && isIP(firstForwardedAddress)
-    ? firstForwardedAddress
-    : request.ip ?? "";
+  // Express does not trust proxies unless configured to do so. Using request.ip
+  // therefore avoids allowing clients to choose their own rate-limit key via
+  // an X-Forwarded-For header. Configure Express trust proxy only for a known,
+  // controlled ingress that sanitizes forwarded headers.
+  return ipKeyGenerator(request.ip ?? "");
+}
 
-  return ipKeyGenerator(clientAddress);
+function authenticatedUserOrClientIpKey(request: Request): string {
+  const userId = (request as Request & { auth?: { userId?: string } }).auth?.userId;
+  return userId ? `user:${userId}` : clientIpKey(request);
 }
 
 export function makeOtpRequestLimiter(opts: { forceProductionLimit?: boolean } = {}): RateLimitRequestHandler {
@@ -90,6 +89,24 @@ export function makeRefreshLimiter(opts: { forceProductionLimit?: boolean } = {}
 
 export function makeSignOutLimiter(opts: { forceProductionLimit?: boolean } = {}): RateLimitRequestHandler {
   return createLimiter({ windowMs: 60_000, limit: 30, storePrefix: "signout", forceProductionLimit: opts.forceProductionLimit, keyGenerator: clientIpKey });
+}
+
+export function makeCatalogSearchLimiter(): RateLimitRequestHandler {
+  return createLimiter({
+    windowMs: 60_000,
+    limit: 60,
+    storePrefix: "catalog-search",
+    keyGenerator: authenticatedUserOrClientIpKey
+  });
+}
+
+export function makeCatalogAutocompleteLimiter(): RateLimitRequestHandler {
+  return createLimiter({
+    windowMs: 60_000,
+    limit: 180,
+    storePrefix: "catalog-autocomplete",
+    keyGenerator: authenticatedUserOrClientIpKey
+  });
 }
 
 export function makeAiChatLimiter(): RateLimitRequestHandler {

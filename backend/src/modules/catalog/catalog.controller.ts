@@ -11,18 +11,20 @@ type AuthRequest = Request & {
 };
 
 export async function listCategoriesHandler(request: Request, response: Response): Promise<void> {
-  const { locale, cityId } = request.query as {
+  const { locale, cityId, pincode } = request.query as {
     locale?: string;
     cityId?: string;
+    pincode?: string;
   };
 
-  const categories = await catalogService.resolveCatalogTree(cityId, locale);
+  const categories = await catalogService.resolveCatalogTree(cityId, locale, pincode);
 
   response.status(200).json({ categories });
 }
 
 export async function getCategoryHandler(request: Request, response: Response): Promise<void> {
-  const category = await catalogService.resolveCategoryBySlug(String(request.params.slug));
+  const { pincode } = request.query as { pincode?: string };
+  const category = await catalogService.resolveCategoryBySlug(String(request.params.slug), pincode);
   if (!category) {
     response.status(404).json({ message: "Category not found" });
     return;
@@ -32,7 +34,8 @@ export async function getCategoryHandler(request: Request, response: Response): 
 }
 
 export async function getSubcategoryHandler(request: Request, response: Response): Promise<void> {
-  const subcategory = await catalogService.resolveSubcategoryBySlug(String(request.params.slug));
+  const { pincode } = request.query as { pincode?: string };
+  const subcategory = await catalogService.resolveSubcategoryBySlug(String(request.params.slug), pincode);
   if (!subcategory) {
     response.status(404).json({ message: "Subcategory not found" });
     return;
@@ -42,9 +45,17 @@ export async function getSubcategoryHandler(request: Request, response: Response
 }
 
 export async function getServiceHandler(request: Request, response: Response): Promise<void> {
-  const { cityId } = request.query as { cityId?: string };
-  const service = await catalogService.resolveServiceBySlug(String(request.params.slug), cityId);
+  const { cityId, pincode } = request.query as { cityId?: string; pincode?: string };
+  const slug = String(request.params.slug);
+  const service = await catalogService.resolveServiceBySlug(slug, cityId, pincode);
   if (!service) {
+    if (pincode && await catalogService.resolveServiceBySlug(slug, cityId)) {
+      response.status(404).json({
+        code: "SERVICE_UNAVAILABLE_IN_AREA",
+        message: "Not available in your area yet"
+      });
+      return;
+    }
     response.status(404).json({ message: "Service not found" });
     return;
   }
@@ -56,7 +67,8 @@ export async function getServiceHandler(request: Request, response: Response): P
 }
 
 export async function getServiceReviewsHandler(request: Request, response: Response): Promise<void> {
-  const service = await catalogService.resolveServiceBySlug(String(request.params.slug));
+  const { pincode } = request.query as { pincode?: string };
+  const service = await catalogService.resolveServiceBySlug(String(request.params.slug), undefined, pincode);
   if (!service || !service.isActive) {
     response.status(404).json({ message: "Service not found" });
     return;
@@ -66,10 +78,11 @@ export async function getServiceReviewsHandler(request: Request, response: Respo
 }
 
 export async function searchCatalogHandler(request: Request, response: Response): Promise<void> {
-  const { q, locale, cityId, categorySlug, subcategorySlug, page, pageSize } = request.query as {
+  const { q, locale, cityId, pincode, categorySlug, subcategorySlug, page, pageSize } = request.query as {
     q?: string;
     locale?: string;
     cityId?: string;
+    pincode?: string;
     categorySlug?: string;
     subcategorySlug?: string;
     page?: string | number;
@@ -80,6 +93,7 @@ export async function searchCatalogHandler(request: Request, response: Response)
     q,
     locale,
     cityId,
+    pincode,
     categorySlug,
     subcategorySlug,
     page: typeof page === "string" ? Number(page) : page,
@@ -90,45 +104,46 @@ export async function searchCatalogHandler(request: Request, response: Response)
 }
 
 export async function autocompleteCatalogHandler(request: Request, response: Response): Promise<void> {
-  const { q, limit, cityId } = request.query as { q: string; limit?: string | number; cityId?: string };
+  const { q, limit, cityId, pincode } = request.query as { q: string; limit?: string | number; cityId?: string; pincode?: string };
   const result = await catalogService.getAutocompleteSuggestions(
     q,
     typeof limit === "string" ? Number(limit) : limit ?? 12,
-    cityId
+    cityId,
+    pincode
   );
   response.status(200).json(result);
 }
 
 export async function homeCatalogHandler(request: Request, response: Response): Promise<void> {
-  const { cityId } = request.query as { cityId?: string };
+  const { cityId, pincode } = request.query as { cityId?: string; pincode?: string };
   const authRequest = request as AuthRequest;
-  const result = await catalogService.getHomeCatalog(cityId, authRequest.auth?.userId);
+  const result = await catalogService.getHomeCatalog(cityId, authRequest.auth?.userId, pincode);
   response.status(200).json(result);
 }
 
 export async function trendingCatalogHandler(request: Request, response: Response): Promise<void> {
-  const { cityId } = request.query as { cityId?: string };
-  const result = await catalogService.getHomeCatalog(cityId);
+  const { cityId, pincode } = request.query as { cityId?: string; pincode?: string };
+  const result = await catalogService.getHomeCatalog(cityId, undefined, pincode);
   response.status(200).json({ items: result.trendingServices });
 }
 
 export async function popularCatalogHandler(request: Request, response: Response): Promise<void> {
-  const { cityId } = request.query as { cityId?: string };
-  const result = await catalogService.getHomeCatalog(cityId);
+  const { cityId, pincode } = request.query as { cityId?: string; pincode?: string };
+  const result = await catalogService.getHomeCatalog(cityId, undefined, pincode);
   response.status(200).json({ items: result.popularServices });
 }
 
 export async function recommendedCatalogHandler(request: Request, response: Response): Promise<void> {
-  const { cityId } = request.query as { cityId?: string };
+  const { cityId, pincode } = request.query as { cityId?: string; pincode?: string };
   const authRequest = request as AuthRequest;
-  const result = await catalogService.getHomeCatalog(cityId, authRequest.auth?.userId);
+  const result = await catalogService.getHomeCatalog(cityId, authRequest.auth?.userId, pincode);
   response.status(200).json({ items: result.recommendedServices });
 }
 
 export async function recentlyBookedCatalogHandler(request: Request, response: Response): Promise<void> {
-  const { cityId } = request.query as { cityId?: string };
+  const { cityId, pincode } = request.query as { cityId?: string; pincode?: string };
   const authRequest = request as AuthRequest;
-  const result = await catalogService.getHomeCatalog(cityId, authRequest.auth?.userId);
+  const result = await catalogService.getHomeCatalog(cityId, authRequest.auth?.userId, pincode);
   response.status(200).json({ items: result.recentBookings });
 }
 
@@ -212,11 +227,61 @@ export async function importCatalogHandler(request: Request, response: Response)
   response.status(201).json(result);
 }
 
-export async function exportCatalogHandler(_request: Request, response: Response): Promise<void> {
+export async function exportCatalogHandler(request: Request, response: Response): Promise<void> {
+  const query = request.query as {
+    stateId?: string;
+    districtId?: string;
+    cityId?: string;
+    areaId?: string;
+    pincode?: string;
+    categoryId?: string;
+    subcategoryId?: string;
+    serviceId?: string;
+    availabilityStatus?: "INHERITED" | "CUSTOM" | "AVAILABLE" | "UNAVAILABLE";
+    isActive?: "true" | "false";
+  };
   const [categories, serviceAreas] = await Promise.all([
-    catalogService.resolveAdminCatalogTree(),
+    catalogService.resolveAdminCatalogTree({
+      ...query,
+      isActive: query.isActive === undefined ? undefined : query.isActive === "true"
+    }),
     prisma.serviceArea.findMany({
-      include: { city: { select: { id: true, name: true } } },
+      where: {
+        ...(query.areaId ? { id: query.areaId } : {}),
+        ...(query.cityId || query.stateId || query.districtId
+          ? {
+              city: {
+                ...(query.cityId ? { id: query.cityId } : {}),
+                ...(query.stateId ? { stateId: query.stateId } : {}),
+                ...(query.districtId ? { districtId: query.districtId } : {})
+              }
+            }
+          : {}),
+        ...(query.pincode
+          ? {
+              OR: [
+                { pincode: query.pincode },
+                { assignedPincodes: { some: { pincode: query.pincode } } },
+                { pincodeRangeStart: { lte: query.pincode }, pincodeRangeEnd: { gte: query.pincode } }
+              ]
+            }
+          : {})
+      },
+      include: {
+        assignedPincodes: { select: { pincode: true, pincodeId: true } },
+        city: {
+          select: {
+            id: true,
+            name: true,
+            slug: true,
+            state: true,
+            district: true,
+            stateId: true,
+            districtId: true,
+            isActive: true
+          }
+        }
+      },
       orderBy: [{ cityId: "asc" }, { name: "asc" }]
     })
   ]);
@@ -230,5 +295,10 @@ export async function addStarterCatalogHandler(_request: Request, response: Resp
 
 export async function bulkCatalogStatusHandler(request: Request, response: Response): Promise<void> {
   const result = await catalogService.bulkSetCatalogActiveStatus(request.body);
+  response.status(200).json(result);
+}
+
+export async function bulkCatalogAvailabilityHandler(request: Request, response: Response): Promise<void> {
+  const result = await catalogService.bulkUpdateCatalogAvailability(request.body);
   response.status(200).json(result);
 }

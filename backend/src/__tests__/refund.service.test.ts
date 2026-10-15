@@ -6,7 +6,7 @@ import { Prisma, PaymentStatus } from '@prisma/client';
 vi.mock('../lib/prisma.js', () => {
   const prisma: any = {
     booking: { findUnique: vi.fn(), update: vi.fn() },
-    payment: { findFirst: vi.fn(), updateMany: vi.fn() },
+    payment: { findFirst: vi.fn(), findMany: vi.fn(), updateMany: vi.fn() },
     refund: {
       create: vi.fn(), update: vi.fn(), updateMany: vi.fn(), findUnique: vi.fn(),
       findMany: vi.fn(), count: vi.fn(), aggregate: vi.fn()
@@ -46,6 +46,9 @@ vi.mock('../config/env.js', () => ({
 // ─── Imports ──────────────────────────────────────────────────────────────────
 
 import {
+  getOriginalBookingChargeAmount,
+  getRemainingOriginalBookingChargeAmount,
+  isBookingFullyRefunded,
   processRefund,
   retryRefund,
   settleRefundFromProvider,
@@ -63,10 +66,141 @@ describe('Refund Service', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(prisma.refund.findMany).mockResolvedValue([] as any);
+    vi.mocked(prisma.refund.aggregate).mockResolvedValue({ _sum: { amount: 0 } } as any);
+    vi.mocked(prisma.payment.findMany).mockResolvedValue([] as any);
     vi.mocked(prisma.refund.updateMany).mockResolvedValue({ count: 1 } as any);
   });
 
+  describe('payment-specific refund accounting', () => {
+    it('separates the original booking charge from paid custom-quote charges', async () => {
+      vi.mocked(prisma.payment.findFirst).mockResolvedValue({
+        id: 'base-payment',
+        amount: new Prisma.Decimal(100),
+        notes: { walletDeductAmountPaise: 0 },
+        booking: {
+          totalAmount: new Prisma.Decimal(150),
+          payments: [{ amount: new Prisma.Decimal(50) }]
+        }
+      } as any);
+
+      await expect(getOriginalBookingChargeAmount('b1')).resolves.toBe(100);
+      expect(prisma.payment.findFirst).toHaveBeenCalledWith(expect.objectContaining({
+        where: expect.objectContaining({ customQuoteRevisionId: null })
+      }));
+    });
+
+    it('returns the original charge less pending and processed refunds', async () => {
+      vi.mocked(prisma.payment.findFirst).mockResolvedValue({
+        id: 'base-payment',
+        amount: new Prisma.Decimal(100),
+        notes: { walletDeductAmountPaise: 2000 },
+        booking: {
+          totalAmount: new Prisma.Decimal(150),
+          payments: [{ amount: new Prisma.Decimal(50) }]
+        }
+      } as any);
+      vi.mocked(prisma.refund.aggregate).mockResolvedValue({
+        _sum: { amount: new Prisma.Decimal(45) }
+      } as any);
+
+      await expect(getRemainingOriginalBookingChargeAmount('b1')).resolves.toBe(75);
+      expect(prisma.refund.aggregate).toHaveBeenCalledWith({
+        where: { bookingId: 'b1', status: { in: ['pending', 'processed'] } },
+        _sum: { amount: true }
+      });
+    });
+
+    it('rejects a dispute refund when no original balance remains', async () => {
+      vi.mocked(prisma.payment.findFirst).mockResolvedValue({
+        id: 'base-payment',
+        amount: new Prisma.Decimal(100),
+        notes: { walletDeductAmountPaise: 0 },
+        booking: {
+          totalAmount: new Prisma.Decimal(150),
+          payments: [{ amount: new Prisma.Decimal(50) }]
+        }
+      } as any);
+      vi.mocked(prisma.refund.aggregate).mockResolvedValue({
+        _sum: { amount: new Prisma.Decimal(100) }
+      } as any);
+
+      await expect(getRemainingOriginalBookingChargeAmount('b1')).rejects.toThrow(
+        'The original booking payment has no remaining refundable balance'
+      );
+    });
+
+    it('counts both base refunds and custom-quote refunds before marking the booking fully refunded', async () => {
+      vi.mocked(prisma.refund.aggregate).mockResolvedValue({ _sum: { amount: new Prisma.Decimal(100) } } as any);
+      vi.mocked(prisma.booking.findUnique).mockResolvedValue({ totalAmount: new Prisma.Decimal(150) } as any);
+      vi.mocked(prisma.payment.findMany).mockResolvedValue([{
+        notes: { customQuoteRefundedAmountPaise: 5000 }
+      }] as any);
+
+      await expect(isBookingFullyRefunded('b1')).resolves.toBe(true);
+    });
+
+    it('does not treat a base refund as a full booking refund while the quote remains unpaid back', async () => {
+      vi.mocked(prisma.refund.aggregate).mockResolvedValue({ _sum: { amount: new Prisma.Decimal(100) } } as any);
+      vi.mocked(prisma.booking.findUnique).mockResolvedValue({ totalAmount: new Prisma.Decimal(150) } as any);
+      vi.mocked(prisma.payment.findMany).mockResolvedValue([{
+        notes: { customQuoteRefundedAmountPaise: 0 }
+      }] as any);
+
+      await expect(isBookingFullyRefunded('b1')).resolves.toBe(false);
+    });
+
+    it.each([
+      'amountMismatch',
+      'duplicateQuoteCapture',
+      'capturedAfterBookingClosed',
+      'capturedAfterQuoteRefund'
+    ])('does not count refunds from an extra capture marked %s toward the booking total', async (flag) => {
+      vi.mocked(prisma.refund.aggregate).mockResolvedValue({
+        _sum: { amount: new Prisma.Decimal(100) }
+      } as any);
+      vi.mocked(prisma.booking.findUnique).mockResolvedValue({
+        totalAmount: new Prisma.Decimal(150)
+      } as any);
+      vi.mocked(prisma.payment.findMany).mockResolvedValue([{
+        notes: { customQuoteRefundedAmountPaise: 5000, [flag]: true }
+      }] as any);
+
+      await expect(isBookingFullyRefunded('b1')).resolves.toBe(false);
+    });
+  });
+
   describe('settleRefundFromProvider', () => {
+    it('does not mark an extra quote capture refunded when its provider refund is still outstanding', async () => {
+      const refund = {
+        id: 'r1',
+        bookingId: 'b1',
+        disputeId: null,
+        status: 'pending',
+        walletAmount: new Prisma.Decimal(0),
+        walletCreditedAt: null,
+        razorpayRefundId: 'rfnd-1',
+        providerAttemptId: 'attempt-1',
+        booking: { customerId: 'c1' }
+      };
+      vi.mocked(prisma.refund.findUnique).mockResolvedValue(refund as any);
+      vi.mocked(prisma.refund.aggregate).mockResolvedValue({ _sum: { amount: new Prisma.Decimal(100) } } as any);
+      vi.mocked(prisma.booking.findUnique).mockResolvedValue({ totalAmount: new Prisma.Decimal(100) } as any);
+      vi.mocked(prisma.payment.findMany).mockResolvedValue([{
+        notes: { duplicateQuoteCapture: true, customQuoteRefundedAmountPaise: 5000 }
+      }] as any);
+
+      await settleRefundFromProvider('r1', true);
+
+      expect(prisma.payment.updateMany).toHaveBeenCalledWith({
+        where: {
+          bookingId: 'b1',
+          customQuoteRevisionId: null,
+          status: PaymentStatus.CAPTURED
+        },
+        data: { status: PaymentStatus.REFUNDED }
+      });
+    });
+
     it('ignores a stale provider attempt before applying settlement', async () => {
       const activeRefund = {
         id: 'r1',

@@ -49,6 +49,7 @@ class LocationChip extends StatelessWidget {
                 latitude: selection.latitude,
                 longitude: selection.longitude,
                 label: selection.label,
+                pincode: selection.pincode,
               );
         } catch (_) {
           if (!context.mounted) return;

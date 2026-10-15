@@ -124,7 +124,8 @@ async function fetchCapturedPayment(bookingId: string, db: RefundDbClient = pris
     where: {
       bookingId,
       provider: "RAZORPAY",
-      status: PaymentStatus.CAPTURED
+      status: PaymentStatus.CAPTURED,
+      customQuoteRevisionId: null
     },
     orderBy: {
       updatedAt: "desc"
@@ -139,11 +140,93 @@ async function fetchCapturedPayment(bookingId: string, db: RefundDbClient = pris
           id: true,
           code: true,
           customerId: true,
-          totalAmount: true
+          totalAmount: true,
+          payments: {
+            where: {
+              customQuoteRevisionId: { not: null },
+              status: { in: [PaymentStatus.CAPTURED, PaymentStatus.REFUNDED] }
+            },
+            select: { amount: true }
+          }
         }
       }
     }
   });
+}
+
+function readWalletContributionPaise(payment: NonNullable<Awaited<ReturnType<typeof fetchCapturedPayment>>>): number {
+  const notes = payment.notes;
+  if (notes && typeof notes === "object" && !Array.isArray(notes)) {
+    const stored = (notes as Record<string, unknown>).walletDeductAmountPaise;
+    if (typeof stored === "number" && Number.isSafeInteger(stored) && stored >= 0) return stored;
+  }
+  const quotePayments = payment.booking.payments as Array<{ amount: Prisma.Decimal }>;
+  const quoteAmountPaise = quotePayments.reduce(
+    (sum: number, quotePayment: { amount: Prisma.Decimal }) => sum + toPaise(quotePayment.amount),
+    0
+  );
+  return Math.max(0,
+    toPaise(payment.booking.totalAmount) - quoteAmountPaise - toPaise(payment.amount)
+  );
+}
+
+export async function getOriginalBookingChargeAmount(bookingId: string): Promise<number> {
+  const payment = await fetchCapturedPayment(bookingId);
+  if (!payment) throw AppError.conflict("No captured original booking payment is available to refund");
+  return (toPaise(payment.amount) + readWalletContributionPaise(payment)) / 100;
+}
+
+export async function getRemainingOriginalBookingChargeAmount(bookingId: string): Promise<number> {
+  const payment = await fetchCapturedPayment(bookingId);
+  if (!payment) throw AppError.conflict("No captured original booking payment is available to refund");
+
+  const refunds = await prisma.refund.aggregate({
+    where: { bookingId, status: { in: ["pending", "processed"] } },
+    _sum: { amount: true }
+  });
+  const originalChargePaise = toPaise(payment.amount) + readWalletContributionPaise(payment);
+  const alreadyReservedPaise = toPaise(refunds._sum.amount ?? 0);
+  const remainingPaise = Math.max(0, originalChargePaise - alreadyReservedPaise);
+  if (remainingPaise === 0) {
+    throw AppError.conflict("The original booking payment has no remaining refundable balance");
+  }
+  return remainingPaise / 100;
+}
+
+export async function isBookingFullyRefunded(
+  bookingId: string,
+  db: RefundDbClient = prisma,
+  additionalRefundAmount = 0
+): Promise<boolean> {
+  const [refunds, booking, loadedQuotePayments] = await Promise.all([
+    db.refund.aggregate({
+      where: { bookingId, status: "processed" },
+      _sum: { amount: true }
+    }),
+    db.booking.findUnique({ where: { id: bookingId }, select: { totalAmount: true } }),
+    db.payment.findMany({
+      where: { bookingId, customQuoteRevisionId: { not: null } },
+      select: { notes: true }
+    })
+  ]);
+  if (!booking) return false;
+  const quotePayments = loadedQuotePayments as Array<{ notes: Prisma.JsonValue | null }>;
+  const quoteRefundedPaise = quotePayments.reduce<number>((sum: number, payment: { notes: Prisma.JsonValue | null }) => {
+    if (!payment.notes || typeof payment.notes !== "object" || Array.isArray(payment.notes)) return sum;
+    const notes = payment.notes as Record<string, unknown>;
+    if (
+      notes.amountMismatch === true ||
+      notes.duplicateQuoteCapture === true ||
+      notes.capturedAfterBookingClosed === true ||
+      notes.capturedAfterQuoteRefund === true
+    ) {
+      return sum;
+    }
+    const value = notes.customQuoteRefundedAmountPaise;
+    return sum + (typeof value === "number" && Number.isSafeInteger(value) && value > 0 ? value : 0);
+  }, 0);
+  return toPaise(refunds._sum.amount ?? 0) + quoteRefundedPaise + toPaise(additionalRefundAmount) >=
+    toPaise(booking.totalAmount);
 }
 
 async function createRefundRecord(input: {
@@ -286,26 +369,20 @@ async function calculateRefundAllocation(
   }>;
   const requestedPaise = toPaise(amount);
   const refundedTotalPaise = rows.reduce((sum, refund) => sum + toPaise(refund.amount), 0);
-  const remainingTotalPaise = Math.max(0, toPaise(payment.booking.totalAmount) - refundedTotalPaise);
-  if (requestedPaise <= 0 || requestedPaise > remainingTotalPaise) {
-    throw AppError.conflict("Refund amount exceeds the remaining refundable booking balance");
-  }
-
   const refundedGatewayPaise = rows.reduce(
     (sum, refund) => sum + toPaise(refund.gatewayAmount ?? refund.amount),
     0
   );
   const refundedWalletPaise = rows.reduce((sum, refund) => sum + toPaise(refund.walletAmount ?? 0), 0);
   const gatewayRemainingPaise = Math.max(0, toPaise(payment.amount) - refundedGatewayPaise);
-  const walletDeductAmountPaise = (() => {
-    if (!payment.notes || typeof payment.notes !== "object" || Array.isArray(payment.notes)) {
-      return Math.max(0, toPaise(payment.booking.totalAmount) - toPaise(payment.amount));
-    }
-    const storedAmount = (payment.notes as Record<string, unknown>).walletDeductAmountPaise;
-    return typeof storedAmount === "number"
-      ? Math.max(0, Math.round(storedAmount))
-      : Math.max(0, toPaise(payment.booking.totalAmount) - toPaise(payment.amount));
-  })();
+  const walletDeductAmountPaise = readWalletContributionPaise(payment);
+  const remainingTotalPaise = Math.max(
+    0,
+    toPaise(payment.amount) + walletDeductAmountPaise - refundedTotalPaise
+  );
+  if (requestedPaise <= 0 || requestedPaise > remainingTotalPaise) {
+    throw AppError.conflict("Refund amount exceeds the remaining refundable original booking payment");
+  }
   const walletRemainingPaise = Math.max(0, walletDeductAmountPaise - refundedWalletPaise);
   const gatewayAmountPaise = Math.min(requestedPaise, gatewayRemainingPaise);
   const walletAmountPaise = requestedPaise - gatewayAmountPaise;
@@ -401,23 +478,17 @@ export async function settleRefundFromProvider(
       });
     }
 
-    const [processedRefunds, booking] = await Promise.all([
-      tx.refund.aggregate({
-        where: { bookingId: refund.bookingId, status: "processed" },
-        _sum: { amount: true }
-      }),
-      tx.booking.findUnique({
-        where: { id: refund.bookingId },
-        select: { totalAmount: true }
-      })
-    ]);
-    if (booking && toPaise(processedRefunds._sum.amount ?? 0) >= toPaise(booking.totalAmount)) {
+    if (await isBookingFullyRefunded(refund.bookingId, tx)) {
       await tx.booking.update({
         where: { id: refund.bookingId },
         data: { status: BookingStatus.REFUNDED }
       });
       await tx.payment.updateMany({
-        where: { bookingId: refund.bookingId },
+        where: {
+          bookingId: refund.bookingId,
+          customQuoteRevisionId: null,
+          status: PaymentStatus.CAPTURED
+        },
         data: { status: PaymentStatus.REFUNDED }
       });
     }

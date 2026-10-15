@@ -46,16 +46,28 @@ export const updateMarketSchema = z.object({
 function validateCoverage(
   value: {
     pincode?: string | null;
+    pincodes?: string[] | null;
     pincodeRangeStart?: string | null;
     pincodeRangeEnd?: string | null;
   },
-  context: z.RefinementCtx
+  context: z.RefinementCtx,
+  requireCoverage = true
 ): void {
-  const hasExactPincode = Boolean(value.pincode);
+  const hasExactPincode = Boolean(value.pincode) || Boolean(value.pincodes?.length);
   const hasRangeStart = Boolean(value.pincodeRangeStart);
   const hasRangeEnd = Boolean(value.pincodeRangeEnd);
+  const hasRange = hasRangeStart || hasRangeEnd;
 
-  if (!hasExactPincode && !(hasRangeStart && hasRangeEnd)) {
+  if (hasExactPincode && hasRange) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["pincodes"],
+      message: "Use either exact pincodes or a pincode range, not both"
+    });
+    return;
+  }
+
+  if (requireCoverage && !hasExactPincode && !(hasRangeStart && hasRangeEnd)) {
     context.addIssue({
       code: z.ZodIssueCode.custom,
       path: ["pincode"],
@@ -111,12 +123,30 @@ export const serviceAreaIdParamsSchema = z.object({
   })
 });
 
+export const workerServiceAreasParamsSchema = z.object({
+  body: z.object({}).strict(),
+  query: z.object({}).strict(),
+  params: z.object({ workerProfileId: z.string().trim().min(1) })
+});
+
+export const updateWorkerServiceAreasSchema = z.object({
+  body: z.object({
+    serviceAreaIds: z.array(z.string().trim().min(1)).min(1).max(500)
+      .refine((ids) => new Set(ids).size === ids.length, "Service areas must be unique")
+  }).strict(),
+  query: z.object({}).strict(),
+  params: z.object({ workerProfileId: z.string().trim().min(1) })
+});
+
 export const createServiceAreaSchema = z.object({
   body: z.object({
     cityId: z.string().trim().min(1, "City is required"),
     name: z.string().trim().min(2).max(120),
     slug: slugSchema.optional(),
     pincode: optionalPincodeSchema,
+    pincodes: z.array(pincodeSchema).min(1).max(500)
+      .refine((pincodes) => new Set(pincodes).size === pincodes.length, "Pincodes must be unique")
+      .optional(),
     pincodeRangeStart: optionalPincodeSchema,
     pincodeRangeEnd: optionalPincodeSchema,
     isActive: z.boolean().optional()
@@ -133,12 +163,16 @@ export const updateServiceAreaSchema = z.object({
     name: z.string().trim().min(2).max(120).optional(),
     slug: slugSchema.optional(),
     pincode: optionalPincodeSchema,
+    pincodes: z.array(pincodeSchema).max(500)
+      .refine((pincodes) => new Set(pincodes).size === pincodes.length, "Pincodes must be unique")
+      .optional(),
     pincodeRangeStart: optionalPincodeSchema,
     pincodeRangeEnd: optionalPincodeSchema,
     isActive: z.boolean().optional()
   }).superRefine((value, context) => {
     const hasCoverageInput =
       value.pincode !== undefined ||
+      value.pincodes !== undefined ||
       value.pincodeRangeStart !== undefined ||
       value.pincodeRangeEnd !== undefined;
 
@@ -146,7 +180,7 @@ export const updateServiceAreaSchema = z.object({
       return;
     }
 
-    validateCoverage(value, context);
+    validateCoverage(value, context, false);
   }),
   query: z.object({}).strict(),
   params: z.object({}).strict()

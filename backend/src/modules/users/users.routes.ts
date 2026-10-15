@@ -7,6 +7,7 @@ import { requestWorkerPayout } from "../wallet/wallet.service.js";
 import { generateSignedUrl, getCloudinaryFormatFromUrl } from "../../lib/cloudinary.js";
 import { getCustomerScheduleSlots } from "../availability/availability.service.js";
 import { createUserDataExport } from "./data-export.service.js";
+import { getRebookOptions } from "../bookings/rebook.service.js";
 
 export const usersRouter = Router();
 
@@ -374,7 +375,8 @@ usersRouter.get("/me/worker/jobs", requireAuth, requireRole("WORKER"), async (re
       addressLabel: b.address
       ? `${b.address.label}, ${b.address.line1}`
       : null,
-    cityName: b.address?.city?.name ?? null
+      cityName: b.address?.city?.name ?? null,
+      isMaintenanceVisit: b.notes?.includes("Recurring maintenance visit") ?? false
   }));
 
   response.status(200).json({ jobs: serialized });
@@ -451,12 +453,19 @@ usersRouter.get("/me/worker/stats", requireAuth, async (request: AuthenticatedRe
       serviceId: j.services[0]?.service?.id ?? null,
       serviceName: j.services[0]?.service?.name ?? j.services[0]?.serviceSubcategory?.name ?? "Service",
       serviceIcon: j.services[0]?.service?.iconUrl ?? null,
-      addressLabel: j.address ? `${j.address.label}, ${j.address.line1}` : null
+      addressLabel: j.address ? `${j.address.label}, ${j.address.line1}` : null,
+      isMaintenanceVisit: j.notes?.includes("Recurring maintenance visit") ?? false
     }))
   });
 });
 
 // ─── Single booking full detail ───────────────────────────────────────────────
+usersRouter.get("/bookings/:bookingId/rebook-options", requireAuth, requireRole("CUSTOMER"), async (request: AuthenticatedRequest, response) => {
+  const bookingId = String(request.params.bookingId);
+  const options = await getRebookOptions(bookingId, request.auth!.userId);
+  response.status(200).json({ rebook: options });
+});
+
 usersRouter.get("/bookings/:bookingId", requireAuth, async (request: AuthenticatedRequest, response) => {
   const { bookingId } = request.params as { bookingId: string };
   const userId = request.auth!.userId;
@@ -705,6 +714,7 @@ usersRouter.patch("/bookings/:bookingId", requireAuth, async (request: Authentic
           isActive: true,
           OR: [
             { pincode: savedAddress.pincode },
+            { assignedPincodes: { some: { pincode: savedAddress.pincode } } },
             {
               pincodeRangeStart: { lte: savedAddress.pincode },
               pincodeRangeEnd: { gte: savedAddress.pincode }

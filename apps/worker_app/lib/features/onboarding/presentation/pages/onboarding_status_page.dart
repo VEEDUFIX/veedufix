@@ -16,129 +16,150 @@ class OnboardingStatusPage extends ConsumerWidget {
       backgroundColor: VeeduFixDesignSystem.ivory,
       body: SafeArea(
         child: statusAsync.when(
-                loading: () => const Center(child: CircularProgressIndicator()),
-                error: (error, _) => _OnboardingStatusShell(
-                  title: 'Could not load your onboarding status',
-                  subtitle: 'We could not load your onboarding profile right now.',
-                  icon: Icons.info_outline_rounded,
-                  extra: FilledButton.icon(
-                    onPressed: () => ref.invalidate(workerOnboardingStatusProvider),
-                    icon: const Icon(Icons.refresh_rounded),
-                    label: const Text('Try again'),
+          loading: () => const Center(child: CircularProgressIndicator()),
+          error: (error, _) => _OnboardingStatusShell(
+            title: 'Could not load your onboarding status',
+            subtitle: 'We could not load your onboarding profile right now.',
+            icon: Icons.info_outline_rounded,
+            extra: FilledButton.icon(
+              onPressed: () => ref.invalidate(workerOnboardingStatusProvider),
+              icon: const Icon(Icons.refresh_rounded),
+              label: const Text('Try again'),
+            ),
+          ),
+          data: (profile) {
+            if (profile == null) {
+              return const _OnboardingStatusShell(
+                title: 'Your application is not ready yet',
+                subtitle: 'We could not load your onboarding profile.',
+                icon: Icons.pending_actions_rounded,
+              );
+            }
+
+            final status = profile.onboardingStatus;
+            if (status == 'under_review') {
+              return _OnboardingStatusShell(
+                title: 'Your application is being reviewed',
+                subtitle:
+                    'Thanks for submitting your details. We will notify you when the review is complete.',
+                icon: Icons.hourglass_top_rounded,
+                accent: VeeduFixDesignSystem.warning,
+                chips: const [
+                  _StatusChip(
+                      icon: Icons.schedule_rounded,
+                      label: 'Review in progress'),
+                  _StatusChip(
+                      icon: Icons.verified_user_outlined,
+                      label: 'Identity checked'),
+                  _StatusChip(
+                      icon: Icons.support_agent_rounded,
+                      label: 'Support available'),
+                ],
+                extra: PremiumGlassCard(
+                  child: Padding(
+                    padding: const EdgeInsets.all(18),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'What happens next',
+                          style:
+                              Theme.of(context).textTheme.titleMedium?.copyWith(
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'We are checking your personal details, identity document, and skill documents before approval.',
+                          style: Theme.of(context).textTheme.bodyMedium,
+                        ),
+                      ],
+                    ),
                   ),
                 ),
-                data: (profile) {
-                  if (profile == null) {
-                    return const _OnboardingStatusShell(
-                      title: 'Your application is not ready yet',
-                      subtitle: 'We could not load your onboarding profile.',
-                      icon: Icons.pending_actions_rounded,
-                    );
-                  }
+              );
+            }
 
-                  final status = profile.onboardingStatus;
-                  if (status == 'under_review') {
-                    return _OnboardingStatusShell(
-                      title: 'Your application is being reviewed',
-                      subtitle:
-                          'Thanks for submitting your details. We will notify you when the review is complete.',
-                      icon: Icons.hourglass_top_rounded,
-                      accent: VeeduFixDesignSystem.warning,
-                      chips: const [
-                        _StatusChip(icon: Icons.schedule_rounded, label: 'Review in progress'),
-                        _StatusChip(icon: Icons.verified_user_outlined, label: 'Identity checked'),
-                        _StatusChip(icon: Icons.support_agent_rounded, label: 'Support available'),
-                      ],
-                      extra: PremiumGlassCard(
-                        child: Padding(
-                          padding: const EdgeInsets.all(18),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'What happens next',
-                                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                      fontWeight: FontWeight.w800,
-                                    ),
-                              ),
-                              const SizedBox(height: 8),
-                              Text(
-                                'We are checking your personal details, identity document, and skill documents before approval.',
-                                style: Theme.of(context).textTheme.bodyMedium,
-                              ),
-                            ],
-                          ),
+            if (status == 'rejected') {
+              final suggestedStep = _stepForReason(profile.rejectionReason);
+              return _OnboardingStatusShell(
+                title: 'Your application needs a few fixes',
+                subtitle:
+                    'Please review the feedback and resubmit your details.',
+                icon: Icons.warning_amber_rounded,
+                accent: VeeduFixDesignSystem.error,
+                chips: const [
+                  _StatusChip(
+                      icon: Icons.edit_note_rounded, label: 'Can be updated'),
+                  _StatusChip(
+                      icon: Icons.verified_user_outlined,
+                      label: 'Feedback provided'),
+                ],
+                extra: PremiumGlassCard(
+                  child: Padding(
+                    padding: const EdgeInsets.all(18),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Review feedback',
+                          style:
+                              Theme.of(context).textTheme.titleMedium?.copyWith(
+                                    fontWeight: FontWeight.w800,
+                                  ),
                         ),
-                      ),
-                    );
-                  }
-
-                  if (status == 'rejected') {
-                    final suggestedStep = _stepForReason(profile.rejectionReason);
-                    return _OnboardingStatusShell(
-                      title: 'Your application needs a few fixes',
-                      subtitle: profile.rejectionReason ?? 'Please review the feedback and resubmit your details.',
-                      icon: Icons.warning_amber_rounded,
-                      accent: VeeduFixDesignSystem.error,
-                      chips: const [
-                        _StatusChip(icon: Icons.edit_note_rounded, label: 'Can be updated'),
-                        _StatusChip(icon: Icons.verified_user_outlined, label: 'Feedback provided'),
-                      ],
-                      extra: PremiumGlassCard(
-                        child: Padding(
-                          padding: const EdgeInsets.all(18),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Review feedback',
-                                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                      fontWeight: FontWeight.w800,
-                                    ),
-                              ),
-                              const SizedBox(height: 8),
-                              Text(
-                                profile.rejectionReason ?? 'Your submission was not approved yet.',
-                                style: Theme.of(context).textTheme.bodyMedium,
-                              ),
-                              const SizedBox(height: 16),
-                              PrimaryActionButton(
-                                label: 'Fix and Resubmit',
-                                onPressed: () {
-                                  context.go('/onboarding?mode=edit&step=$suggestedStep');
-                                },
-                              ),
-                            ],
-                          ),
+                        const SizedBox(height: 8),
+                        Text(
+                          profile.rejectionReason ??
+                              'Your submission was not approved yet.',
+                          style: Theme.of(context).textTheme.bodyMedium,
                         ),
-                      ),
-                    );
-                  }
-
-                  if (status == 'suspended') {
-                    return const _OnboardingStatusShell(
-                      title: 'Your account is currently suspended',
-                      subtitle: 'Please contact support to continue using the worker app.',
-                      icon: Icons.pause_circle_outline_rounded,
-                      accent: VeeduFixDesignSystem.mutedInk,
-                      chips: [
-                        _StatusChip(icon: Icons.headset_mic_rounded, label: 'Contact support'),
-                        _StatusChip(icon: Icons.lock_outline_rounded, label: 'Account paused'),
+                        const SizedBox(height: 16),
+                        PrimaryActionButton(
+                          label: 'Fix and Resubmit',
+                          onPressed: () {
+                            context.go(
+                                '/onboarding?mode=edit&step=$suggestedStep');
+                          },
+                        ),
                       ],
-                    );
-                  }
+                    ),
+                  ),
+                ),
+              );
+            }
 
-                  return const _OnboardingStatusShell(
-                    title: 'Your onboarding is in progress',
-                    subtitle: 'Please continue setting up your profile to get approved.',
-                    icon: Icons.person_search_rounded,
-                    accent: VeeduFixDesignSystem.gold,
-                    chips: [
-                      _StatusChip(icon: Icons.save_outlined, label: 'Draft saved'),
-                      _StatusChip(icon: Icons.badge_rounded, label: 'Profile incomplete'),
-                    ],
-                  );
-                },
+            if (status == 'suspended') {
+              return const _OnboardingStatusShell(
+                title: 'Your account is currently suspended',
+                subtitle:
+                    'Please contact support to continue using the worker app.',
+                icon: Icons.pause_circle_outline_rounded,
+                accent: VeeduFixDesignSystem.mutedInk,
+                chips: [
+                  _StatusChip(
+                      icon: Icons.headset_mic_rounded,
+                      label: 'Contact support'),
+                  _StatusChip(
+                      icon: Icons.lock_outline_rounded,
+                      label: 'Account paused'),
+                ],
+              );
+            }
+
+            return const _OnboardingStatusShell(
+              title: 'Your onboarding is in progress',
+              subtitle:
+                  'Please continue setting up your profile to get approved.',
+              icon: Icons.person_search_rounded,
+              accent: VeeduFixDesignSystem.gold,
+              chips: [
+                _StatusChip(icon: Icons.save_outlined, label: 'Draft saved'),
+                _StatusChip(
+                    icon: Icons.badge_rounded, label: 'Profile incomplete'),
+              ],
+            );
+          },
         ),
       ),
     );
@@ -146,7 +167,9 @@ class OnboardingStatusPage extends ConsumerWidget {
 
   int _stepForReason(String? reason) {
     final text = reason?.toLowerCase() ?? '';
-    if (text.contains('aadhaar') || text.contains('identity') || text.contains('document')) {
+    if (text.contains('aadhaar') ||
+        text.contains('identity') ||
+        text.contains('document')) {
       return 5;
     }
     if (text.contains('experience') || text.contains('qualification')) {
@@ -158,10 +181,14 @@ class OnboardingStatusPage extends ConsumerWidget {
     if (text.contains('upi') || text.contains('bank')) {
       return 7;
     }
-    if (text.contains('area') || text.contains('pincode') || text.contains('availability')) {
+    if (text.contains('area') ||
+        text.contains('pincode') ||
+        text.contains('availability')) {
       return 4;
     }
-    if (text.contains('agreement') || text.contains('consent') || text.contains('safety')) {
+    if (text.contains('agreement') ||
+        text.contains('consent') ||
+        text.contains('safety')) {
       return 10;
     }
     return 1;
@@ -219,7 +246,10 @@ class _OnboardingStatusShell extends StatelessWidget {
                         children: [
                           Text(
                             'Worker onboarding',
-                            style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                            style: Theme.of(context)
+                                .textTheme
+                                .labelLarge
+                                ?.copyWith(
                                   fontWeight: FontWeight.w800,
                                   color: accent,
                                   letterSpacing: 0.4,
@@ -228,7 +258,10 @@ class _OnboardingStatusShell extends StatelessWidget {
                           const SizedBox(height: 8),
                           Text(
                             title,
-                            style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                            style: Theme.of(context)
+                                .textTheme
+                                .headlineSmall
+                                ?.copyWith(
                                   fontWeight: FontWeight.w900,
                                   letterSpacing: -0.4,
                                 ),
@@ -283,12 +316,17 @@ class _StatusChip extends StatelessWidget {
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.75),
         borderRadius: BorderRadius.circular(VeeduFixDesignSystem.radiusMedium),
-        border: Border.all(color: Theme.of(context).colorScheme.outlineVariant.withValues(alpha: 0.45)),
+        border: Border.all(
+            color: Theme.of(context)
+                .colorScheme
+                .outlineVariant
+                .withValues(alpha: 0.45)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 16, color: Theme.of(context).colorScheme.onSurfaceVariant),
+          Icon(icon,
+              size: 16, color: Theme.of(context).colorScheme.onSurfaceVariant),
           const SizedBox(width: 8),
           Text(
             label,
@@ -301,4 +339,3 @@ class _StatusChip extends StatelessWidget {
     );
   }
 }
-

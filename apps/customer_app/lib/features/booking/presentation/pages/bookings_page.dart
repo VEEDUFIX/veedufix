@@ -113,7 +113,7 @@ class _BookingsPageState extends ConsumerState<BookingsPage>
                   ),
                   const SizedBox(height: 20),
                   Container(
-                    height: 46,
+                    constraints: const BoxConstraints(minHeight: 46),
                     padding: const EdgeInsets.all(4),
                     decoration: BoxDecoration(
                       color: const Color(0xFFF0ECE4),
@@ -261,11 +261,7 @@ class _BookingsOverviewCard extends StatelessWidget {
           if (constraints.maxWidth < 340) {
             return Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                summaryPills,
-                const SizedBox(height: 10),
-                bookButton,
-              ],
+              children: [summaryPills, const SizedBox(height: 10), bookButton],
             );
           }
           return Row(
@@ -759,15 +755,7 @@ class _BookingCard extends ConsumerWidget {
   }
 
   bool get _canBookAgain {
-    final status = booking.status.toUpperCase();
-    const rebookableStatuses = {
-      'COMPLETED',
-      'CANCELLED',
-      'CANCELLED_MANUAL',
-      'CANCELLED_NO_SHOW',
-      'REFUNDED',
-    };
-    return rebookableStatuses.contains(status);
+    return booking.status.toUpperCase() == 'COMPLETED';
   }
 
   @override
@@ -996,12 +984,6 @@ class _BookingCard extends ConsumerWidget {
   }
 
   void _openRebookBooking(BuildContext context) {
-    final serviceSlug = booking.serviceSlug;
-    if (serviceSlug != null && serviceSlug.isNotEmpty) {
-      context.push('/service?id=${Uri.encodeComponent(serviceSlug)}');
-      return;
-    }
-
-    context.push('/search?q=${Uri.encodeComponent(booking.serviceName)}');
+    context.push('/booking/${booking.id}/rebook');
   }
 }

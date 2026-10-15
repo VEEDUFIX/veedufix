@@ -42,7 +42,7 @@ async function completeNotification(key: string, claimId: string): Promise<void>
   if (completed !== 1) throw new Error("Lifecycle notification claim expired before completion");
 }
 
-async function sendToRecipient(input: {
+export async function sendToRecipient(input: {
   key: string;
   userId: string;
   title: string;

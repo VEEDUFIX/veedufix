@@ -9,14 +9,27 @@ class WorkerLocation {
     required this.longitude,
     required this.heading,
     required this.timestamp,
+    this.etaMinutes,
   });
 
   final double latitude;
   final double longitude;
   final double heading;
   final DateTime timestamp;
+  final int? etaMinutes;
 
-  factory WorkerLocation.fromJson(Map<String, dynamic> json) {
+  bool isAtLeastAsRecentAs(DateTime? previousTimestamp) =>
+      previousTimestamp == null || !timestamp.isBefore(previousTimestamp);
+
+  bool isFreshAt(DateTime now, {Duration maxAge = const Duration(minutes: 2)}) {
+    final age = now.difference(timestamp);
+    return !age.isNegative && age <= maxAge;
+  }
+
+  factory WorkerLocation.fromJson(
+    Map<String, dynamic> json, {
+    int? fallbackEtaMinutes,
+  }) {
     final latitude = double.tryParse(json['lat']?.toString() ?? '');
     final longitude = double.tryParse(json['lng']?.toString() ?? '');
     if (latitude == null ||
@@ -31,15 +44,21 @@ class WorkerLocation {
     }
     final parsedHeading =
         double.tryParse(json['heading']?.toString() ?? '') ?? 0.0;
+    final timestamp = DateTime.tryParse(json['timestamp']?.toString() ?? '');
+    if (timestamp == null) {
+      throw const FormatException('Missing worker location timestamp');
+    }
+    final eta = json.containsKey('etaMinutes')
+        ? int.tryParse(json['etaMinutes']?.toString() ?? '')
+        : fallbackEtaMinutes;
     return WorkerLocation(
       latitude: latitude,
       longitude: longitude,
       heading: parsedHeading.isFinite
           ? ((parsedHeading % 360) + 360) % 360
           : 0.0,
-      timestamp: json.containsKey('timestamp')
-          ? DateTime.tryParse(json['timestamp'].toString()) ?? DateTime.now()
-          : DateTime.now(),
+      timestamp: timestamp,
+      etaMinutes: eta != null && eta > 0 ? eta : null,
     );
   }
 }
@@ -47,28 +66,101 @@ class WorkerLocation {
 final workerLocationProvider = StreamProvider.autoDispose
     .family<WorkerLocation?, String>((ref, bookingId) {
       final realtime = ref.read(realtimeServiceProvider);
-      var disposed = false;
+      final api = ref.read(apiClientProvider);
+      final events = realtime.trackingStream;
       final connection = realtime.connectTracking(bookingId);
+      var disposed = false;
+      int? snapshotEtaMinutes;
+      DateTime? lastEmittedTimestamp;
+      StreamSubscription<Map<String, dynamic>>? eventSubscription;
+      Timer? refreshTimer;
+      final stream = Stream<WorkerLocation?>.multi((controller) {
+        void emitIfNotOlder(WorkerLocation location) {
+          if (!location.isAtLeastAsRecentAs(lastEmittedTimestamp)) return;
+          lastEmittedTimestamp = location.timestamp;
+          controller.add(location);
+        }
 
-      ref.onDispose(() {
-        disposed = true;
-        unawaited(realtime.disconnectTracking());
-      });
-      unawaited(
-        connection.then((_) {
-          if (disposed) unawaited(realtime.disconnectTracking());
-        }, onError: (_) {}),
-      );
-
-      return realtime.trackingStream.map((payload) {
-        // Check if the payload contains lat/lng from a worker
-        if (payload['lat'] != null && payload['lng'] != null) {
+        Future<void> refreshSnapshot() async {
           try {
-            return WorkerLocation.fromJson(payload);
-          } on FormatException {
-            return null;
+            final snapshot = await api.get('/bookings/$bookingId/tracking');
+            if (disposed) return;
+            if (snapshot['status'] != 'EN_ROUTE') {
+              ref.invalidate(bookingDetailProvider(bookingId));
+              snapshotEtaMinutes = null;
+              controller.add(null);
+              return;
+            }
+            final snapshotEta = int.tryParse(
+              snapshot['etaMinutes']?.toString() ?? '',
+            );
+            snapshotEtaMinutes = snapshotEta != null && snapshotEta > 0
+                ? snapshotEta
+                : null;
+            final location = snapshot['location'];
+            if (location is Map<String, dynamic>) {
+              try {
+                emitIfNotOlder(
+                  WorkerLocation.fromJson({
+                    ...location,
+                    'etaMinutes': snapshot['etaMinutes'],
+                  }),
+                );
+              } on FormatException {
+                controller.add(null);
+              }
+            } else {
+              controller.add(null);
+            }
+          } catch (error, stackTrace) {
+            if (!disposed) controller.addError(error, stackTrace);
           }
         }
-        return null;
+
+        unawaited(() async {
+          try {
+            await connection;
+            if (disposed) return;
+            eventSubscription = events.listen((payload) {
+              if (payload['status'] != null &&
+                  payload['status'] != 'EN_ROUTE') {
+                ref.invalidate(bookingDetailProvider(bookingId));
+                controller.add(null);
+                return;
+              }
+              if (payload['lat'] == null || payload['lng'] == null) return;
+              try {
+                emitIfNotOlder(
+                  WorkerLocation.fromJson(
+                    payload,
+                    fallbackEtaMinutes: snapshotEtaMinutes,
+                  ),
+                );
+              } on FormatException {
+                controller.add(null);
+              }
+            });
+            await refreshSnapshot();
+            if (disposed) return;
+            refreshTimer = Timer.periodic(const Duration(seconds: 20), (_) {
+              unawaited(refreshSnapshot());
+            });
+          } catch (error, stackTrace) {
+            if (!disposed) controller.addError(error, stackTrace);
+          }
+        }());
+        controller.onCancel = () {
+          disposed = true;
+          refreshTimer?.cancel();
+          unawaited(eventSubscription?.cancel());
+          unawaited(realtime.disconnectTracking());
+        };
       });
+      ref.onDispose(() {
+        disposed = true;
+        refreshTimer?.cancel();
+        unawaited(eventSubscription?.cancel());
+        unawaited(realtime.disconnectTracking());
+      });
+      return stream;
     });

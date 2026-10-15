@@ -1,11 +1,14 @@
+import 'dart:async';
+
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:intl/intl.dart';
 import 'package:marketplace_shared/marketplace_shared.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../providers/job_execution_provider.dart';
-import '../providers/worker_availability_provider.dart';
 import 'generate_quote_page.dart';
 import 'add_spare_parts_page.dart';
 import '../widgets/job_header_card.dart';
@@ -69,7 +72,6 @@ class _JobExecutionPageState extends ConsumerState<JobExecutionPage> {
       }
 
       ref.read(jobExecutionProvider.notifier).start(booking);
-      ref.read(locationBroadcasterProvider.notifier).start(booking.bookingId);
       setState(() {
         _loadingBooking = false;
         _bookingLoadFailed = false;
@@ -89,8 +91,6 @@ class _JobExecutionPageState extends ConsumerState<JobExecutionPage> {
   void dispose() {
     _arrivalOtpController.dispose();
     _completionOtpController.dispose();
-    // Stop location broadcasting when job page closes
-    ref.read(locationBroadcasterProvider.notifier).stop();
     super.dispose();
   }
 
@@ -219,10 +219,31 @@ class _JobExecutionPageState extends ConsumerState<JobExecutionPage> {
         child: ListView(
           padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
           children: [
+            if (booking.isMaintenanceVisit) ...[
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.secondaryContainer,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Row(children: [
+                  Icon(Icons.event_repeat_outlined, size: 18),
+                  SizedBox(width: 8),
+                  Expanded(
+                      child: Text(
+                          'Recurring maintenance visit · follow the scheduled job details.')),
+                ]),
+              ),
+              const SizedBox(height: 12),
+            ],
             JobHeaderCard(
               state: state,
               accentColor: booking.accentColor,
             ),
+            const SizedBox(height: 16),
+            _PartnerClaimCard(bookingId: booking.bookingId),
+            BookingDiagnosticPhotosSection(bookingId: booking.bookingId),
             const SizedBox(height: 16),
             OutlinedButton.icon(
               onPressed: () {
@@ -232,8 +253,7 @@ class _JobExecutionPageState extends ConsumerState<JobExecutionPage> {
                     'category': 'other',
                     'autoFocusForm': 'true',
                     'subject': 'Help with job ${booking.bookingCode}',
-                    'message':
-                        'I need help with job #${booking.bookingCode} for '
+                    'message': 'I need help with job #${booking.bookingCode} for '
                         '${booking.serviceName} (step ${state.currentStep} of 7). '
                         'Please help me with: ',
                   },
@@ -410,4 +430,445 @@ class _JobExecutionPageState extends ConsumerState<JobExecutionPage> {
       SnackBar(content: Text(message)),
     );
   }
+}
+
+class _PartnerClaimCard extends ConsumerStatefulWidget {
+  const _PartnerClaimCard({required this.bookingId});
+  final String bookingId;
+
+  @override
+  ConsumerState<_PartnerClaimCard> createState() => _PartnerClaimCardState();
+}
+
+class _PartnerClaimCardState extends ConsumerState<_PartnerClaimCard> {
+  late Future<Map<String, dynamic>?> _claim;
+  Map<String, dynamic>? _lastLoadedClaim;
+  int _loadGeneration = 0;
+  final _response = TextEditingController();
+  bool _sending = false;
+  String? _responseKey;
+  String? _responseKeyMessage;
+  String? _correctiveWorkKey;
+  String? _proposalKey;
+  String? _proposalKeyForTimestamp;
+
+  @override
+  void initState() {
+    super.initState();
+    _claim = _load();
+  }
+
+  Future<Map<String, dynamic>?> _load() async {
+    final generation = ++_loadGeneration;
+    late final Map<String, dynamic> response;
+    try {
+      response = await ref
+          .read(apiClientProvider)
+          .get('/worker/bookings/${widget.bookingId}/dispute');
+    } catch (_) {
+      if (!mounted) return _lastLoadedClaim;
+      rethrow;
+    }
+    if (!mounted) return _lastLoadedClaim;
+    final raw = response['dispute'];
+    final claim = raw is Map ? Map<String, dynamic>.from(raw) : null;
+    if (generation != _loadGeneration) return _lastLoadedClaim;
+    _lastLoadedClaim = claim;
+    return claim;
+  }
+
+  String _formatWhen(Object? raw) {
+    final parsed = DateTime.tryParse(raw?.toString() ?? '');
+    return parsed == null
+        ? 'time pending'
+        : DateFormat('d MMM y, h:mm a').format(parsed.toLocal());
+  }
+
+  Future<void> _send() async {
+    if (_sending) return;
+    final message = _response.text.trim();
+    if (message.length < 2) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Enter a response before sending.'),
+      ));
+      return;
+    }
+    setState(() => _sending = true);
+    if (_responseKeyMessage != message) _responseKey = null;
+    final key = _responseKey ??
+        'partner-claim-message-${widget.bookingId}-${DateTime.now().microsecondsSinceEpoch}';
+    _responseKey = key;
+    _responseKeyMessage = message;
+    var postSucceeded = false;
+    try {
+      await ref.read(apiClientProvider).post(
+          '/bookings/${widget.bookingId}/dispute/message',
+          data: {'message': message, 'idempotencyKey': key});
+      postSucceeded = true;
+      if (!mounted) return;
+      final refresh = _load();
+      setState(() => _claim = refresh);
+      await refresh;
+      if (!mounted) return;
+      if (_response.text.trim() == message) _response.clear();
+      _responseKey = null;
+      _responseKeyMessage = null;
+    } catch (error) {
+      if (mounted) {
+        final networkFailure = error is DioException &&
+            const {
+              DioExceptionType.connectionError,
+              DioExceptionType.connectionTimeout,
+              DioExceptionType.sendTimeout,
+              DioExceptionType.receiveTimeout,
+            }.contains(error.type);
+        if (networkFailure && !postSucceeded) {
+          setState(() => _claim = _load());
+        } else if (!postSucceeded) {
+          _responseKey = null;
+          _responseKeyMessage = null;
+        }
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(postSucceeded
+              ? 'Your response was sent, but the latest claim status could not be loaded. Refresh before trying again.'
+              : networkFailure
+                  ? 'Connection was interrupted. Refresh the claim before retrying; your response may already have reached the server.'
+                  : 'Could not send your response. Please retry.'),
+        ));
+      }
+    } finally {
+      if (mounted) setState(() => _sending = false);
+    }
+  }
+
+  Future<void> _proposeAppointment() async {
+    if (_sending) return;
+    final now = DateTime.now();
+    final date = await showDatePicker(
+      context: context,
+      initialDate: now.add(const Duration(days: 1)),
+      firstDate: now,
+      lastDate: now.add(const Duration(days: 90)),
+    );
+    if (!mounted || _sending || date == null) return;
+    final time = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay.fromDateTime(now.add(const Duration(hours: 2))),
+    );
+    if (!mounted || _sending || time == null) return;
+    final proposedAt =
+        DateTime(date.year, date.month, date.day, time.hour, time.minute);
+    if (!proposedAt.isAfter(DateTime.now())) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Choose a time in the future.')),
+      );
+      return;
+    }
+    setState(() => _sending = true);
+    final proposalTimestamp = proposedAt.toUtc().toIso8601String();
+    if (_proposalKeyForTimestamp != proposalTimestamp) {
+      _proposalKey = null;
+      _proposalKeyForTimestamp = proposalTimestamp;
+    }
+    final proposalKey = _proposalKey ??=
+        'partner-claim-proposal-${widget.bookingId}-${proposedAt.millisecondsSinceEpoch}-${DateTime.now().microsecondsSinceEpoch}';
+    var postSucceeded = false;
+    try {
+      await ref.read(apiClientProvider).post(
+        '/worker/bookings/${widget.bookingId}/dispute/rework/propose',
+        data: {
+          'proposedAt': proposalTimestamp,
+          'message': 'I can attend at the proposed time.',
+          'idempotencyKey': proposalKey,
+        },
+      );
+      postSucceeded = true;
+      if (!mounted) return;
+      final refresh = _load();
+      setState(() => _claim = refresh);
+      await refresh;
+      if (!mounted) return;
+      _proposalKey = null;
+      _proposalKeyForTimestamp = null;
+    } catch (error) {
+      if (mounted) {
+        final statusCode =
+            error is DioException ? error.response?.statusCode : null;
+        final slotConflict = statusCode == 409 || statusCode == 422;
+        final networkFailure = error is DioException &&
+            const {
+              DioExceptionType.connectionError,
+              DioExceptionType.connectionTimeout,
+              DioExceptionType.sendTimeout,
+              DioExceptionType.receiveTimeout,
+            }.contains(error.type);
+        if (networkFailure && !postSucceeded) {
+          setState(() => _claim = _load());
+        } else if (!postSucceeded && slotConflict) {
+          _proposalKey = null;
+          _proposalKeyForTimestamp = null;
+        }
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              postSucceeded
+                  ? 'Your appointment proposal was sent, but the latest claim status could not be loaded. Refresh before retrying.'
+                  : networkFailure
+                      ? 'Connection was interrupted. Refresh the claim before retrying; your request may already have reached the server.'
+                      : slotConflict
+                          ? 'That time is unavailable. Choose another appointment time.'
+                          : 'Could not send the appointment proposal. Refresh the claim and try again.',
+            ),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _sending = false);
+    }
+  }
+
+  Future<void> _completeCorrectiveWork() async {
+    if (_sending) return;
+    setState(() => _sending = true);
+    var postSucceeded = false;
+    try {
+      await ref.read(apiClientProvider).post(
+        '/worker/bookings/${widget.bookingId}/dispute/rework/complete',
+        data: {
+          'message': 'Approved corrective work was completed.',
+          'idempotencyKey': _correctiveWorkKey ??=
+              'partner-claim-complete-${widget.bookingId}-${DateTime.now().microsecondsSinceEpoch}',
+        },
+      );
+      postSucceeded = true;
+      if (!mounted) return;
+      final refresh = _load();
+      setState(() => _claim = refresh);
+      await refresh;
+      if (!mounted) return;
+      _correctiveWorkKey = null;
+    } catch (error) {
+      if (mounted) {
+        final networkFailure = error is DioException &&
+            const {
+              DioExceptionType.connectionError,
+              DioExceptionType.connectionTimeout,
+              DioExceptionType.sendTimeout,
+              DioExceptionType.receiveTimeout,
+            }.contains(error.type);
+        if (networkFailure && !postSucceeded) {
+          setState(() => _claim = _load());
+        } else if (!postSucceeded) {
+          _correctiveWorkKey = null;
+        }
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              postSucceeded
+                  ? 'Corrective work was recorded, but the latest claim status could not be loaded. Refresh before retrying.'
+                  : networkFailure
+                      ? 'Connection was interrupted. Refresh the claim before retrying; your request may already have reached the server.'
+                      : 'Corrective work cannot be completed yet.',
+            ),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _sending = false);
+    }
+  }
+
+  @override
+  void dispose() {
+    _response.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => FutureBuilder<Map<String, dynamic>?>(
+        future: _claim,
+        builder: (context, snapshot) {
+          final reloading = snapshot.connectionState == ConnectionState.waiting;
+          final claim =
+              snapshot.hasError || reloading ? _lastLoadedClaim : snapshot.data;
+          if (reloading && _lastLoadedClaim == null) {
+            return Container(
+              margin: const EdgeInsets.only(bottom: 16),
+              padding: const EdgeInsets.all(18),
+              alignment: Alignment.center,
+              child: const SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+            );
+          }
+          if (claim == null) {
+            if (!snapshot.hasError) return const SizedBox.shrink();
+            final colors = Theme.of(context).colorScheme;
+            return Container(
+              margin: const EdgeInsets.only(bottom: 16),
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: colors.surfaceContainerLow,
+                border: Border.all(color: colors.outlineVariant),
+                borderRadius: BorderRadius.circular(18),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.cloud_off_outlined, color: colors.error),
+                  const SizedBox(width: 12),
+                  const Expanded(
+                    child: Text('Could not load the customer claim.'),
+                  ),
+                  TextButton(
+                    onPressed: () {
+                      setState(() {
+                        _claim = _load();
+                      });
+                    },
+                    child: const Text('Retry'),
+                  ),
+                ],
+              ),
+            );
+          }
+          final cs = Theme.of(context).colorScheme;
+          final history =
+              (claim['history'] as List? ?? const []).whereType<Map>().toList();
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (snapshot.hasError)
+                Container(
+                  margin: const EdgeInsets.only(bottom: 8),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: cs.errorContainer,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          'Could not refresh the claim. Showing the last saved details.',
+                          style: TextStyle(color: cs.onErrorContainer),
+                        ),
+                      ),
+                      TextButton(
+                        onPressed: () => setState(() => _claim = _load()),
+                        child: const Text('Retry'),
+                      ),
+                    ],
+                  ),
+                ),
+              Container(
+                margin: const EdgeInsets.only(bottom: 16),
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                    color: cs.surfaceContainerLow,
+                    border: Border.all(color: cs.outlineVariant),
+                    borderRadius: BorderRadius.circular(18)),
+                child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Customer service claim',
+                          style: Theme.of(context)
+                              .textTheme
+                              .titleMedium
+                              ?.copyWith(fontWeight: FontWeight.w800)),
+                      const SizedBox(height: 6),
+                      Text(
+                          'Status: ${(claim['status'] as String? ?? 'open').replaceAll('_', ' ')}'),
+                      if ((claim['referenceCode'] as String?)?.isNotEmpty ==
+                          true)
+                        Text('Reference: ${claim['referenceCode']}'),
+                      const SizedBox(height: 8),
+                      Text(claim['reason'] as String? ?? ''),
+                      BookingDiagnosticPhotosSection(
+                        bookingId: widget.bookingId,
+                        photoIds:
+                            (claim['evidencePhotoIds'] as List? ?? const [])
+                                .whereType<String>()
+                                .toList(growable: false),
+                      ),
+                      if ((claim['remedyStatus'] as String?) ==
+                              'awaiting_admin_schedule' &&
+                          claim['reworkProposedAt'] != null)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 8),
+                          child: Text(
+                            'Appointment proposed: ${_formatWhen(claim['reworkProposedAt'])} · awaiting Admin confirmation',
+                          ),
+                        ),
+                      if ((claim['remedyStatus'] as String?) == 'scheduled' &&
+                          claim['reworkScheduledAt'] != null)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 8),
+                          child: Text(
+                            'Corrective work scheduled: ${_formatWhen(claim['reworkScheduledAt'])}',
+                          ),
+                        ),
+                      for (final event in history)
+                        if (event['type'] == 'request_info' ||
+                            event['type'] == 'customer_response')
+                          Padding(
+                              padding: const EdgeInsets.only(top: 8),
+                              child: Text(
+                                  '${(event['type'] as String).replaceAll('_', ' ')}: ${event['message'] ?? ''}')),
+                      if ([
+                        'open',
+                        'under_review',
+                        'action_required',
+                        'approved'
+                      ].contains(claim['status'])) ...[
+                        const SizedBox(height: 10),
+                        TextField(
+                            controller: _response,
+                            maxLines: 3,
+                            maxLength: 2000,
+                            decoration: const InputDecoration(
+                                labelText: 'Your response to the claim')),
+                        const SizedBox(height: 8),
+                        Align(
+                            alignment: Alignment.centerRight,
+                            child: FilledButton.tonalIcon(
+                                onPressed: _sending || reloading ? null : _send,
+                                icon: const Icon(Icons.reply_rounded),
+                                label: Text(
+                                    _sending ? 'Sending…' : 'Send response'))),
+                      ],
+                      if (claim['remedyStatus'] == 'awaiting_partner_proposal')
+                        SizedBox(
+                          width: double.infinity,
+                          child: OutlinedButton.icon(
+                            onPressed: _sending ||
+                                    snapshot.connectionState ==
+                                        ConnectionState.waiting
+                                ? null
+                                : _proposeAppointment,
+                            icon: const Icon(Icons.event_available_outlined),
+                            label: const Text(
+                                'Propose corrective-work appointment'),
+                          ),
+                        ),
+                      if (claim['remedyStatus'] == 'scheduled')
+                        SizedBox(
+                          width: double.infinity,
+                          child: FilledButton.icon(
+                            onPressed: _sending || reloading
+                                ? null
+                                : _completeCorrectiveWork,
+                            icon: const Icon(Icons.task_alt_rounded),
+                            label:
+                                const Text('Report corrective work complete'),
+                          ),
+                        ),
+                    ]),
+              ),
+            ],
+          );
+        },
+      );
 }

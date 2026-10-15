@@ -15,6 +15,7 @@ import {
   assertServiceablePincode,
   getServiceAreaUnavailableMessage
 } from '../modules/service-area/service-area.service.js';
+import { updateWorkerServiceAreasSchema } from '../modules/service-area/service-area.schemas.js';
 import { prisma } from '../lib/prisma.js';
 import { AppError } from '../lib/app-error.js';
 
@@ -91,5 +92,21 @@ describe('Service Area Service', () => {
         (err: any) => err instanceof AppError && err.statusCode === 400 && err.message === getServiceAreaUnavailableMessage()
       );
     });
+  });
+});
+
+describe('Partner service-area update validation', () => {
+  const request = (serviceAreaIds: string[]) => ({
+    body: { serviceAreaIds },
+    query: {},
+    params: { workerProfileId: 'worker-profile-1' }
+  });
+
+  it('requires at least one service area so an approved Partner cannot be left unassigned', () => {
+    expect(updateWorkerServiceAreasSchema.safeParse(request([])).success).toBe(false);
+  });
+
+  it('accepts a non-empty unique list of service areas', () => {
+    expect(updateWorkerServiceAreasSchema.safeParse(request(['area-1'])).success).toBe(true);
   });
 });

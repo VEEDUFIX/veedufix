@@ -3,9 +3,9 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:marketplace_shared/marketplace_shared.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../../../admin/presentation/widgets/admin_surface.dart';
+import '../../../finance/data/finance_api.dart';
 
 class ReportsPage extends ConsumerWidget {
   const ReportsPage({super.key});
@@ -37,7 +37,8 @@ class ReportsPage extends ConsumerWidget {
             ),
           ),
         ),
-        title: Text('Reports & Exports', style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
+        title: Text('Reports & Exports',
+            style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
       ),
       body: ListView(
         padding: const EdgeInsets.all(20),
@@ -55,7 +56,8 @@ class ReportsPage extends ConsumerWidget {
                       color: const Color(0xFF2563EB).withValues(alpha: 0.12),
                       borderRadius: BorderRadius.circular(18),
                     ),
-                    child: const Icon(Icons.summarize_rounded, color: Color(0xFF2563EB)),
+                    child: const Icon(Icons.summarize_rounded,
+                        color: Color(0xFF2563EB)),
                   ),
                   const SizedBox(width: 14),
                   Expanded(
@@ -64,7 +66,8 @@ class ReportsPage extends ConsumerWidget {
                       children: [
                         Text(
                           'Reports command center',
-                          style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+                          style: tt.titleMedium
+                              ?.copyWith(fontWeight: FontWeight.w800),
                         ),
                         const SizedBox(height: 4),
                         Text(
@@ -79,9 +82,15 @@ class ReportsPage extends ConsumerWidget {
                           spacing: 8,
                           runSpacing: 8,
                           children: [
-                            _ReportPill(label: 'Bookings CSV', icon: Icons.receipt_long_rounded),
-                            _ReportPill(label: 'Finance exports', icon: Icons.payments_rounded),
-                            _ReportPill(label: 'Audit-ready', icon: Icons.verified_rounded),
+                            _ReportPill(
+                                label: 'Bookings CSV',
+                                icon: Icons.receipt_long_rounded),
+                            _ReportPill(
+                                label: 'Finance exports',
+                                icon: Icons.payments_rounded),
+                            _ReportPill(
+                                label: 'Audit-ready',
+                                icon: Icons.verified_rounded),
                           ],
                         ),
                       ],
@@ -100,22 +109,36 @@ class ReportsPage extends ConsumerWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Saved report presets', style: tt.titleSmall?.copyWith(fontWeight: FontWeight.w800)),
+                  Text('Saved report presets',
+                      style:
+                          tt.titleSmall?.copyWith(fontWeight: FontWeight.w800)),
                   const SizedBox(height: 8),
                   Wrap(
                     spacing: 10,
                     runSpacing: 10,
                     children: [
                       FilledButton.tonal(
-                        onPressed: () => _download('$baseUrl/api/admin/reports/bookings?status=COMPLETED'),
+                        onPressed: () => _download(
+                            context,
+                            ref,
+                            '$baseUrl/api/admin/reports/bookings?status=COMPLETED',
+                            'completed-bookings.csv'),
                         child: const Text('Completed bookings'),
                       ),
                       FilledButton.tonal(
-                        onPressed: () => _download('$baseUrl/api/admin/reports/payouts?status=pending'),
+                        onPressed: () => _download(
+                            context,
+                            ref,
+                            '$baseUrl/api/admin/reports/payouts?status=pending',
+                            'pending-payouts.csv'),
                         child: const Text('Pending payouts'),
                       ),
                       FilledButton.tonal(
-                        onPressed: () => _download('$baseUrl/api/admin/reports/payouts?status=failed'),
+                        onPressed: () => _download(
+                            context,
+                            ref,
+                            '$baseUrl/api/admin/reports/payouts?status=failed',
+                            'failed-payouts.csv'),
                         child: const Text('Failed payouts'),
                       ),
                     ],
@@ -127,7 +150,8 @@ class ReportsPage extends ConsumerWidget {
                     children: [
                       OutlinedButton.icon(
                         onPressed: () => context.go('/finance'),
-                        icon: const Icon(Icons.account_balance_wallet_rounded, size: 16),
+                        icon: const Icon(Icons.account_balance_wallet_rounded,
+                            size: 16),
                         label: const Text('Finance hub'),
                       ),
                       OutlinedButton.icon(
@@ -137,9 +161,11 @@ class ReportsPage extends ConsumerWidget {
                       ),
                       OutlinedButton.icon(
                         onPressed: () {
-                          Clipboard.setData(ClipboardData(text: '$baseUrl/api/admin/reports/bookings'));
+                          Clipboard.setData(ClipboardData(
+                              text: '$baseUrl/api/admin/reports/bookings'));
                           ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Bookings export URL copied')),
+                            const SnackBar(
+                                content: Text('Bookings export URL copied')),
                           );
                         },
                         icon: const Icon(Icons.copy_rounded, size: 16),
@@ -157,7 +183,8 @@ class ReportsPage extends ConsumerWidget {
             subtitle: 'All bookings with status, customer, worker, amount',
             icon: Icons.receipt_long_rounded,
             color: const Color(0xFF6366F1),
-            onDownload: () => _download('$baseUrl/api/admin/reports/bookings'),
+            onDownload: () => _download(context, ref,
+                '$baseUrl/api/admin/reports/bookings', 'bookings.csv'),
           ),
           const SizedBox(height: 12),
           _ReportCard(
@@ -165,7 +192,8 @@ class ReportsPage extends ConsumerWidget {
             subtitle: 'Worker credit transactions and balances',
             icon: Icons.payments_rounded,
             color: const Color(0xFF10B981),
-            onDownload: () => _download('$baseUrl/api/admin/reports/earnings'),
+            onDownload: () => _download(context, ref,
+                '$baseUrl/api/admin/reports/earnings', 'earnings.csv'),
           ),
           const SizedBox(height: 12),
           _ReportCard(
@@ -173,17 +201,30 @@ class ReportsPage extends ConsumerWidget {
             subtitle: 'Pending UPI payout requests from workers',
             icon: Icons.account_balance_wallet_rounded,
             color: const Color(0xFFF59E0B),
-            onDownload: () => _download('$baseUrl/api/admin/reports/payouts'),
+            onDownload: () => _download(context, ref,
+                '$baseUrl/api/admin/reports/payouts', 'payouts.csv'),
           ),
         ],
       ),
     );
   }
 
-  Future<void> _download(String url) async {
-    final uri = Uri.parse(url);
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
+  Future<void> _download(
+    BuildContext context,
+    WidgetRef ref,
+    String url,
+    String fileName,
+  ) async {
+    try {
+      await FinanceApi(ref.read(apiClientProvider).dio)
+          .downloadCsv(url, fileName);
+    } catch (_) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+            content: Text(
+                'Could not download the report. Check your Admin access and try again.')),
+      );
     }
   }
 }
@@ -227,9 +268,13 @@ class _ReportCard extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(title, style: tt.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
+                  Text(title,
+                      style:
+                          tt.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
                   const SizedBox(height: 2),
-                  Text(subtitle, style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
+                  Text(subtitle,
+                      style:
+                          tt.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
                 ],
               ),
             ),

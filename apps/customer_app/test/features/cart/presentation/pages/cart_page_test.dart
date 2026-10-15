@@ -103,7 +103,7 @@ void main() {
     expect(find.text('AC Repair'), findsOneWidget);
 
     // Tap the remove button (minus icon)
-    await tester.tap(find.byIcon(Icons.remove));
+    await tester.tap(find.byIcon(Icons.remove_rounded));
     await tester.pumpAndSettle();
 
     // Cart should now be empty

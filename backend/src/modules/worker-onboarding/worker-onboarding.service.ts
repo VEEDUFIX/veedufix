@@ -39,6 +39,7 @@ type ProfileDetails = {
   city?: string;
   pincode?: string;
   serviceAreas?: string;
+  serviceAreaIds?: string[];
   workType?: "FULL_TIME" | "PART_TIME";
   acceptsUrgentJobs?: boolean;
   serviceRadiusKm?: number;
@@ -176,22 +177,37 @@ function normalizeProfile(profile: WorkerProfileWithRelations | MinimalWorkerPro
     return null;
   }
 
-  const relations = profile as typeof profile & {
+  const relations = profile as unknown as {
     skills?: WorkerSkillWithCategory[];
     availability?: Array<{
       dayOfWeek: number;
       startTime: string;
       endTime: string;
     }>;
+    serviceAreaAssignments?: Array<{
+      serviceAreaId: string;
+      serviceArea: {
+        id: string;
+        name: string;
+        slug: string;
+        cityId: string;
+        city: { id: string; name: string; stateId: string; districtId: string | null; state: string; district: string | null };
+        assignedPincodes: Array<{ pincode: string }>;
+      };
+    }>;
   };
   const skills = Array.isArray(relations.skills) ? relations.skills : [];
   const availability = Array.isArray(relations.availability)
     ? relations.availability
     : [];
+  const serviceAreaAssignments = Array.isArray(relations.serviceAreaAssignments)
+    ? relations.serviceAreaAssignments
+    : [];
 
   // Destructure raw KYC doc fields — never send these to any client.
-  const { aadhaarDocUrl, aadhaarDocPublicId, ...rest } = maskWorkerFinancialFields(profile) as typeof profile & {
+  const { aadhaarDocUrl, aadhaarDocPublicId, serviceAreaAssignments: _rawAssignments, ...rest } = maskWorkerFinancialFields(profile) as typeof profile & {
     aadhaarDocPublicId?: string | null;
+    serviceAreaAssignments?: unknown;
   };
 
   const base = {
@@ -199,6 +215,15 @@ function normalizeProfile(profile: WorkerProfileWithRelations | MinimalWorkerPro
     // Boolean presence indicator replaces the raw URL in every response.
     hasAadhaarDoc: Boolean(aadhaarDocUrl?.trim()),
     hasAvailability: Boolean(availability?.length),
+    serviceAreaIds: serviceAreaAssignments.map((assignment) => assignment.serviceAreaId),
+    assignedServiceAreas: serviceAreaAssignments.map((assignment) => ({
+      id: assignment.serviceArea.id,
+      name: assignment.serviceArea.name,
+      slug: assignment.serviceArea.slug,
+      cityId: assignment.serviceArea.cityId,
+      city: assignment.serviceArea.city,
+      pincodes: assignment.serviceArea.assignedPincodes.map((item) => item.pincode)
+    })),
     availabilitySlots: (availability ?? []).map((slot: any) => ({
       dayOfWeek: slot.dayOfWeek,
       startTime: slot.startTime,
@@ -261,6 +286,17 @@ async function getWorkerProfile(userId: string) {
         }
       },
       availability: true
+      ,serviceAreaAssignments: {
+        include: {
+          serviceArea: {
+            include: {
+              assignedPincodes: { select: { pincode: true } },
+              city: true
+            }
+          }
+        },
+        orderBy: { serviceAreaId: "asc" }
+      }
     }
   });
 }
@@ -294,7 +330,18 @@ async function getWorkerProfileByIdOrThrow(workerProfileId: string) {
           category: true
         }
       },
-      availability: true
+      availability: true,
+      serviceAreaAssignments: {
+        include: {
+          serviceArea: {
+            include: {
+              assignedPincodes: { select: { pincode: true } },
+              city: true
+            }
+          }
+        },
+        orderBy: { serviceAreaId: "asc" }
+      }
     }
   });
 
@@ -369,6 +416,7 @@ export async function updatePersonalDetails(userId: string, details: ProfileDeta
   const current = await prisma.workerProfile.findUnique({
     where: { userId },
     select: {
+      id: true,
       fullName: true,
       verificationStatus: true,
       onboardingStatus: true,
@@ -390,6 +438,50 @@ export async function updatePersonalDetails(userId: string, details: ProfileDeta
     );
   }
 
+  const serviceAreaIds = details.serviceAreaIds;
+  let selectedServiceAreas: Array<{
+    id: string;
+    name: string;
+    cityId: string;
+    city: { name: string };
+  }> = [];
+  if (serviceAreaIds !== undefined) {
+    if (
+      current?.onboardingStatus === "approved" ||
+      current?.onboardingStatus === "under_review"
+    ) {
+      const currentAssignments = await prisma.workerProfileServiceArea.findMany({
+        where: { workerProfileId: current.id },
+        select: { serviceAreaId: true }
+      });
+      const currentIds = new Set(
+        currentAssignments.map((assignment) => assignment.serviceAreaId)
+      );
+      const requestedIds = new Set(serviceAreaIds);
+      const serviceAreasChanged =
+        currentIds.size !== requestedIds.size ||
+        [...requestedIds].some((serviceAreaId) => !currentIds.has(serviceAreaId));
+
+      if (serviceAreasChanged) {
+        throw new WorkerStatusConflictError(
+          "Partner service-area changes require an admin review"
+        );
+      }
+    }
+    const queriedServiceAreas = await prisma.serviceArea.findMany({
+      where: {
+        id: { in: serviceAreaIds },
+        isActive: true,
+        city: { isActive: true }
+      },
+      select: { id: true, name: true, cityId: true, city: { select: { name: true } } }
+    });
+    selectedServiceAreas = queriedServiceAreas as typeof selectedServiceAreas;
+    if (selectedServiceAreas.length !== serviceAreaIds.length) {
+      throw AppError.badRequest("Select only active, configured Partner service areas");
+    }
+  }
+
   const payoutChangeRequested =
     (details.bankAccountNumber !== undefined && details.bankAccountNumber !== current?.bankAccountNumber) ||
     (details.bankIfsc !== undefined && details.bankIfsc !== current?.bankIfsc) ||
@@ -403,17 +495,52 @@ export async function updatePersonalDetails(userId: string, details: ProfileDeta
     );
   }
 
-  await prisma.workerProfile.update({
-    where: { userId },
-    data: {
+  await prisma.$transaction(async (tx) => {
+    if (serviceAreaIds !== undefined && current) {
+      await tx.$queryRaw`SELECT "id" FROM "WorkerProfile" WHERE "userId" = ${userId} FOR UPDATE`;
+      const lockedProfile = await tx.workerProfile.findUnique({
+        where: { userId },
+        select: { id: true, onboardingStatus: true }
+      });
+      if (
+        lockedProfile?.onboardingStatus === "approved" ||
+        lockedProfile?.onboardingStatus === "under_review"
+      ) {
+        const lockedAssignments = await tx.workerProfileServiceArea.findMany({
+          where: { workerProfileId: lockedProfile.id },
+          select: { serviceAreaId: true }
+        });
+        const lockedIds = new Set(lockedAssignments.map((assignment) => assignment.serviceAreaId));
+        const requestedIds = new Set(serviceAreaIds);
+        const changed = lockedIds.size !== requestedIds.size ||
+          [...requestedIds].some((serviceAreaId) => !lockedIds.has(serviceAreaId));
+        if (changed) {
+          throw new WorkerStatusConflictError(
+            "Partner service-area changes require an admin review"
+          );
+        }
+      }
+    }
+    await tx.workerProfile.update({
+      where: { userId },
+      data: {
       fullName: details.fullName,
       gender: details.gender,
       dateOfBirth: toDate(details.dateOfBirth),
       addressLine1: details.addressLine1,
       alternatePhone: details.alternatePhone,
-      city: details.city,
+      city: serviceAreaIds !== undefined
+        ? [...new Set(selectedServiceAreas.map((area) => area.city.name))].join(", ").slice(0, 120)
+        : details.city,
+      cityId: serviceAreaIds !== undefined
+        ? [...new Set(selectedServiceAreas.map((area) => area.cityId))].length === 1
+          ? selectedServiceAreas[0]?.cityId
+          : null
+        : undefined,
       pincode: details.pincode,
-      serviceAreas: details.serviceAreas,
+      serviceAreas: serviceAreaIds !== undefined
+        ? selectedServiceAreas.map((area) => area.name).join(", ").slice(0, 500)
+        : details.serviceAreas,
       workType: details.workType,
       acceptsUrgentJobs: details.acceptsUrgentJobs,
       serviceRadiusKm: details.serviceRadiusKm,
@@ -426,6 +553,18 @@ export async function updatePersonalDetails(userId: string, details: ProfileDeta
       emergencyContactPhone: details.emergencyContactPhone,
       agreementAcceptedAt: details.agreementAccepted ? current?.agreementAcceptedAt ?? new Date() : undefined,
       dataConsentAcceptedAt: details.dataConsentAccepted ? current?.dataConsentAcceptedAt ?? new Date() : undefined
+      }
+    });
+    if (serviceAreaIds !== undefined) {
+      await tx.workerProfileServiceArea.deleteMany({
+        where: { workerProfileId: current!.id }
+      });
+      await tx.workerProfileServiceArea.createMany({
+        data: selectedServiceAreas.map((area) => ({
+          workerProfileId: current!.id,
+          serviceAreaId: area.id
+        }))
+      });
     }
   });
 
@@ -767,20 +906,34 @@ export async function getWorkerReviewProfile(workerProfileId: string) {
   return normalizeProfile(await getWorkerProfileByIdOrThrow(workerProfileId));
 }
 
-export async function approveWorker(workerProfileId: string, adminUserId: string) {
-  const profile = await prisma.workerProfile.findUnique({
-    where: { id: workerProfileId },
-    include: {
-      skills: true
+async function requireActiveServiceAreaAssignment(
+  workerProfileId: string,
+  client: Prisma.TransactionClient | typeof prisma = prisma
+) {
+  const activeAssignmentCount = await client.workerProfileServiceArea.count({
+    where: {
+      workerProfileId,
+      serviceArea: { isActive: true, city: { isActive: true } }
     }
   });
-
-  if (!profile) {
-    throw new WorkerProfileNotFoundError();
+  if (activeAssignmentCount === 0) {
+    throw new WorkerStatusConflictError(
+      "Assign at least one active Partner service area before approval"
+    );
   }
+}
 
-  await prisma.$transaction([
-    prisma.workerProfile.update({
+export async function approveWorker(workerProfileId: string, adminUserId: string) {
+  const userId = await prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT "id" FROM "WorkerProfile" WHERE "id" = ${workerProfileId} FOR UPDATE`;
+    const profile = await tx.workerProfile.findUnique({
+      where: { id: workerProfileId },
+      select: { userId: true }
+    });
+    if (!profile) throw new WorkerProfileNotFoundError();
+
+    await requireActiveServiceAreaAssignment(workerProfileId, tx);
+    await tx.workerProfile.update({
       where: { id: workerProfileId },
       data: {
         onboardingStatus: "approved",
@@ -789,14 +942,15 @@ export async function approveWorker(workerProfileId: string, adminUserId: string
         reviewedAt: new Date(),
         rejectionReason: null
       }
-    }),
-    prisma.workerSkill.updateMany({
+    });
+    await tx.workerSkill.updateMany({
       where: { workerProfileId },
       data: { verifiedByAdmin: true }
     })
-  ]);
+    return profile.userId;
+  });
 
-  return normalizeProfile(await getWorkerProfileOrThrow(profile.userId));
+  return normalizeProfile(await getWorkerProfileOrThrow(userId));
 }
 
 export async function rejectWorker(workerProfileId: string, adminUserId: string, reason: string) {
@@ -846,27 +1000,29 @@ export async function suspendWorker(workerProfileId: string, adminUserId: string
 }
 
 export async function reinstateWorker(workerProfileId: string, adminUserId: string, note: string) {
-  const profile = await prisma.workerProfile.findUnique({
-    where: { id: workerProfileId }
-  });
-
-  if (!profile) {
-    throw new WorkerProfileNotFoundError();
-  }
-
-  if (profile.onboardingStatus !== "suspended") {
-    throw new WorkerStatusConflictError("Only suspended workers can be reinstated");
-  }
-
-  await prisma.workerProfile.update({
-    where: { id: workerProfileId },
-    data: {
-      onboardingStatus: "approved",
-      verificationStatus: VerificationStatus.VERIFIED,
-      rejectionReason: null,
-      reviewedBy: adminUserId,
-      reviewedAt: new Date()
+  const userId = await prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT "id" FROM "WorkerProfile" WHERE "id" = ${workerProfileId} FOR UPDATE`;
+    const profile = await tx.workerProfile.findUnique({
+      where: { id: workerProfileId },
+      select: { userId: true, onboardingStatus: true }
+    });
+    if (!profile) throw new WorkerProfileNotFoundError();
+    if (profile.onboardingStatus !== "suspended") {
+      throw new WorkerStatusConflictError("Only suspended workers can be reinstated");
     }
+
+    await requireActiveServiceAreaAssignment(workerProfileId, tx);
+    await tx.workerProfile.update({
+      where: { id: workerProfileId },
+      data: {
+        onboardingStatus: "approved",
+        verificationStatus: VerificationStatus.VERIFIED,
+        rejectionReason: null,
+        reviewedBy: adminUserId,
+        reviewedAt: new Date()
+      }
+    });
+    return profile.userId;
   });
 
   logger.info(
@@ -878,7 +1034,7 @@ export async function reinstateWorker(workerProfileId: string, adminUserId: stri
     "Worker reinstated"
   );
 
-  return normalizeProfile(await getWorkerProfileOrThrow(profile.userId));
+  return normalizeProfile(await getWorkerProfileOrThrow(userId));
 }
 
 export async function getWorkerDirectory(filters: WorkerDirectoryFilters = {}) {

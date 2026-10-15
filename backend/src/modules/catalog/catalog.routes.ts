@@ -1,12 +1,15 @@
 import { Router } from "express";
 import { prisma } from "../../lib/prisma.js";
-import { requireAuth, requireRole } from "../../middleware/auth.js";
+import { makeCatalogAutocompleteLimiter, makeCatalogSearchLimiter } from "../../lib/rate-limit.js";
+import { optionalAuth, requireAuth, requireRole } from "../../middleware/auth.js";
 import { validate } from "../../middleware/validate.js";
 import {
   addServiceImagesSchema,
   addServicePricingSchema,
   autocompleteCatalogQuerySchema,
   bulkCatalogStatusSchema,
+  bulkCatalogAvailabilitySchema,
+  adminCatalogExportQuerySchema,
   catalogListQuerySchema,
   catalogSearchQuerySchema,
   catalogSlugParamsSchema,
@@ -27,6 +30,7 @@ import {
   addServicePricingHandler,
   addStarterCatalogHandler,
   bulkCatalogStatusHandler,
+  bulkCatalogAvailabilityHandler,
   autocompleteCatalogHandler,
   createCategoryHandler,
   createServiceHandler,
@@ -58,11 +62,13 @@ import {
 
 export const catalogRouter = Router();
 export const adminCatalogRouter = Router();
+const publicCatalogSearchLimiter = makeCatalogSearchLimiter();
+const publicCatalogAutocompleteLimiter = makeCatalogAutocompleteLimiter();
 
 catalogRouter.get("/", validate(catalogListQuerySchema), listCategoriesHandler);
 catalogRouter.get("/categories", validate(catalogListQuerySchema), listCategoriesHandler);
 catalogRouter.get("/home", homeCatalogHandler);
-catalogRouter.get("/services", validate(catalogSearchQuerySchema), searchCatalogHandler);
+catalogRouter.get("/services", optionalAuth, publicCatalogSearchLimiter, validate(catalogSearchQuerySchema), searchCatalogHandler);
 
 // GET /api/catalog/coupons — Returns active public coupons
 catalogRouter.get('/coupons', async (_request, response) => {
@@ -110,8 +116,8 @@ catalogRouter.get('/coupons', async (_request, response) => {
   response.status(200).json({ coupons: mappedCoupons });
 });
 
-catalogRouter.get("/search", validate(catalogSearchQuerySchema), searchCatalogHandler);
-catalogRouter.get("/autocomplete", validate(autocompleteCatalogQuerySchema), autocompleteCatalogHandler);
+catalogRouter.get("/search", optionalAuth, publicCatalogSearchLimiter, validate(catalogSearchQuerySchema), searchCatalogHandler);
+catalogRouter.get("/autocomplete", optionalAuth, publicCatalogAutocompleteLimiter, validate(autocompleteCatalogQuerySchema), autocompleteCatalogHandler);
 
 catalogRouter.get("/professionals", async (_request, response) => {
   const professionals = await prisma.workerProfile.findMany({
@@ -153,6 +159,7 @@ catalogRouter.get("/services/:slug/reviews", validate(catalogSlugParamsSchema), 
 adminCatalogRouter.use(requireAuth, requireRole("ADMIN"));
 adminCatalogRouter.post("/starter", addStarterCatalogHandler);
 adminCatalogRouter.patch("/bulk-status", validate(bulkCatalogStatusSchema), bulkCatalogStatusHandler);
+adminCatalogRouter.post("/availability/bulk", validate(bulkCatalogAvailabilitySchema), bulkCatalogAvailabilityHandler);
 adminCatalogRouter.post("/categories", validate(createCategorySchema), createCategoryHandler);
 adminCatalogRouter.patch("/categories/:id", validate(updateCategorySchema), updateCategoryHandler);
 adminCatalogRouter.delete("/categories/:id", validate(updateCategorySchema), deleteCategoryHandler);
@@ -169,4 +176,4 @@ adminCatalogRouter.post("/services/:id/images", validate(addServiceImagesSchema)
 adminCatalogRouter.post("/services/:id/pricing-rules", validate(addServicePricingSchema), addServicePricingHandler);
 adminCatalogRouter.patch("/pricing-rules/:id", validate(updatePriceRuleSchema), updatePriceRuleHandler);
 adminCatalogRouter.post("/import", validate(importCatalogSchema), importCatalogHandler);
-adminCatalogRouter.get("/export", exportCatalogHandler);
+adminCatalogRouter.get("/export", validate(adminCatalogExportQuerySchema), exportCatalogHandler);
