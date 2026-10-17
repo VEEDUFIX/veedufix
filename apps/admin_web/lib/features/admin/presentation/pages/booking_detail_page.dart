@@ -367,10 +367,10 @@ class _AdminBookingDetailPageState
                       );
                     }
                     if (trackingSnapshot.hasError) {
-                      return _SurfaceCard(
+                      return const _SurfaceCard(
                         child: Padding(
-                          padding: const EdgeInsets.all(16),
-                          child: const Text(
+                          padding: EdgeInsets.all(16),
+                          child: Text(
                             'Tracking state is unavailable right now. Refresh to retry.',
                           ),
                         ),

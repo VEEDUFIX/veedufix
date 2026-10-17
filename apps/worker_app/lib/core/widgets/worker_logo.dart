@@ -20,7 +20,9 @@ class WorkerLogo extends StatelessWidget {
       height: height,
       width: width,
       fit: BoxFit.contain,
-      colorFilter: color != null ? ColorFilter.mode(color!, BlendMode.srcIn) : null,
+      semanticsLabel: 'VeeduFix Partner',
+      colorFilter:
+          color != null ? ColorFilter.mode(color!, BlendMode.srcIn) : null,
     );
   }
 }

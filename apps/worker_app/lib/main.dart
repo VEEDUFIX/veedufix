@@ -50,7 +50,8 @@ Future<void> _initializeSentry() async {
         'APP_ENV',
         defaultValue: 'production',
       );
-      options.release = const String.fromEnvironment('APP_RELEASE', defaultValue: '');
+      options.release =
+          const String.fromEnvironment('APP_RELEASE', defaultValue: '');
     });
   } catch (_) {
     // Observability is optional and must never prevent app startup.

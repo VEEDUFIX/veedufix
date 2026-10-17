@@ -3713,7 +3713,6 @@ class _CatalogCard extends StatelessWidget {
     required this.onDisable,
     this.trailing,
     this.imageUrl,
-    this.secondaryLabel = 'Disable',
   });
 
   final String title;
@@ -3725,7 +3724,6 @@ class _CatalogCard extends StatelessWidget {
   final VoidCallback? onDisable;
   final Widget? trailing;
   final String? imageUrl;
-  final String secondaryLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -3784,7 +3782,7 @@ class _CatalogCard extends StatelessWidget {
                     IconButton(
                       onPressed: onDisable,
                       icon: const Icon(Icons.visibility_off_rounded),
-                      tooltip: secondaryLabel,
+                      tooltip: 'Disable',
                     ),
                 ],
               ),
@@ -5108,8 +5106,9 @@ class _ServiceDetailPageState extends ConsumerState<ServiceDetailPage> {
                                                                           child:
                                                                               const Text('Remove'))
                                                                     ]));
-                                                        if (confirmed != true)
+                                                        if (confirmed != true) {
                                                           return;
+                                                        }
                                                         setDialogState(() {
                                                           final removedPrimary =
                                                               item['isPrimary'] ==

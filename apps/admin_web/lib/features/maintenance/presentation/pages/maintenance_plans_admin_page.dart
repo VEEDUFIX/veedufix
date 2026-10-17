@@ -21,10 +21,12 @@ String _maintenancePlansLoadError(Object error) {
   if (error is DioException) {
     final status = error.response?.statusCode;
     if (status == 401) return 'Your Admin session expired. Sign in and retry.';
-    if (status == 403)
+    if (status == 403) {
       return 'This account does not have access to maintenance plans.';
-    if (status != null)
+    }
+    if (status != null) {
       return 'Maintenance plans could not load (HTTP $status).';
+    }
     return 'Could not reach the backend. Check the connection and retry.';
   }
   final message =
