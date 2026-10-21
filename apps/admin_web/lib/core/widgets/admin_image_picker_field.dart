@@ -4,12 +4,15 @@ import 'dart:ui' as ui;
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
+typedef PendingImageUpload = Future<String?> Function();
+
 class AdminImagePickerField extends StatefulWidget {
   const AdminImagePickerField({
     required this.value,
     required this.onChanged,
     required this.uploadImage,
     this.onPendingUploadChanged,
+    this.onPendingImageUploadActionChanged,
     this.label = 'Image',
     this.recommendedWidth = 1200,
     this.recommendedHeight = 900,
@@ -21,6 +24,7 @@ class AdminImagePickerField extends StatefulWidget {
   final ValueChanged<String?> onChanged;
   final Future<String> Function(Uint8List bytes, String fileName) uploadImage;
   final ValueChanged<bool>? onPendingUploadChanged;
+  final ValueChanged<PendingImageUpload?>? onPendingImageUploadActionChanged;
   final String label;
   final int recommendedWidth;
   final int recommendedHeight;
@@ -99,12 +103,14 @@ class _AdminImagePickerFieldState extends State<AdminImagePickerField> {
       _error = null;
     });
     widget.onPendingUploadChanged?.call(true);
+    widget.onPendingImageUploadActionChanged?.call(_uploadPendingImage);
   }
 
-  Future<void> _uploadPendingImage() async {
+  Future<String?> _uploadPendingImage() async {
     final bytes = _pendingBytes;
     final fileName = _pendingFileName;
-    if (bytes == null || fileName == null || _uploading) return;
+    if (bytes == null || fileName == null) return widget.value;
+    if (_uploading) return null;
 
     setState(() {
       _uploading = true;
@@ -112,15 +118,17 @@ class _AdminImagePickerFieldState extends State<AdminImagePickerField> {
     });
     try {
       final url = await widget.uploadImage(bytes, fileName);
-      if (!mounted) return;
+      if (!mounted) return null;
       widget.onChanged(url);
       widget.onPendingUploadChanged?.call(false);
+      widget.onPendingImageUploadActionChanged?.call(null);
       setState(() {
         _pendingBytes = null;
         _pendingFileName = null;
         _pendingWidth = null;
         _pendingHeight = null;
       });
+      return url;
     } catch (error) {
       if (mounted) {
         final message = error is StateError ? error.message.toString() : '';
@@ -128,6 +136,7 @@ class _AdminImagePickerFieldState extends State<AdminImagePickerField> {
             ? 'Image upload failed. Check your connection and retry.'
             : message);
       }
+      return null;
     } finally {
       if (mounted) setState(() => _uploading = false);
     }
@@ -245,6 +254,7 @@ class _AdminImagePickerFieldState extends State<AdminImagePickerField> {
       _error = null;
     });
     widget.onPendingUploadChanged?.call(false);
+    widget.onPendingImageUploadActionChanged?.call(null);
     widget.onChanged(null);
   }
 

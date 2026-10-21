@@ -253,6 +253,7 @@ class _HomeBannerManagerPageState extends ConsumerState<HomeBannerManagerPage> {
     String? error;
     var saving = false;
     var imageUploadPending = false;
+    PendingImageUpload? uploadPendingImage;
 
     await showDialog<void>(
       context: context,
@@ -283,6 +284,8 @@ class _HomeBannerManagerPageState extends ConsumerState<HomeBannerManagerPage> {
                       onPendingUploadChanged: (pending) => setDialogState(
                         () => imageUploadPending = pending,
                       ),
+                      onPendingImageUploadActionChanged: (upload) =>
+                          setDialogState(() => uploadPendingImage = upload),
                       uploadImage: _uploadBannerImage,
                       recommendedWidth: 1200,
                       recommendedHeight: 630,
@@ -478,15 +481,16 @@ class _HomeBannerManagerPageState extends ConsumerState<HomeBannerManagerPage> {
                 child: const Text('Cancel'),
               ),
               FilledButton(
-                onPressed: saving || imageUploadPending
+                onPressed: saving
                     ? null
                     : () async {
-                        final selectedImageUrl = imageUrl?.trim() ?? '';
                         final selectedDestinationValue =
                             destinationValue.trim();
                         final sortOrder =
                             int.tryParse(orderController.text.trim());
-                        if (!selectedImageUrl.startsWith('https://')) {
+                        if (!imageUploadPending &&
+                            !(imageUrl?.trim().startsWith('https://') ??
+                                false)) {
                           setDialogState(() => error =
                               'Upload a JPG or PNG banner image before saving.');
                           return;
@@ -550,6 +554,23 @@ class _HomeBannerManagerPageState extends ConsumerState<HomeBannerManagerPage> {
                           error = null;
                         });
                         try {
+                          var selectedImageUrl = imageUrl?.trim() ?? '';
+                          if (imageUploadPending) {
+                            final uploadedUrl =
+                                await uploadPendingImage?.call();
+                            if (uploadedUrl == null ||
+                                !uploadedUrl.startsWith('https://')) {
+                              if (dialogContext.mounted) {
+                                setDialogState(() {
+                                  saving = false;
+                                  error =
+                                      'Image upload failed. Retry the upload and save again.';
+                                });
+                              }
+                              return;
+                            }
+                            selectedImageUrl = uploadedUrl;
+                          }
                           await _saveBanner(
                             {
                               'imageUrl': selectedImageUrl,
