@@ -219,10 +219,10 @@ export const createCategorySchema = z.object({
   body: z.object({
     name: z.string().min(2).max(160),
     slug: optionalSlug,
-    description: z.string().max(5000).optional(),
-    iconUrl: z.string().url().optional(),
-    seoTitle: z.string().max(160).optional(),
-    seoDescription: z.string().max(300).optional(),
+    description: z.string().max(5000).nullable().optional(),
+    iconUrl: z.string().url().nullable().optional(),
+    seoTitle: z.string().max(160).nullable().optional(),
+    seoDescription: z.string().max(300).nullable().optional(),
     sortOrder: z.number().int().min(0).optional(),
     isActive: z.boolean().optional(),
     featured: z.boolean().optional(),
@@ -245,10 +245,10 @@ export const createSubcategorySchema = z.object({
     categoryId: id,
     name: z.string().min(2).max(160),
     slug: optionalSlug,
-    description: z.string().max(5000).optional(),
-    iconUrl: z.string().url().optional(),
-    seoTitle: z.string().max(160).optional(),
-    seoDescription: z.string().max(300).optional(),
+    description: z.string().max(5000).nullable().optional(),
+    iconUrl: z.string().url().nullable().optional(),
+    seoTitle: z.string().max(160).nullable().optional(),
+    seoDescription: z.string().max(300).nullable().optional(),
     basePrice: z.number().nonnegative().optional(),
     sortOrder: z.number().int().min(0).optional(),
     rating: z.number().min(0).max(5).optional(),
@@ -274,11 +274,11 @@ export const createServiceSchema = z.object({
     name: z.string().min(2).max(160),
     slug: optionalSlug,
     code: z.string().min(2).max(80).optional(),
-    description: z.string().max(10000).optional(),
-    shortDescription: z.string().max(500).optional(),
+    description: z.string().max(10000).nullable().optional(),
+    shortDescription: z.string().max(500).nullable().optional(),
     startingPrice: z.number().positive(),
     gstRate: z.number().positive().default(18),
-    sacCode: z.string().max(80).optional(),
+    sacCode: z.string().max(80).nullable().optional(),
     estimatedDurationMins: z.number().int().positive(),
     warrantyDays: z.number().int().min(0).optional(),
     gstApplicable: z.boolean().optional(),
@@ -311,13 +311,13 @@ export const createServiceSchema = z.object({
     popular: z.boolean().optional(),
     rating: z.number().min(0).max(5).optional(),
     reviewCount: z.number().int().min(0).optional(),
-    cancellationPolicy: z.string().max(2000).optional(),
+    cancellationPolicy: z.string().max(2000).nullable().optional(),
     inclusions: z.array(z.string().trim().min(1).max(300)).max(50).optional(),
     exclusions: z.array(z.string().trim().min(1).max(300)).max(50).optional(),
-    seoTitle: z.string().max(160).optional(),
-    seoDescription: z.string().max(300).optional(),
-    seoKeywords: z.string().max(500).optional(),
-    iconUrl: z.string().url().optional(),
+    seoTitle: z.string().max(160).nullable().optional(),
+    seoDescription: z.string().max(300).nullable().optional(),
+    seoKeywords: z.string().max(500).nullable().optional(),
+    iconUrl: z.string().url().nullable().optional(),
     sortOrder: z.number().int().min(0).optional(),
     translations: z.array(translationSchema).optional(),
     images: z.array(imageSchema).optional(),
@@ -362,7 +362,15 @@ export const addServicePricingSchema = z.object({
   params: z.object({
     id
   }),
-  body: priceRuleSchema
+  body: priceRuleSchema.superRefine((rule, context) => {
+    if (rule.type === "CITY" && !rule.cityId) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["cityId"],
+        message: "Choose a city for a city pricing rule"
+      });
+    }
+  })
 });
 
 export const updatePriceRuleSchema = z.object({
@@ -372,61 +380,92 @@ export const updatePriceRuleSchema = z.object({
   body: priceRuleSchema.partial()
 });
 
+function normalizeExportedAssignments(value: Record<string, unknown>) {
+  if (value.serviceAreaIds === undefined && Array.isArray(value.serviceAreaAssignments)) {
+    value.serviceAreaIds = value.serviceAreaAssignments.flatMap((assignment) => {
+      if (!assignment || typeof assignment !== "object") return [];
+      const serviceAreaId = (assignment as Record<string, unknown>).serviceAreaId;
+      return typeof serviceAreaId === "string" ? [serviceAreaId] : [];
+    });
+  }
+  return value;
+}
+
+function normalizeExportedService(value: unknown): unknown {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return value;
+  const service = normalizeExportedAssignments({ ...(value as Record<string, unknown>) });
+  if (service.priceRules === undefined && Array.isArray(service.pricingRules)) {
+    service.priceRules = service.pricingRules;
+  }
+  for (const field of ["startingPrice", "gstRate", "rating", "reviewCount"]) {
+    if (typeof service[field] === "string" && service[field].trim()) {
+      const parsed = Number(service[field]);
+      if (Number.isFinite(parsed)) service[field] = parsed;
+    }
+  }
+  for (const [field, relation] of [["requiredSkills", "skill"], ["requiredTools", "tool"]] as const) {
+    if (Array.isArray(service[field])) {
+      service[field] = service[field].map((item) => {
+        if (!item || typeof item !== "object") return item;
+        const entry = item as Record<string, unknown>;
+        const related = entry[relation];
+        return related && typeof related === "object"
+          ? { ...entry, ...(related as Record<string, unknown>) }
+          : entry;
+      });
+    }
+  }
+  for (const field of ["variants", "addons", "pricingRules", "priceRules"] as const) {
+    if (!Array.isArray(service[field])) continue;
+    service[field] = service[field].map((value) => {
+      if (!value || typeof value !== "object") return value;
+      const item = normalizeExportedAssignments({ ...(value as Record<string, unknown>) });
+      for (const numericField of ["price", "originalPrice"]) {
+        if (typeof item[numericField] === "string" && item[numericField].trim()) {
+          const parsed = Number(item[numericField]);
+          if (Number.isFinite(parsed)) item[numericField] = parsed;
+        }
+      }
+      return item;
+    });
+  }
+  return service;
+}
+
+const importServiceSchema = z.preprocess(
+  normalizeExportedService,
+  createServiceSchema.shape.body.innerType()
+    .omit({ categoryId: true, subcategoryId: true })
+    .extend({
+      priceRules: z.array(priceRuleSchema.extend({ cityId: z.string().nullable().optional() })).optional()
+    })
+    .superRefine((service, context) => validateServiceFeatureConfiguration(service, context))
+);
+
+const importSubcategorySchema = z.preprocess((value) => {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return value;
+  const subcategory = normalizeExportedAssignments({ ...(value as Record<string, unknown>) });
+  if (typeof subcategory.basePrice === "string" && subcategory.basePrice.trim()) {
+    const parsed = Number(subcategory.basePrice);
+    if (Number.isFinite(parsed)) subcategory.basePrice = parsed;
+  }
+  if (subcategory.services === undefined && Array.isArray(subcategory.catalogServices)) {
+    subcategory.services = subcategory.catalogServices;
+  }
+  return subcategory;
+}, createSubcategorySchema.shape.body.omit({ categoryId: true }).extend({
+  services: z.array(importServiceSchema).optional()
+}));
+
+const importCategorySchema = z.preprocess((value) => {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return value;
+  return normalizeExportedAssignments({ ...(value as Record<string, unknown>) });
+}, createCategorySchema.shape.body.extend({
+  subcategories: z.array(importSubcategorySchema).optional()
+}));
+
 export const importCatalogSchema = z.object({
-  body: z.object({
-    categories: z.array(
-      z.object({
-        name: z.string().min(2).max(160),
-        slug: optionalSlug,
-        description: z.string().max(5000).optional(),
-        iconUrl: z.string().url().optional(),
-        sortOrder: z.number().int().min(0).optional(),
-        featured: z.boolean().optional(),
-        popular: z.boolean().optional(),
-        translations: z.array(translationSchema).optional(),
-        subcategories: z.array(
-          z.object({
-            name: z.string().min(2).max(160),
-            slug: optionalSlug,
-            description: z.string().max(5000).optional(),
-            iconUrl: z.string().url().optional(),
-            basePrice: z.number().nonnegative().optional(),
-            sortOrder: z.number().int().min(0).optional(),
-            isActive: z.boolean().optional(),
-            translations: z.array(translationSchema).optional(),
-            services: z.array(
-              z.object({
-                name: z.string().min(2).max(160),
-                slug: optionalSlug,
-                code: z.string().min(2).max(80).optional(),
-                description: z.string().max(10000).optional(),
-                shortDescription: z.string().max(500).optional(),
-                startingPrice: z.number().positive(),
-                gstRate: z.number().positive().default(18),
-                sacCode: z.string().max(80).optional(),
-                estimatedDurationMins: z.number().int().positive(),
-                warrantyDays: z.number().int().min(0).optional(),
-                gstApplicable: z.boolean().optional(),
-                emergencyAvailable: z.boolean().optional(),
-                homeVisit: z.boolean().optional(),
-                featured: z.boolean().optional(),
-                popular: z.boolean().optional(),
-                rating: z.number().min(0).max(5).optional(),
-                reviewCount: z.number().int().min(0).optional(),
-                iconUrl: z.string().url().optional(),
-                sortOrder: z.number().int().min(0).optional(),
-                translations: z.array(translationSchema).optional(),
-                images: z.array(imageSchema).optional(),
-                requiredSkills: z.array(requirementSchema).optional(),
-                requiredTools: z.array(requirementSchema).optional(),
-                requiredDocuments: z.array(requirementSchema).optional()
-              })
-            ).optional()
-          })
-        ).optional()
-      })
-    )
-  })
+  body: z.object({ categories: z.array(importCategorySchema) })
 });
 
 export const bulkCatalogStatusSchema = z.object({

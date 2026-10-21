@@ -119,7 +119,7 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
   _PendingPaymentRecovery? _pendingPaymentRecovery;
   bool _pendingPaymentRecoveryStorageFailed = false;
   final FlutterSecureStorage _paymentRecoveryStorage =
-      const FlutterSecureStorage();
+      SecureStore.createStorage();
   String? _paymentVerificationError;
   bool _paymentVerificationRetryable = false;
 

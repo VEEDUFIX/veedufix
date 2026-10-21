@@ -962,10 +962,10 @@ async function resolveHomeServiceSections(cityId?: string, pincode?: string) {
 async function createCategory(data: {
   name: string;
   slug?: string;
-  description?: string;
-  iconUrl?: string;
-  seoTitle?: string;
-  seoDescription?: string;
+  description?: string | null;
+  iconUrl?: string | null;
+  seoTitle?: string | null;
+  seoDescription?: string | null;
   sortOrder?: number;
   isActive?: boolean;
   featured?: boolean;
@@ -1042,10 +1042,10 @@ async function updateCategory(id: string, data: Record<string, unknown>) {
       data: {
       name: typeof data.name === "string" ? data.name : undefined,
       slug: nextSlug,
-      description: typeof data.description === "string" ? data.description : undefined,
-      iconUrl: typeof data.iconUrl === "string" ? data.iconUrl : undefined,
-      seoTitle: typeof data.seoTitle === "string" ? data.seoTitle : undefined,
-      seoDescription: typeof data.seoDescription === "string" ? data.seoDescription : undefined,
+      description: data.description === null ? null : typeof data.description === "string" ? data.description : undefined,
+      iconUrl: data.iconUrl === null ? null : typeof data.iconUrl === "string" ? data.iconUrl : undefined,
+      seoTitle: data.seoTitle === null ? null : typeof data.seoTitle === "string" ? data.seoTitle : undefined,
+      seoDescription: data.seoDescription === null ? null : typeof data.seoDescription === "string" ? data.seoDescription : undefined,
       sortOrder: typeof data.sortOrder === "number" ? data.sortOrder : undefined,
       isActive: typeof data.isActive === "boolean" ? data.isActive : undefined,
       featured: typeof data.featured === "boolean" ? data.featured : undefined,
@@ -1111,10 +1111,10 @@ async function createSubcategory(data: {
   categoryId: string;
   name: string;
   slug?: string;
-  description?: string;
-  iconUrl?: string;
-  seoTitle?: string;
-  seoDescription?: string;
+  description?: string | null;
+  iconUrl?: string | null;
+  seoTitle?: string | null;
+  seoDescription?: string | null;
   basePrice?: number;
   sortOrder?: number;
   rating?: number;
@@ -1198,10 +1198,10 @@ async function updateSubcategory(id: string, data: Record<string, unknown>) {
       categoryId: typeof data.categoryId === "string" ? data.categoryId : undefined,
       name: typeof data.name === "string" ? data.name : undefined,
       slug: nextSlug,
-      description: typeof data.description === "string" ? data.description : undefined,
-      iconUrl: typeof data.iconUrl === "string" ? data.iconUrl : undefined,
-      seoTitle: typeof data.seoTitle === "string" ? data.seoTitle : undefined,
-      seoDescription: typeof data.seoDescription === "string" ? data.seoDescription : undefined,
+      description: data.description === null ? null : typeof data.description === "string" ? data.description : undefined,
+      iconUrl: data.iconUrl === null ? null : typeof data.iconUrl === "string" ? data.iconUrl : undefined,
+      seoTitle: data.seoTitle === null ? null : typeof data.seoTitle === "string" ? data.seoTitle : undefined,
+      seoDescription: data.seoDescription === null ? null : typeof data.seoDescription === "string" ? data.seoDescription : undefined,
       basePrice: typeof data.basePrice === "number" ? new Prisma.Decimal(data.basePrice) : undefined,
       sortOrder: typeof data.sortOrder === "number" ? data.sortOrder : undefined,
       rating: typeof data.rating === "number" ? new Prisma.Decimal(data.rating) : undefined,
@@ -1255,11 +1255,11 @@ async function createService(data: {
   name: string;
   slug?: string;
   code?: string;
-  description?: string;
-  shortDescription?: string;
+  description?: string | null;
+  shortDescription?: string | null;
   startingPrice: number;
   gstRate?: number;
-  sacCode?: string;
+  sacCode?: string | null;
   estimatedDurationMins: number;
   warrantyDays?: number;
   gstApplicable?: boolean;
@@ -1292,13 +1292,13 @@ async function createService(data: {
   popular?: boolean;
   rating?: number;
   reviewCount?: number;
-  cancellationPolicy?: string;
+  cancellationPolicy?: string | null;
   inclusions?: string[];
   exclusions?: string[];
-  seoTitle?: string;
-  seoDescription?: string;
-  seoKeywords?: string;
-  iconUrl?: string;
+  seoTitle?: string | null;
+  seoDescription?: string | null;
+  seoKeywords?: string | null;
+  iconUrl?: string | null;
   sortOrder?: number;
   translations?: Array<Record<string, unknown>>;
   images?: Array<Record<string, unknown>>;
@@ -1588,11 +1588,11 @@ async function updateService(id: string, data: Record<string, unknown>) {
         name: typeof data.name === "string" ? data.name : undefined,
         slug: nextSlug,
         code: nextCode,
-        description: typeof data.description === "string" ? data.description : undefined,
-        shortDescription: typeof data.shortDescription === "string" ? data.shortDescription : undefined,
+        description: data.description === null ? null : typeof data.description === "string" ? data.description : undefined,
+        shortDescription: data.shortDescription === null ? null : typeof data.shortDescription === "string" ? data.shortDescription : undefined,
         startingPrice: typeof data.startingPrice === "number" ? new Prisma.Decimal(data.startingPrice) : undefined,
         gstRate: typeof data.gstRate === "number" ? new Prisma.Decimal(data.gstRate) : undefined,
-        sacCode: typeof data.sacCode === "string" ? normalizeSacCode(data.sacCode) : undefined,
+        sacCode: data.sacCode === null ? null : typeof data.sacCode === "string" ? normalizeSacCode(data.sacCode) : undefined,
         estimatedDurationMins: typeof data.estimatedDurationMins === "number" ? data.estimatedDurationMins : undefined,
         warrantyDays: typeof data.warrantyDays === "number" ? data.warrantyDays : undefined,
         gstApplicable: typeof data.gstApplicable === "boolean" ? data.gstApplicable : undefined,
@@ -1640,17 +1640,17 @@ async function updateService(id: string, data: Record<string, unknown>) {
         popular: typeof data.popular === "boolean" ? data.popular : undefined,
         rating: typeof data.rating === "number" ? new Prisma.Decimal(data.rating) : undefined,
         reviewCount: typeof data.reviewCount === "number" ? data.reviewCount : undefined,
-        cancellationPolicy: typeof data.cancellationPolicy === "string" ? data.cancellationPolicy : undefined,
+        cancellationPolicy: data.cancellationPolicy === null ? null : typeof data.cancellationPolicy === "string" ? data.cancellationPolicy : undefined,
         inclusions: Array.isArray(data.inclusions)
           ? data.inclusions.filter((item): item is string => typeof item === "string")
           : undefined,
         exclusions: Array.isArray(data.exclusions)
           ? data.exclusions.filter((item): item is string => typeof item === "string")
           : undefined,
-        seoTitle: typeof data.seoTitle === "string" ? data.seoTitle : undefined,
-        seoDescription: typeof data.seoDescription === "string" ? data.seoDescription : undefined,
-        seoKeywords: typeof data.seoKeywords === "string" ? data.seoKeywords : undefined,
-        iconUrl: typeof data.iconUrl === "string" ? data.iconUrl : undefined,
+        seoTitle: data.seoTitle === null ? null : typeof data.seoTitle === "string" ? data.seoTitle : undefined,
+        seoDescription: data.seoDescription === null ? null : typeof data.seoDescription === "string" ? data.seoDescription : undefined,
+        seoKeywords: data.seoKeywords === null ? null : typeof data.seoKeywords === "string" ? data.seoKeywords : undefined,
+        iconUrl: data.iconUrl === null ? null : typeof data.iconUrl === "string" ? data.iconUrl : undefined,
         sortOrder: typeof data.sortOrder === "number" ? data.sortOrder : undefined
       }
     });
@@ -1899,6 +1899,18 @@ async function upsertPriceRule(serviceId: string, data: {
   isActive?: boolean;
   priority?: number;
 }) {
+  if (data.type === "CITY" && !data.cityId) {
+    throw AppError.badRequest("Choose a city for a city pricing rule");
+  }
+  if (data.cityId) {
+    const city = await prisma.city.findFirst({
+      where: { id: data.cityId, isActive: true },
+      select: { id: true },
+    });
+    if (!city) {
+      throw AppError.badRequest("The selected city is not active or no longer exists");
+    }
+  }
   const created = await prisma.servicePriceRule.create({
     data: {
       serviceId,
@@ -1941,29 +1953,32 @@ async function updatePriceRule(id: string, data: Record<string, unknown>) {
 }
 
 async function importCatalog(categories: Array<Record<string, unknown>>) {
-  let categoryCount = 0;
-  let subcategoryCount = 0;
-  let serviceCount = 0;
+  const result = await prisma.$transaction(async (tx) => {
+    let categoryCount = 0;
+    let subcategoryCount = 0;
+    let serviceCount = 0;
 
-  for (const category of categories) {
-    const createdCategory = await createOrUpdateCategoryFromImport(category);
-    categoryCount += 1;
+    for (const category of categories) {
+      const createdCategory = await createOrUpdateCategoryFromImport(category, tx);
+      categoryCount += 1;
 
-    const subcategories = Array.isArray(category.subcategories) ? category.subcategories as Array<Record<string, unknown>> : [];
-    for (const subcategory of subcategories) {
-      const createdSubcategory = await createOrUpdateSubcategoryFromImport(createdCategory.id, subcategory);
-      subcategoryCount += 1;
+      const subcategories = Array.isArray(category.subcategories) ? category.subcategories as Array<Record<string, unknown>> : [];
+      for (const subcategory of subcategories) {
+        const createdSubcategory = await createOrUpdateSubcategoryFromImport(createdCategory.id, subcategory, tx);
+        subcategoryCount += 1;
 
-      const services = Array.isArray(subcategory.services) ? subcategory.services as Array<Record<string, unknown>> : [];
-      for (const service of services) {
-        await createOrUpdateServiceFromImport(createdCategory.id, createdSubcategory.id, service);
-        serviceCount += 1;
+        const services = Array.isArray(subcategory.services) ? subcategory.services as Array<Record<string, unknown>> : [];
+        for (const service of services) {
+          await createOrUpdateServiceFromImport(createdCategory.id, createdSubcategory.id, service, tx);
+          serviceCount += 1;
+        }
       }
     }
-  }
 
+    return { categoryCount, subcategoryCount, serviceCount };
+  }, { maxWait: 10_000, timeout: 60_000 });
   await invalidateCatalogCache();
-  return { categoryCount, subcategoryCount, serviceCount };
+  return result;
 }
 
 const starterCatalog = [
@@ -2320,92 +2335,363 @@ async function bulkUpdateCatalogAvailability(input: {
   return { action: input.action, ...result };
 }
 
-async function createOrUpdateCategoryFromImport(category: Record<string, unknown>) {
+async function createOrUpdateCategoryFromImport(category: Record<string, unknown>, tx: Prisma.TransactionClient) {
   const slug = String(category.slug ?? slugify(String(category.name ?? "category")));
-  const existing = await prisma.serviceCategory.findUnique({ where: { slug } });
+  const existing = await tx.serviceCategory.findUnique({ where: { slug } });
   const payload = {
     name: String(category.name ?? slug),
     slug,
-    description: category.description ? String(category.description) : undefined,
-    iconUrl: category.iconUrl ? String(category.iconUrl) : undefined,
-    seoTitle: category.seoTitle ? String(category.seoTitle) : undefined,
-    seoDescription: category.seoDescription ? String(category.seoDescription) : undefined,
-    sortOrder: typeof category.sortOrder === "number" ? category.sortOrder : 0,
-    isActive: typeof category.isActive === "boolean" ? category.isActive : true,
-    featured: typeof category.featured === "boolean" ? category.featured : false,
-    popular: typeof category.popular === "boolean" ? category.popular : false
+    description: typeof category.description === "string" ? category.description : category.description === null ? null : undefined,
+    iconUrl: typeof category.iconUrl === "string" ? category.iconUrl : category.iconUrl === null ? null : undefined,
+    seoTitle: typeof category.seoTitle === "string" ? category.seoTitle : category.seoTitle === null ? null : undefined,
+    seoDescription: typeof category.seoDescription === "string" ? category.seoDescription : category.seoDescription === null ? null : undefined,
+    sortOrder: typeof category.sortOrder === "number" ? category.sortOrder : existing?.sortOrder ?? 0,
+    isActive: typeof category.isActive === "boolean" ? category.isActive : existing?.isActive ?? true,
+    featured: typeof category.featured === "boolean" ? category.featured : existing?.featured ?? false,
+    popular: typeof category.popular === "boolean" ? category.popular : existing?.popular ?? false,
+    availabilityMode: category.availabilityMode === "CUSTOM" || category.availabilityMode === "INHERITED"
+      ? category.availabilityMode
+      : existing?.availabilityMode ?? "INHERITED"
   };
 
-  if (!existing) {
-    return prisma.serviceCategory.create({ data: payload });
+  const saved = existing
+    ? await tx.serviceCategory.update({ where: { id: existing.id }, data: payload })
+    : await tx.serviceCategory.create({ data: payload });
+  const serviceAreaIds = Array.isArray(category.serviceAreaIds)
+    ? category.serviceAreaIds.filter((areaId): areaId is string => typeof areaId === "string")
+    : undefined;
+  if (serviceAreaIds !== undefined || category.availabilityMode === "INHERITED") {
+    if (serviceAreaIds?.length && await tx.serviceArea.count({ where: { id: { in: serviceAreaIds } } }) !== serviceAreaIds.length) {
+      throw AppError.badRequest("One or more imported category service areas do not exist");
+    }
+    await tx.serviceAreaCategory.deleteMany({ where: { categoryId: saved.id } });
+    if (payload.availabilityMode === "CUSTOM" && serviceAreaIds?.length) {
+      await tx.serviceAreaCategory.createMany({
+        data: serviceAreaIds.map((serviceAreaId) => ({ categoryId: saved.id, serviceAreaId }))
+      });
+    }
   }
-
-  return prisma.serviceCategory.update({
-    where: { id: existing.id },
-    data: payload
-  });
+  if (Array.isArray(category.translations)) {
+    await tx.serviceCategoryTranslation.deleteMany({ where: { categoryId: saved.id } });
+    if (category.translations.length) {
+      await tx.serviceCategoryTranslation.createMany({
+        data: category.translations.map((translation) => ({
+          categoryId: saved.id,
+          locale: String(translation.locale ?? "en"),
+          name: String(translation.name ?? saved.name),
+          description: typeof translation.description === "string" ? translation.description : null,
+          seoTitle: typeof translation.seoTitle === "string" ? translation.seoTitle : null,
+          seoDescription: typeof translation.seoDescription === "string" ? translation.seoDescription : null
+        }))
+      });
+    }
+  }
+  return saved;
 }
 
-async function createOrUpdateSubcategoryFromImport(categoryId: string, subcategory: Record<string, unknown>) {
+async function createOrUpdateSubcategoryFromImport(categoryId: string, subcategory: Record<string, unknown>, tx: Prisma.TransactionClient) {
   const slug = String(subcategory.slug ?? slugify(String(subcategory.name ?? "subcategory")));
-  const existing = await prisma.serviceSubcategory.findUnique({ where: { slug } });
+  const existing = await tx.serviceSubcategory.findUnique({ where: { slug } });
   const payload = {
     categoryId,
     name: String(subcategory.name ?? slug),
     slug,
-    description: subcategory.description ? String(subcategory.description) : undefined,
-    iconUrl: subcategory.iconUrl ? String(subcategory.iconUrl) : undefined,
-    basePrice: new Prisma.Decimal(typeof subcategory.basePrice === "number" ? subcategory.basePrice : 0),
-    sortOrder: typeof subcategory.sortOrder === "number" ? subcategory.sortOrder : 0,
-    isActive: typeof subcategory.isActive === "boolean" ? subcategory.isActive : true
+    description: typeof subcategory.description === "string" ? subcategory.description : subcategory.description === null ? null : undefined,
+    iconUrl: typeof subcategory.iconUrl === "string" ? subcategory.iconUrl : subcategory.iconUrl === null ? null : undefined,
+    seoTitle: typeof subcategory.seoTitle === "string" ? subcategory.seoTitle : subcategory.seoTitle === null ? null : undefined,
+    seoDescription: typeof subcategory.seoDescription === "string" ? subcategory.seoDescription : subcategory.seoDescription === null ? null : undefined,
+    basePrice: new Prisma.Decimal(typeof subcategory.basePrice === "number" ? subcategory.basePrice : existing?.basePrice ?? 0),
+    sortOrder: typeof subcategory.sortOrder === "number" ? subcategory.sortOrder : existing?.sortOrder ?? 0,
+    rating: new Prisma.Decimal(typeof subcategory.rating === "number" ? subcategory.rating : existing?.rating ?? 0),
+    reviewCount: typeof subcategory.reviewCount === "number" ? subcategory.reviewCount : existing?.reviewCount ?? 0,
+    isActive: typeof subcategory.isActive === "boolean" ? subcategory.isActive : existing?.isActive ?? true,
+    availabilityMode: subcategory.availabilityMode === "CUSTOM" || subcategory.availabilityMode === "INHERITED"
+      ? subcategory.availabilityMode
+      : existing?.availabilityMode ?? "INHERITED"
   };
 
-  if (!existing) {
-    return prisma.serviceSubcategory.create({ data: payload });
+  const saved = existing
+    ? await tx.serviceSubcategory.update({ where: { id: existing.id }, data: payload })
+    : await tx.serviceSubcategory.create({ data: payload });
+  const serviceAreaIds = Array.isArray(subcategory.serviceAreaIds)
+    ? subcategory.serviceAreaIds.filter((areaId): areaId is string => typeof areaId === "string")
+    : undefined;
+  if (serviceAreaIds !== undefined || subcategory.availabilityMode === "INHERITED") {
+    if (serviceAreaIds?.length && await tx.serviceArea.count({ where: { id: { in: serviceAreaIds } } }) !== serviceAreaIds.length) {
+      throw AppError.badRequest("One or more imported subcategory service areas do not exist");
+    }
+    await tx.serviceAreaSubcategory.deleteMany({ where: { subcategoryId: saved.id } });
+    if (payload.availabilityMode === "CUSTOM" && serviceAreaIds?.length) {
+      await tx.serviceAreaSubcategory.createMany({
+        data: serviceAreaIds.map((serviceAreaId) => ({ subcategoryId: saved.id, serviceAreaId }))
+      });
+    }
   }
-
-  return prisma.serviceSubcategory.update({
-    where: { id: existing.id },
-    data: payload
-  });
+  if (Array.isArray(subcategory.translations)) {
+    await tx.serviceSubcategoryTranslation.deleteMany({ where: { subcategoryId: saved.id } });
+    if (subcategory.translations.length) {
+      await tx.serviceSubcategoryTranslation.createMany({
+        data: subcategory.translations.map((translation) => ({
+          subcategoryId: saved.id,
+          locale: String(translation.locale ?? "en"),
+          name: String(translation.name ?? saved.name),
+          description: typeof translation.description === "string" ? translation.description : null,
+          seoTitle: typeof translation.seoTitle === "string" ? translation.seoTitle : null,
+          seoDescription: typeof translation.seoDescription === "string" ? translation.seoDescription : null
+        }))
+      });
+    }
+  }
+  return saved;
 }
 
-async function createOrUpdateServiceFromImport(categoryId: string, subcategoryId: string, service: Record<string, unknown>) {
+async function createOrUpdateServiceFromImport(categoryId: string, subcategoryId: string, service: Record<string, unknown>, tx: Prisma.TransactionClient) {
   const slug = String(service.slug ?? slugify(String(service.name ?? "service")));
-  const existing = await prisma.service.findUnique({ where: { slug } });
+  const existing = await tx.service.findUnique({ where: { slug } });
   const payload = {
     categoryId,
     subcategoryId,
     name: String(service.name ?? slug),
     slug,
-    code: String(service.code ?? uniqueCode("SRV", String(service.name ?? slug))),
-    description: service.description ? String(service.description) : undefined,
-    shortDescription: service.shortDescription ? String(service.shortDescription) : undefined,
+    code: String(service.code ?? existing?.code ?? uniqueCode("SRV", String(service.name ?? slug))),
+    description: typeof service.description === "string" ? service.description : service.description === null ? null : undefined,
+    shortDescription: typeof service.shortDescription === "string" ? service.shortDescription : service.shortDescription === null ? null : undefined,
     startingPrice: new Prisma.Decimal(typeof service.startingPrice === "number" ? service.startingPrice : 0),
     gstRate: new Prisma.Decimal(typeof service.gstRate === "number" ? service.gstRate : 18),
     sacCode: normalizeSacCode(typeof service.sacCode === "string" ? service.sacCode : undefined),
     estimatedDurationMins: typeof service.estimatedDurationMins === "number" ? service.estimatedDurationMins : 30,
     warrantyDays: typeof service.warrantyDays === "number" ? service.warrantyDays : 0,
-    gstApplicable: typeof service.gstApplicable === "boolean" ? service.gstApplicable : true,
-    emergencyAvailable: typeof service.emergencyAvailable === "boolean" ? service.emergencyAvailable : false,
-    homeVisit: typeof service.homeVisit === "boolean" ? service.homeVisit : true,
-    isActive: typeof service.isActive === "boolean" ? service.isActive : true,
-    featured: typeof service.featured === "boolean" ? service.featured : false,
-    popular: typeof service.popular === "boolean" ? service.popular : false,
-    rating: new Prisma.Decimal(typeof service.rating === "number" ? service.rating : 0),
-    reviewCount: typeof service.reviewCount === "number" ? service.reviewCount : 0,
-    iconUrl: service.iconUrl ? String(service.iconUrl) : undefined,
-    sortOrder: typeof service.sortOrder === "number" ? service.sortOrder : 0
+    gstApplicable: typeof service.gstApplicable === "boolean" ? service.gstApplicable : existing?.gstApplicable ?? true,
+    emergencyAvailable: typeof service.emergencyAvailable === "boolean" ? service.emergencyAvailable : existing?.emergencyAvailable ?? false,
+    homeVisit: typeof service.homeVisit === "boolean" ? service.homeVisit : existing?.homeVisit ?? true,
+    requiresSiteVisit: typeof service.requiresSiteVisit === "boolean" ? service.requiresSiteVisit : existing?.requiresSiteVisit ?? false,
+    bookingEnabled: typeof service.bookingEnabled === "boolean" ? service.bookingEnabled : existing?.bookingEnabled ?? true,
+    publicationStatus: typeof service.publicationStatus === "string" ? service.publicationStatus : existing?.publicationStatus ?? "PUBLISHED",
+    publishStartsAt: typeof service.publishStartsAt === "string" ? new Date(service.publishStartsAt) : service.publishStartsAt === null ? null : existing?.publishStartsAt,
+    publishEndsAt: typeof service.publishEndsAt === "string" ? new Date(service.publishEndsAt) : service.publishEndsAt === null ? null : existing?.publishEndsAt,
+    availabilityMode: service.availabilityMode === "CUSTOM" || service.availabilityMode === "INHERITED"
+      ? service.availabilityMode
+      : Array.isArray(service.serviceAreaIds) && service.serviceAreaIds.length ? "CUSTOM" : existing?.availabilityMode ?? "INHERITED",
+    maintenanceEnabled: typeof service.maintenanceEnabled === "boolean" ? service.maintenanceEnabled : existing?.maintenanceEnabled ?? false,
+    maintenanceIntervalsMonths: Array.isArray(service.maintenanceIntervalsMonths)
+      ? service.maintenanceIntervalsMonths.filter((value): value is number => typeof value === "number")
+      : existing?.maintenanceIntervalsMonths ?? [],
+    maintenanceReminderHours: typeof service.maintenanceReminderHours === "number" ? service.maintenanceReminderHours : existing?.maintenanceReminderHours ?? 24,
+    priceType: typeof service.priceType === "string" ? service.priceType : existing?.priceType ?? "FROM",
+    ctaLabel: typeof service.ctaLabel === "string" ? service.ctaLabel : existing?.ctaLabel ?? "Book service",
+    warrantyText: typeof service.warrantyText === "string" ? service.warrantyText : service.warrantyText === null ? null : existing?.warrantyText,
+    guaranteeEnabled: typeof service.guaranteeEnabled === "boolean" ? service.guaranteeEnabled : existing?.guaranteeEnabled ?? false,
+    guaranteeClaimWindowDays: typeof service.guaranteeClaimWindowDays === "number" ? service.guaranteeClaimWindowDays : existing?.guaranteeClaimWindowDays ?? 0,
+    guaranteeIssueCategories: Array.isArray(service.guaranteeIssueCategories)
+      ? service.guaranteeIssueCategories.filter((value): value is string => typeof value === "string")
+      : existing?.guaranteeIssueCategories ?? [],
+    guaranteeTerms: typeof service.guaranteeTerms === "string" ? service.guaranteeTerms : service.guaranteeTerms === null ? null : existing?.guaranteeTerms,
+    guaranteeExclusions: typeof service.guaranteeExclusions === "string" ? service.guaranteeExclusions : service.guaranteeExclusions === null ? null : existing?.guaranteeExclusions,
+    guaranteeResolutionTypes: Array.isArray(service.guaranteeResolutionTypes)
+      ? service.guaranteeResolutionTypes.filter((value): value is string => typeof value === "string")
+      : existing?.guaranteeResolutionTypes ?? [],
+    guaranteeRequiresPartnerReview: typeof service.guaranteeRequiresPartnerReview === "boolean" ? service.guaranteeRequiresPartnerReview : existing?.guaranteeRequiresPartnerReview ?? false,
+    guaranteeEvidenceRequired: typeof service.guaranteeEvidenceRequired === "boolean" ? service.guaranteeEvidenceRequired : existing?.guaranteeEvidenceRequired ?? false,
+    requirements: Array.isArray(service.requirements)
+      ? service.requirements.filter((value): value is string => typeof value === "string")
+      : existing?.requirements ?? [],
+    isActive: typeof service.isActive === "boolean" ? service.isActive : existing?.isActive ?? true,
+    featured: typeof service.featured === "boolean" ? service.featured : existing?.featured ?? false,
+    popular: typeof service.popular === "boolean" ? service.popular : existing?.popular ?? false,
+    rating: new Prisma.Decimal(typeof service.rating === "number" ? service.rating : existing?.rating ?? 0),
+    reviewCount: typeof service.reviewCount === "number" ? service.reviewCount : existing?.reviewCount ?? 0,
+    iconUrl: typeof service.iconUrl === "string" ? service.iconUrl : service.iconUrl === null ? null : existing?.iconUrl,
+    cancellationPolicy: typeof service.cancellationPolicy === "string" ? service.cancellationPolicy : service.cancellationPolicy === null ? null : undefined,
+    inclusions: Array.isArray(service.inclusions) ? service.inclusions.filter((value): value is string => typeof value === "string") : existing?.inclusions ?? [],
+    exclusions: Array.isArray(service.exclusions) ? service.exclusions.filter((value): value is string => typeof value === "string") : existing?.exclusions ?? [],
+    seoTitle: typeof service.seoTitle === "string" ? service.seoTitle : service.seoTitle === null ? null : undefined,
+    seoDescription: typeof service.seoDescription === "string" ? service.seoDescription : service.seoDescription === null ? null : undefined,
+    seoKeywords: typeof service.seoKeywords === "string" ? service.seoKeywords : service.seoKeywords === null ? null : undefined,
+    sortOrder: typeof service.sortOrder === "number" ? service.sortOrder : existing?.sortOrder ?? 0
   };
 
-  if (!existing) {
-    return prisma.service.create({ data: payload });
+  const saved = existing
+    ? await tx.service.update({ where: { id: existing.id }, data: payload })
+    : await tx.service.create({ data: payload });
+  const serviceAreaIds = Array.isArray(service.serviceAreaIds)
+    ? service.serviceAreaIds.filter((areaId): areaId is string => typeof areaId === "string")
+    : undefined;
+  if (serviceAreaIds !== undefined || service.availabilityMode === "INHERITED") {
+    if (serviceAreaIds?.length && await tx.serviceArea.count({ where: { id: { in: serviceAreaIds } } }) !== serviceAreaIds.length) {
+      throw AppError.badRequest("One or more imported service areas do not exist");
+    }
+    await tx.serviceAreaService.deleteMany({ where: { serviceId: saved.id } });
+    if (payload.availabilityMode === "CUSTOM" && serviceAreaIds?.length) {
+      await tx.serviceAreaService.createMany({
+        data: serviceAreaIds.map((serviceAreaId) => ({ serviceId: saved.id, serviceAreaId }))
+      });
+    }
   }
-
-  return prisma.service.update({
-    where: { id: existing.id },
-    data: payload
-  });
+  if (Array.isArray(service.translations)) {
+    await tx.serviceTranslation.deleteMany({ where: { serviceId: saved.id } });
+    if (service.translations.length) {
+      await tx.serviceTranslation.createMany({
+        data: service.translations.map((translation) => ({
+          serviceId: saved.id,
+          locale: String(translation.locale ?? "en"),
+          name: String(translation.name ?? saved.name),
+          shortDescription: typeof translation.shortDescription === "string" ? translation.shortDescription : null,
+          description: typeof translation.description === "string" ? translation.description : null,
+          seoTitle: typeof translation.seoTitle === "string" ? translation.seoTitle : null,
+          seoDescription: typeof translation.seoDescription === "string" ? translation.seoDescription : null
+        }))
+      });
+    }
+  }
+  if (Array.isArray(service.images)) {
+    await tx.serviceImage.deleteMany({ where: { serviceId: saved.id } });
+    if (service.images.length) {
+      await tx.serviceImage.createMany({
+        data: service.images.map((image, index) => ({
+          serviceId: saved.id,
+          url: String(image.url),
+          altText: typeof image.altText === "string" ? image.altText : null,
+          sortOrder: typeof image.sortOrder === "number" ? image.sortOrder : index,
+          isPrimary: typeof image.isPrimary === "boolean" ? image.isPrimary : index === 0
+        }))
+      });
+    }
+  }
+  if (Array.isArray(service.requiredSkills)) {
+    await tx.serviceRequiredSkill.deleteMany({ where: { serviceId: saved.id } });
+    if (service.requiredSkills.length) {
+      await tx.serviceRequiredSkill.createMany({
+        data: await Promise.all(service.requiredSkills.map(async (item, index) => ({
+          serviceId: saved.id,
+          skillId: await resolveSkillId(String(item.name), String(item.slug), tx),
+          isMandatory: typeof item.isMandatory === "boolean" ? item.isMandatory : true,
+          sortOrder: typeof item.sortOrder === "number" ? item.sortOrder : index
+        })))
+      });
+    }
+  }
+  if (Array.isArray(service.requiredTools)) {
+    await tx.serviceRequiredTool.deleteMany({ where: { serviceId: saved.id } });
+    if (service.requiredTools.length) {
+      await tx.serviceRequiredTool.createMany({
+        data: await Promise.all(service.requiredTools.map(async (item, index) => ({
+          serviceId: saved.id,
+          toolId: await resolveToolId(String(item.name), String(item.slug), tx),
+          isMandatory: typeof item.isMandatory === "boolean" ? item.isMandatory : true,
+          sortOrder: typeof item.sortOrder === "number" ? item.sortOrder : index
+        })))
+      });
+    }
+  }
+  if (Array.isArray(service.requiredDocuments)) {
+    await tx.serviceRequiredDocument.deleteMany({ where: { serviceId: saved.id } });
+    if (service.requiredDocuments.length) {
+      await tx.serviceRequiredDocument.createMany({
+        data: service.requiredDocuments.map((item, index) => ({
+          serviceId: saved.id,
+          name: String(item.name),
+          slug: String(item.slug),
+          isMandatory: typeof item.isMandatory === "boolean" ? item.isMandatory : true,
+          sortOrder: typeof item.sortOrder === "number" ? item.sortOrder : index
+        }))
+      });
+    }
+  }
+  if (Array.isArray(service.variants)) {
+    const existingVariants = await tx.serviceVariant.findMany({
+      where: { serviceId: saved.id }, select: { id: true, name: true }
+    }) as Array<{ id: string; name: string }>;
+    const importedVariants = service.variants as Array<Record<string, unknown>>;
+    for (const [index, item] of importedVariants.entries()) {
+      const prior = existingVariants.find((variant) =>
+        (typeof item.id === "string" && variant.id === item.id) || variant.name === item.name
+      );
+      const variantAreaIds = Array.isArray(item.serviceAreaIds)
+        ? item.serviceAreaIds.filter((areaId: unknown): areaId is string => typeof areaId === "string")
+        : [];
+      if (variantAreaIds.length && await tx.serviceArea.count({ where: { id: { in: variantAreaIds } } }) !== variantAreaIds.length) {
+        throw AppError.badRequest("One or more imported variant service areas do not exist");
+      }
+      const availabilityMode = item.availabilityMode === "CUSTOM" || variantAreaIds.length ? "CUSTOM" : "INHERITED";
+      const optionData = {
+        name: String(item.name),
+        description: typeof item.description === "string" ? item.description : null,
+        imageUrl: typeof item.imageUrl === "string" ? item.imageUrl : null,
+        price: new Prisma.Decimal(Number(item.price)),
+        originalPrice: typeof item.originalPrice === "number" ? new Prisma.Decimal(item.originalPrice) : null,
+        estimatedDurationMins: typeof item.estimatedDurationMins === "number" ? item.estimatedDurationMins : null,
+        isAvailable: typeof item.isAvailable === "boolean" ? item.isAvailable : true,
+        availabilityMode,
+        sortOrder: typeof item.sortOrder === "number" ? item.sortOrder : index
+      };
+      if (prior) {
+        await tx.serviceVariant.update({ where: { id: prior.id }, data: optionData });
+        if (Array.isArray(item.serviceAreaIds) || item.availabilityMode === "INHERITED") {
+          await tx.serviceAreaVariant.deleteMany({ where: { variantId: prior.id } });
+          if (availabilityMode === "CUSTOM" && variantAreaIds.length) {
+            await tx.serviceAreaVariant.createMany({ data: variantAreaIds.map((serviceAreaId: string) => ({ variantId: prior.id, serviceAreaId })) });
+          }
+        }
+      } else {
+        await tx.serviceVariant.create({
+          data: {
+            serviceId: saved.id,
+            ...optionData,
+            serviceAreaAssignments: availabilityMode === "CUSTOM" && variantAreaIds.length
+              ? { create: variantAreaIds.map((serviceAreaId: string) => ({ serviceAreaId })) }
+              : undefined
+          }
+        });
+      }
+    }
+  }
+  if (Array.isArray(service.addons)) {
+    const existingAddons = await tx.serviceAddon.findMany({ where: { serviceId: saved.id }, select: { id: true, name: true } }) as Array<{ id: string; name: string }>;
+    const importedAddons = service.addons as Array<Record<string, unknown>>;
+    for (const [index, item] of importedAddons.entries()) {
+      const prior = existingAddons.find((addon) =>
+        (typeof item.id === "string" && addon.id === item.id) || addon.name === item.name
+      );
+      const data = {
+        name: String(item.name),
+        description: typeof item.description === "string" ? item.description : null,
+        imageUrl: typeof item.imageUrl === "string" ? item.imageUrl : null,
+        price: new Prisma.Decimal(Number(item.price)),
+        estimatedDurationMins: typeof item.estimatedDurationMins === "number" ? item.estimatedDurationMins : null,
+        isActive: typeof item.isActive === "boolean" ? item.isActive : true,
+        sortOrder: typeof item.sortOrder === "number" ? item.sortOrder : index
+      };
+      if (prior) await tx.serviceAddon.update({ where: { id: prior.id }, data });
+      else await tx.serviceAddon.create({ data: { serviceId: saved.id, ...data } });
+    }
+  }
+  if (Array.isArray(service.priceRules)) {
+    const existingRules = await tx.servicePriceRule.findMany({ where: { serviceId: saved.id } }) as Array<{ id: string; type: string; title: string; cityId: string | null }>;
+    const importedRules = service.priceRules as Array<Record<string, unknown>>;
+    for (const rule of importedRules) {
+      const cityId = typeof rule.cityId === "string" ? rule.cityId : null;
+      if (rule.type === "CITY" && !cityId) throw AppError.badRequest("Choose a city for an imported city pricing rule");
+      if (cityId && !await tx.city.findFirst({ where: { id: cityId, isActive: true }, select: { id: true } })) {
+        throw AppError.badRequest("An imported pricing rule references an inactive or missing city");
+      }
+      const prior = existingRules.find((current) => current.type === rule.type && current.title === rule.title && current.cityId === cityId);
+      const data = {
+        cityId,
+        type: rule.type as PriceRuleType,
+        title: rule.title,
+        description: rule.description ?? null,
+        currency: rule.currency ?? "INR",
+        price: new Prisma.Decimal(Number(rule.price)),
+        startsAt: typeof rule.startsAt === "string" ? new Date(rule.startsAt) : null,
+        endsAt: typeof rule.endsAt === "string" ? new Date(rule.endsAt) : null,
+        isActive: rule.isActive ?? true,
+        priority: rule.priority ?? 0
+      };
+      if (prior) await tx.servicePriceRule.update({ where: { id: prior.id }, data });
+      else await tx.servicePriceRule.create({ data: { serviceId: saved.id, ...data } });
+    }
+  }
+  return saved;
 }
 
 export const catalogService = {

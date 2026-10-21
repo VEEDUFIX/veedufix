@@ -14,6 +14,141 @@ bool _customAvailabilityHasNoLocations(
         String mode, Set<String> serviceAreaIds) =>
     mode == 'CUSTOM' && serviceAreaIds.isEmpty;
 
+Future<bool> _confirmDiscardCatalogChanges(BuildContext context) async =>
+    await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Discard unsaved changes?'),
+        content: const Text('Your catalog changes have not been saved.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Keep editing'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Discard changes'),
+          ),
+        ],
+      ),
+    ) ??
+    false;
+
+String _formatCatalogDate(DateTime value) =>
+    '${value.year.toString().padLeft(4, '0')}-${value.month.toString().padLeft(2, '0')}-${value.day.toString().padLeft(2, '0')}';
+
+Map<String, dynamic> _parseCatalogImport(String source) {
+  final decoded = jsonDecode(source);
+  if (decoded is! Map) {
+    throw const FormatException('The import document must be a JSON object.');
+  }
+  final rawCategories = decoded['categories'];
+  if (rawCategories is! List) {
+    throw const FormatException(
+        'The document must contain a categories array.');
+  }
+  final categories = <Map<String, dynamic>>[];
+  var subcategoryCount = 0;
+  var serviceCount = 0;
+  for (var categoryIndex = 0;
+      categoryIndex < rawCategories.length;
+      categoryIndex += 1) {
+    final category = rawCategories[categoryIndex];
+    if (category is! Map) {
+      throw FormatException(
+          'Category row ${categoryIndex + 1} must be an object.');
+    }
+    final categoryMap = Map<String, dynamic>.from(category);
+    final rawSubcategories = categoryMap['subcategories'] ?? const [];
+    if (rawSubcategories is! List) {
+      throw FormatException(
+          'Category row ${categoryIndex + 1}: subcategories must be an array.');
+    }
+    subcategoryCount += rawSubcategories.length;
+    final normalizedSubcategories = <Map<String, dynamic>>[];
+    for (var subcategoryIndex = 0;
+        subcategoryIndex < rawSubcategories.length;
+        subcategoryIndex += 1) {
+      final subcategory = rawSubcategories[subcategoryIndex];
+      if (subcategory is! Map) {
+        throw FormatException(
+            'Category ${categoryIndex + 1}, subcategory ${subcategoryIndex + 1} must be an object.');
+      }
+      final subcategoryMap = Map<String, dynamic>.from(subcategory);
+      final rawServices = subcategoryMap['services'] ??
+          subcategoryMap['catalogServices'] ??
+          const [];
+      if (rawServices is! List) {
+        throw FormatException(
+            'Category ${categoryIndex + 1}, subcategory ${subcategoryIndex + 1}: services must be an array.');
+      }
+      serviceCount += rawServices.length;
+      for (var serviceIndex = 0;
+          serviceIndex < rawServices.length;
+          serviceIndex += 1) {
+        if (rawServices[serviceIndex] is! Map) {
+          throw FormatException(
+              'Category ${categoryIndex + 1}, subcategory ${subcategoryIndex + 1}, service ${serviceIndex + 1} must be an object.');
+        }
+      }
+      subcategoryMap['services'] = rawServices;
+      normalizedSubcategories.add(subcategoryMap);
+    }
+    categoryMap['subcategories'] = normalizedSubcategories;
+    categories.add(categoryMap);
+  }
+  return {
+    'categories': categories,
+    'categoryCount': categories.length,
+    'subcategoryCount': subcategoryCount,
+    'serviceCount': serviceCount,
+  };
+}
+
+String _catalogImportSummary(Map<String, dynamic> parsed) =>
+    '${parsed['categoryCount']} categories, ${parsed['subcategoryCount']} subcategories, and ${parsed['serviceCount']} services. Server-side validation runs on import; matching slugs update existing records.';
+
+String _catalogSaveError(Object error) {
+  if (error is DioException) {
+    final data = error.response?.data;
+    if (data is Map) {
+      final message = data['message'];
+      if (message is String &&
+          message.trim().isNotEmpty &&
+          message != 'Validation failed') {
+        return message.trim();
+      }
+      final issues = data['issues'];
+      if (issues is List) {
+        final messages = <String>[];
+        for (final issue in issues.whereType<Map>().take(8)) {
+          final message = issue['message'];
+          if (message is String && message.trim().isNotEmpty) {
+            final path = issue['path'];
+            final location = path is List
+                ? path.map((part) => part.toString()).join('.')
+                : '';
+            messages.add(location.isEmpty
+                ? message.trim()
+                : '$location: ${message.trim()}');
+          }
+        }
+        if (messages.isNotEmpty) return messages.join('\n');
+      }
+    }
+    if (error.response?.statusCode == 401) {
+      return 'Your Admin session expired. Sign in again, then retry.';
+    }
+    if (error.response?.statusCode == 403) {
+      return 'Your account is not allowed to change the catalog.';
+    }
+    if (error.response == null) {
+      return 'Could not reach the server. Check your connection and retry.';
+    }
+  }
+  return 'Could not save these changes. Review the fields and retry.';
+}
+
 ({
   String stateId,
   String districtId,
@@ -339,6 +474,32 @@ class _AvailabilitySettingsEditor extends StatelessWidget {
   }
 }
 
+class _CatalogEditorSectionHeader extends StatelessWidget {
+  const _CatalogEditorSectionHeader(this.title);
+
+  final String title;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.only(top: 18, bottom: 6),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                title,
+                style: Theme.of(context)
+                    .textTheme
+                    .titleSmall
+                    ?.copyWith(fontWeight: FontWeight.w700),
+              ),
+            ),
+            const SizedBox(width: 12),
+            const Expanded(child: Divider(height: 1)),
+          ],
+        ),
+      );
+}
+
 class CatalogManagerPage extends ConsumerStatefulWidget {
   const CatalogManagerPage({super.key, this.showFeaturedOnly = false});
 
@@ -355,6 +516,7 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
   String _catalogQuery = '';
   String _selectedCategoryId = '';
   _CatalogFilter _catalogFilter = _CatalogFilter.all;
+  String _pricingRuleType = 'all';
   String _stateFilter = 'all';
   String _districtFilter = 'all';
   String _cityFilter = 'all';
@@ -363,6 +525,9 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
   String _subcategoryFilter = 'all';
   String _serviceFilter = 'all';
   String _availabilityFilter = 'all';
+  _ServiceSort _serviceSort = _ServiceSort.name;
+  int _servicePage = 0;
+  static const int _servicePageSize = 25;
 
   @override
   void initState() {
@@ -454,7 +619,7 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
     }).toList(growable: false);
     final targetAreaIds = matchingAreas.map((area) => area.id).toSet();
 
-    return base.where((service) {
+    final visible = base.where((service) {
       if (filters.subcategoryId != 'all' &&
           service.subcategoryId != filters.subcategoryId) {
         return false;
@@ -494,30 +659,47 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
       }
       return true;
     }).toList(growable: false);
+    visible.sort((a, b) => switch (_serviceSort) {
+          _ServiceSort.name =>
+            a.name.toLowerCase().compareTo(b.name.toLowerCase()),
+          _ServiceSort.price => a.startingPrice.compareTo(b.startingPrice),
+          _ServiceSort.status =>
+            _serviceStatusSortKey(a).compareTo(_serviceStatusSortKey(b)),
+          _ServiceSort.updated => (b.updatedAt ??
+                  DateTime.fromMillisecondsSinceEpoch(0))
+              .compareTo(a.updatedAt ?? DateTime.fromMillisecondsSinceEpoch(0)),
+        });
+    return visible;
   }
 
   Future<void> _createCategory() async {
-    final payload = await _showCategoryEditor(await _snapshotFuture);
+    final payload = await _showCategoryEditor(
+      await _snapshotFuture,
+      onSave: _api.createCategory,
+    );
     if (payload == null) return;
     try {
-      await _api.createCategory(payload);
       await _reload();
       await _showMessage('Category created');
     } catch (error) {
-      await _showMessage('Unable to create category: $error');
+      await _showMessage(
+          'Category was saved, but the catalog could not refresh. ${_catalogSaveError(error)}');
     }
   }
 
   Future<void> _editCategory(_AdminCategory category) async {
-    final payload =
-        await _showCategoryEditor(await _snapshotFuture, existing: category);
+    final payload = await _showCategoryEditor(
+      await _snapshotFuture,
+      existing: category,
+      onSave: (values) => _api.updateCategory(category.id, values),
+    );
     if (payload == null) return;
     try {
-      await _api.updateCategory(category.id, payload);
       await _reload();
       await _showMessage('Category updated');
     } catch (error) {
-      await _showMessage('Unable to update category: $error');
+      await _showMessage(
+          'Category was saved, but the catalog could not refresh. ${_catalogSaveError(error)}');
     }
   }
 
@@ -532,28 +714,34 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
   }
 
   Future<void> _createSubcategory(_CatalogSnapshot snapshot) async {
-    final payload = await _showSubcategoryEditor(snapshot);
+    final payload = await _showSubcategoryEditor(
+      snapshot,
+      onSave: _api.createSubcategory,
+    );
     if (payload == null) return;
     try {
-      await _api.createSubcategory(payload);
       await _reload();
       await _showMessage('Subcategory created');
     } catch (error) {
-      await _showMessage('Unable to create subcategory: $error');
+      await _showMessage(
+          'Subcategory was saved, but the catalog could not refresh. ${_catalogSaveError(error)}');
     }
   }
 
   Future<void> _editSubcategory(
       _CatalogSnapshot snapshot, _AdminSubcategory subcategory) async {
-    final payload =
-        await _showSubcategoryEditor(snapshot, existing: subcategory);
+    final payload = await _showSubcategoryEditor(
+      snapshot,
+      existing: subcategory,
+      onSave: (values) => _api.updateSubcategory(subcategory.id, values),
+    );
     if (payload == null) return;
     try {
-      await _api.updateSubcategory(subcategory.id, payload);
       await _reload();
       await _showMessage('Subcategory updated');
     } catch (error) {
-      await _showMessage('Unable to update subcategory: $error');
+      await _showMessage(
+          'Subcategory was saved, but the catalog could not refresh. ${_catalogSaveError(error)}');
     }
   }
 
@@ -568,13 +756,18 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
   }
 
   Future<void> _createService(_CatalogSnapshot snapshot) async {
-    final payload = await _showServiceEditor(snapshot);
+    Map<String, dynamic>? created;
+    final payload = await _showServiceEditor(
+      snapshot,
+      onSave: (values) async {
+        created = await _api.createService(values);
+      },
+    );
     if (payload == null) return;
     try {
-      final created = await _api.createService(payload);
       await _reload();
       if (!mounted) return;
-      final serviceId = created['id'] as String?;
+      final serviceId = created?['id'] as String?;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: const Text('Service created and saved to the catalog.'),
@@ -587,20 +780,25 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
         ),
       );
     } catch (error) {
-      await _showMessage('Unable to create service: $error');
+      await _showMessage(
+          'Service was saved, but the catalog could not refresh. ${_catalogSaveError(error)}');
     }
   }
 
   Future<void> _editService(
       _CatalogSnapshot snapshot, _AdminService service) async {
-    final payload = await _showServiceEditor(snapshot, existing: service);
+    final payload = await _showServiceEditor(
+      snapshot,
+      existing: service,
+      onSave: (values) => _api.updateService(service.id, values),
+    );
     if (payload == null) return;
     try {
-      await _api.updateService(service.id, payload);
       await _reload();
       await _showMessage('Service updated');
     } catch (error) {
-      await _showMessage('Unable to update service: $error');
+      await _showMessage(
+          'Service was saved, but the catalog could not refresh. ${_catalogSaveError(error)}');
     }
   }
 
@@ -1300,14 +1498,19 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
   }
 
   Future<void> _addPricingRule(_AdminService service) async {
-    final payload = await _showPricingRuleEditor(service);
+    final snapshot = await _snapshotFuture;
+    final payload = await _showPricingRuleEditor(
+      service,
+      snapshot,
+      onSave: (values) => _api.addPricingRule(service.id, values),
+    );
     if (payload == null) return;
     try {
-      await _api.addPricingRule(service.id, payload);
       await _reload();
       await _showMessage('Pricing rule saved');
     } catch (error) {
-      await _showMessage('Unable to save pricing rule: $error');
+      await _showMessage(
+          'Pricing rule was saved, but the catalog could not refresh. ${_catalogSaveError(error)}');
     }
   }
 
@@ -1346,54 +1549,123 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
         text: const JsonEncoder.withIndent('  ').convert({
       'categories': <Map<String, dynamic>>[],
     }));
-    final imported = await showDialog<bool>(
+    final imported = await showDialog<Map<String, dynamic>>(
       context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: const Text('Import catalog JSON'),
-          content: SizedBox(
-            width: 720,
-            child: TextField(
-              controller: controller,
-              maxLines: 18,
-              decoration: const InputDecoration(
-                border: OutlineInputBorder(),
-                alignLabelWithHint: true,
-                hintText: 'Paste catalog JSON here',
+      builder: (dialogContext) {
+        var saving = false;
+        String? preview;
+        String? errorMessage;
+        return StatefulBuilder(
+          builder: (context, setDialogState) => AlertDialog(
+            title: const Text('Preview catalog import'),
+            content: SizedBox(
+              width: 720,
+              height: 430,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: controller,
+                      expands: true,
+                      minLines: null,
+                      maxLines: null,
+                      decoration: const InputDecoration(
+                        border: OutlineInputBorder(),
+                        alignLabelWithHint: true,
+                        hintText: 'Paste catalog JSON here',
+                      ),
+                    ),
+                  ),
+                  if (preview != null) ...[
+                    const SizedBox(height: 10),
+                    Text(preview!,
+                        style: Theme.of(context).textTheme.bodySmall),
+                  ],
+                  if (errorMessage != null) ...[
+                    const SizedBox(height: 10),
+                    SelectableText(errorMessage!,
+                        style: TextStyle(
+                            color: Theme.of(context).colorScheme.error)),
+                  ],
+                  const SizedBox(height: 8),
+                  Text(
+                    'Import uses the existing slug-based create-or-update behavior. Server validation runs before records are saved; an unsuccessful import is rolled back.',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ],
               ),
             ),
+            actions: [
+              TextButton(
+                onPressed:
+                    saving ? null : () => Navigator.of(dialogContext).pop(),
+                child: const Text('Cancel'),
+              ),
+              TextButton(
+                onPressed: saving
+                    ? null
+                    : () {
+                        try {
+                          final parsed = _parseCatalogImport(controller.text);
+                          setDialogState(() {
+                            errorMessage = null;
+                            preview = _catalogImportSummary(parsed);
+                          });
+                        } catch (error) {
+                          setDialogState(() {
+                            preview = null;
+                            errorMessage = error.toString();
+                          });
+                        }
+                      },
+                child: const Text('Check preview'),
+              ),
+              FilledButton(
+                onPressed: saving
+                    ? null
+                    : () async {
+                        setDialogState(() {
+                          saving = true;
+                          errorMessage = null;
+                        });
+                        try {
+                          final parsed = _parseCatalogImport(controller.text);
+                          final result = await _api.importCatalog(
+                              parsed['categories'] as List<dynamic>);
+                          if (dialogContext.mounted) {
+                            Navigator.of(dialogContext).pop(result);
+                          }
+                        } catch (error) {
+                          setDialogState(() {
+                            saving = false;
+                            errorMessage = _catalogSaveError(error);
+                          });
+                        }
+                      },
+                child: saving
+                    ? const SizedBox.square(
+                        dimension: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Text('Import catalog'),
+              ),
+            ],
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.of(context).pop(true),
-              child: const Text('Import'),
-            ),
-          ],
         );
       },
     );
 
-    if (imported != true) {
-      return;
-    }
-
+    controller.dispose();
+    if (imported == null) return;
     try {
-      final decoded = jsonDecode(controller.text) as Map<String, dynamic>;
-      final categories = decoded['categories'];
-      if (categories is! List) {
-        throw Exception('categories must be an array');
-      }
-      await _api.importCatalog(categories);
       await _reload();
-      await _showMessage('Catalog import started');
+      await _showMessage(
+        'Imported ${imported['categoryCount']} categories, ${imported['subcategoryCount']} subcategories, and ${imported['serviceCount']} services.',
+      );
     } catch (error) {
-      await _showMessage('Unable to import catalog: $error');
-    } finally {
-      controller.dispose();
+      await _showMessage(
+          'Import succeeded, but the catalog could not refresh. ${_catalogSaveError(error)}');
     }
   }
 
@@ -1430,8 +1702,11 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
     }
   }
 
-  Future<Map<String, dynamic>?> _showCategoryEditor(_CatalogSnapshot snapshot,
-      {_AdminCategory? existing}) {
+  Future<Map<String, dynamic>?> _showCategoryEditor(
+    _CatalogSnapshot snapshot, {
+    _AdminCategory? existing,
+    required Future<void> Function(Map<String, dynamic>) onSave,
+  }) {
     final formKey = GlobalKey<FormState>();
     final nameController = TextEditingController(text: existing?.name ?? '');
     final slugController = TextEditingController(text: existing?.slug ?? '');
@@ -1449,6 +1724,8 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
     return showDialog<Map<String, dynamic>>(
       context: context,
       builder: (dialogContext) {
+        var saving = false;
+        String? saveError;
         return StatefulBuilder(
           builder: (context, setState) {
             return AlertDialog(
@@ -1460,6 +1737,12 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
+                      if (saveError != null) ...[
+                        Text(saveError!,
+                            style: TextStyle(
+                                color: Theme.of(context).colorScheme.error)),
+                        const SizedBox(height: 8),
+                      ],
                       TextFormField(
                         controller: nameController,
                         decoration: const InputDecoration(labelText: 'Name'),
@@ -1470,6 +1753,7 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
                       TextFormField(
                         controller: slugController,
                         decoration: const InputDecoration(labelText: 'Slug'),
+                        validator: _validateCatalogSlug,
                       ),
                       TextFormField(
                         controller: descriptionController,
@@ -1491,6 +1775,12 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
                         decoration:
                             const InputDecoration(labelText: 'Sort order'),
                         keyboardType: TextInputType.number,
+                        validator: (value) {
+                          final order = int.tryParse((value ?? '').trim());
+                          return order == null || order < 0
+                              ? 'Enter a whole number of 0 or more'
+                              : null;
+                        },
                       ),
                       SwitchListTile(
                         value: isActive,
@@ -1528,40 +1818,71 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
               ),
               actions: [
                 TextButton(
-                  onPressed: () => Navigator.of(dialogContext).pop(),
+                  onPressed:
+                      saving ? null : () => Navigator.of(dialogContext).pop(),
                   child: const Text('Cancel'),
                 ),
                 FilledButton(
-                  onPressed: () {
-                    if (_customAvailabilityHasNoLocations(
-                      availabilityMode,
-                      serviceAreaIds,
-                    )) {
-                      _showCustomAvailabilityValidationError(dialogContext);
-                      return;
-                    }
-                    if (!formKey.currentState!.validate()) return;
-                    Navigator.of(dialogContext).pop({
-                      'name': nameController.text.trim(),
-                      'slug': slugController.text.trim().isEmpty
-                          ? _slugify(nameController.text)
-                          : slugController.text.trim(),
-                      'description': descriptionController.text.trim().isEmpty
-                          ? null
-                          : descriptionController.text.trim(),
-                      'iconUrl': iconUrl,
-                      'sortOrder':
-                          int.tryParse(sortOrderController.text.trim()) ?? 0,
-                      'isActive': isActive,
-                      'featured': featured,
-                      'popular': popular,
-                      'availabilityMode': availabilityMode,
-                      'serviceAreaIds': availabilityMode == 'CUSTOM'
-                          ? serviceAreaIds.toList(growable: false)
-                          : const <String>[],
-                    });
-                  },
-                  child: const Text('Save'),
+                  onPressed: saving
+                      ? null
+                      : () async {
+                          if (_customAvailabilityHasNoLocations(
+                            availabilityMode,
+                            serviceAreaIds,
+                          )) {
+                            _showCustomAvailabilityValidationError(
+                                dialogContext);
+                            return;
+                          }
+                          if (!formKey.currentState!.validate()) return;
+                          final payload = <String, dynamic>{
+                            'name': nameController.text.trim(),
+                            'slug': slugController.text.trim().isEmpty
+                                ? (existing?.slug ??
+                                    _slugify(nameController.text))
+                                : slugController.text.trim(),
+                            'description':
+                                descriptionController.text.trim().isEmpty
+                                    ? null
+                                    : descriptionController.text.trim(),
+                            'iconUrl': iconUrl,
+                            'sortOrder':
+                                int.parse(sortOrderController.text.trim()),
+                            'isActive': isActive,
+                            'featured': featured,
+                            'popular': popular,
+                            'availabilityMode': availabilityMode,
+                            'serviceAreaIds': availabilityMode == 'CUSTOM'
+                                ? serviceAreaIds.toList(growable: false)
+                                : const <String>[],
+                          };
+                          setState(() {
+                            saving = true;
+                            saveError = null;
+                          });
+                          try {
+                            await onSave(payload);
+                            if (dialogContext.mounted) {
+                              Navigator.of(dialogContext).pop(payload);
+                            }
+                          } catch (error) {
+                            if (dialogContext.mounted) {
+                              setState(
+                                  () => saveError = _catalogSaveError(error));
+                            }
+                          } finally {
+                            if (dialogContext.mounted) {
+                              setState(() => saving = false);
+                            }
+                          }
+                        },
+                  child: saving
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Text('Save changes'),
                 ),
               ],
             );
@@ -1579,6 +1900,7 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
   Future<Map<String, dynamic>?> _showSubcategoryEditor(
     _CatalogSnapshot snapshot, {
     _AdminSubcategory? existing,
+    required Future<void> Function(Map<String, dynamic>) onSave,
   }) async {
     final formKey = GlobalKey<FormState>();
     final categoryIdController = ValueNotifier<String>(
@@ -1600,6 +1922,8 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
     return showDialog<Map<String, dynamic>>(
       context: context,
       builder: (dialogContext) {
+        var saving = false;
+        String? saveError;
         return StatefulBuilder(
           builder: (context, setState) {
             return AlertDialog(
@@ -1611,6 +1935,12 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
+                      if (saveError != null) ...[
+                        Text(saveError!,
+                            style: TextStyle(
+                                color: Theme.of(context).colorScheme.error)),
+                        const SizedBox(height: 8),
+                      ],
                       DropdownButtonFormField<String>(
                         initialValue: categoryIdController.value.isEmpty
                             ? null
@@ -1640,6 +1970,7 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
                       TextFormField(
                         controller: slugController,
                         decoration: const InputDecoration(labelText: 'Slug'),
+                        validator: _validateCatalogSlug,
                       ),
                       TextFormField(
                         controller: descriptionController,
@@ -1661,12 +1992,24 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
                         decoration:
                             const InputDecoration(labelText: 'Base price'),
                         keyboardType: TextInputType.number,
+                        validator: (value) {
+                          final price = double.tryParse((value ?? '').trim());
+                          return price == null || !price.isFinite || price < 0
+                              ? 'Enter a valid amount of 0 or more'
+                              : null;
+                        },
                       ),
                       TextFormField(
                         controller: sortOrderController,
                         decoration:
                             const InputDecoration(labelText: 'Sort order'),
                         keyboardType: TextInputType.number,
+                        validator: (value) {
+                          final order = int.tryParse((value ?? '').trim());
+                          return order == null || order < 0
+                              ? 'Enter a whole number of 0 or more'
+                              : null;
+                        },
                       ),
                       SwitchListTile(
                         contentPadding: EdgeInsets.zero,
@@ -1693,41 +2036,73 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
               ),
               actions: [
                 TextButton(
-                  onPressed: () => Navigator.of(dialogContext).pop(),
+                  onPressed:
+                      saving ? null : () => Navigator.of(dialogContext).pop(),
                   child: const Text('Cancel'),
                 ),
                 FilledButton(
-                  onPressed: () {
-                    if (_customAvailabilityHasNoLocations(
-                      availabilityMode,
-                      serviceAreaIds,
-                    )) {
-                      _showCustomAvailabilityValidationError(dialogContext);
-                      return;
-                    }
-                    if (!formKey.currentState!.validate()) return;
-                    Navigator.of(dialogContext).pop({
-                      'categoryId': categoryIdController.value,
-                      'name': nameController.text.trim(),
-                      'slug': slugController.text.trim().isEmpty
-                          ? _slugify(nameController.text)
-                          : slugController.text.trim(),
-                      'description': descriptionController.text.trim().isEmpty
-                          ? null
-                          : descriptionController.text.trim(),
-                      'iconUrl': iconUrl,
-                      'basePrice':
-                          double.tryParse(basePriceController.text.trim()) ?? 0,
-                      'sortOrder':
-                          int.tryParse(sortOrderController.text.trim()) ?? 0,
-                      'isActive': isActive,
-                      'availabilityMode': availabilityMode,
-                      'serviceAreaIds': availabilityMode == 'CUSTOM'
-                          ? serviceAreaIds.toList(growable: false)
-                          : const <String>[],
-                    });
-                  },
-                  child: const Text('Save'),
+                  onPressed: saving
+                      ? null
+                      : () async {
+                          if (_customAvailabilityHasNoLocations(
+                            availabilityMode,
+                            serviceAreaIds,
+                          )) {
+                            _showCustomAvailabilityValidationError(
+                                dialogContext);
+                            return;
+                          }
+                          if (!formKey.currentState!.validate()) return;
+                          final payload = <String, dynamic>{
+                            'categoryId': categoryIdController.value,
+                            'name': nameController.text.trim(),
+                            'slug': slugController.text.trim().isEmpty
+                                ? (existing == null
+                                    ? _slugify(nameController.text)
+                                    : existing.slug)
+                                : slugController.text.trim(),
+                            'description':
+                                descriptionController.text.trim().isEmpty
+                                    ? null
+                                    : descriptionController.text.trim(),
+                            'iconUrl': iconUrl,
+                            'basePrice': double.tryParse(
+                                basePriceController.text.trim())!,
+                            'sortOrder':
+                                int.parse(sortOrderController.text.trim()),
+                            'isActive': isActive,
+                            'availabilityMode': availabilityMode,
+                            'serviceAreaIds': availabilityMode == 'CUSTOM'
+                                ? serviceAreaIds.toList(growable: false)
+                                : const <String>[],
+                          };
+                          setState(() {
+                            saving = true;
+                            saveError = null;
+                          });
+                          try {
+                            await onSave(payload);
+                            if (dialogContext.mounted) {
+                              Navigator.of(dialogContext).pop(payload);
+                            }
+                          } catch (error) {
+                            if (dialogContext.mounted) {
+                              setState(
+                                  () => saveError = _catalogSaveError(error));
+                            }
+                          } finally {
+                            if (dialogContext.mounted) {
+                              setState(() => saving = false);
+                            }
+                          }
+                        },
+                  child: saving
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Text('Save changes'),
                 ),
               ],
             );
@@ -1747,6 +2122,7 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
   Future<Map<String, dynamic>?> _showServiceEditor(
     _CatalogSnapshot snapshot, {
     _AdminService? existing,
+    required Future<void> Function(Map<String, dynamic>) onSave,
   }) async {
     final formKey = GlobalKey<FormState>();
     final selectedCategoryId = ValueNotifier<String>(
@@ -1876,651 +2252,848 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
 
     return showDialog<Map<String, dynamic>>(
       context: context,
+      barrierDismissible: false,
       builder: (dialogContext) {
+        var saving = false;
+        var dirty = false;
+        String? saveError;
         return StatefulBuilder(
           builder: (context, setState) {
+            void markDirtySetState(VoidCallback callback) {
+              dirty = true;
+              setState(callback);
+            }
+
             final subcategories =
                 snapshot.subcategoriesForCategory(selectedCategoryId.value);
             if (selectedSubcategoryId.value.isEmpty &&
                 subcategories.isNotEmpty) {
               selectedSubcategoryId.value = subcategories.first.id;
             }
-            return AlertDialog(
-              title: Text(existing == null ? 'Create service' : 'Edit service'),
-              content: Form(
-                key: formKey,
-                child: SingleChildScrollView(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      DropdownButtonFormField<String>(
-                        initialValue: selectedCategoryId.value.isEmpty
-                            ? null
-                            : selectedCategoryId.value,
-                        decoration:
-                            const InputDecoration(labelText: 'Category'),
-                        items: snapshot.categories
-                            .map(
-                              (category) => DropdownMenuItem(
-                                value: category.id,
-                                child: Text(category.name),
-                              ),
-                            )
-                            .toList(growable: false),
-                        onChanged: (value) {
-                          setState(() {
-                            selectedCategoryId.value = value ?? '';
-                            final nextSubcategories =
-                                snapshot.subcategoriesForCategory(
-                                    selectedCategoryId.value);
-                            selectedSubcategoryId.value =
-                                nextSubcategories.firstOrNull?.id ?? '';
-                          });
-                        },
-                        validator: (value) =>
-                            (value ?? '').isEmpty ? 'Select a category' : null,
-                      ),
-                      DropdownButtonFormField<String>(
-                        initialValue: selectedSubcategoryId.value.isEmpty
-                            ? null
-                            : selectedSubcategoryId.value,
-                        decoration:
-                            const InputDecoration(labelText: 'Subcategory'),
-                        items: subcategories
-                            .map(
-                              (subcategory) => DropdownMenuItem(
-                                value: subcategory.id,
-                                child: Text(subcategory.name),
-                              ),
-                            )
-                            .toList(growable: false),
-                        onChanged: (value) => setState(
-                            () => selectedSubcategoryId.value = value ?? ''),
-                        validator: (value) => (value ?? '').isEmpty
-                            ? 'Select a subcategory'
-                            : null,
-                      ),
-                      TextFormField(
-                        controller: nameController,
-                        decoration: const InputDecoration(labelText: 'Name'),
-                        validator: (value) => (value ?? '').trim().length < 2
-                            ? 'Enter a service name'
-                            : null,
-                      ),
-                      TextFormField(
-                        controller: slugController,
-                        decoration: const InputDecoration(labelText: 'Slug'),
-                      ),
-                      TextFormField(
-                        controller: codeController,
-                        decoration: const InputDecoration(labelText: 'Code'),
-                      ),
-                      TextFormField(
-                        controller: descriptionController,
-                        decoration:
-                            const InputDecoration(labelText: 'Description'),
-                        maxLines: 3,
-                      ),
-                      TextFormField(
-                        controller: shortDescriptionController,
-                        decoration: const InputDecoration(
-                            labelText: 'Short description'),
-                        maxLines: 2,
-                      ),
-                      TextFormField(
-                        controller: inclusionsController,
-                        decoration: const InputDecoration(
-                          labelText: 'What’s included',
-                          helperText: 'One item per line.',
-                        ),
-                        maxLines: 4,
-                      ),
-                      TextFormField(
-                        controller: exclusionsController,
-                        decoration: const InputDecoration(
-                          labelText: 'What’s not included',
-                          helperText: 'One item per line.',
-                        ),
-                        maxLines: 4,
-                      ),
-                      TextFormField(
-                        controller: requiredSkillsController,
-                        decoration: const InputDecoration(
-                          labelText: 'Required skills',
-                          helperText: 'One skill per line.',
-                        ),
-                        maxLines: 3,
-                      ),
-                      TextFormField(
-                        controller: requiredToolsController,
-                        decoration: const InputDecoration(
-                          labelText: 'Required tools',
-                          helperText: 'One tool per line.',
-                        ),
-                        maxLines: 3,
-                      ),
-                      TextFormField(
-                        controller: requiredDocumentsController,
-                        decoration: const InputDecoration(
-                          labelText: 'Required documents',
-                          helperText: 'One document per line.',
-                        ),
-                        maxLines: 3,
-                      ),
-                      TextFormField(
-                        controller: startingPriceController,
-                        decoration:
-                            const InputDecoration(labelText: 'Starting price'),
-                        keyboardType: TextInputType.number,
-                      ),
-                      TextFormField(
-                        controller: gstRateController,
-                        decoration:
-                            const InputDecoration(labelText: 'GST rate (%)'),
-                        keyboardType: TextInputType.number,
-                      ),
-                      SwitchListTile(
-                        value: gstApplicable,
-                        onChanged: (value) =>
-                            setState(() => gstApplicable = value),
-                        title: const Text('GST applicable'),
-                      ),
-                      TextFormField(
-                        controller: sacCodeController,
-                        decoration:
-                            const InputDecoration(labelText: 'SAC code'),
-                      ),
-                      TextFormField(
-                        controller: durationController,
-                        decoration: const InputDecoration(
-                            labelText: 'Estimated duration (mins)'),
-                        keyboardType: TextInputType.number,
-                      ),
-                      TextFormField(
-                        controller: warrantyController,
-                        decoration:
-                            const InputDecoration(labelText: 'Warranty days'),
-                        keyboardType: TextInputType.number,
-                      ),
-                      TextFormField(
-                        controller: warrantyTextController,
-                        decoration: const InputDecoration(
-                            labelText: 'Warranty terms (optional)'),
-                        maxLines: 3,
-                      ),
-                      const Divider(height: 28),
-                      SwitchListTile(
-                        contentPadding: EdgeInsets.zero,
-                        value: guaranteeEnabled,
-                        onChanged: (value) =>
-                            setState(() => guaranteeEnabled = value),
-                        title: const Text('Enable service guarantee claims'),
-                        subtitle: const Text(
-                            'Only enable after business policy approval. No refund or free rework is promised automatically.'),
-                      ),
-                      if (guaranteeEnabled) ...[
-                        TextFormField(
-                            controller: guaranteeWindowController,
-                            decoration: const InputDecoration(
-                                labelText:
-                                    'Claim window after completion (days)'),
-                            keyboardType: TextInputType.number),
-                        TextFormField(
-                            controller: guaranteeCategoriesController,
-                            decoration: const InputDecoration(
-                                labelText: 'Eligible issue categories',
-                                helperText:
-                                    'One per line; e.g. incomplete work, poor workmanship, damage'),
-                            maxLines: 3),
-                        TextFormField(
-                            controller: guaranteeTermsController,
-                            decoration: const InputDecoration(
-                                labelText: 'Guarantee terms'),
-                            maxLines: 3),
-                        TextFormField(
-                            controller: guaranteeExclusionsController,
-                            decoration: const InputDecoration(
-                                labelText: 'Guarantee exclusions'),
-                            maxLines: 3),
-                        TextFormField(
-                            controller: guaranteeRemediesController,
-                            validator: _validateGuaranteeRemedies,
-                            decoration: const InputDecoration(
-                                labelText: 'Permitted resolution types',
-                                helperText:
-                                    'Use REWORK, REVISIT, or REFUND_REVIEW (one per line)'),
-                            maxLines: 3),
-                        SwitchListTile(
-                            contentPadding: EdgeInsets.zero,
-                            value: guaranteeRequiresPartnerReview,
-                            onChanged: (value) => setState(
-                                () => guaranteeRequiresPartnerReview = value),
-                            title: const Text(
-                                'Request Partner response during review')),
-                        SwitchListTile(
-                            contentPadding: EdgeInsets.zero,
-                            value: guaranteeEvidenceRequired,
-                            onChanged: (value) => setState(
-                                () => guaranteeEvidenceRequired = value),
-                            title: const Text('Require supporting photos')),
-                      ],
-                      TextFormField(
-                        controller: requirementsController,
-                        decoration: const InputDecoration(
-                          labelText: 'Before booking requirements',
-                          helperText: 'One requirement per line.',
-                        ),
-                        maxLines: 4,
-                      ),
-                      TextFormField(
-                        controller: variantsController,
-                        decoration: const InputDecoration(
-                          labelText: 'Service options / variants',
-                          helperText:
-                              'One per line: name | price | duration minutes | active/inactive | description',
-                        ),
-                        maxLines: 4,
-                        validator: _validateServiceOptionLines,
-                        onChanged: (_) => setState(() {}),
-                      ),
-                      _buildServiceOptionImageEditors(
-                        context: context,
-                        controller: variantsController,
-                        selectedImageUrls: variantImageUrls,
-                        label: 'Variant images',
-                        setState: setState,
-                        uploadImage: (bytes, fileName) =>
-                            _uploadCatalogImage(_api, bytes, fileName),
-                      ),
-                      _buildServiceOptionAvailabilityEditors(
-                        context: context,
-                        snapshot: snapshot,
-                        controller: variantsController,
-                        existingVariants: existingVariants,
-                        modes: variantAvailabilityModes,
-                        areaIds: variantServiceAreaIds,
-                        setState: setState,
-                      ),
-                      TextFormField(
-                        controller: addonsController,
-                        decoration: const InputDecoration(
-                          labelText: 'Optional add-ons',
-                          helperText:
-                              'One per line: name | price | duration minutes | active/inactive | description',
-                        ),
-                        maxLines: 4,
-                        validator: _validateServiceOptionLines,
-                        onChanged: (_) => setState(() {}),
-                      ),
-                      _buildServiceOptionImageEditors(
-                        context: context,
-                        controller: addonsController,
-                        selectedImageUrls: addonImageUrls,
-                        label: 'Add-on images',
-                        setState: setState,
-                        uploadImage: (bytes, fileName) =>
-                            _uploadCatalogImage(_api, bytes, fileName),
-                      ),
-                      _buildPublicationControls(
-                        context: context,
-                        snapshot: snapshot,
-                        publicationStatus: publicationStatus,
-                        availabilityMode: availabilityMode,
-                        availabilityKey: existing?.id ?? 'draft-service',
-                        publishStartsAt: publishStartsAt,
-                        publishEndsAt: publishEndsAt,
-                        serviceAreaIds: serviceAreaIds,
-                        dateError: publicationDateError,
-                        onPublicationStatusChanged: (value) =>
-                            setState(() => publicationStatus = value),
-                        onAvailabilityModeChanged: (value) =>
-                            setState(() => availabilityMode = value),
-                        onPublishStartsAtChanged: (value) => setState(() {
-                          publishStartsAt = value;
-                          publicationDateError = null;
-                        }),
-                        onPublishEndsAtChanged: (value) => setState(() {
-                          publishEndsAt = value;
-                          publicationDateError = null;
-                        }),
-                        onServiceAreaToggled: (id) => setState(() {
-                          if (!serviceAreaIds.add(id)) {
-                            serviceAreaIds.remove(id);
-                          }
-                        }),
-                      ),
-                      DropdownButtonFormField<String>(
-                        initialValue: priceType,
-                        decoration: const InputDecoration(
-                            labelText: 'Customer price label'),
-                        items: const [
-                          DropdownMenuItem(
-                              value: 'FIXED', child: Text('Fixed price')),
-                          DropdownMenuItem(
-                              value: 'FROM', child: Text('Starting from')),
-                          DropdownMenuItem(
-                              value: 'QUOTE',
-                              child: Text('Price after assessment')),
+            return PopScope<Map<String, dynamic>>(
+              canPop: !dirty && !saving,
+              onPopInvokedWithResult: (didPop, _) async {
+                if (didPop || !dirty || saving) return;
+                if (await _confirmDiscardCatalogChanges(dialogContext) &&
+                    dialogContext.mounted) {
+                  dirty = false;
+                  Navigator.of(dialogContext).pop();
+                }
+              },
+              child: AlertDialog(
+                title:
+                    Text(existing == null ? 'Create service' : 'Edit service'),
+                content: Form(
+                  key: formKey,
+                  onChanged: () => dirty = true,
+                  child: SingleChildScrollView(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (saveError != null) ...[
+                          Text(saveError!,
+                              style: TextStyle(
+                                  color: Theme.of(context).colorScheme.error)),
+                          const SizedBox(height: 8),
                         ],
-                        onChanged: (value) =>
-                            setState(() => priceType = value ?? 'FROM'),
-                      ),
-                      TextFormField(
-                        controller: ctaLabelController,
-                        decoration: const InputDecoration(
-                            labelText: 'Booking button text'),
-                        maxLength: 40,
-                      ),
-                      AdminImagePickerField(
-                        label: 'Service image',
-                        value: iconUrl,
-                        onChanged: (value) => setState(() => iconUrl = value),
-                        uploadImage: (bytes, fileName) =>
-                            _uploadCatalogImage(_api, bytes, fileName),
-                        recommendedWidth: 1200,
-                        recommendedHeight: 840,
-                      ),
-                      TextFormField(
-                        controller: seoTitleController,
-                        decoration:
-                            const InputDecoration(labelText: 'SEO title'),
-                      ),
-                      TextFormField(
-                        controller: seoDescriptionController,
-                        decoration:
-                            const InputDecoration(labelText: 'SEO description'),
-                        maxLines: 2,
-                      ),
-                      TextFormField(
-                        controller: seoKeywordsController,
-                        decoration: const InputDecoration(
-                          labelText: 'Search aliases / SEO keywords',
-                          helperText:
-                              'Comma-separated service names and phrases customers may search for.',
-                        ),
-                      ),
-                      TextFormField(
-                        controller: cancellationPolicyController,
-                        decoration: const InputDecoration(
-                            labelText: 'Cancellation policy'),
-                        maxLines: 3,
-                      ),
-                      TextFormField(
-                        controller: ratingController,
-                        decoration: const InputDecoration(labelText: 'Rating'),
-                        keyboardType: const TextInputType.numberWithOptions(
-                            decimal: true),
-                      ),
-                      TextFormField(
-                        controller: reviewCountController,
-                        decoration:
-                            const InputDecoration(labelText: 'Review count'),
-                        keyboardType: TextInputType.number,
-                      ),
-                      SwitchListTile(
-                        value: featured,
-                        onChanged: (value) => setState(() => featured = value),
-                        title: const Text('Featured'),
-                      ),
-                      SwitchListTile(
-                        value: popular,
-                        onChanged: (value) => setState(() => popular = value),
-                        title: const Text('Popular'),
-                      ),
-                      SwitchListTile(
-                        value: emergency,
-                        onChanged: (value) => setState(() => emergency = value),
-                        title: const Text('Emergency available'),
-                      ),
-                      SwitchListTile(
-                        value: homeVisit,
-                        onChanged: (value) => setState(() => homeVisit = value),
-                        title: const Text('Home visit'),
-                      ),
-                      SwitchListTile(
-                        value: requiresSiteVisit,
-                        onChanged: (value) =>
-                            setState(() => requiresSiteVisit = value),
-                        title: const Text('Requires site visit (Big Job)'),
-                        subtitle: const Text(
-                            'Worker visits first to generate a custom quote'),
-                      ),
-                      SwitchListTile(
-                        value: isActive,
-                        onChanged: (value) => setState(() => isActive = value),
-                        title: const Text('Active'),
-                      ),
-                      SwitchListTile(
-                        value: bookingEnabled,
-                        onChanged: (value) =>
-                            setState(() => bookingEnabled = value),
-                        title: const Text('Booking enabled'),
-                        subtitle: const Text(
-                            'Disable temporarily without hiding the service.'),
-                      ),
-                      SwitchListTile(
-                        value: maintenanceEnabled,
-                        onChanged: (value) =>
-                            setState(() => maintenanceEnabled = value),
-                        title: const Text('Recurring maintenance plans'),
-                        subtitle: const Text(
-                            'Eligible customers can create a plan. Each visit still requires customer confirmation and checkout.'),
-                      ),
-                      if (maintenanceEnabled) ...[
-                        TextFormField(
-                          controller: maintenanceIntervalsController,
-                          decoration: const InputDecoration(
-                              labelText: 'Allowed intervals (months)',
-                              hintText: '1, 3, 6, 12'),
-                          validator: (value) {
-                            if (!maintenanceEnabled) return null;
-                            final tokens = (value ?? '')
-                                .split(',')
-                                .map((item) => item.trim())
-                                .where((item) => item.isNotEmpty)
-                                .toList();
-                            final values = tokens
-                                .map((item) => int.tryParse(item))
-                                .whereType<int>()
-                                .toList();
-                            if (tokens.isEmpty ||
-                                values.length != tokens.length ||
-                                values.any((item) => item < 1 || item > 24) ||
-                                values.toSet().length != values.length) {
-                              return 'Enter unique month intervals from 1 to 24.';
-                            }
-                            return null;
+                        const _CatalogEditorSectionHeader('Basic details'),
+                        DropdownButtonFormField<String>(
+                          initialValue: selectedCategoryId.value.isEmpty
+                              ? null
+                              : selectedCategoryId.value,
+                          decoration:
+                              const InputDecoration(labelText: 'Category'),
+                          items: snapshot.categories
+                              .map(
+                                (category) => DropdownMenuItem(
+                                  value: category.id,
+                                  child: Text(category.name),
+                                ),
+                              )
+                              .toList(growable: false),
+                          onChanged: (value) {
+                            dirty = true;
+                            setState(() {
+                              selectedCategoryId.value = value ?? '';
+                              final nextSubcategories =
+                                  snapshot.subcategoriesForCategory(
+                                      selectedCategoryId.value);
+                              selectedSubcategoryId.value =
+                                  nextSubcategories.firstOrNull?.id ?? '';
+                            });
                           },
+                          validator: (value) => (value ?? '').isEmpty
+                              ? 'Select a category'
+                              : null,
+                        ),
+                        DropdownButtonFormField<String>(
+                          initialValue: selectedSubcategoryId.value.isEmpty
+                              ? null
+                              : selectedSubcategoryId.value,
+                          decoration:
+                              const InputDecoration(labelText: 'Subcategory'),
+                          items: subcategories
+                              .map(
+                                (subcategory) => DropdownMenuItem(
+                                  value: subcategory.id,
+                                  child: Text(subcategory.name),
+                                ),
+                              )
+                              .toList(growable: false),
+                          onChanged: (value) => setState(() {
+                            dirty = true;
+                            selectedSubcategoryId.value = value ?? '';
+                          }),
+                          validator: (value) => (value ?? '').isEmpty
+                              ? 'Select a subcategory'
+                              : null,
                         ),
                         TextFormField(
-                          controller: maintenanceReminderController,
+                          controller: nameController,
+                          decoration: const InputDecoration(labelText: 'Name'),
+                          validator: (value) => (value ?? '').trim().length < 2
+                              ? 'Enter a service name'
+                              : null,
+                        ),
+                        TextFormField(
+                          controller: slugController,
+                          decoration: const InputDecoration(labelText: 'Slug'),
+                          validator: _validateCatalogSlug,
+                        ),
+                        TextFormField(
+                          controller: codeController,
+                          decoration: const InputDecoration(labelText: 'Code'),
+                        ),
+                        TextFormField(
+                          controller: descriptionController,
+                          decoration:
+                              const InputDecoration(labelText: 'Description'),
+                          maxLines: 3,
+                        ),
+                        TextFormField(
+                          controller: shortDescriptionController,
                           decoration: const InputDecoration(
-                              labelText: 'Reminder lead time (hours)'),
+                              labelText: 'Short description'),
+                          maxLines: 2,
+                        ),
+                        TextFormField(
+                          controller: inclusionsController,
+                          decoration: const InputDecoration(
+                            labelText: 'What’s included',
+                            helperText: 'One item per line.',
+                          ),
+                          maxLines: 4,
+                        ),
+                        TextFormField(
+                          controller: exclusionsController,
+                          decoration: const InputDecoration(
+                            labelText: 'What’s not included',
+                            helperText: 'One item per line.',
+                          ),
+                          maxLines: 4,
+                        ),
+                        const _CatalogEditorSectionHeader(
+                            'Partner requirements'),
+                        TextFormField(
+                          controller: requiredSkillsController,
+                          decoration: const InputDecoration(
+                            labelText: 'Required skills',
+                            helperText: 'One skill per line.',
+                          ),
+                          maxLines: 3,
+                        ),
+                        TextFormField(
+                          controller: requiredToolsController,
+                          decoration: const InputDecoration(
+                            labelText: 'Required tools',
+                            helperText: 'One tool per line.',
+                          ),
+                          maxLines: 3,
+                        ),
+                        TextFormField(
+                          controller: requiredDocumentsController,
+                          decoration: const InputDecoration(
+                            labelText: 'Required documents',
+                            helperText: 'One document per line.',
+                          ),
+                          maxLines: 3,
+                        ),
+                        const _CatalogEditorSectionHeader('Pricing & tax'),
+                        TextFormField(
+                          controller: startingPriceController,
+                          decoration: const InputDecoration(
+                              labelText: 'Starting price'),
                           keyboardType: TextInputType.number,
                           validator: (value) {
-                            if (!maintenanceEnabled) return null;
-                            final hours = int.tryParse(value ?? '');
-                            return hours == null || hours < 1 || hours > 720
-                                ? 'Enter 1 to 720 hours.'
+                            final price = double.tryParse((value ?? '').trim());
+                            return price == null ||
+                                    !price.isFinite ||
+                                    price <= 0
+                                ? 'Enter a price greater than zero.'
                                 : null;
                           },
                         ),
+                        TextFormField(
+                          controller: gstRateController,
+                          decoration:
+                              const InputDecoration(labelText: 'GST rate (%)'),
+                          keyboardType: TextInputType.number,
+                          validator: (value) {
+                            final rate = double.tryParse((value ?? '').trim());
+                            return rate == null || !rate.isFinite || rate <= 0
+                                ? 'Enter a GST rate greater than zero.'
+                                : null;
+                          },
+                        ),
+                        SwitchListTile(
+                          value: gstApplicable,
+                          onChanged: (value) => setState(() {
+                            dirty = true;
+                            gstApplicable = value;
+                          }),
+                          title: const Text('GST applicable'),
+                        ),
+                        TextFormField(
+                          controller: sacCodeController,
+                          decoration:
+                              const InputDecoration(labelText: 'SAC code'),
+                        ),
+                        TextFormField(
+                          controller: durationController,
+                          decoration: const InputDecoration(
+                              labelText: 'Estimated duration (mins)'),
+                          keyboardType: TextInputType.number,
+                          validator: (value) {
+                            final minutes = int.tryParse((value ?? '').trim());
+                            return minutes == null || minutes <= 0
+                                ? 'Enter a whole number of minutes greater than zero.'
+                                : null;
+                          },
+                        ),
+                        TextFormField(
+                          controller: warrantyController,
+                          decoration:
+                              const InputDecoration(labelText: 'Warranty days'),
+                          keyboardType: TextInputType.number,
+                          validator: (value) {
+                            final days = int.tryParse((value ?? '').trim());
+                            return days == null || days < 0
+                                ? 'Enter zero or a whole number of days.'
+                                : null;
+                          },
+                        ),
+                        const _CatalogEditorSectionHeader(
+                            'Warranty & guarantees'),
+                        TextFormField(
+                          controller: warrantyTextController,
+                          decoration: const InputDecoration(
+                              labelText: 'Warranty terms (optional)'),
+                          maxLines: 3,
+                        ),
+                        const Divider(height: 28),
+                        SwitchListTile(
+                          contentPadding: EdgeInsets.zero,
+                          value: guaranteeEnabled,
+                          onChanged: (value) => setState(() {
+                            dirty = true;
+                            guaranteeEnabled = value;
+                          }),
+                          title: const Text('Enable service guarantee claims'),
+                          subtitle: const Text(
+                              'Only enable after business policy approval. No refund or free rework is promised automatically.'),
+                        ),
+                        if (guaranteeEnabled) ...[
+                          TextFormField(
+                              controller: guaranteeWindowController,
+                              decoration: const InputDecoration(
+                                  labelText:
+                                      'Claim window after completion (days)'),
+                              keyboardType: TextInputType.number,
+                              validator: (value) {
+                                final days = int.tryParse((value ?? '').trim());
+                                return days == null || days < 1 || days > 3650
+                                    ? 'Enter a claim window from 1 to 3650 days.'
+                                    : null;
+                              }),
+                          TextFormField(
+                              controller: guaranteeCategoriesController,
+                              decoration: const InputDecoration(
+                                  labelText: 'Eligible issue categories',
+                                  helperText:
+                                      'One per line; e.g. incomplete work, poor workmanship, damage'),
+                              maxLines: 3,
+                              validator: (value) => _serviceLines(value ?? '')
+                                      .isEmpty
+                                  ? 'Add at least one eligible issue category.'
+                                  : null),
+                          TextFormField(
+                              controller: guaranteeTermsController,
+                              decoration: const InputDecoration(
+                                  labelText: 'Guarantee terms'),
+                              maxLines: 3),
+                          TextFormField(
+                              controller: guaranteeExclusionsController,
+                              decoration: const InputDecoration(
+                                  labelText: 'Guarantee exclusions'),
+                              maxLines: 3),
+                          TextFormField(
+                              controller: guaranteeRemediesController,
+                              validator: _validateGuaranteeRemedies,
+                              decoration: const InputDecoration(
+                                  labelText: 'Permitted resolution types',
+                                  helperText:
+                                      'Use REWORK, REVISIT, or REFUND_REVIEW (one per line)'),
+                              maxLines: 3),
+                          SwitchListTile(
+                              contentPadding: EdgeInsets.zero,
+                              value: guaranteeRequiresPartnerReview,
+                              onChanged: (value) => setState(() {
+                                    dirty = true;
+                                    guaranteeRequiresPartnerReview = value;
+                                  }),
+                              title: const Text(
+                                  'Request Partner response during review')),
+                          SwitchListTile(
+                              contentPadding: EdgeInsets.zero,
+                              value: guaranteeEvidenceRequired,
+                              onChanged: (value) => setState(() {
+                                    dirty = true;
+                                    guaranteeEvidenceRequired = value;
+                                  }),
+                              title: const Text('Require supporting photos')),
+                        ],
+                        TextFormField(
+                          controller: requirementsController,
+                          decoration: const InputDecoration(
+                            labelText: 'Before booking requirements',
+                            helperText: 'One requirement per line.',
+                          ),
+                          maxLines: 4,
+                        ),
+                        const _CatalogEditorSectionHeader(
+                            'Booking requirements'),
+                        const _CatalogEditorSectionHeader('Options & add-ons'),
+                        TextFormField(
+                          controller: variantsController,
+                          decoration: const InputDecoration(
+                            labelText: 'Service options / variants',
+                            helperText:
+                                'One per line: name | price | duration minutes | active/inactive | description',
+                          ),
+                          maxLines: 4,
+                          validator: _validateServiceOptionLines,
+                          onChanged: (_) => dirty = true,
+                        ),
+                        _buildServiceOptionImageEditors(
+                          context: context,
+                          controller: variantsController,
+                          selectedImageUrls: variantImageUrls,
+                          label: 'Variant images',
+                          setState: markDirtySetState,
+                          uploadImage: (bytes, fileName) =>
+                              _uploadCatalogImage(_api, bytes, fileName),
+                        ),
+                        _buildServiceOptionAvailabilityEditors(
+                          context: context,
+                          snapshot: snapshot,
+                          controller: variantsController,
+                          existingVariants: existingVariants,
+                          modes: variantAvailabilityModes,
+                          areaIds: variantServiceAreaIds,
+                          setState: markDirtySetState,
+                        ),
+                        TextFormField(
+                          controller: addonsController,
+                          decoration: const InputDecoration(
+                            labelText: 'Optional add-ons',
+                            helperText:
+                                'One per line: name | price | duration minutes | active/inactive | description',
+                          ),
+                          maxLines: 4,
+                          validator: _validateServiceOptionLines,
+                          onChanged: (_) => dirty = true,
+                        ),
+                        _buildServiceOptionImageEditors(
+                          context: context,
+                          controller: addonsController,
+                          selectedImageUrls: addonImageUrls,
+                          label: 'Add-on images',
+                          setState: markDirtySetState,
+                          uploadImage: (bytes, fileName) =>
+                              _uploadCatalogImage(_api, bytes, fileName),
+                        ),
+                        const _CatalogEditorSectionHeader(
+                            'Availability & publishing'),
+                        _buildPublicationControls(
+                          context: context,
+                          snapshot: snapshot,
+                          publicationStatus: publicationStatus,
+                          availabilityMode: availabilityMode,
+                          availabilityKey: existing?.id ?? 'draft-service',
+                          publishStartsAt: publishStartsAt,
+                          publishEndsAt: publishEndsAt,
+                          serviceAreaIds: serviceAreaIds,
+                          dateError: publicationDateError,
+                          onPublicationStatusChanged: (value) =>
+                              setState(() => publicationStatus = value),
+                          onAvailabilityModeChanged: (value) =>
+                              setState(() => availabilityMode = value),
+                          onPublishStartsAtChanged: (value) => setState(() {
+                            publishStartsAt = value;
+                            publicationDateError = null;
+                          }),
+                          onPublishEndsAtChanged: (value) => setState(() {
+                            publishEndsAt = value;
+                            publicationDateError = null;
+                          }),
+                          onServiceAreaToggled: (id) => setState(() {
+                            if (!serviceAreaIds.add(id)) {
+                              serviceAreaIds.remove(id);
+                            }
+                          }),
+                        ),
+                        const _CatalogEditorSectionHeader(
+                            'Customer booking controls'),
+                        DropdownButtonFormField<String>(
+                          initialValue: priceType,
+                          decoration: const InputDecoration(
+                              labelText: 'Customer price label'),
+                          items: const [
+                            DropdownMenuItem(
+                                value: 'FIXED', child: Text('Fixed price')),
+                            DropdownMenuItem(
+                                value: 'FROM', child: Text('Starting from')),
+                            DropdownMenuItem(
+                                value: 'QUOTE',
+                                child: Text('Price after assessment')),
+                          ],
+                          onChanged: (value) => setState(() {
+                            dirty = true;
+                            priceType = value ?? 'FROM';
+                          }),
+                        ),
+                        TextFormField(
+                          controller: ctaLabelController,
+                          decoration: const InputDecoration(
+                              labelText: 'Booking button text'),
+                          maxLength: 40,
+                        ),
+                        const _CatalogEditorSectionHeader(
+                            'Image, search & policies'),
+                        AdminImagePickerField(
+                          label: 'Service image',
+                          value: iconUrl,
+                          onChanged: (value) => setState(() {
+                            dirty = true;
+                            iconUrl = value;
+                          }),
+                          uploadImage: (bytes, fileName) =>
+                              _uploadCatalogImage(_api, bytes, fileName),
+                          recommendedWidth: 1200,
+                          recommendedHeight: 840,
+                        ),
+                        TextFormField(
+                          controller: seoTitleController,
+                          decoration:
+                              const InputDecoration(labelText: 'SEO title'),
+                        ),
+                        TextFormField(
+                          controller: seoDescriptionController,
+                          decoration: const InputDecoration(
+                              labelText: 'SEO description'),
+                          maxLines: 2,
+                        ),
+                        TextFormField(
+                          controller: seoKeywordsController,
+                          decoration: const InputDecoration(
+                            labelText: 'Search aliases / SEO keywords',
+                            helperText:
+                                'Comma-separated service names and phrases customers may search for.',
+                          ),
+                        ),
+                        TextFormField(
+                          controller: cancellationPolicyController,
+                          decoration: const InputDecoration(
+                              labelText: 'Cancellation policy'),
+                          maxLines: 3,
+                        ),
+                        TextFormField(
+                          controller: ratingController,
+                          decoration:
+                              const InputDecoration(labelText: 'Rating'),
+                          keyboardType: const TextInputType.numberWithOptions(
+                              decimal: true),
+                          validator: (value) {
+                            final rating =
+                                double.tryParse((value ?? '').trim());
+                            return rating == null ||
+                                    !rating.isFinite ||
+                                    rating < 0 ||
+                                    rating > 5
+                                ? 'Enter a rating from 0 to 5.'
+                                : null;
+                          },
+                        ),
+                        TextFormField(
+                          controller: reviewCountController,
+                          decoration:
+                              const InputDecoration(labelText: 'Review count'),
+                          keyboardType: TextInputType.number,
+                          validator: (value) {
+                            final count = int.tryParse((value ?? '').trim());
+                            return count == null || count < 0
+                                ? 'Enter a whole number of 0 or more.'
+                                : null;
+                          },
+                        ),
+                        SwitchListTile(
+                          value: featured,
+                          onChanged: (value) => setState(() {
+                            dirty = true;
+                            featured = value;
+                          }),
+                          title: const Text('Featured'),
+                        ),
+                        SwitchListTile(
+                          value: popular,
+                          onChanged: (value) => setState(() {
+                            dirty = true;
+                            popular = value;
+                          }),
+                          title: const Text('Popular'),
+                        ),
+                        SwitchListTile(
+                          value: emergency,
+                          onChanged: (value) => setState(() {
+                            dirty = true;
+                            emergency = value;
+                          }),
+                          title: const Text('Emergency available'),
+                        ),
+                        SwitchListTile(
+                          value: homeVisit,
+                          onChanged: (value) => setState(() {
+                            dirty = true;
+                            homeVisit = value;
+                          }),
+                          title: const Text('Home visit'),
+                        ),
+                        SwitchListTile(
+                          value: requiresSiteVisit,
+                          onChanged: (value) => setState(() {
+                            dirty = true;
+                            requiresSiteVisit = value;
+                          }),
+                          title: const Text('Requires site visit (Big Job)'),
+                          subtitle: const Text(
+                              'Worker visits first to generate a custom quote'),
+                        ),
+                        SwitchListTile(
+                          value: isActive,
+                          onChanged: (value) => setState(() {
+                            dirty = true;
+                            isActive = value;
+                          }),
+                          title: const Text('Active'),
+                        ),
+                        SwitchListTile(
+                          value: bookingEnabled,
+                          onChanged: (value) => setState(() {
+                            dirty = true;
+                            bookingEnabled = value;
+                          }),
+                          title: const Text('Booking enabled'),
+                          subtitle: const Text(
+                              'Disable temporarily without hiding the service.'),
+                        ),
+                        SwitchListTile(
+                          value: maintenanceEnabled,
+                          onChanged: (value) => setState(() {
+                            dirty = true;
+                            maintenanceEnabled = value;
+                          }),
+                          title: const Text('Recurring maintenance plans'),
+                          subtitle: const Text(
+                              'Eligible customers can create a plan. Each visit still requires customer confirmation and checkout.'),
+                        ),
+                        if (maintenanceEnabled) ...[
+                          TextFormField(
+                            controller: maintenanceIntervalsController,
+                            decoration: const InputDecoration(
+                                labelText: 'Allowed intervals (months)',
+                                hintText: '1, 3, 6, 12'),
+                            validator: (value) {
+                              if (!maintenanceEnabled) return null;
+                              final tokens = (value ?? '')
+                                  .split(',')
+                                  .map((item) => item.trim())
+                                  .where((item) => item.isNotEmpty)
+                                  .toList();
+                              final values = tokens
+                                  .map((item) => int.tryParse(item))
+                                  .whereType<int>()
+                                  .toList();
+                              if (tokens.isEmpty ||
+                                  values.length != tokens.length ||
+                                  values.any((item) => item < 1 || item > 24) ||
+                                  values.toSet().length != values.length) {
+                                return 'Enter unique month intervals from 1 to 24.';
+                              }
+                              return null;
+                            },
+                          ),
+                          TextFormField(
+                            controller: maintenanceReminderController,
+                            decoration: const InputDecoration(
+                                labelText: 'Reminder lead time (hours)'),
+                            keyboardType: TextInputType.number,
+                            validator: (value) {
+                              if (!maintenanceEnabled) return null;
+                              final hours = int.tryParse(value ?? '');
+                              return hours == null || hours < 1 || hours > 720
+                                  ? 'Enter 1 to 720 hours.'
+                                  : null;
+                            },
+                          ),
+                        ],
                       ],
-                    ],
+                    ),
                   ),
                 ),
+                actions: [
+                  TextButton(
+                    onPressed: saving
+                        ? null
+                        : () async {
+                            if (dirty &&
+                                !await _confirmDiscardCatalogChanges(
+                                    dialogContext)) {
+                              return;
+                            }
+                            dirty = false;
+                            if (dialogContext.mounted) {
+                              Navigator.of(dialogContext).pop();
+                            }
+                          },
+                    child: const Text('Cancel'),
+                  ),
+                  FilledButton(
+                    onPressed: saving
+                        ? null
+                        : () async {
+                            if (!formKey.currentState!.validate()) return;
+                            if (_customAvailabilityHasNoLocations(
+                              availabilityMode,
+                              serviceAreaIds,
+                            )) {
+                              _showCustomAvailabilityValidationError(
+                                  dialogContext);
+                              return;
+                            }
+                            if (_hasUncoveredCustomVariant(
+                              variantsController.text,
+                              existingVariants,
+                              variantAvailabilityModes,
+                              variantServiceAreaIds,
+                            )) {
+                              _showCustomAvailabilityValidationError(
+                                dialogContext,
+                                isVariant: true,
+                              );
+                              return;
+                            }
+                            if (publishStartsAt != null &&
+                                publishEndsAt != null &&
+                                !publishEndsAt!.isAfter(publishStartsAt!)) {
+                              setState(() => publicationDateError =
+                                  'End date must be after the start date.');
+                              return;
+                            }
+                            final payload = <String, dynamic>{
+                              'categoryId': selectedCategoryId.value,
+                              'subcategoryId': selectedSubcategoryId.value,
+                              'name': nameController.text.trim(),
+                              'slug': slugController.text.trim().isEmpty
+                                  ? (existing?.slug ??
+                                      _slugify(nameController.text))
+                                  : slugController.text.trim(),
+                              if (codeController.text.trim().isNotEmpty)
+                                'code': codeController.text.trim(),
+                              'description':
+                                  descriptionController.text.trim().isEmpty
+                                      ? null
+                                      : descriptionController.text.trim(),
+                              'shortDescription':
+                                  shortDescriptionController.text.trim().isEmpty
+                                      ? null
+                                      : shortDescriptionController.text.trim(),
+                              'startingPrice': double.tryParse(
+                                      startingPriceController.text.trim()) ??
+                                  0,
+                              'gstRate': double.tryParse(
+                                      gstRateController.text.trim()) ??
+                                  18,
+                              'sacCode': sacCodeController.text.trim().isEmpty
+                                  ? 'PENDING'
+                                  : sacCodeController.text.trim(),
+                              'estimatedDurationMins': int.tryParse(
+                                      durationController.text.trim()) ??
+                                  0,
+                              'warrantyDays': int.tryParse(
+                                      warrantyController.text.trim()) ??
+                                  0,
+                              'inclusions':
+                                  _serviceLines(inclusionsController.text),
+                              'exclusions':
+                                  _serviceLines(exclusionsController.text),
+                              'requiredSkills': _serviceRequirementRows(
+                                  requiredSkillsController.text),
+                              'requiredTools': _serviceRequirementRows(
+                                  requiredToolsController.text),
+                              'requiredDocuments': _serviceRequirementRows(
+                                  requiredDocumentsController.text),
+                              'warrantyText':
+                                  warrantyTextController.text.trim().isEmpty
+                                      ? null
+                                      : warrantyTextController.text.trim(),
+                              'guaranteeEnabled': guaranteeEnabled,
+                              'guaranteeClaimWindowDays': guaranteeEnabled
+                                  ? (int.tryParse(guaranteeWindowController.text
+                                          .trim()) ??
+                                      0)
+                                  : 0,
+                              'guaranteeIssueCategories': _serviceLines(
+                                  guaranteeCategoriesController.text),
+                              'guaranteeTerms':
+                                  guaranteeTermsController.text.trim().isEmpty
+                                      ? null
+                                      : guaranteeTermsController.text.trim(),
+                              'guaranteeExclusions':
+                                  guaranteeExclusionsController
+                                          .text
+                                          .trim()
+                                          .isEmpty
+                                      ? null
+                                      : guaranteeExclusionsController.text
+                                          .trim(),
+                              'guaranteeResolutionTypes': _serviceLines(
+                                      guaranteeRemediesController.text)
+                                  .map((value) => value.toUpperCase())
+                                  .toList(growable: false),
+                              'guaranteeRequiresPartnerReview':
+                                  guaranteeRequiresPartnerReview,
+                              'guaranteeEvidenceRequired':
+                                  guaranteeEvidenceRequired,
+                              'requirements': requirementsController.text
+                                  .split('\n')
+                                  .map((item) => item.trim())
+                                  .where((item) => item.isNotEmpty)
+                                  .toList(growable: false),
+                              'variants': _serviceOptionRows(
+                                variantsController.text,
+                                existing?.variants ?? const [],
+                                isVariant: true,
+                                imageUrls: variantImageUrls,
+                                availabilityModes: variantAvailabilityModes,
+                                serviceAreaIds: variantServiceAreaIds,
+                              ),
+                              'addons': _serviceOptionRows(
+                                addonsController.text,
+                                existing?.addons ?? const [],
+                                isVariant: false,
+                                imageUrls: addonImageUrls,
+                              ),
+                              'priceType': priceType,
+                              'ctaLabel': ctaLabelController.text.trim().isEmpty
+                                  ? 'Book service'
+                                  : ctaLabelController.text.trim(),
+                              'iconUrl': iconUrl,
+                              'seoTitle': seoTitleController.text.trim().isEmpty
+                                  ? null
+                                  : seoTitleController.text.trim(),
+                              'seoDescription':
+                                  seoDescriptionController.text.trim().isEmpty
+                                      ? null
+                                      : seoDescriptionController.text.trim(),
+                              'seoKeywords':
+                                  seoKeywordsController.text.trim().isEmpty
+                                      ? null
+                                      : seoKeywordsController.text.trim(),
+                              'cancellationPolicy': cancellationPolicyController
+                                      .text
+                                      .trim()
+                                      .isEmpty
+                                  ? null
+                                  : cancellationPolicyController.text.trim(),
+                              'rating': double.tryParse(
+                                      ratingController.text.trim()) ??
+                                  0,
+                              'reviewCount': int.tryParse(
+                                      reviewCountController.text.trim()) ??
+                                  0,
+                              'featured': featured,
+                              'popular': popular,
+                              'emergencyAvailable': emergency,
+                              'gstApplicable': gstApplicable,
+                              'homeVisit': homeVisit,
+                              'requiresSiteVisit': requiresSiteVisit,
+                              'isActive': isActive,
+                              'bookingEnabled': bookingEnabled,
+                              'publicationStatus': publicationStatus,
+                              'publishStartsAt':
+                                  publishStartsAt?.toUtc().toIso8601String(),
+                              'publishEndsAt':
+                                  publishEndsAt?.toUtc().toIso8601String(),
+                              'serviceAreaIds': availabilityMode == 'CUSTOM'
+                                  ? serviceAreaIds.toList(growable: false)
+                                  : const <String>[],
+                              'availabilityMode': availabilityMode,
+                              'maintenanceEnabled': maintenanceEnabled,
+                              'maintenanceIntervalsMonths': maintenanceEnabled
+                                  ? maintenanceIntervalsController.text
+                                      .split(',')
+                                      .map((item) => int.tryParse(item.trim()))
+                                      .whereType<int>()
+                                      .toList()
+                                  : <int>[],
+                              'maintenanceReminderHours': int.tryParse(
+                                      maintenanceReminderController.text
+                                          .trim()) ??
+                                  24,
+                            };
+                            setState(() {
+                              saving = true;
+                              saveError = null;
+                            });
+                            try {
+                              await onSave(payload);
+                              if (dialogContext.mounted) {
+                                dirty = false;
+                                Navigator.of(dialogContext).pop(payload);
+                              }
+                            } catch (error) {
+                              if (dialogContext.mounted) {
+                                setState(
+                                    () => saveError = _catalogSaveError(error));
+                              }
+                            } finally {
+                              if (dialogContext.mounted) {
+                                setState(() => saving = false);
+                              }
+                            }
+                          },
+                    child: saving
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : Text(existing == null
+                            ? 'Create service'
+                            : 'Save changes'),
+                  ),
+                ],
               ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.of(dialogContext).pop(),
-                  child: const Text('Cancel'),
-                ),
-                FilledButton(
-                  onPressed: () {
-                    if (!formKey.currentState!.validate()) return;
-                    if (_customAvailabilityHasNoLocations(
-                      availabilityMode,
-                      serviceAreaIds,
-                    )) {
-                      _showCustomAvailabilityValidationError(dialogContext);
-                      return;
-                    }
-                    if (_hasUncoveredCustomVariant(
-                      variantsController.text,
-                      existingVariants,
-                      variantAvailabilityModes,
-                      variantServiceAreaIds,
-                    )) {
-                      _showCustomAvailabilityValidationError(
-                        dialogContext,
-                        isVariant: true,
-                      );
-                      return;
-                    }
-                    if (publishStartsAt != null &&
-                        publishEndsAt != null &&
-                        !publishEndsAt!.isAfter(publishStartsAt!)) {
-                      setState(() => publicationDateError =
-                          'End date must be after the start date.');
-                      return;
-                    }
-                    Navigator.of(dialogContext).pop({
-                      'categoryId': selectedCategoryId.value,
-                      'subcategoryId': selectedSubcategoryId.value,
-                      'name': nameController.text.trim(),
-                      'slug': slugController.text.trim().isEmpty
-                          ? _slugify(nameController.text)
-                          : slugController.text.trim(),
-                      'code': codeController.text.trim().isEmpty
-                          ? null
-                          : codeController.text.trim(),
-                      'description': descriptionController.text.trim().isEmpty
-                          ? null
-                          : descriptionController.text.trim(),
-                      'shortDescription':
-                          shortDescriptionController.text.trim().isEmpty
-                              ? null
-                              : shortDescriptionController.text.trim(),
-                      'startingPrice': double.tryParse(
-                              startingPriceController.text.trim()) ??
-                          0,
-                      'gstRate':
-                          double.tryParse(gstRateController.text.trim()) ?? 18,
-                      'sacCode': sacCodeController.text.trim().isEmpty
-                          ? 'PENDING'
-                          : sacCodeController.text.trim(),
-                      'estimatedDurationMins':
-                          int.tryParse(durationController.text.trim()) ?? 0,
-                      'warrantyDays':
-                          int.tryParse(warrantyController.text.trim()) ?? 0,
-                      'inclusions': _serviceLines(inclusionsController.text),
-                      'exclusions': _serviceLines(exclusionsController.text),
-                      'requiredSkills': _serviceRequirementRows(
-                          requiredSkillsController.text),
-                      'requiredTools':
-                          _serviceRequirementRows(requiredToolsController.text),
-                      'requiredDocuments': _serviceRequirementRows(
-                          requiredDocumentsController.text),
-                      'warrantyText': warrantyTextController.text.trim().isEmpty
-                          ? null
-                          : warrantyTextController.text.trim(),
-                      'guaranteeEnabled': guaranteeEnabled,
-                      'guaranteeClaimWindowDays': guaranteeEnabled
-                          ? (int.tryParse(
-                                  guaranteeWindowController.text.trim()) ??
-                              0)
-                          : 0,
-                      'guaranteeIssueCategories':
-                          _serviceLines(guaranteeCategoriesController.text),
-                      'guaranteeTerms':
-                          guaranteeTermsController.text.trim().isEmpty
-                              ? null
-                              : guaranteeTermsController.text.trim(),
-                      'guaranteeExclusions':
-                          guaranteeExclusionsController.text.trim().isEmpty
-                              ? null
-                              : guaranteeExclusionsController.text.trim(),
-                      'guaranteeResolutionTypes':
-                          _serviceLines(guaranteeRemediesController.text)
-                              .map((value) => value.toUpperCase())
-                              .toList(growable: false),
-                      'guaranteeRequiresPartnerReview':
-                          guaranteeRequiresPartnerReview,
-                      'guaranteeEvidenceRequired': guaranteeEvidenceRequired,
-                      'requirements': requirementsController.text
-                          .split('\n')
-                          .map((item) => item.trim())
-                          .where((item) => item.isNotEmpty)
-                          .toList(growable: false),
-                      'variants': _serviceOptionRows(
-                        variantsController.text,
-                        existing?.variants ?? const [],
-                        isVariant: true,
-                        imageUrls: variantImageUrls,
-                        availabilityModes: variantAvailabilityModes,
-                        serviceAreaIds: variantServiceAreaIds,
-                      ),
-                      'addons': _serviceOptionRows(
-                        addonsController.text,
-                        existing?.addons ?? const [],
-                        isVariant: false,
-                        imageUrls: addonImageUrls,
-                      ),
-                      'priceType': priceType,
-                      'ctaLabel': ctaLabelController.text.trim().isEmpty
-                          ? 'Book service'
-                          : ctaLabelController.text.trim(),
-                      'iconUrl': iconUrl,
-                      'seoTitle': seoTitleController.text.trim().isEmpty
-                          ? null
-                          : seoTitleController.text.trim(),
-                      'seoDescription':
-                          seoDescriptionController.text.trim().isEmpty
-                              ? null
-                              : seoDescriptionController.text.trim(),
-                      'seoKeywords': seoKeywordsController.text.trim().isEmpty
-                          ? null
-                          : seoKeywordsController.text.trim(),
-                      'cancellationPolicy':
-                          cancellationPolicyController.text.trim().isEmpty
-                              ? null
-                              : cancellationPolicyController.text.trim(),
-                      'rating':
-                          double.tryParse(ratingController.text.trim()) ?? 0,
-                      'reviewCount':
-                          int.tryParse(reviewCountController.text.trim()) ?? 0,
-                      'featured': featured,
-                      'popular': popular,
-                      'emergencyAvailable': emergency,
-                      'gstApplicable': gstApplicable,
-                      'homeVisit': homeVisit,
-                      'requiresSiteVisit': requiresSiteVisit,
-                      'isActive': isActive,
-                      'bookingEnabled': bookingEnabled,
-                      'publicationStatus': publicationStatus,
-                      'publishStartsAt':
-                          publishStartsAt?.toUtc().toIso8601String(),
-                      'publishEndsAt': publishEndsAt?.toUtc().toIso8601String(),
-                      'serviceAreaIds': availabilityMode == 'CUSTOM'
-                          ? serviceAreaIds.toList(growable: false)
-                          : const <String>[],
-                      'availabilityMode': availabilityMode,
-                      'maintenanceEnabled': maintenanceEnabled,
-                      'maintenanceIntervalsMonths': maintenanceEnabled
-                          ? maintenanceIntervalsController.text
-                              .split(',')
-                              .map((item) => int.tryParse(item.trim()))
-                              .whereType<int>()
-                              .toList()
-                          : <int>[],
-                      'maintenanceReminderHours': int.tryParse(
-                              maintenanceReminderController.text.trim()) ??
-                          24,
-                    });
-                  },
-                  child: const Text('Save'),
-                ),
-              ],
             );
           },
         );
@@ -2564,12 +3137,26 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
     });
   }
 
-  Future<Map<String, dynamic>?> _showPricingRuleEditor(_AdminService service) {
+  Future<Map<String, dynamic>?> _showPricingRuleEditor(
+    _AdminService service,
+    _CatalogSnapshot snapshot, {
+    required Future<void> Function(Map<String, dynamic>) onSave,
+  }) {
     final formKey = GlobalKey<FormState>();
     final typeController = TextEditingController(text: 'BASE');
     final titleController =
         TextEditingController(text: '${service.name} base price');
-    final cityIdController = TextEditingController();
+    String? selectedCityId;
+    DateTime? startsAt;
+    DateTime? endsAt;
+    var isActive = true;
+    String? dateError;
+    final cities = <String, String>{};
+    for (final area in snapshot.serviceAreas) {
+      if (area.cityId.isNotEmpty && area.cityIsActive) {
+        cities.putIfAbsent(area.cityId, () => area.cityName);
+      }
+    }
     final descriptionController = TextEditingController();
     final priceController =
         TextEditingController(text: service.startingPrice.toStringAsFixed(0));
@@ -2578,98 +3165,320 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
     return showDialog<Map<String, dynamic>>(
       context: context,
       builder: (dialogContext) {
-        return AlertDialog(
-          title: Text('Pricing rule for ${service.name}'),
-          content: Form(
-            key: formKey,
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  DropdownButtonFormField<String>(
-                    initialValue: typeController.text,
-                    decoration: const InputDecoration(labelText: 'Rule type'),
-                    items: const [
-                      DropdownMenuItem(value: 'BASE', child: Text('BASE')),
-                      DropdownMenuItem(value: 'CITY', child: Text('CITY')),
-                      DropdownMenuItem(
-                          value: 'SEASONAL', child: Text('SEASONAL')),
-                      DropdownMenuItem(
-                          value: 'PROMOTIONAL', child: Text('PROMOTIONAL')),
-                      DropdownMenuItem(value: 'SURGE', child: Text('SURGE')),
-                      DropdownMenuItem(value: 'WORKER', child: Text('WORKER')),
-                    ],
-                    onChanged: (value) => typeController.text = value ?? 'BASE',
+        var selectedType = 'BASE';
+        var saving = false;
+        String? saveError;
+        return StatefulBuilder(
+            builder: (context, setState) => AlertDialog(
+                  title: Text('Pricing rule for ${service.name}'),
+                  content: Form(
+                    key: formKey,
+                    child: SingleChildScrollView(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (saveError != null) ...[
+                            Text(saveError!,
+                                style: TextStyle(
+                                    color:
+                                        Theme.of(context).colorScheme.error)),
+                            const SizedBox(height: 8),
+                          ],
+                          DropdownButtonFormField<String>(
+                            initialValue: selectedType,
+                            decoration:
+                                const InputDecoration(labelText: 'Rule type'),
+                            items: const [
+                              DropdownMenuItem(
+                                  value: 'BASE', child: Text('BASE')),
+                              DropdownMenuItem(
+                                  value: 'CITY', child: Text('CITY')),
+                              DropdownMenuItem(
+                                  value: 'SEASONAL', child: Text('SEASONAL')),
+                              DropdownMenuItem(
+                                  value: 'PROMOTIONAL',
+                                  child: Text('PROMOTIONAL')),
+                              DropdownMenuItem(
+                                  value: 'SURGE', child: Text('SURGE')),
+                              DropdownMenuItem(
+                                  value: 'WORKER', child: Text('WORKER')),
+                            ],
+                            onChanged: (value) => setState(() {
+                              selectedType = value ?? 'BASE';
+                              typeController.text = selectedType;
+                              if (selectedType != 'CITY') selectedCityId = null;
+                            }),
+                          ),
+                          if (selectedType == 'CITY')
+                            DropdownButtonFormField<String>(
+                              initialValue: selectedCityId,
+                              decoration: const InputDecoration(
+                                labelText: 'City',
+                                helperText:
+                                    'City pricing applies only to this active city.',
+                              ),
+                              items: cities.entries
+                                  .map((entry) => DropdownMenuItem(
+                                        value: entry.key,
+                                        child: Text(entry.value),
+                                      ))
+                                  .toList(growable: false),
+                              onChanged: (value) =>
+                                  setState(() => selectedCityId = value),
+                              validator: (value) => selectedType == 'CITY' &&
+                                      (value == null ||
+                                          !cities.containsKey(value))
+                                  ? 'Choose an active city.'
+                                  : null,
+                            )
+                          else
+                            DropdownButtonFormField<String>(
+                              initialValue: selectedCityId ?? '',
+                              decoration: const InputDecoration(
+                                labelText: 'Optional city scope',
+                                helperText:
+                                    'Leave empty to apply this rule across cities.',
+                              ),
+                              items: [
+                                const DropdownMenuItem(
+                                  value: '',
+                                  child: Text('All cities'),
+                                ),
+                                ...cities.entries
+                                    .map((entry) => DropdownMenuItem(
+                                          value: entry.key,
+                                          child: Text(entry.value),
+                                        )),
+                              ],
+                              onChanged: (value) => setState(() =>
+                                  selectedCityId =
+                                      value == null || value.isEmpty
+                                          ? null
+                                          : value),
+                            ),
+                          if (selectedType == 'SEASONAL' ||
+                              selectedType == 'PROMOTIONAL' ||
+                              selectedType == 'SURGE') ...[
+                            const SizedBox(height: 12),
+                            Align(
+                              alignment: Alignment.centerLeft,
+                              child: Text('Optional effective dates',
+                                  style:
+                                      Theme.of(context).textTheme.labelLarge),
+                            ),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: OutlinedButton.icon(
+                                    onPressed: () async {
+                                      final selected = await showDatePicker(
+                                        context: context,
+                                        initialDate: startsAt ?? DateTime.now(),
+                                        firstDate: DateTime(2020),
+                                        lastDate: DateTime(2100),
+                                      );
+                                      if (selected != null) {
+                                        setState(() {
+                                          startsAt = DateTime(selected.year,
+                                              selected.month, selected.day);
+                                          dateError = null;
+                                        });
+                                      }
+                                    },
+                                    icon: const Icon(Icons.event_outlined),
+                                    label: Text(startsAt == null
+                                        ? 'Starts'
+                                        : 'Starts ${_formatDate(startsAt!)}'),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: OutlinedButton.icon(
+                                    onPressed: () async {
+                                      final selected = await showDatePicker(
+                                        context: context,
+                                        initialDate: endsAt ??
+                                            startsAt ??
+                                            DateTime.now(),
+                                        firstDate: DateTime(2020),
+                                        lastDate: DateTime(2100),
+                                      );
+                                      if (selected != null) {
+                                        setState(() {
+                                          endsAt = DateTime(selected.year,
+                                              selected.month, selected.day);
+                                          dateError = null;
+                                        });
+                                      }
+                                    },
+                                    icon: const Icon(Icons.event_available),
+                                    label: Text(endsAt == null
+                                        ? 'Ends'
+                                        : 'Ends ${_formatDate(endsAt!)}'),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            if (startsAt != null || endsAt != null)
+                              Align(
+                                alignment: Alignment.centerRight,
+                                child: TextButton(
+                                  onPressed: () => setState(() {
+                                    startsAt = null;
+                                    endsAt = null;
+                                    dateError = null;
+                                  }),
+                                  child: const Text('Clear dates'),
+                                ),
+                              ),
+                            if (dateError != null)
+                              Align(
+                                alignment: Alignment.centerLeft,
+                                child: Text(dateError!,
+                                    style: TextStyle(
+                                        color: Theme.of(context)
+                                            .colorScheme
+                                            .error)),
+                              ),
+                          ],
+                          TextFormField(
+                            controller: titleController,
+                            decoration:
+                                const InputDecoration(labelText: 'Title'),
+                            validator: (value) =>
+                                (value ?? '').trim().length < 2
+                                    ? 'Enter a title'
+                                    : null,
+                          ),
+                          TextFormField(
+                            controller: descriptionController,
+                            decoration:
+                                const InputDecoration(labelText: 'Description'),
+                            maxLines: 3,
+                          ),
+                          TextFormField(
+                            controller: priceController,
+                            decoration:
+                                const InputDecoration(labelText: 'Price'),
+                            keyboardType: TextInputType.number,
+                            validator: (value) {
+                              final price =
+                                  double.tryParse((value ?? '').trim());
+                              return price == null ||
+                                      !price.isFinite ||
+                                      price <= 0
+                                  ? 'Enter a price greater than zero.'
+                                  : null;
+                            },
+                          ),
+                          TextFormField(
+                            controller: priorityController,
+                            decoration:
+                                const InputDecoration(labelText: 'Priority'),
+                            keyboardType: TextInputType.number,
+                            validator: (value) {
+                              final priority =
+                                  int.tryParse((value ?? '').trim());
+                              return priority == null || priority < 0
+                                  ? 'Enter a whole number zero or greater.'
+                                  : null;
+                            },
+                          ),
+                          SwitchListTile(
+                            contentPadding: EdgeInsets.zero,
+                            value: isActive,
+                            onChanged: (value) =>
+                                setState(() => isActive = value),
+                            title: const Text('Rule active'),
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
-                  TextFormField(
-                    controller: titleController,
-                    decoration: const InputDecoration(labelText: 'Title'),
-                    validator: (value) => (value ?? '').trim().length < 2
-                        ? 'Enter a title'
-                        : null,
-                  ),
-                  TextFormField(
-                    controller: cityIdController,
-                    decoration:
-                        const InputDecoration(labelText: 'City ID (optional)'),
-                  ),
-                  TextFormField(
-                    controller: descriptionController,
-                    decoration: const InputDecoration(labelText: 'Description'),
-                    maxLines: 3,
-                  ),
-                  TextFormField(
-                    controller: priceController,
-                    decoration: const InputDecoration(labelText: 'Price'),
-                    keyboardType: TextInputType.number,
-                  ),
-                  TextFormField(
-                    controller: priorityController,
-                    decoration: const InputDecoration(labelText: 'Priority'),
-                    keyboardType: TextInputType.number,
-                  ),
-                ],
-              ),
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(dialogContext).pop(),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () {
-                if (!formKey.currentState!.validate()) return;
-                final payload = <String, dynamic>{
-                  'type': typeController.text,
-                  'title': titleController.text.trim(),
-                  'currency': 'INR',
-                  'price': double.tryParse(priceController.text.trim()) ??
-                      service.startingPrice,
-                  'priority': int.tryParse(priorityController.text.trim()) ?? 0,
-                };
-                final cityId = cityIdController.text.trim();
-                final description = descriptionController.text.trim();
-                if (cityId.isNotEmpty) payload['cityId'] = cityId;
-                if (description.isNotEmpty) {
-                  payload['description'] = description;
-                }
-                Navigator.of(dialogContext).pop(payload);
-              },
-              child: const Text('Save'),
-            ),
-          ],
-        );
+                  actions: [
+                    TextButton(
+                      onPressed: saving
+                          ? null
+                          : () => Navigator.of(dialogContext).pop(),
+                      child: const Text('Cancel'),
+                    ),
+                    FilledButton(
+                      onPressed: saving
+                          ? null
+                          : () async {
+                              if (!formKey.currentState!.validate()) return;
+                              if (startsAt != null &&
+                                  endsAt != null &&
+                                  !endsAt!.isAfter(startsAt!)) {
+                                setState(() => dateError =
+                                    'End date must be after the start date.');
+                                return;
+                              }
+                              final payload = <String, dynamic>{
+                                'type': typeController.text,
+                                'title': titleController.text.trim(),
+                                'currency': 'INR',
+                                'price':
+                                    double.parse(priceController.text.trim()),
+                                'priority':
+                                    int.parse(priorityController.text.trim()),
+                                'isActive': isActive,
+                                if (startsAt != null)
+                                  'startsAt':
+                                      startsAt!.toUtc().toIso8601String(),
+                                if (endsAt != null)
+                                  'endsAt': endsAt!.toUtc().toIso8601String(),
+                              };
+                              final description =
+                                  descriptionController.text.trim();
+                              if (selectedCityId != null) {
+                                payload['cityId'] = selectedCityId;
+                              }
+                              if (description.isNotEmpty) {
+                                payload['description'] = description;
+                              }
+                              setState(() {
+                                saving = true;
+                                saveError = null;
+                              });
+                              try {
+                                await onSave(payload);
+                                if (dialogContext.mounted) {
+                                  Navigator.of(dialogContext).pop(payload);
+                                }
+                              } catch (error) {
+                                if (dialogContext.mounted) {
+                                  setState(() =>
+                                      saveError = _catalogSaveError(error));
+                                }
+                              } finally {
+                                if (dialogContext.mounted) {
+                                  setState(() => saving = false);
+                                }
+                              }
+                            },
+                      child: saving
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Text('Save'),
+                    ),
+                  ],
+                ));
       },
     ).whenComplete(() {
       typeController.dispose();
       titleController.dispose();
-      cityIdController.dispose();
       descriptionController.dispose();
       priceController.dispose();
       priorityController.dispose();
     });
   }
+
+  String _formatDate(DateTime value) =>
+      '${value.year.toString().padLeft(4, '0')}-${value.month.toString().padLeft(2, '0')}-${value.day.toString().padLeft(2, '0')}';
 
   @override
   Widget build(BuildContext context) {
@@ -2704,6 +3513,19 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
               final visibleServices = scopedSnapshot == null
                   ? const <_AdminService>[]
                   : _visibleCatalogServices(scopedSnapshot);
+              final calculatedServicePageCount =
+                  (visibleServices.length + _servicePageSize - 1) ~/
+                      _servicePageSize;
+              final servicePageCount = calculatedServicePageCount == 0
+                  ? 1
+                  : calculatedServicePageCount;
+              final servicePage = _servicePage < servicePageCount
+                  ? _servicePage
+                  : servicePageCount - 1;
+              final pagedServices = visibleServices
+                  .skip(servicePage * _servicePageSize)
+                  .take(_servicePageSize)
+                  .toList(growable: false);
               final catalogFilters = scopedSnapshot == null
                   ? null
                   : _effectiveCatalogFilters(scopedSnapshot);
@@ -2716,47 +3538,123 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Row(
-                            children: [
-                              Expanded(
-                                child: Column(
+                          LayoutBuilder(
+                            builder: (context, constraints) {
+                              final title = Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Catalog Manager',
+                                    style: GoogleFonts.outfit(
+                                      fontSize:
+                                          constraints.maxWidth < 500 ? 25 : 32,
+                                      fontWeight: FontWeight.w800,
+                                      color: Colors.black87,
+                                      letterSpacing: -0.5,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    'Manage categories, services, pricing, images, and bulk imports without code changes.',
+                                    style: GoogleFonts.outfit(
+                                      color: Colors.black54,
+                                      fontSize: 16,
+                                    ),
+                                  ),
+                                ],
+                              );
+                              final actions = Wrap(
+                                spacing: 8,
+                                crossAxisAlignment: WrapCrossAlignment.center,
+                                children: [
+                                  IconButton(
+                                    onPressed: loading ? null : _reload,
+                                    icon: const Icon(Icons.refresh_rounded),
+                                    tooltip: 'Refresh catalog',
+                                  ),
+                                  PopupMenuButton<String>(
+                                    enabled: !loading && data != null,
+                                    onSelected: (kind) {
+                                      final catalog = data;
+                                      if (catalog == null) return;
+                                      switch (kind) {
+                                        case 'category':
+                                          _createCategory();
+                                          break;
+                                        case 'subcategory':
+                                          _createSubcategory(catalog);
+                                          break;
+                                        case 'service':
+                                          _createService(catalog);
+                                          break;
+                                      }
+                                    },
+                                    itemBuilder: (context) => const [
+                                      PopupMenuItem(
+                                          value: 'category',
+                                          child: Text('Category')),
+                                      PopupMenuItem(
+                                          value: 'subcategory',
+                                          child: Text('Subcategory')),
+                                      PopupMenuItem(
+                                          value: 'service',
+                                          child: Text('Service')),
+                                    ],
+                                    child: Container(
+                                      constraints:
+                                          const BoxConstraints(minHeight: 44),
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 16),
+                                      decoration: BoxDecoration(
+                                        color: Theme.of(context)
+                                            .colorScheme
+                                            .primary,
+                                        borderRadius: BorderRadius.circular(12),
+                                      ),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Icon(Icons.add_rounded,
+                                              color: Theme.of(context)
+                                                  .colorScheme
+                                                  .onPrimary),
+                                          const SizedBox(width: 6),
+                                          Text('Create',
+                                              style: TextStyle(
+                                                  color: Theme.of(context)
+                                                      .colorScheme
+                                                      .onPrimary,
+                                                  fontWeight: FontWeight.w700)),
+                                          const SizedBox(width: 4),
+                                          Icon(Icons.arrow_drop_down_rounded,
+                                              color: Theme.of(context)
+                                                  .colorScheme
+                                                  .onPrimary),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              );
+                              if (constraints.maxWidth < 680) {
+                                return Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Text(
-                                      'Catalog Manager',
-                                      style: GoogleFonts.outfit(
-                                        fontSize: 32,
-                                        fontWeight: FontWeight.w800,
-                                        color: Colors.black87,
-                                        letterSpacing: -0.5,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 8),
-                                    Text(
-                                      'Manage categories, services, pricing, images, and bulk imports without code changes.',
-                                      style: GoogleFonts.outfit(
-                                        color: Colors.black54,
-                                        fontSize: 16,
-                                      ),
-                                    ),
+                                    title,
+                                    const SizedBox(height: 12),
+                                    actions
                                   ],
-                                ),
-                              ),
-                              const SizedBox(width: 12),
-                              IconButton(
-                                onPressed: loading ? null : _reload,
-                                icon: const Icon(Icons.refresh_rounded),
-                              ),
-                              const SizedBox(width: 8),
-                              FilledButton.icon(
-                                onPressed: loading
-                                    ? null
-                                    : () => _createService(
-                                        data ?? const _CatalogSnapshot.empty()),
-                                icon: const Icon(Icons.add_rounded),
-                                label: const Text('New service'),
-                              ),
-                            ],
+                                );
+                              }
+                              return Row(
+                                crossAxisAlignment: CrossAxisAlignment.center,
+                                children: [
+                                  Expanded(child: title),
+                                  const SizedBox(width: 12),
+                                  actions
+                                ],
+                              );
+                            },
                           ),
                           const SizedBox(height: 18),
                           _SearchBar(
@@ -2922,10 +3820,14 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
                               ),
                               _ServicesTab(
                                 snapshot: scopedSnapshot ?? data,
-                                services: visibleServices,
+                                services: pagedServices,
                                 query: _catalogQuery,
                                 filter: _catalogFilter,
                                 visibleCount: visibleServices.length,
+                                pageIndex: servicePage,
+                                pageCount: servicePageCount,
+                                onPageChanged: (value) =>
+                                    setState(() => _servicePage = value),
                                 onCreate: () => _createService(data),
                                 onEdit: (service) =>
                                     _editService(data, service),
@@ -2941,6 +3843,9 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
                                 onBulkAvailability: () =>
                                     _bulkUpdateAvailability(
                                         data, visibleServices),
+                                sort: _serviceSort,
+                                onSortChanged: (value) =>
+                                    setState(() => _serviceSort = value),
                               ),
                               _PricingTab(
                                 snapshot: scopedSnapshot ?? data,
@@ -2948,6 +3853,9 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
                                 query: _catalogQuery,
                                 filter: _catalogFilter,
                                 onPricingRule: _addPricingRule,
+                                ruleType: _pricingRuleType,
+                                onRuleTypeChanged: (value) =>
+                                    setState(() => _pricingRuleType = value),
                               ),
                               _ImportExportTab(
                                 onImport: _importCatalog,
@@ -3029,8 +3937,16 @@ class _OverviewMetrics extends StatelessWidget {
     final totalCategories = snapshot.categories.length;
     final totalSubcategories = snapshot.subcategories.length;
     final totalServices = snapshot.services.length;
-    final activeServices =
-        snapshot.services.where((service) => service.isActive).length;
+    final publishedServices = snapshot.services
+        .where((service) => service.publicationStatus == 'PUBLISHED')
+        .length;
+    final draftServices = snapshot.services
+        .where((service) => service.publicationStatus == 'DRAFT')
+        .length;
+    final inactiveServices =
+        snapshot.services.where((service) => !service.isActive).length;
+    final bookingDisabledServices =
+        snapshot.services.where((service) => !service.bookingEnabled).length;
     final metrics = <_MetricData>[
       _MetricData(
           label: 'Categories',
@@ -3048,9 +3964,24 @@ class _OverviewMetrics extends StatelessWidget {
           icon: Icons.design_services_rounded,
           accent: AbzioTheme.successColor),
       _MetricData(
-          label: 'Active',
-          value: activeServices.toString(),
-          icon: Icons.verified_rounded,
+          label: 'Published services',
+          value: publishedServices.toString(),
+          icon: Icons.public_rounded,
+          accent: AbzioTheme.successColor),
+      _MetricData(
+          label: 'Draft services',
+          value: draftServices.toString(),
+          icon: Icons.edit_note_rounded,
+          accent: AbzioTheme.accentColor),
+      _MetricData(
+          label: 'Inactive services',
+          value: inactiveServices.toString(),
+          icon: Icons.pause_circle_outline_rounded,
+          accent: AbzioTheme.accentColor),
+      _MetricData(
+          label: 'Booking disabled',
+          value: bookingDisabledServices.toString(),
+          icon: Icons.event_busy_outlined,
           accent: AbzioTheme.accentColor),
     ];
 
@@ -3111,12 +4042,17 @@ bool _matchesCatalogFilter({
   required bool isActive,
   required bool featured,
   required bool popular,
+  String? publicationStatus,
+  bool? bookingEnabled,
   required _CatalogFilter filter,
 }) {
   return switch (filter) {
     _CatalogFilter.all => true,
     _CatalogFilter.active => isActive,
     _CatalogFilter.inactive => !isActive,
+    _CatalogFilter.published => publicationStatus == 'PUBLISHED',
+    _CatalogFilter.draft => publicationStatus == 'DRAFT',
+    _CatalogFilter.bookingDisabled => bookingEnabled == false,
     _CatalogFilter.featured => featured,
     _CatalogFilter.popular => popular,
   };
@@ -3172,6 +4108,8 @@ List<_AdminService> _filteredServices(
           isActive: service.isActive,
           featured: service.featured,
           popular: service.popular,
+          publicationStatus: service.publicationStatus,
+          bookingEnabled: service.bookingEnabled,
           filter: filter,
         ) &&
         _matchesQuery([
@@ -3186,10 +4124,41 @@ List<_AdminService> _filteredServices(
   }).toList(growable: false);
 }
 
+enum _ServiceSort {
+  name('Name'),
+  price('Price'),
+  status('Status'),
+  updated('Recently updated');
+
+  const _ServiceSort(this.label);
+  final String label;
+}
+
+String _serviceStatusSortKey(_AdminService service) =>
+    '${service.publicationStatus}:${service.isActive ? 0 : 1}:${service.bookingEnabled ? 0 : 1}';
+
+String _pricingRulesSummary(_AdminService service) {
+  final gst = service.gstApplicable
+      ? '${service.gstRate.toStringAsFixed(2)}%'
+      : 'not applicable';
+  final ruleDetails = service.pricingRules
+      .take(4)
+      .map((rule) =>
+          '${rule.type}: ${rule.currency} ${rule.price.toStringAsFixed(0)}, priority ${rule.priority}${rule.isActive ? '' : ', inactive'}')
+      .join(' · ');
+  final ruleSummary = service.pricingRules.isEmpty
+      ? 'No additional rules'
+      : '${service.pricingRules.length} rules · $ruleDetails';
+  return 'Base ${service.startingPrice.toStringAsFixed(0)} · GST $gst · $ruleSummary';
+}
+
 enum _CatalogFilter {
   all('All'),
   active('Active'),
   inactive('Inactive'),
+  published('Published'),
+  draft('Draft'),
+  bookingDisabled('Booking disabled'),
   featured('Featured'),
   popular('Popular');
 
@@ -3433,6 +4402,9 @@ class _ServicesTab extends StatelessWidget {
     required this.query,
     required this.filter,
     required this.visibleCount,
+    required this.pageIndex,
+    required this.pageCount,
+    required this.onPageChanged,
     required this.onCreate,
     required this.onEdit,
     required this.onDisable,
@@ -3441,6 +4413,8 @@ class _ServicesTab extends StatelessWidget {
     required this.onBulkEnable,
     required this.onBulkDisable,
     required this.onBulkAvailability,
+    required this.sort,
+    required this.onSortChanged,
   });
 
   final _CatalogSnapshot snapshot;
@@ -3448,6 +4422,9 @@ class _ServicesTab extends StatelessWidget {
   final String query;
   final _CatalogFilter filter;
   final int visibleCount;
+  final int pageIndex;
+  final int pageCount;
+  final ValueChanged<int> onPageChanged;
   final VoidCallback onCreate;
   final ValueChanged<_AdminService> onEdit;
   final ValueChanged<_AdminService> onDisable;
@@ -3456,6 +4433,8 @@ class _ServicesTab extends StatelessWidget {
   final VoidCallback onBulkEnable;
   final VoidCallback onBulkDisable;
   final VoidCallback onBulkAvailability;
+  final _ServiceSort sort;
+  final ValueChanged<_ServiceSort> onSortChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -3517,16 +4496,43 @@ class _ServicesTab extends StatelessWidget {
           label: const Text('Bulk location availability'),
         ),
         const SizedBox(height: 16),
+        Align(
+          alignment: Alignment.centerRight,
+          child: SizedBox(
+            width: 240,
+            child: DropdownButtonFormField<_ServiceSort>(
+              initialValue: sort,
+              decoration: const InputDecoration(labelText: 'Sort services'),
+              items: _ServiceSort.values
+                  .map((value) =>
+                      DropdownMenuItem(value: value, child: Text(value.label)))
+                  .toList(growable: false),
+              onChanged: (value) {
+                if (value != null) onSortChanged(value);
+              },
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
         ...services.map(
           (service) {
             final category = snapshot.categoryById(service.categoryId);
             final subcategory = snapshot.subcategoryById(service.subcategoryId);
+            final primaryImage =
+                service.images.where((image) => image.isPrimary);
+            final imageUrl = primaryImage.isNotEmpty
+                ? primaryImage.first.url
+                : service.images.isNotEmpty
+                    ? service.images.first.url
+                    : service.iconUrl;
             return _CatalogCard(
               title: service.name,
               subtitle:
-                  '${category?.name ?? 'Category'} / ${subcategory?.name ?? 'Subcategory'} - ₹${service.startingPrice.toStringAsFixed(0)} - GST ${service.gstRate.toStringAsFixed(2)}% - SAC ${service.sacCode} - ${service.estimatedDurationMins} mins - ${service.availabilityMode == 'INHERITED' ? 'Inherited' : 'Custom'} availability',
-              tag: service.isActive ? 'Active' : 'Disabled',
-              imageUrl: service.iconUrl,
+                  '${category?.name ?? 'Category'} / ${subcategory?.name ?? 'Subcategory'} · ₹${service.startingPrice.toStringAsFixed(0)} base · ${service.estimatedDurationMins} mins · ${service.publicationStatus == 'PUBLISHED' ? 'Published' : 'Draft'} · ${service.isActive ? 'Active' : 'Inactive'} · ${service.bookingEnabled ? 'Booking enabled' : 'Booking disabled'} · ${service.availabilityMode == 'INHERITED' ? 'Inherited' : 'Custom'} availability${service.updatedAt == null ? '' : ' · Updated ${_formatCatalogDate(service.updatedAt!)}'}',
+              tag: service.publicationStatus == 'PUBLISHED'
+                  ? 'Published'
+                  : 'Draft',
+              imageUrl: imageUrl,
               accent: service.featured
                   ? AbzioTheme.accentColor
                   : AbzioTheme.successColor,
@@ -3556,6 +4562,30 @@ class _ServicesTab extends StatelessWidget {
             );
           },
         ),
+        if (pageCount > 1) ...[
+          const SizedBox(height: 16),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              IconButton(
+                tooltip: 'Previous page',
+                onPressed:
+                    pageIndex == 0 ? null : () => onPageChanged(pageIndex - 1),
+                icon: const Icon(Icons.chevron_left),
+              ),
+              Text(
+                  'Page ${pageIndex + 1} of $pageCount · $visibleCount services',
+                  textAlign: TextAlign.center),
+              IconButton(
+                tooltip: 'Next page',
+                onPressed: pageIndex + 1 >= pageCount
+                    ? null
+                    : () => onPageChanged(pageIndex + 1),
+                icon: const Icon(Icons.chevron_right),
+              ),
+            ],
+          ),
+        ],
       ],
     );
   }
@@ -3568,6 +4598,8 @@ class _PricingTab extends StatelessWidget {
     required this.query,
     required this.filter,
     required this.onPricingRule,
+    required this.ruleType,
+    required this.onRuleTypeChanged,
   });
 
   final _CatalogSnapshot snapshot;
@@ -3575,9 +4607,14 @@ class _PricingTab extends StatelessWidget {
   final String query;
   final _CatalogFilter filter;
   final ValueChanged<_AdminService> onPricingRule;
+  final String ruleType;
+  final ValueChanged<String> onRuleTypeChanged;
 
   @override
   Widget build(BuildContext context) {
+    final visibleServices = services.where((service) =>
+        ruleType == 'all' ||
+        service.pricingRules.any((rule) => rule.type == ruleType));
     return ListView(
       primary: true,
       padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
@@ -3604,11 +4641,43 @@ class _PricingTab extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 12),
-        ...services.map(
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(14),
+            child: Text(
+              'Checkout uses active rules for the selected city when available; otherwise it uses all-city rules. Within that set, higher priority wins, then newer rules. A BASE rule is preferred; if none exists, the first eligible rule is used. If no rule applies, the service starting price is used. Seasonal dates control whether a rule is active.',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+        DropdownButtonFormField<String>(
+          initialValue: ruleType,
+          decoration:
+              const InputDecoration(labelText: 'Filter by pricing rule'),
+          items: const [
+            DropdownMenuItem(value: 'all', child: Text('All services')),
+            DropdownMenuItem(value: 'BASE', child: Text('BASE')),
+            DropdownMenuItem(value: 'CITY', child: Text('CITY')),
+            DropdownMenuItem(value: 'SEASONAL', child: Text('SEASONAL')),
+            DropdownMenuItem(value: 'PROMOTIONAL', child: Text('PROMOTIONAL')),
+            DropdownMenuItem(value: 'SURGE', child: Text('SURGE')),
+            DropdownMenuItem(value: 'WORKER', child: Text('WORKER')),
+          ],
+          onChanged: (value) {
+            if (value != null) onRuleTypeChanged(value);
+          },
+        ),
+        const SizedBox(height: 12),
+        if (visibleServices.isEmpty)
+          const Padding(
+            padding: EdgeInsets.all(24),
+            child: Text('No services match this pricing filter.'),
+          ),
+        ...visibleServices.map(
           (service) => _CatalogCard(
             title: service.name,
-            subtitle:
-                'Base price ₹${service.startingPrice.toStringAsFixed(0)} - GST ${service.gstRate.toStringAsFixed(2)}% - SAC ${service.sacCode} - ${service.pricingRules.length} rules',
+            subtitle: _pricingRulesSummary(service),
             tag: 'Pricing',
             accent: AbzioTheme.accentColor,
             onTap: () => context.push('/catalog/services/${service.id}'),
@@ -3868,7 +4937,9 @@ class _CategoryDetailPageState extends ConsumerState<CategoryDetailPage> {
   }
 
   Future<Map<String, dynamic>?> _showCategoryEditor(
-      _AdminCategory existing) async {
+    _AdminCategory existing, {
+    required Future<void> Function(Map<String, dynamic>) onSave,
+  }) async {
     final loaded = await _future;
     if (!mounted || loaded == null) return null;
     final snapshot = loaded.snapshot;
@@ -3893,6 +4964,8 @@ class _CategoryDetailPageState extends ConsumerState<CategoryDetailPage> {
     return showDialog<Map<String, dynamic>>(
       context: context,
       builder: (dialogContext) {
+        var saving = false;
+        String? saveError;
         return StatefulBuilder(
           builder: (context, setState) {
             return AlertDialog(
@@ -3903,6 +4976,12 @@ class _CategoryDetailPageState extends ConsumerState<CategoryDetailPage> {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
+                      if (saveError != null) ...[
+                        Text(saveError!,
+                            style: TextStyle(
+                                color: Theme.of(context).colorScheme.error)),
+                        const SizedBox(height: 8),
+                      ],
                       TextFormField(
                         controller: nameController,
                         decoration: const InputDecoration(labelText: 'Name'),
@@ -3913,6 +4992,7 @@ class _CategoryDetailPageState extends ConsumerState<CategoryDetailPage> {
                       TextFormField(
                         controller: slugController,
                         decoration: const InputDecoration(labelText: 'Slug'),
+                        validator: _validateCatalogSlug,
                       ),
                       TextFormField(
                         controller: descriptionController,
@@ -3945,6 +5025,12 @@ class _CategoryDetailPageState extends ConsumerState<CategoryDetailPage> {
                         decoration:
                             const InputDecoration(labelText: 'Sort order'),
                         keyboardType: TextInputType.number,
+                        validator: (value) {
+                          final order = int.tryParse((value ?? '').trim());
+                          return order == null || order < 0
+                              ? 'Enter a whole number of 0 or more'
+                              : null;
+                        },
                       ),
                       SwitchListTile(
                         value: featured,
@@ -3982,47 +5068,77 @@ class _CategoryDetailPageState extends ConsumerState<CategoryDetailPage> {
               ),
               actions: [
                 TextButton(
-                  onPressed: () => Navigator.of(dialogContext).pop(),
+                  onPressed:
+                      saving ? null : () => Navigator.of(dialogContext).pop(),
                   child: const Text('Cancel'),
                 ),
                 FilledButton(
-                  onPressed: () {
-                    if (_customAvailabilityHasNoLocations(
-                      availabilityMode,
-                      serviceAreaIds,
-                    )) {
-                      _showCustomAvailabilityValidationError(dialogContext);
-                      return;
-                    }
-                    if (!formKey.currentState!.validate()) return;
-                    Navigator.of(dialogContext).pop({
-                      'name': nameController.text.trim(),
-                      'slug': slugController.text.trim().isEmpty
-                          ? _slugify(nameController.text)
-                          : slugController.text.trim(),
-                      'description': descriptionController.text.trim().isEmpty
-                          ? null
-                          : descriptionController.text.trim(),
-                      'iconUrl': iconUrl,
-                      'seoTitle': seoTitleController.text.trim().isEmpty
-                          ? null
-                          : seoTitleController.text.trim(),
-                      'seoDescription':
-                          seoDescriptionController.text.trim().isEmpty
-                              ? null
-                              : seoDescriptionController.text.trim(),
-                      'sortOrder':
-                          int.tryParse(sortOrderController.text.trim()) ?? 0,
-                      'featured': featured,
-                      'popular': popular,
-                      'isActive': isActive,
-                      'availabilityMode': availabilityMode,
-                      'serviceAreaIds': availabilityMode == 'CUSTOM'
-                          ? serviceAreaIds.toList(growable: false)
-                          : const <String>[],
-                    });
-                  },
-                  child: const Text('Save'),
+                  onPressed: saving
+                      ? null
+                      : () async {
+                          if (_customAvailabilityHasNoLocations(
+                            availabilityMode,
+                            serviceAreaIds,
+                          )) {
+                            _showCustomAvailabilityValidationError(
+                                dialogContext);
+                            return;
+                          }
+                          if (!formKey.currentState!.validate()) return;
+                          final payload = <String, dynamic>{
+                            'name': nameController.text.trim(),
+                            'slug': slugController.text.trim().isEmpty
+                                ? existing.slug
+                                : slugController.text.trim(),
+                            'description':
+                                descriptionController.text.trim().isEmpty
+                                    ? null
+                                    : descriptionController.text.trim(),
+                            'iconUrl': iconUrl,
+                            'seoTitle': seoTitleController.text.trim().isEmpty
+                                ? null
+                                : seoTitleController.text.trim(),
+                            'seoDescription':
+                                seoDescriptionController.text.trim().isEmpty
+                                    ? null
+                                    : seoDescriptionController.text.trim(),
+                            'sortOrder':
+                                int.parse(sortOrderController.text.trim()),
+                            'featured': featured,
+                            'popular': popular,
+                            'isActive': isActive,
+                            'availabilityMode': availabilityMode,
+                            'serviceAreaIds': availabilityMode == 'CUSTOM'
+                                ? serviceAreaIds.toList(growable: false)
+                                : const <String>[],
+                          };
+                          setState(() {
+                            saving = true;
+                            saveError = null;
+                          });
+                          try {
+                            await onSave(payload);
+                            if (dialogContext.mounted) {
+                              Navigator.of(dialogContext).pop(payload);
+                            }
+                          } catch (error) {
+                            if (dialogContext.mounted) {
+                              setState(
+                                  () => saveError = _catalogSaveError(error));
+                            }
+                          } finally {
+                            if (dialogContext.mounted) {
+                              setState(() => saving = false);
+                            }
+                          }
+                        },
+                  child: saving
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Text('Save'),
                 ),
               ],
             );
@@ -4040,18 +5156,30 @@ class _CategoryDetailPageState extends ConsumerState<CategoryDetailPage> {
   }
 
   Future<void> _editCategory(_AdminCategory category) async {
-    final payload = await _showCategoryEditor(category);
+    final payload = await _showCategoryEditor(
+      category,
+      onSave: (values) => _api.updateCategory(category.id, values),
+    );
     if (payload == null) return;
     try {
-      await _api.updateCategory(category.id, payload);
       await _reload();
       await _showMessage('Category updated');
     } catch (error) {
-      await _showMessage('Unable to update category: $error');
+      await _showMessage(
+          'Category was saved, but the catalog could not refresh. ${_catalogSaveError(error)}');
     }
   }
 
   Future<void> _toggleCategory(_AdminCategory category) async {
+    if (category.isActive &&
+        !await _confirmDisableCatalogEntry(
+          context,
+          title: 'Disable ${category.name}?',
+          message:
+              'The category will be unavailable for new catalog discovery. Its existing subcategories, services, and bookings remain in the catalog; existing bookings are not changed.',
+        )) {
+      return;
+    }
     try {
       await _api.updateCategory(category.id, {'isActive': !category.isActive});
       await _reload();
@@ -4296,7 +5424,10 @@ class _SubcategoryDetailPageState extends ConsumerState<SubcategoryDetailPage> {
   }
 
   Future<Map<String, dynamic>?> _showSubcategoryEditor(
-      _CatalogSnapshot snapshot, _AdminSubcategory existing) {
+    _CatalogSnapshot snapshot,
+    _AdminSubcategory existing, {
+    required Future<void> Function(Map<String, dynamic>) onSave,
+  }) {
     final formKey = GlobalKey<FormState>();
     final categoryIdController = ValueNotifier<String>(existing.categoryId);
     final nameController = TextEditingController(text: existing.name);
@@ -4323,6 +5454,8 @@ class _SubcategoryDetailPageState extends ConsumerState<SubcategoryDetailPage> {
     return showDialog<Map<String, dynamic>>(
       context: context,
       builder: (dialogContext) {
+        var saving = false;
+        String? saveError;
         return StatefulBuilder(
           builder: (context, setState) {
             return AlertDialog(
@@ -4333,6 +5466,13 @@ class _SubcategoryDetailPageState extends ConsumerState<SubcategoryDetailPage> {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
+                      if (saveError != null) ...[
+                        Text(saveError!,
+                            style: TextStyle(
+                                color: Theme.of(context).colorScheme.error)),
+                        const SizedBox(height: 8),
+                      ],
+                      const _CatalogEditorSectionHeader('Basic details'),
                       DropdownButtonFormField<String>(
                         initialValue: categoryIdController.value.isEmpty
                             ? null
@@ -4362,6 +5502,7 @@ class _SubcategoryDetailPageState extends ConsumerState<SubcategoryDetailPage> {
                       TextFormField(
                         controller: slugController,
                         decoration: const InputDecoration(labelText: 'Slug'),
+                        validator: _validateCatalogSlug,
                       ),
                       TextFormField(
                         controller: descriptionController,
@@ -4394,24 +5535,51 @@ class _SubcategoryDetailPageState extends ConsumerState<SubcategoryDetailPage> {
                         decoration:
                             const InputDecoration(labelText: 'Base price'),
                         keyboardType: TextInputType.number,
+                        validator: (value) {
+                          final price = double.tryParse((value ?? '').trim());
+                          return price == null || !price.isFinite || price < 0
+                              ? 'Enter a valid amount of 0 or more'
+                              : null;
+                        },
                       ),
                       TextFormField(
                         controller: sortOrderController,
                         decoration:
                             const InputDecoration(labelText: 'Sort order'),
                         keyboardType: TextInputType.number,
+                        validator: (value) {
+                          final order = int.tryParse((value ?? '').trim());
+                          return order == null || order < 0
+                              ? 'Enter a whole number of 0 or more'
+                              : null;
+                        },
                       ),
                       TextFormField(
                         controller: ratingController,
                         decoration: const InputDecoration(labelText: 'Rating'),
                         keyboardType: const TextInputType.numberWithOptions(
                             decimal: true),
+                        validator: (value) {
+                          final rating = double.tryParse((value ?? '').trim());
+                          return rating == null ||
+                                  !rating.isFinite ||
+                                  rating < 0 ||
+                                  rating > 5
+                              ? 'Enter a rating from 0 to 5'
+                              : null;
+                        },
                       ),
                       TextFormField(
                         controller: reviewCountController,
                         decoration:
                             const InputDecoration(labelText: 'Review count'),
                         keyboardType: TextInputType.number,
+                        validator: (value) {
+                          final count = int.tryParse((value ?? '').trim());
+                          return count == null || count < 0
+                              ? 'Enter a whole number of 0 or more'
+                              : null;
+                        },
                       ),
                       SwitchListTile(
                         value: isActive,
@@ -4437,52 +5605,82 @@ class _SubcategoryDetailPageState extends ConsumerState<SubcategoryDetailPage> {
               ),
               actions: [
                 TextButton(
-                  onPressed: () => Navigator.of(dialogContext).pop(),
+                  onPressed:
+                      saving ? null : () => Navigator.of(dialogContext).pop(),
                   child: const Text('Cancel'),
                 ),
                 FilledButton(
-                  onPressed: () {
-                    if (_customAvailabilityHasNoLocations(
-                      availabilityMode,
-                      serviceAreaIds,
-                    )) {
-                      _showCustomAvailabilityValidationError(dialogContext);
-                      return;
-                    }
-                    if (!formKey.currentState!.validate()) return;
-                    Navigator.of(dialogContext).pop({
-                      'categoryId': categoryIdController.value,
-                      'name': nameController.text.trim(),
-                      'slug': slugController.text.trim().isEmpty
-                          ? _slugify(nameController.text)
-                          : slugController.text.trim(),
-                      'description': descriptionController.text.trim().isEmpty
-                          ? null
-                          : descriptionController.text.trim(),
-                      'iconUrl': iconUrl,
-                      'seoTitle': seoTitleController.text.trim().isEmpty
-                          ? null
-                          : seoTitleController.text.trim(),
-                      'seoDescription':
-                          seoDescriptionController.text.trim().isEmpty
-                              ? null
-                              : seoDescriptionController.text.trim(),
-                      'basePrice':
-                          double.tryParse(basePriceController.text.trim()) ?? 0,
-                      'sortOrder':
-                          int.tryParse(sortOrderController.text.trim()) ?? 0,
-                      'rating':
-                          double.tryParse(ratingController.text.trim()) ?? 0,
-                      'reviewCount':
-                          int.tryParse(reviewCountController.text.trim()) ?? 0,
-                      'isActive': isActive,
-                      'availabilityMode': availabilityMode,
-                      'serviceAreaIds': availabilityMode == 'CUSTOM'
-                          ? serviceAreaIds.toList(growable: false)
-                          : const <String>[],
-                    });
-                  },
-                  child: const Text('Save'),
+                  onPressed: saving
+                      ? null
+                      : () async {
+                          if (_customAvailabilityHasNoLocations(
+                            availabilityMode,
+                            serviceAreaIds,
+                          )) {
+                            _showCustomAvailabilityValidationError(
+                                dialogContext);
+                            return;
+                          }
+                          if (!formKey.currentState!.validate()) return;
+                          final payload = <String, dynamic>{
+                            'categoryId': categoryIdController.value,
+                            'name': nameController.text.trim(),
+                            'slug': slugController.text.trim().isEmpty
+                                ? existing.slug
+                                : slugController.text.trim(),
+                            'description':
+                                descriptionController.text.trim().isEmpty
+                                    ? null
+                                    : descriptionController.text.trim(),
+                            'iconUrl': iconUrl,
+                            'seoTitle': seoTitleController.text.trim().isEmpty
+                                ? null
+                                : seoTitleController.text.trim(),
+                            'seoDescription':
+                                seoDescriptionController.text.trim().isEmpty
+                                    ? null
+                                    : seoDescriptionController.text.trim(),
+                            'basePrice':
+                                double.parse(basePriceController.text.trim()),
+                            'sortOrder':
+                                int.parse(sortOrderController.text.trim()),
+                            'rating':
+                                double.parse(ratingController.text.trim()),
+                            'reviewCount':
+                                int.parse(reviewCountController.text.trim()),
+                            'isActive': isActive,
+                            'availabilityMode': availabilityMode,
+                            'serviceAreaIds': availabilityMode == 'CUSTOM'
+                                ? serviceAreaIds.toList(growable: false)
+                                : const <String>[],
+                          };
+                          setState(() {
+                            saving = true;
+                            saveError = null;
+                          });
+                          try {
+                            await onSave(payload);
+                            if (dialogContext.mounted) {
+                              Navigator.of(dialogContext).pop(payload);
+                            }
+                          } catch (error) {
+                            if (dialogContext.mounted) {
+                              setState(
+                                  () => saveError = _catalogSaveError(error));
+                            }
+                          } finally {
+                            if (dialogContext.mounted) {
+                              setState(() => saving = false);
+                            }
+                          }
+                        },
+                  child: saving
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Text('Save'),
                 ),
               ],
             );
@@ -4505,18 +5703,31 @@ class _SubcategoryDetailPageState extends ConsumerState<SubcategoryDetailPage> {
 
   Future<void> _editSubcategory(
       _CatalogSnapshot snapshot, _AdminSubcategory subcategory) async {
-    final payload = await _showSubcategoryEditor(snapshot, subcategory);
+    final payload = await _showSubcategoryEditor(
+      snapshot,
+      subcategory,
+      onSave: (values) => _api.updateSubcategory(subcategory.id, values),
+    );
     if (payload == null) return;
     try {
-      await _api.updateSubcategory(subcategory.id, payload);
       await _reload();
       await _showMessage('Subcategory updated');
     } catch (error) {
-      await _showMessage('Unable to update subcategory: $error');
+      await _showMessage(
+          'Subcategory was saved, but the catalog could not refresh. ${_catalogSaveError(error)}');
     }
   }
 
   Future<void> _toggleSubcategory(_AdminSubcategory subcategory) async {
+    if (subcategory.isActive &&
+        !await _confirmDisableCatalogEntry(
+          context,
+          title: 'Disable ${subcategory.name}?',
+          message:
+              'The subcategory will be unavailable for new catalog discovery. Its existing services and bookings remain in the catalog; existing bookings are not changed.',
+        )) {
+      return;
+    }
     try {
       await _api.updateSubcategory(
           subcategory.id, {'isActive': !subcategory.isActive});
@@ -5237,7 +6448,10 @@ class _ServiceDetailPageState extends ConsumerState<ServiceDetailPage> {
   }
 
   Future<Map<String, dynamic>?> _showServiceEditor(
-      _CatalogSnapshot snapshot, _AdminService existing) {
+    _CatalogSnapshot snapshot,
+    _AdminService existing, {
+    required Future<void> Function(Map<String, dynamic>) onSave,
+  }) {
     final formKey = GlobalKey<FormState>();
     final selectedCategoryId = ValueNotifier<String>(existing.categoryId);
     final selectedSubcategoryId = ValueNotifier<String>(existing.subcategoryId);
@@ -5349,9 +6563,18 @@ class _ServiceDetailPageState extends ConsumerState<ServiceDetailPage> {
 
     return showDialog<Map<String, dynamic>>(
       context: context,
+      barrierDismissible: false,
       builder: (dialogContext) {
+        var saving = false;
+        var dirty = false;
+        String? saveError;
         return StatefulBuilder(
           builder: (context, setState) {
+            void markDirtySetState(VoidCallback callback) {
+              dirty = true;
+              setState(callback);
+            }
+
             final subcategories =
                 snapshot.subcategoriesForCategory(selectedCategoryId.value);
             if (subcategories.isNotEmpty &&
@@ -5360,639 +6583,822 @@ class _ServiceDetailPageState extends ConsumerState<ServiceDetailPage> {
               selectedSubcategoryId.value = subcategories.first.id;
             }
 
-            return AlertDialog(
-              title: Text('Edit ${existing.name}'),
-              content: Form(
-                key: formKey,
-                child: SingleChildScrollView(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      DropdownButtonFormField<String>(
-                        initialValue: selectedCategoryId.value.isEmpty
-                            ? null
-                            : selectedCategoryId.value,
-                        decoration:
-                            const InputDecoration(labelText: 'Category'),
-                        items: snapshot.categories
-                            .map(
-                              (category) => DropdownMenuItem(
-                                value: category.id,
-                                child: Text(category.name),
-                              ),
-                            )
-                            .toList(growable: false),
-                        onChanged: (value) {
-                          setState(() {
-                            selectedCategoryId.value = value ?? '';
-                            final next = snapshot.subcategoriesForCategory(
-                                selectedCategoryId.value);
-                            selectedSubcategoryId.value =
-                                next.firstOrNull?.id ?? '';
-                          });
-                        },
-                        validator: (value) =>
-                            (value ?? '').isEmpty ? 'Select a category' : null,
-                      ),
-                      DropdownButtonFormField<String>(
-                        initialValue: selectedSubcategoryId.value.isEmpty
-                            ? null
-                            : selectedSubcategoryId.value,
-                        decoration:
-                            const InputDecoration(labelText: 'Subcategory'),
-                        items: subcategories
-                            .map(
-                              (subcategory) => DropdownMenuItem(
-                                value: subcategory.id,
-                                child: Text(subcategory.name),
-                              ),
-                            )
-                            .toList(growable: false),
-                        onChanged: (value) => setState(
-                            () => selectedSubcategoryId.value = value ?? ''),
-                        validator: (value) => (value ?? '').isEmpty
-                            ? 'Select a subcategory'
-                            : null,
-                      ),
-                      TextFormField(
-                        controller: nameController,
-                        decoration: const InputDecoration(labelText: 'Name'),
-                        validator: (value) => (value ?? '').trim().length < 2
-                            ? 'Enter a service name'
-                            : null,
-                      ),
-                      TextFormField(
-                        controller: slugController,
-                        decoration: const InputDecoration(labelText: 'Slug'),
-                      ),
-                      TextFormField(
-                        controller: codeController,
-                        decoration: const InputDecoration(labelText: 'Code'),
-                      ),
-                      TextFormField(
-                        controller: descriptionController,
-                        decoration:
-                            const InputDecoration(labelText: 'Description'),
-                        maxLines: 3,
-                      ),
-                      TextFormField(
-                        controller: shortDescriptionController,
-                        decoration: const InputDecoration(
-                            labelText: 'Short description'),
-                        maxLines: 2,
-                      ),
-                      TextFormField(
-                        controller: inclusionsController,
-                        decoration: const InputDecoration(
-                          labelText: 'What’s included',
-                          helperText: 'One item per line.',
-                        ),
-                        maxLines: 4,
-                      ),
-                      TextFormField(
-                        controller: exclusionsController,
-                        decoration: const InputDecoration(
-                          labelText: 'What’s not included',
-                          helperText: 'One item per line.',
-                        ),
-                        maxLines: 4,
-                      ),
-                      TextFormField(
-                        controller: requiredSkillsController,
-                        decoration: const InputDecoration(
-                          labelText: 'Required skills',
-                          helperText: 'One skill per line.',
-                        ),
-                        maxLines: 3,
-                      ),
-                      TextFormField(
-                        controller: requiredToolsController,
-                        decoration: const InputDecoration(
-                          labelText: 'Required tools',
-                          helperText: 'One tool per line.',
-                        ),
-                        maxLines: 3,
-                      ),
-                      TextFormField(
-                        controller: requiredDocumentsController,
-                        decoration: const InputDecoration(
-                          labelText: 'Required documents',
-                          helperText: 'One document per line.',
-                        ),
-                        maxLines: 3,
-                      ),
-                      TextFormField(
-                        controller: startingPriceController,
-                        decoration:
-                            const InputDecoration(labelText: 'Starting price'),
-                        keyboardType: TextInputType.number,
-                      ),
-                      TextFormField(
-                        controller: gstRateController,
-                        decoration:
-                            const InputDecoration(labelText: 'GST rate'),
-                        keyboardType: TextInputType.number,
-                      ),
-                      SwitchListTile(
-                        value: gstApplicable,
-                        onChanged: (value) =>
-                            setState(() => gstApplicable = value),
-                        title: const Text('GST applicable'),
-                      ),
-                      TextFormField(
-                        controller: sacCodeController,
-                        decoration:
-                            const InputDecoration(labelText: 'SAC code'),
-                      ),
-                      TextFormField(
-                        controller: durationController,
-                        decoration:
-                            const InputDecoration(labelText: 'Duration (mins)'),
-                        keyboardType: TextInputType.number,
-                      ),
-                      TextFormField(
-                        controller: warrantyController,
-                        decoration:
-                            const InputDecoration(labelText: 'Warranty days'),
-                        keyboardType: TextInputType.number,
-                      ),
-                      TextFormField(
-                        controller: warrantyTextController,
-                        decoration: const InputDecoration(
-                            labelText: 'Warranty terms (optional)'),
-                        maxLines: 3,
-                      ),
-                      const Divider(height: 28),
-                      SwitchListTile(
-                          contentPadding: EdgeInsets.zero,
-                          value: guaranteeEnabled,
-                          onChanged: (value) =>
-                              setState(() => guaranteeEnabled = value),
-                          title: const Text('Enable service guarantee claims'),
-                          subtitle: const Text(
-                              'Only enable after business policy approval; no remedy is automatic.')),
-                      if (guaranteeEnabled) ...[
-                        TextFormField(
-                            controller: guaranteeWindowController,
-                            decoration: const InputDecoration(
-                                labelText:
-                                    'Claim window after completion (days)'),
-                            keyboardType: TextInputType.number),
-                        TextFormField(
-                            controller: guaranteeCategoriesController,
-                            decoration: const InputDecoration(
-                                labelText: 'Eligible issue categories',
-                                helperText: 'One per line'),
-                            maxLines: 3),
-                        TextFormField(
-                            controller: guaranteeTermsController,
-                            decoration: const InputDecoration(
-                                labelText: 'Guarantee terms'),
-                            maxLines: 3),
-                        TextFormField(
-                            controller: guaranteeExclusionsController,
-                            decoration: const InputDecoration(
-                                labelText: 'Guarantee exclusions'),
-                            maxLines: 3),
-                        TextFormField(
-                            controller: guaranteeRemediesController,
-                            validator: _validateGuaranteeRemedies,
-                            decoration: const InputDecoration(
-                                labelText: 'Permitted resolution types',
-                                helperText:
-                                    'REWORK, REVISIT, REFUND_REVIEW; one per line'),
-                            maxLines: 3),
-                        SwitchListTile(
-                            contentPadding: EdgeInsets.zero,
-                            value: guaranteeRequiresPartnerReview,
-                            onChanged: (value) => setState(
-                                () => guaranteeRequiresPartnerReview = value),
-                            title: const Text(
-                                'Request Partner response during review')),
-                        SwitchListTile(
-                            contentPadding: EdgeInsets.zero,
-                            value: guaranteeEvidenceRequired,
-                            onChanged: (value) => setState(
-                                () => guaranteeEvidenceRequired = value),
-                            title: const Text('Require supporting photos')),
-                      ],
-                      TextFormField(
-                        controller: requirementsController,
-                        decoration: const InputDecoration(
-                          labelText: 'Before booking requirements',
-                          helperText: 'One requirement per line.',
-                        ),
-                        maxLines: 4,
-                      ),
-                      TextFormField(
-                        controller: variantsController,
-                        decoration: const InputDecoration(
-                          labelText: 'Service options / variants',
-                          helperText:
-                              'One per line: name | price | duration minutes | active/inactive | description',
-                        ),
-                        maxLines: 4,
-                        validator: _validateServiceOptionLines,
-                        onChanged: (_) => setState(() {}),
-                      ),
-                      _buildServiceOptionImageEditors(
-                        context: context,
-                        controller: variantsController,
-                        selectedImageUrls: variantImageUrls,
-                        label: 'Variant images',
-                        setState: setState,
-                        uploadImage: (bytes, fileName) =>
-                            _uploadCatalogImage(_api, bytes, fileName),
-                      ),
-                      _buildServiceOptionAvailabilityEditors(
-                        context: context,
-                        snapshot: snapshot,
-                        controller: variantsController,
-                        existingVariants: existingVariants,
-                        modes: variantAvailabilityModes,
-                        areaIds: variantServiceAreaIds,
-                        setState: setState,
-                      ),
-                      TextFormField(
-                        controller: addonsController,
-                        decoration: const InputDecoration(
-                          labelText: 'Optional add-ons',
-                          helperText:
-                              'One per line: name | price | duration minutes | active/inactive | description',
-                        ),
-                        maxLines: 4,
-                        validator: _validateServiceOptionLines,
-                        onChanged: (_) => setState(() {}),
-                      ),
-                      _buildServiceOptionImageEditors(
-                        context: context,
-                        controller: addonsController,
-                        selectedImageUrls: addonImageUrls,
-                        label: 'Add-on images',
-                        setState: setState,
-                        uploadImage: (bytes, fileName) =>
-                            _uploadCatalogImage(_api, bytes, fileName),
-                      ),
-                      _buildPublicationControls(
-                        context: context,
-                        snapshot: snapshot,
-                        publicationStatus: publicationStatus,
-                        availabilityMode: availabilityMode,
-                        availabilityKey: existing.id,
-                        publishStartsAt: publishStartsAt,
-                        publishEndsAt: publishEndsAt,
-                        serviceAreaIds: serviceAreaIds,
-                        dateError: publicationDateError,
-                        onPublicationStatusChanged: (value) =>
-                            setState(() => publicationStatus = value),
-                        onAvailabilityModeChanged: (value) =>
-                            setState(() => availabilityMode = value),
-                        onPublishStartsAtChanged: (value) => setState(() {
-                          publishStartsAt = value;
-                          publicationDateError = null;
-                        }),
-                        onPublishEndsAtChanged: (value) => setState(() {
-                          publishEndsAt = value;
-                          publicationDateError = null;
-                        }),
-                        onServiceAreaToggled: (id) => setState(() {
-                          if (!serviceAreaIds.add(id)) {
-                            serviceAreaIds.remove(id);
-                          }
-                        }),
-                      ),
-                      DropdownButtonFormField<String>(
-                        initialValue: priceType,
-                        decoration: const InputDecoration(
-                            labelText: 'Customer price label'),
-                        items: const [
-                          DropdownMenuItem(
-                              value: 'FIXED', child: Text('Fixed price')),
-                          DropdownMenuItem(
-                              value: 'FROM', child: Text('Starting from')),
-                          DropdownMenuItem(
-                              value: 'QUOTE',
-                              child: Text('Price after assessment')),
+            return PopScope<Map<String, dynamic>>(
+              canPop: !dirty && !saving,
+              onPopInvokedWithResult: (didPop, _) async {
+                if (didPop || !dirty || saving) return;
+                if (await _confirmDiscardCatalogChanges(dialogContext) &&
+                    dialogContext.mounted) {
+                  dirty = false;
+                  Navigator.of(dialogContext).pop();
+                }
+              },
+              child: AlertDialog(
+                title: Text('Edit ${existing.name}'),
+                content: Form(
+                  key: formKey,
+                  onChanged: () => dirty = true,
+                  child: SingleChildScrollView(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (saveError != null) ...[
+                          Text(saveError!,
+                              style: TextStyle(
+                                  color: Theme.of(context).colorScheme.error)),
+                          const SizedBox(height: 8),
                         ],
-                        onChanged: (value) =>
-                            setState(() => priceType = value ?? 'FROM'),
-                      ),
-                      TextFormField(
-                        controller: ctaLabelController,
-                        decoration: const InputDecoration(
-                            labelText: 'Booking button text'),
-                        maxLength: 40,
-                      ),
-                      AdminImagePickerField(
-                        label: 'Service image',
-                        value: iconUrl,
-                        onChanged: (value) => setState(() => iconUrl = value),
-                        uploadImage: (bytes, fileName) =>
-                            _uploadCatalogImage(_api, bytes, fileName),
-                        recommendedWidth: 1200,
-                        recommendedHeight: 840,
-                      ),
-                      TextFormField(
-                        controller: seoTitleController,
-                        decoration:
-                            const InputDecoration(labelText: 'SEO title'),
-                      ),
-                      TextFormField(
-                        controller: seoDescriptionController,
-                        decoration:
-                            const InputDecoration(labelText: 'SEO description'),
-                        maxLines: 2,
-                      ),
-                      TextFormField(
-                        controller: seoKeywordsController,
-                        decoration: const InputDecoration(
-                          labelText: 'Search aliases / SEO keywords',
-                          helperText:
-                              'Comma-separated service names and phrases customers may search for.',
-                        ),
-                      ),
-                      TextFormField(
-                        controller: cancellationPolicyController,
-                        decoration: const InputDecoration(
-                            labelText: 'Cancellation policy'),
-                        maxLines: 3,
-                      ),
-                      TextFormField(
-                        controller: ratingController,
-                        decoration: const InputDecoration(labelText: 'Rating'),
-                        keyboardType: const TextInputType.numberWithOptions(
-                            decimal: true),
-                      ),
-                      TextFormField(
-                        controller: reviewCountController,
-                        decoration:
-                            const InputDecoration(labelText: 'Review count'),
-                        keyboardType: TextInputType.number,
-                      ),
-                      SwitchListTile(
-                        value: featured,
-                        onChanged: (value) => setState(() => featured = value),
-                        title: const Text('Featured'),
-                      ),
-                      SwitchListTile(
-                        value: popular,
-                        onChanged: (value) => setState(() => popular = value),
-                        title: const Text('Popular'),
-                      ),
-                      SwitchListTile(
-                        value: emergency,
-                        onChanged: (value) => setState(() => emergency = value),
-                        title: const Text('Emergency available'),
-                      ),
-                      SwitchListTile(
-                        value: homeVisit,
-                        onChanged: (value) => setState(() => homeVisit = value),
-                        title: const Text('Home visit'),
-                      ),
-                      SwitchListTile(
-                        value: requiresSiteVisit,
-                        onChanged: (value) =>
-                            setState(() => requiresSiteVisit = value),
-                        title: const Text('Requires site visit (Big Job)'),
-                        subtitle: const Text(
-                            'Worker visits first to generate a custom quote'),
-                      ),
-                      SwitchListTile(
-                        value: isActive,
-                        onChanged: (value) => setState(() => isActive = value),
-                        title: const Text('Active'),
-                      ),
-                      SwitchListTile(
-                        value: bookingEnabled,
-                        onChanged: (value) =>
-                            setState(() => bookingEnabled = value),
-                        title: const Text('Booking enabled'),
-                        subtitle: const Text(
-                            'Disable temporarily without hiding the service.'),
-                      ),
-                      SwitchListTile(
-                        value: maintenanceEnabled,
-                        onChanged: (value) =>
-                            setState(() => maintenanceEnabled = value),
-                        title: const Text('Recurring maintenance plans'),
-                        subtitle: const Text(
-                            'Every visit remains customer-confirmed and uses checkout.'),
-                      ),
-                      if (maintenanceEnabled) ...[
-                        TextFormField(
-                          controller: maintenanceIntervalsController,
-                          decoration: const InputDecoration(
-                              labelText: 'Allowed intervals (months)',
-                              hintText: '1, 3, 6, 12'),
-                          validator: (value) {
-                            if (!maintenanceEnabled) return null;
-                            final tokens = (value ?? '')
-                                .split(',')
-                                .map((item) => item.trim())
-                                .where((item) => item.isNotEmpty)
-                                .toList();
-                            final values = tokens
-                                .map((item) => int.tryParse(item))
-                                .whereType<int>()
-                                .toList();
-                            if (tokens.isEmpty ||
-                                values.length != tokens.length ||
-                                values.any((item) => item < 1 || item > 24) ||
-                                values.toSet().length != values.length) {
-                              return 'Enter unique month intervals from 1 to 24.';
-                            }
-                            return null;
+                        const _CatalogEditorSectionHeader('Basic details'),
+                        DropdownButtonFormField<String>(
+                          initialValue: selectedCategoryId.value.isEmpty
+                              ? null
+                              : selectedCategoryId.value,
+                          decoration:
+                              const InputDecoration(labelText: 'Category'),
+                          items: snapshot.categories
+                              .map(
+                                (category) => DropdownMenuItem(
+                                  value: category.id,
+                                  child: Text(category.name),
+                                ),
+                              )
+                              .toList(growable: false),
+                          onChanged: (value) {
+                            dirty = true;
+                            setState(() {
+                              selectedCategoryId.value = value ?? '';
+                              final next = snapshot.subcategoriesForCategory(
+                                  selectedCategoryId.value);
+                              selectedSubcategoryId.value =
+                                  next.firstOrNull?.id ?? '';
+                            });
                           },
+                          validator: (value) => (value ?? '').isEmpty
+                              ? 'Select a category'
+                              : null,
+                        ),
+                        DropdownButtonFormField<String>(
+                          initialValue: selectedSubcategoryId.value.isEmpty
+                              ? null
+                              : selectedSubcategoryId.value,
+                          decoration:
+                              const InputDecoration(labelText: 'Subcategory'),
+                          items: subcategories
+                              .map(
+                                (subcategory) => DropdownMenuItem(
+                                  value: subcategory.id,
+                                  child: Text(subcategory.name),
+                                ),
+                              )
+                              .toList(growable: false),
+                          onChanged: (value) => setState(() {
+                            dirty = true;
+                            selectedSubcategoryId.value = value ?? '';
+                          }),
+                          validator: (value) => (value ?? '').isEmpty
+                              ? 'Select a subcategory'
+                              : null,
                         ),
                         TextFormField(
-                          controller: maintenanceReminderController,
+                          controller: nameController,
+                          decoration: const InputDecoration(labelText: 'Name'),
+                          validator: (value) => (value ?? '').trim().length < 2
+                              ? 'Enter a service name'
+                              : null,
+                        ),
+                        TextFormField(
+                          controller: slugController,
+                          decoration: const InputDecoration(labelText: 'Slug'),
+                          validator: _validateCatalogSlug,
+                        ),
+                        TextFormField(
+                          controller: codeController,
+                          decoration: const InputDecoration(labelText: 'Code'),
+                        ),
+                        TextFormField(
+                          controller: descriptionController,
+                          decoration:
+                              const InputDecoration(labelText: 'Description'),
+                          maxLines: 3,
+                        ),
+                        TextFormField(
+                          controller: shortDescriptionController,
                           decoration: const InputDecoration(
-                              labelText: 'Reminder lead time (hours)'),
+                              labelText: 'Short description'),
+                          maxLines: 2,
+                        ),
+                        TextFormField(
+                          controller: inclusionsController,
+                          decoration: const InputDecoration(
+                            labelText: 'What’s included',
+                            helperText: 'One item per line.',
+                          ),
+                          maxLines: 4,
+                        ),
+                        TextFormField(
+                          controller: exclusionsController,
+                          decoration: const InputDecoration(
+                            labelText: 'What’s not included',
+                            helperText: 'One item per line.',
+                          ),
+                          maxLines: 4,
+                        ),
+                        TextFormField(
+                          controller: requiredSkillsController,
+                          decoration: const InputDecoration(
+                            labelText: 'Required skills',
+                            helperText: 'One skill per line.',
+                          ),
+                          maxLines: 3,
+                        ),
+                        TextFormField(
+                          controller: requiredToolsController,
+                          decoration: const InputDecoration(
+                            labelText: 'Required tools',
+                            helperText: 'One tool per line.',
+                          ),
+                          maxLines: 3,
+                        ),
+                        TextFormField(
+                          controller: requiredDocumentsController,
+                          decoration: const InputDecoration(
+                            labelText: 'Required documents',
+                            helperText: 'One document per line.',
+                          ),
+                          maxLines: 3,
+                        ),
+                        const _CatalogEditorSectionHeader('Pricing & tax'),
+                        TextFormField(
+                          controller: startingPriceController,
+                          decoration: const InputDecoration(
+                              labelText: 'Starting price'),
                           keyboardType: TextInputType.number,
                           validator: (value) {
-                            if (!maintenanceEnabled) return null;
-                            final hours = int.tryParse(value ?? '');
-                            return hours == null || hours < 1 || hours > 720
-                                ? 'Enter 1 to 720 hours.'
+                            final price = double.tryParse((value ?? '').trim());
+                            return price == null ||
+                                    !price.isFinite ||
+                                    price <= 0
+                                ? 'Enter a price greater than zero.'
                                 : null;
                           },
                         ),
+                        TextFormField(
+                          controller: gstRateController,
+                          decoration:
+                              const InputDecoration(labelText: 'GST rate'),
+                          keyboardType: TextInputType.number,
+                          validator: (value) {
+                            final rate = double.tryParse((value ?? '').trim());
+                            return rate == null || !rate.isFinite || rate <= 0
+                                ? 'Enter a GST rate greater than zero.'
+                                : null;
+                          },
+                        ),
+                        SwitchListTile(
+                          value: gstApplicable,
+                          onChanged: (value) => setState(() {
+                            dirty = true;
+                            gstApplicable = value;
+                          }),
+                          title: const Text('GST applicable'),
+                        ),
+                        TextFormField(
+                          controller: sacCodeController,
+                          decoration:
+                              const InputDecoration(labelText: 'SAC code'),
+                        ),
+                        TextFormField(
+                          controller: durationController,
+                          decoration: const InputDecoration(
+                              labelText: 'Duration (mins)'),
+                          keyboardType: TextInputType.number,
+                          validator: (value) {
+                            final minutes = int.tryParse((value ?? '').trim());
+                            return minutes == null || minutes <= 0
+                                ? 'Enter a whole number of minutes greater than zero.'
+                                : null;
+                          },
+                        ),
+                        TextFormField(
+                          controller: warrantyController,
+                          decoration:
+                              const InputDecoration(labelText: 'Warranty days'),
+                          keyboardType: TextInputType.number,
+                          validator: (value) {
+                            final days = int.tryParse((value ?? '').trim());
+                            return days == null || days < 0
+                                ? 'Enter zero or a whole number of days.'
+                                : null;
+                          },
+                        ),
+                        const _CatalogEditorSectionHeader(
+                            'Warranty & guarantees'),
+                        TextFormField(
+                          controller: warrantyTextController,
+                          decoration: const InputDecoration(
+                              labelText: 'Warranty terms (optional)'),
+                          maxLines: 3,
+                        ),
+                        const Divider(height: 28),
+                        SwitchListTile(
+                            contentPadding: EdgeInsets.zero,
+                            value: guaranteeEnabled,
+                            onChanged: (value) => setState(() {
+                                  dirty = true;
+                                  guaranteeEnabled = value;
+                                }),
+                            title:
+                                const Text('Enable service guarantee claims'),
+                            subtitle: const Text(
+                                'Only enable after business policy approval; no remedy is automatic.')),
+                        if (guaranteeEnabled) ...[
+                          TextFormField(
+                              controller: guaranteeWindowController,
+                              decoration: const InputDecoration(
+                                  labelText:
+                                      'Claim window after completion (days)'),
+                              keyboardType: TextInputType.number,
+                              validator: (value) {
+                                final days = int.tryParse((value ?? '').trim());
+                                return days == null || days < 1 || days > 3650
+                                    ? 'Enter a claim window from 1 to 3650 days.'
+                                    : null;
+                              }),
+                          TextFormField(
+                              controller: guaranteeCategoriesController,
+                              decoration: const InputDecoration(
+                                  labelText: 'Eligible issue categories',
+                                  helperText: 'One per line'),
+                              maxLines: 3,
+                              validator: (value) => _serviceLines(value ?? '')
+                                      .isEmpty
+                                  ? 'Add at least one eligible issue category.'
+                                  : null),
+                          TextFormField(
+                              controller: guaranteeTermsController,
+                              decoration: const InputDecoration(
+                                  labelText: 'Guarantee terms'),
+                              maxLines: 3),
+                          TextFormField(
+                              controller: guaranteeExclusionsController,
+                              decoration: const InputDecoration(
+                                  labelText: 'Guarantee exclusions'),
+                              maxLines: 3),
+                          TextFormField(
+                              controller: guaranteeRemediesController,
+                              validator: _validateGuaranteeRemedies,
+                              decoration: const InputDecoration(
+                                  labelText: 'Permitted resolution types',
+                                  helperText:
+                                      'REWORK, REVISIT, REFUND_REVIEW; one per line'),
+                              maxLines: 3),
+                          SwitchListTile(
+                              contentPadding: EdgeInsets.zero,
+                              value: guaranteeRequiresPartnerReview,
+                              onChanged: (value) => setState(() {
+                                    dirty = true;
+                                    guaranteeRequiresPartnerReview = value;
+                                  }),
+                              title: const Text(
+                                  'Request Partner response during review')),
+                          SwitchListTile(
+                              contentPadding: EdgeInsets.zero,
+                              value: guaranteeEvidenceRequired,
+                              onChanged: (value) => setState(() {
+                                    dirty = true;
+                                    guaranteeEvidenceRequired = value;
+                                  }),
+                              title: const Text('Require supporting photos')),
+                        ],
+                        TextFormField(
+                          controller: requirementsController,
+                          decoration: const InputDecoration(
+                            labelText: 'Before booking requirements',
+                            helperText: 'One requirement per line.',
+                          ),
+                          maxLines: 4,
+                        ),
+                        const _CatalogEditorSectionHeader(
+                            'Booking requirements'),
+                        const _CatalogEditorSectionHeader('Options & add-ons'),
+                        TextFormField(
+                          controller: variantsController,
+                          decoration: const InputDecoration(
+                            labelText: 'Service options / variants',
+                            helperText:
+                                'One per line: name | price | duration minutes | active/inactive | description',
+                          ),
+                          maxLines: 4,
+                          validator: _validateServiceOptionLines,
+                          onChanged: (_) => setState(() {}),
+                        ),
+                        _buildServiceOptionImageEditors(
+                          context: context,
+                          controller: variantsController,
+                          selectedImageUrls: variantImageUrls,
+                          label: 'Variant images',
+                          setState: markDirtySetState,
+                          uploadImage: (bytes, fileName) =>
+                              _uploadCatalogImage(_api, bytes, fileName),
+                        ),
+                        _buildServiceOptionAvailabilityEditors(
+                          context: context,
+                          snapshot: snapshot,
+                          controller: variantsController,
+                          existingVariants: existingVariants,
+                          modes: variantAvailabilityModes,
+                          areaIds: variantServiceAreaIds,
+                          setState: markDirtySetState,
+                        ),
+                        TextFormField(
+                          controller: addonsController,
+                          decoration: const InputDecoration(
+                            labelText: 'Optional add-ons',
+                            helperText:
+                                'One per line: name | price | duration minutes | active/inactive | description',
+                          ),
+                          maxLines: 4,
+                          validator: _validateServiceOptionLines,
+                          onChanged: (_) => setState(() {}),
+                        ),
+                        _buildServiceOptionImageEditors(
+                          context: context,
+                          controller: addonsController,
+                          selectedImageUrls: addonImageUrls,
+                          label: 'Add-on images',
+                          setState: markDirtySetState,
+                          uploadImage: (bytes, fileName) =>
+                              _uploadCatalogImage(_api, bytes, fileName),
+                        ),
+                        const _CatalogEditorSectionHeader(
+                            'Availability & publishing'),
+                        _buildPublicationControls(
+                          context: context,
+                          snapshot: snapshot,
+                          publicationStatus: publicationStatus,
+                          availabilityMode: availabilityMode,
+                          availabilityKey: existing.id,
+                          publishStartsAt: publishStartsAt,
+                          publishEndsAt: publishEndsAt,
+                          serviceAreaIds: serviceAreaIds,
+                          dateError: publicationDateError,
+                          onPublicationStatusChanged: (value) =>
+                              setState(() => publicationStatus = value),
+                          onAvailabilityModeChanged: (value) =>
+                              setState(() => availabilityMode = value),
+                          onPublishStartsAtChanged: (value) => setState(() {
+                            publishStartsAt = value;
+                            publicationDateError = null;
+                          }),
+                          onPublishEndsAtChanged: (value) => setState(() {
+                            publishEndsAt = value;
+                            publicationDateError = null;
+                          }),
+                          onServiceAreaToggled: (id) => setState(() {
+                            if (!serviceAreaIds.add(id)) {
+                              serviceAreaIds.remove(id);
+                            }
+                          }),
+                        ),
+                        const _CatalogEditorSectionHeader(
+                            'Customer booking controls'),
+                        DropdownButtonFormField<String>(
+                          initialValue: priceType,
+                          decoration: const InputDecoration(
+                              labelText: 'Customer price label'),
+                          items: const [
+                            DropdownMenuItem(
+                                value: 'FIXED', child: Text('Fixed price')),
+                            DropdownMenuItem(
+                                value: 'FROM', child: Text('Starting from')),
+                            DropdownMenuItem(
+                                value: 'QUOTE',
+                                child: Text('Price after assessment')),
+                          ],
+                          onChanged: (value) => setState(() {
+                            dirty = true;
+                            priceType = value ?? 'FROM';
+                          }),
+                        ),
+                        TextFormField(
+                          controller: ctaLabelController,
+                          decoration: const InputDecoration(
+                              labelText: 'Booking button text'),
+                          maxLength: 40,
+                        ),
+                        const _CatalogEditorSectionHeader(
+                            'Image, search & policies'),
+                        AdminImagePickerField(
+                          label: 'Service image',
+                          value: iconUrl,
+                          onChanged: (value) => setState(() {
+                            dirty = true;
+                            iconUrl = value;
+                          }),
+                          uploadImage: (bytes, fileName) =>
+                              _uploadCatalogImage(_api, bytes, fileName),
+                          recommendedWidth: 1200,
+                          recommendedHeight: 840,
+                        ),
+                        TextFormField(
+                          controller: seoTitleController,
+                          decoration:
+                              const InputDecoration(labelText: 'SEO title'),
+                        ),
+                        TextFormField(
+                          controller: seoDescriptionController,
+                          decoration: const InputDecoration(
+                              labelText: 'SEO description'),
+                          maxLines: 2,
+                        ),
+                        TextFormField(
+                          controller: seoKeywordsController,
+                          decoration: const InputDecoration(
+                            labelText: 'Search aliases / SEO keywords',
+                            helperText:
+                                'Comma-separated service names and phrases customers may search for.',
+                          ),
+                        ),
+                        TextFormField(
+                          controller: cancellationPolicyController,
+                          decoration: const InputDecoration(
+                              labelText: 'Cancellation policy'),
+                          maxLines: 3,
+                        ),
+                        TextFormField(
+                          controller: ratingController,
+                          decoration:
+                              const InputDecoration(labelText: 'Rating'),
+                          keyboardType: const TextInputType.numberWithOptions(
+                              decimal: true),
+                          validator: (value) {
+                            final rating =
+                                double.tryParse((value ?? '').trim());
+                            return rating == null ||
+                                    !rating.isFinite ||
+                                    rating < 0 ||
+                                    rating > 5
+                                ? 'Enter a rating from 0 to 5.'
+                                : null;
+                          },
+                        ),
+                        TextFormField(
+                          controller: reviewCountController,
+                          decoration:
+                              const InputDecoration(labelText: 'Review count'),
+                          keyboardType: TextInputType.number,
+                          validator: (value) {
+                            final count = int.tryParse((value ?? '').trim());
+                            return count == null || count < 0
+                                ? 'Enter a whole number of 0 or more.'
+                                : null;
+                          },
+                        ),
+                        SwitchListTile(
+                          value: featured,
+                          onChanged: (value) => setState(() {
+                            dirty = true;
+                            featured = value;
+                          }),
+                          title: const Text('Featured'),
+                        ),
+                        SwitchListTile(
+                          value: popular,
+                          onChanged: (value) => setState(() {
+                            dirty = true;
+                            popular = value;
+                          }),
+                          title: const Text('Popular'),
+                        ),
+                        SwitchListTile(
+                          value: emergency,
+                          onChanged: (value) => setState(() {
+                            dirty = true;
+                            emergency = value;
+                          }),
+                          title: const Text('Emergency available'),
+                        ),
+                        SwitchListTile(
+                          value: homeVisit,
+                          onChanged: (value) => setState(() {
+                            dirty = true;
+                            homeVisit = value;
+                          }),
+                          title: const Text('Home visit'),
+                        ),
+                        SwitchListTile(
+                          value: requiresSiteVisit,
+                          onChanged: (value) => setState(() {
+                            dirty = true;
+                            requiresSiteVisit = value;
+                          }),
+                          title: const Text('Requires site visit (Big Job)'),
+                          subtitle: const Text(
+                              'Worker visits first to generate a custom quote'),
+                        ),
+                        SwitchListTile(
+                          value: isActive,
+                          onChanged: (value) => setState(() {
+                            dirty = true;
+                            isActive = value;
+                          }),
+                          title: const Text('Active'),
+                        ),
+                        SwitchListTile(
+                          value: bookingEnabled,
+                          onChanged: (value) => setState(() {
+                            dirty = true;
+                            bookingEnabled = value;
+                          }),
+                          title: const Text('Booking enabled'),
+                          subtitle: const Text(
+                              'Disable temporarily without hiding the service.'),
+                        ),
+                        SwitchListTile(
+                          value: maintenanceEnabled,
+                          onChanged: (value) => setState(() {
+                            dirty = true;
+                            maintenanceEnabled = value;
+                          }),
+                          title: const Text('Recurring maintenance plans'),
+                          subtitle: const Text(
+                              'Every visit remains customer-confirmed and uses checkout.'),
+                        ),
+                        if (maintenanceEnabled) ...[
+                          TextFormField(
+                            controller: maintenanceIntervalsController,
+                            decoration: const InputDecoration(
+                                labelText: 'Allowed intervals (months)',
+                                hintText: '1, 3, 6, 12'),
+                            validator: (value) {
+                              if (!maintenanceEnabled) return null;
+                              final tokens = (value ?? '')
+                                  .split(',')
+                                  .map((item) => item.trim())
+                                  .where((item) => item.isNotEmpty)
+                                  .toList();
+                              final values = tokens
+                                  .map((item) => int.tryParse(item))
+                                  .whereType<int>()
+                                  .toList();
+                              if (tokens.isEmpty ||
+                                  values.length != tokens.length ||
+                                  values.any((item) => item < 1 || item > 24) ||
+                                  values.toSet().length != values.length) {
+                                return 'Enter unique month intervals from 1 to 24.';
+                              }
+                              return null;
+                            },
+                          ),
+                          TextFormField(
+                            controller: maintenanceReminderController,
+                            decoration: const InputDecoration(
+                                labelText: 'Reminder lead time (hours)'),
+                            keyboardType: TextInputType.number,
+                            validator: (value) {
+                              if (!maintenanceEnabled) return null;
+                              final hours = int.tryParse(value ?? '');
+                              return hours == null || hours < 1 || hours > 720
+                                  ? 'Enter 1 to 720 hours.'
+                                  : null;
+                            },
+                          ),
+                        ],
                       ],
-                    ],
+                    ),
                   ),
                 ),
+                actions: [
+                  TextButton(
+                    onPressed: saving
+                        ? null
+                        : () async {
+                            if (dirty &&
+                                !await _confirmDiscardCatalogChanges(
+                                    dialogContext)) {
+                              return;
+                            }
+                            dirty = false;
+                            if (dialogContext.mounted) {
+                              Navigator.of(dialogContext).pop();
+                            }
+                          },
+                    child: const Text('Cancel'),
+                  ),
+                  FilledButton(
+                    onPressed: saving
+                        ? null
+                        : () async {
+                            if (!formKey.currentState!.validate()) return;
+                            if (_customAvailabilityHasNoLocations(
+                              availabilityMode,
+                              serviceAreaIds,
+                            )) {
+                              _showCustomAvailabilityValidationError(
+                                  dialogContext);
+                              return;
+                            }
+                            if (_hasUncoveredCustomVariant(
+                              variantsController.text,
+                              existingVariants,
+                              variantAvailabilityModes,
+                              variantServiceAreaIds,
+                            )) {
+                              _showCustomAvailabilityValidationError(
+                                dialogContext,
+                                isVariant: true,
+                              );
+                              return;
+                            }
+                            if (publishStartsAt != null &&
+                                publishEndsAt != null &&
+                                !publishEndsAt!.isAfter(publishStartsAt!)) {
+                              setState(() => publicationDateError =
+                                  'End date must be after the start date.');
+                              return;
+                            }
+                            final payload = <String, dynamic>{
+                              'categoryId': selectedCategoryId.value,
+                              'subcategoryId': selectedSubcategoryId.value,
+                              'name': nameController.text.trim(),
+                              'slug': slugController.text.trim().isEmpty
+                                  ? existing.slug
+                                  : slugController.text.trim(),
+                              if (codeController.text.trim().isNotEmpty)
+                                'code': codeController.text.trim(),
+                              'description':
+                                  descriptionController.text.trim().isEmpty
+                                      ? null
+                                      : descriptionController.text.trim(),
+                              'shortDescription':
+                                  shortDescriptionController.text.trim().isEmpty
+                                      ? null
+                                      : shortDescriptionController.text.trim(),
+                              'startingPrice': double.tryParse(
+                                      startingPriceController.text.trim()) ??
+                                  0,
+                              'gstRate': double.tryParse(
+                                      gstRateController.text.trim()) ??
+                                  18,
+                              'sacCode': sacCodeController.text.trim().isEmpty
+                                  ? 'PENDING'
+                                  : sacCodeController.text.trim(),
+                              'estimatedDurationMins': int.tryParse(
+                                      durationController.text.trim()) ??
+                                  0,
+                              'warrantyDays': int.tryParse(
+                                      warrantyController.text.trim()) ??
+                                  0,
+                              'inclusions':
+                                  _serviceLines(inclusionsController.text),
+                              'exclusions':
+                                  _serviceLines(exclusionsController.text),
+                              'requiredSkills': _serviceRequirementRows(
+                                  requiredSkillsController.text),
+                              'requiredTools': _serviceRequirementRows(
+                                  requiredToolsController.text),
+                              'requiredDocuments': _serviceRequirementRows(
+                                  requiredDocumentsController.text),
+                              'warrantyText':
+                                  warrantyTextController.text.trim().isEmpty
+                                      ? null
+                                      : warrantyTextController.text.trim(),
+                              'guaranteeEnabled': guaranteeEnabled,
+                              'guaranteeClaimWindowDays': guaranteeEnabled
+                                  ? (int.tryParse(guaranteeWindowController.text
+                                          .trim()) ??
+                                      0)
+                                  : 0,
+                              'guaranteeIssueCategories': _serviceLines(
+                                  guaranteeCategoriesController.text),
+                              'guaranteeTerms':
+                                  guaranteeTermsController.text.trim().isEmpty
+                                      ? null
+                                      : guaranteeTermsController.text.trim(),
+                              'guaranteeExclusions':
+                                  guaranteeExclusionsController
+                                          .text
+                                          .trim()
+                                          .isEmpty
+                                      ? null
+                                      : guaranteeExclusionsController.text
+                                          .trim(),
+                              'guaranteeResolutionTypes': _serviceLines(
+                                      guaranteeRemediesController.text)
+                                  .map((value) => value.toUpperCase())
+                                  .toList(growable: false),
+                              'guaranteeRequiresPartnerReview':
+                                  guaranteeRequiresPartnerReview,
+                              'guaranteeEvidenceRequired':
+                                  guaranteeEvidenceRequired,
+                              'requirements': requirementsController.text
+                                  .split('\n')
+                                  .map((item) => item.trim())
+                                  .where((item) => item.isNotEmpty)
+                                  .toList(growable: false),
+                              'variants': _serviceOptionRows(
+                                variantsController.text,
+                                existing.variants,
+                                isVariant: true,
+                                imageUrls: variantImageUrls,
+                                availabilityModes: variantAvailabilityModes,
+                                serviceAreaIds: variantServiceAreaIds,
+                              ),
+                              'addons': _serviceOptionRows(
+                                addonsController.text,
+                                existing.addons,
+                                isVariant: false,
+                                imageUrls: addonImageUrls,
+                              ),
+                              'priceType': priceType,
+                              'ctaLabel': ctaLabelController.text.trim().isEmpty
+                                  ? 'Book service'
+                                  : ctaLabelController.text.trim(),
+                              'iconUrl': iconUrl,
+                              'seoTitle': seoTitleController.text.trim().isEmpty
+                                  ? null
+                                  : seoTitleController.text.trim(),
+                              'seoDescription':
+                                  seoDescriptionController.text.trim().isEmpty
+                                      ? null
+                                      : seoDescriptionController.text.trim(),
+                              'seoKeywords':
+                                  seoKeywordsController.text.trim().isEmpty
+                                      ? null
+                                      : seoKeywordsController.text.trim(),
+                              'cancellationPolicy': cancellationPolicyController
+                                      .text
+                                      .trim()
+                                      .isEmpty
+                                  ? null
+                                  : cancellationPolicyController.text.trim(),
+                              'rating': double.tryParse(
+                                      ratingController.text.trim()) ??
+                                  0,
+                              'reviewCount': int.tryParse(
+                                      reviewCountController.text.trim()) ??
+                                  0,
+                              'featured': featured,
+                              'popular': popular,
+                              'emergencyAvailable': emergency,
+                              'gstApplicable': gstApplicable,
+                              'homeVisit': homeVisit,
+                              'requiresSiteVisit': requiresSiteVisit,
+                              'isActive': isActive,
+                              'bookingEnabled': bookingEnabled,
+                              'maintenanceEnabled': maintenanceEnabled,
+                              'maintenanceIntervalsMonths': maintenanceEnabled
+                                  ? maintenanceIntervalsController.text
+                                      .split(',')
+                                      .map((item) => int.tryParse(item.trim()))
+                                      .whereType<int>()
+                                      .toList()
+                                  : <int>[],
+                              'maintenanceReminderHours': int.tryParse(
+                                      maintenanceReminderController.text
+                                          .trim()) ??
+                                  24,
+                              'publicationStatus': publicationStatus,
+                              'publishStartsAt':
+                                  publishStartsAt?.toUtc().toIso8601String(),
+                              'publishEndsAt':
+                                  publishEndsAt?.toUtc().toIso8601String(),
+                              'serviceAreaIds': availabilityMode == 'CUSTOM'
+                                  ? serviceAreaIds.toList(growable: false)
+                                  : const <String>[],
+                              'availabilityMode': availabilityMode,
+                            };
+                            setState(() {
+                              saving = true;
+                              saveError = null;
+                            });
+                            try {
+                              await onSave(payload);
+                              if (dialogContext.mounted) {
+                                dirty = false;
+                                Navigator.of(dialogContext).pop(payload);
+                              }
+                            } catch (error) {
+                              if (dialogContext.mounted) {
+                                setState(
+                                    () => saveError = _catalogSaveError(error));
+                              }
+                            } finally {
+                              if (dialogContext.mounted) {
+                                setState(() => saving = false);
+                              }
+                            }
+                          },
+                    child: saving
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Text('Save changes'),
+                  ),
+                ],
               ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.of(dialogContext).pop(),
-                  child: const Text('Cancel'),
-                ),
-                FilledButton(
-                  onPressed: () {
-                    if (!formKey.currentState!.validate()) return;
-                    if (_customAvailabilityHasNoLocations(
-                      availabilityMode,
-                      serviceAreaIds,
-                    )) {
-                      _showCustomAvailabilityValidationError(dialogContext);
-                      return;
-                    }
-                    if (_hasUncoveredCustomVariant(
-                      variantsController.text,
-                      existingVariants,
-                      variantAvailabilityModes,
-                      variantServiceAreaIds,
-                    )) {
-                      _showCustomAvailabilityValidationError(
-                        dialogContext,
-                        isVariant: true,
-                      );
-                      return;
-                    }
-                    if (publishStartsAt != null &&
-                        publishEndsAt != null &&
-                        !publishEndsAt!.isAfter(publishStartsAt!)) {
-                      setState(() => publicationDateError =
-                          'End date must be after the start date.');
-                      return;
-                    }
-                    Navigator.of(dialogContext).pop({
-                      'categoryId': selectedCategoryId.value,
-                      'subcategoryId': selectedSubcategoryId.value,
-                      'name': nameController.text.trim(),
-                      'slug': slugController.text.trim().isEmpty
-                          ? _slugify(nameController.text)
-                          : slugController.text.trim(),
-                      'code': codeController.text.trim().isEmpty
-                          ? null
-                          : codeController.text.trim(),
-                      'description': descriptionController.text.trim().isEmpty
-                          ? null
-                          : descriptionController.text.trim(),
-                      'shortDescription':
-                          shortDescriptionController.text.trim().isEmpty
-                              ? null
-                              : shortDescriptionController.text.trim(),
-                      'startingPrice': double.tryParse(
-                              startingPriceController.text.trim()) ??
-                          0,
-                      'gstRate':
-                          double.tryParse(gstRateController.text.trim()) ?? 18,
-                      'sacCode': sacCodeController.text.trim().isEmpty
-                          ? 'PENDING'
-                          : sacCodeController.text.trim(),
-                      'estimatedDurationMins':
-                          int.tryParse(durationController.text.trim()) ?? 0,
-                      'warrantyDays':
-                          int.tryParse(warrantyController.text.trim()) ?? 0,
-                      'inclusions': _serviceLines(inclusionsController.text),
-                      'exclusions': _serviceLines(exclusionsController.text),
-                      'requiredSkills': _serviceRequirementRows(
-                          requiredSkillsController.text),
-                      'requiredTools':
-                          _serviceRequirementRows(requiredToolsController.text),
-                      'requiredDocuments': _serviceRequirementRows(
-                          requiredDocumentsController.text),
-                      'warrantyText': warrantyTextController.text.trim().isEmpty
-                          ? null
-                          : warrantyTextController.text.trim(),
-                      'guaranteeEnabled': guaranteeEnabled,
-                      'guaranteeClaimWindowDays': guaranteeEnabled
-                          ? (int.tryParse(
-                                  guaranteeWindowController.text.trim()) ??
-                              0)
-                          : 0,
-                      'guaranteeIssueCategories':
-                          _serviceLines(guaranteeCategoriesController.text),
-                      'guaranteeTerms':
-                          guaranteeTermsController.text.trim().isEmpty
-                              ? null
-                              : guaranteeTermsController.text.trim(),
-                      'guaranteeExclusions':
-                          guaranteeExclusionsController.text.trim().isEmpty
-                              ? null
-                              : guaranteeExclusionsController.text.trim(),
-                      'guaranteeResolutionTypes':
-                          _serviceLines(guaranteeRemediesController.text)
-                              .map((value) => value.toUpperCase())
-                              .toList(growable: false),
-                      'guaranteeRequiresPartnerReview':
-                          guaranteeRequiresPartnerReview,
-                      'guaranteeEvidenceRequired': guaranteeEvidenceRequired,
-                      'requirements': requirementsController.text
-                          .split('\n')
-                          .map((item) => item.trim())
-                          .where((item) => item.isNotEmpty)
-                          .toList(growable: false),
-                      'variants': _serviceOptionRows(
-                        variantsController.text,
-                        existing.variants,
-                        isVariant: true,
-                        imageUrls: variantImageUrls,
-                        availabilityModes: variantAvailabilityModes,
-                        serviceAreaIds: variantServiceAreaIds,
-                      ),
-                      'addons': _serviceOptionRows(
-                        addonsController.text,
-                        existing.addons,
-                        isVariant: false,
-                        imageUrls: addonImageUrls,
-                      ),
-                      'priceType': priceType,
-                      'ctaLabel': ctaLabelController.text.trim().isEmpty
-                          ? 'Book service'
-                          : ctaLabelController.text.trim(),
-                      'iconUrl': iconUrl,
-                      'seoTitle': seoTitleController.text.trim().isEmpty
-                          ? null
-                          : seoTitleController.text.trim(),
-                      'seoDescription':
-                          seoDescriptionController.text.trim().isEmpty
-                              ? null
-                              : seoDescriptionController.text.trim(),
-                      'seoKeywords': seoKeywordsController.text.trim().isEmpty
-                          ? null
-                          : seoKeywordsController.text.trim(),
-                      'cancellationPolicy':
-                          cancellationPolicyController.text.trim().isEmpty
-                              ? null
-                              : cancellationPolicyController.text.trim(),
-                      'rating':
-                          double.tryParse(ratingController.text.trim()) ?? 0,
-                      'reviewCount':
-                          int.tryParse(reviewCountController.text.trim()) ?? 0,
-                      'featured': featured,
-                      'popular': popular,
-                      'emergencyAvailable': emergency,
-                      'gstApplicable': gstApplicable,
-                      'homeVisit': homeVisit,
-                      'requiresSiteVisit': requiresSiteVisit,
-                      'isActive': isActive,
-                      'bookingEnabled': bookingEnabled,
-                      'maintenanceEnabled': maintenanceEnabled,
-                      'maintenanceIntervalsMonths': maintenanceEnabled
-                          ? maintenanceIntervalsController.text
-                              .split(',')
-                              .map((item) => int.tryParse(item.trim()))
-                              .whereType<int>()
-                              .toList()
-                          : <int>[],
-                      'maintenanceReminderHours': int.tryParse(
-                              maintenanceReminderController.text.trim()) ??
-                          24,
-                      'publicationStatus': publicationStatus,
-                      'publishStartsAt':
-                          publishStartsAt?.toUtc().toIso8601String(),
-                      'publishEndsAt': publishEndsAt?.toUtc().toIso8601String(),
-                      'serviceAreaIds': availabilityMode == 'CUSTOM'
-                          ? serviceAreaIds.toList(growable: false)
-                          : const <String>[],
-                      'availabilityMode': availabilityMode,
-                    });
-                  },
-                  child: const Text('Save'),
-                ),
-              ],
             );
           },
         );
@@ -6038,18 +7444,31 @@ class _ServiceDetailPageState extends ConsumerState<ServiceDetailPage> {
 
   Future<void> _editService(
       _CatalogSnapshot snapshot, _AdminService service) async {
-    final payload = await _showServiceEditor(snapshot, service);
+    final payload = await _showServiceEditor(
+      snapshot,
+      service,
+      onSave: (values) => _api.updateService(service.id, values),
+    );
     if (payload == null) return;
     try {
-      await _api.updateService(service.id, payload);
       await _reload();
       await _showMessage('Service updated');
     } catch (error) {
-      await _showMessage('Unable to update service: $error');
+      await _showMessage(
+          'Service was saved, but the catalog could not refresh. ${_catalogSaveError(error)}');
     }
   }
 
   Future<void> _toggleService(_AdminService service) async {
+    if (service.isActive &&
+        !await _confirmDisableCatalogEntry(
+          context,
+          title: 'Disable ${service.name}?',
+          message:
+              'Customers will no longer be able to book this service while it is inactive. Existing bookings are not changed.',
+        )) {
+      return;
+    }
     try {
       await _api.updateService(service.id, {'isActive': !service.isActive});
       await _reload();
@@ -6058,6 +7477,140 @@ class _ServiceDetailPageState extends ConsumerState<ServiceDetailPage> {
     } catch (error) {
       await _showMessage('Unable to update service status: $error');
     }
+  }
+
+  Future<void> _previewCustomerService(
+    _CatalogSnapshot snapshot,
+    _AdminService service,
+  ) async {
+    final category = snapshot.categoryById(service.categoryId);
+    final subcategory = snapshot.subcategoryById(service.subcategoryId);
+    final primaryImages = service.images.where((image) => image.isPrimary);
+    final image = primaryImages.isNotEmpty
+        ? primaryImages.first
+        : service.images.firstOrNull;
+    final priceLabel = switch (service.priceType) {
+      'FIXED' => '₹${service.startingPrice.toStringAsFixed(0)}',
+      'QUOTE' => 'Price after assessment',
+      _ => 'From ₹${service.startingPrice.toStringAsFixed(0)}',
+    };
+    await showDialog<void>(
+      context: context,
+      builder: (previewContext) => Dialog(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 500, maxHeight: 720),
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (image != null)
+                  AspectRatio(
+                    aspectRatio: 360 / 250,
+                    child: Image.network(
+                      image.url,
+                      fit: BoxFit.cover,
+                      loadingBuilder: (context, child, progress) => progress ==
+                              null
+                          ? child
+                          : const Center(child: CircularProgressIndicator()),
+                      errorBuilder: (_, __, ___) => const ColoredBox(
+                        color: Color(0xFFF1EEE7),
+                        child: Center(child: Icon(Icons.broken_image_outlined)),
+                      ),
+                    ),
+                  ),
+                Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '${category?.name ?? 'Services'} · ${subcategory?.name ?? 'General'}',
+                        style: Theme.of(previewContext).textTheme.labelLarge,
+                      ),
+                      const SizedBox(height: 6),
+                      Text(service.name,
+                          style: Theme.of(previewContext)
+                              .textTheme
+                              .headlineSmall
+                              ?.copyWith(fontWeight: FontWeight.w800)),
+                      if ((service.shortDescription ?? '')
+                          .trim()
+                          .isNotEmpty) ...[
+                        const SizedBox(height: 8),
+                        Text(service.shortDescription!.trim()),
+                      ],
+                      const SizedBox(height: 12),
+                      Wrap(spacing: 8, children: [
+                        Chip(label: Text(priceLabel)),
+                        Chip(
+                            label:
+                                Text('${service.estimatedDurationMins} mins')),
+                      ]),
+                      if ((service.description ?? '').trim().isNotEmpty) ...[
+                        const SizedBox(height: 12),
+                        Text(service.description!.trim()),
+                      ],
+                      for (final section in <(String, List<String>)>[
+                        (
+                          'Options',
+                          service.variants
+                              .where((item) => item.isActive)
+                              .map((item) =>
+                                  '${item.name} · ₹${item.price.toStringAsFixed(0)}')
+                              .toList(growable: false)
+                        ),
+                        (
+                          'Optional add-ons',
+                          service.addons
+                              .where((item) => item.isActive)
+                              .map((item) =>
+                                  '${item.name} · +₹${item.price.toStringAsFixed(0)}')
+                              .toList(growable: false)
+                        ),
+                        ('What’s included', service.inclusions),
+                        ('What’s not included', service.exclusions),
+                        ('Before you book', service.requirements),
+                      ])
+                        if (section.$2.isNotEmpty) ...[
+                          const SizedBox(height: 12),
+                          Text(section.$1,
+                              style: Theme.of(previewContext)
+                                  .textTheme
+                                  .titleMedium),
+                          ...section.$2.map((value) => Padding(
+                                padding: const EdgeInsets.only(top: 4),
+                                child: Text('• $value'),
+                              )),
+                        ],
+                      if (service.warrantyDays > 0)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 12),
+                          child: Text('Warranty: ${service.warrantyDays} days'),
+                        ),
+                      const Padding(
+                        padding: EdgeInsets.only(top: 14),
+                        child: Text(
+                          'Preview only. Availability and final price depend on the customer’s selected area.',
+                        ),
+                      ),
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: TextButton(
+                          onPressed: () => Navigator.of(previewContext).pop(),
+                          child: const Text('Close preview'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   @override
@@ -6189,6 +7742,12 @@ class _ServiceDetailPageState extends ConsumerState<ServiceDetailPage> {
                     onPressed: () => _editService(data.snapshot, service),
                     icon: const Icon(Icons.edit_rounded),
                     label: const Text('Edit service'),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: () =>
+                        _previewCustomerService(data.snapshot, service),
+                    icon: const Icon(Icons.visibility_outlined),
+                    label: const Text('Customer preview'),
                   ),
                   OutlinedButton.icon(
                     onPressed: () => _toggleService(service),
@@ -6580,8 +8139,12 @@ class _CatalogAdminApi {
     return response.data ?? <String, dynamic>{};
   }
 
-  Future<void> importCatalog(List<dynamic> categories) async {
-    await _dio.post('/admin/catalog/import', data: {'categories': categories});
+  Future<Map<String, dynamic>> importCatalog(List<dynamic> categories) async {
+    final response = await _dio.post<Map<String, dynamic>>(
+      '/admin/catalog/import',
+      data: {'categories': categories},
+    );
+    return response.data ?? <String, dynamic>{};
   }
 
   Future<Map<String, dynamic>> bulkSetActiveStatus({
@@ -6612,13 +8175,34 @@ class _CatalogAdminApi {
   }
 }
 
+Future<bool> _confirmDisableCatalogEntry(
+  BuildContext context, {
+  required String title,
+  required String message,
+}) async {
+  final confirmed = await showDialog<bool>(
+    context: context,
+    builder: (dialogContext) => AlertDialog(
+      title: Text(title),
+      content: Text(message),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(dialogContext).pop(false),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.of(dialogContext).pop(true),
+          child: const Text('Disable'),
+        ),
+      ],
+    ),
+  );
+  return confirmed == true;
+}
+
 class _CatalogSnapshot {
   const _CatalogSnapshot(
       {required this.categories, this.serviceAreas = const []});
-
-  const _CatalogSnapshot.empty()
-      : categories = const [],
-        serviceAreas = const [];
 
   final List<_AdminCategory> categories;
   final List<_AdminCatalogServiceArea> serviceAreas;
@@ -7090,6 +8674,7 @@ class _AdminSubcategory {
 class _AdminService {
   const _AdminService({
     required this.id,
+    required this.updatedAt,
     required this.categoryId,
     required this.subcategoryId,
     required this.name,
@@ -7149,6 +8734,7 @@ class _AdminService {
   });
 
   final String id;
+  final DateTime? updatedAt;
   final String categoryId;
   final String subcategoryId;
   final String name;
@@ -7209,6 +8795,8 @@ class _AdminService {
   factory _AdminService.fromJson(Map<String, dynamic> json) {
     return _AdminService(
       id: json['id'] as String? ?? '',
+      updatedAt:
+          DateTime.tryParse(json['updatedAt'] as String? ?? '')?.toLocal(),
       categoryId: json['categoryId'] as String? ?? '',
       subcategoryId: json['subcategoryId'] as String? ?? '',
       name: json['name'] as String? ?? '',
@@ -7468,7 +9056,9 @@ String? _validateServiceOptionLines(String? value) {
 
 String? _validateGuaranteeRemedies(String? value) {
   const allowed = {'REWORK', 'REVISIT', 'REFUND_REVIEW'};
-  final invalid = _serviceLines(value ?? '')
+  final remedies = _serviceLines(value ?? '');
+  if (remedies.isEmpty) return 'Select at least one resolution type.';
+  final invalid = remedies
       .map((item) => item.toUpperCase())
       .where((item) => !allowed.contains(item))
       .toList(growable: false);
@@ -7846,6 +9436,16 @@ String _slugify(String value) {
       .toLowerCase()
       .replaceAll(RegExp(r'[\s_-]+'), '-')
       .replaceAll(RegExp(r'^-+|-+$'), '');
+}
+
+String? _validateCatalogSlug(String? value) {
+  final slug = (value ?? '').trim();
+  if (slug.isEmpty) return null;
+  if (slug.length > 120 ||
+      !RegExp(r'^[a-z0-9]+(?:-[a-z0-9]+)*$').hasMatch(slug)) {
+    return 'Use lowercase letters, numbers, and single hyphens.';
+  }
+  return null;
 }
 
 extension<T> on Iterable<T> {

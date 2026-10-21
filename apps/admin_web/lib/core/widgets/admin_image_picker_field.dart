@@ -9,6 +9,7 @@ class AdminImagePickerField extends StatefulWidget {
     required this.value,
     required this.onChanged,
     required this.uploadImage,
+    this.onPendingUploadChanged,
     this.label = 'Image',
     this.recommendedWidth = 1200,
     this.recommendedHeight = 900,
@@ -19,6 +20,7 @@ class AdminImagePickerField extends StatefulWidget {
   final String? value;
   final ValueChanged<String?> onChanged;
   final Future<String> Function(Uint8List bytes, String fileName) uploadImage;
+  final ValueChanged<bool>? onPendingUploadChanged;
   final String label;
   final int recommendedWidth;
   final int recommendedHeight;
@@ -96,6 +98,7 @@ class _AdminImagePickerFieldState extends State<AdminImagePickerField> {
       _pendingHeight = height;
       _error = null;
     });
+    widget.onPendingUploadChanged?.call(true);
   }
 
   Future<void> _uploadPendingImage() async {
@@ -111,14 +114,20 @@ class _AdminImagePickerFieldState extends State<AdminImagePickerField> {
       final url = await widget.uploadImage(bytes, fileName);
       if (!mounted) return;
       widget.onChanged(url);
+      widget.onPendingUploadChanged?.call(false);
       setState(() {
         _pendingBytes = null;
         _pendingFileName = null;
         _pendingWidth = null;
         _pendingHeight = null;
       });
-    } catch (_) {
-      if (mounted) setState(() => _error = 'Image upload failed. Try again.');
+    } catch (error) {
+      if (mounted) {
+        final message = error is StateError ? error.message.toString() : '';
+        setState(() => _error = message.isEmpty
+            ? 'Image upload failed. Check your connection and retry.'
+            : message);
+      }
     } finally {
       if (mounted) setState(() => _uploading = false);
     }
@@ -235,6 +244,7 @@ class _AdminImagePickerFieldState extends State<AdminImagePickerField> {
       _pendingHeight = null;
       _error = null;
     });
+    widget.onPendingUploadChanged?.call(false);
     widget.onChanged(null);
   }
 
@@ -273,6 +283,16 @@ class _AdminImagePickerFieldState extends State<AdminImagePickerField> {
         if (hasPendingImage) ...[
           const SizedBox(height: 10),
           _fileDetails(context),
+          const SizedBox(height: 6),
+          Text(
+            _uploading
+                ? 'Upload in progress. Saving is disabled until it finishes.'
+                : 'Upload this image before saving. You can retry if the upload fails.',
+            style: Theme.of(context)
+                .textTheme
+                .bodySmall
+                ?.copyWith(color: colors.onSurfaceVariant),
+          ),
         ],
         const SizedBox(height: 10),
         Wrap(
@@ -469,7 +489,7 @@ class _AdminImagePickerFieldState extends State<AdminImagePickerField> {
         ? 0.0
         : ((ratio - widget.recommendedAspectRatio).abs() /
             widget.recommendedAspectRatio);
-    final hasCropWarning = ratioDelta > 0.15;
+    final hasCropWarning = ratioDelta > 0.03;
 
     return Container(
       width: double.infinity,
@@ -533,7 +553,23 @@ class _AdminImagePickerFieldState extends State<AdminImagePickerField> {
   }) {
     final placeholder = ColoredBox(
       color: Theme.of(context).colorScheme.surfaceContainerHighest,
-      child: const Center(child: Icon(Icons.broken_image_outlined)),
+      child: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.broken_image_outlined),
+              const SizedBox(height: 6),
+              Text(
+                'Preview unavailable. Check the image and try again.',
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ],
+          ),
+        ),
+      ),
     );
     if (bytes != null) {
       return Image.memory(

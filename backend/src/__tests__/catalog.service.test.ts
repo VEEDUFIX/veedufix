@@ -9,17 +9,34 @@ vi.mock('../lib/prisma.js', () => ({
     serviceSubcategory: { findFirst: vi.fn(), findMany: vi.fn(), create: vi.fn(), count: vi.fn(), findUnique: vi.fn() },
     service: { findFirst: vi.fn(), create: vi.fn(), count: vi.fn(), findMany: vi.fn(), findUnique: vi.fn() },
     serviceArea: { count: vi.fn() },
+    city: { findFirst: vi.fn() },
+    servicePriceRule: { create: vi.fn() },
     $transaction: vi.fn((cb) => cb(prismaMockTx)),
   },
 }));
 
 const prismaMockTx = {
-  serviceCategory: { create: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
-  serviceSubcategory: { create: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
+  serviceCategory: { create: vi.fn(), update: vi.fn(), updateMany: vi.fn(), findUnique: vi.fn() },
+  serviceSubcategory: { create: vi.fn(), update: vi.fn(), updateMany: vi.fn(), findUnique: vi.fn() },
   service: { create: vi.fn(), update: vi.fn(), updateMany: vi.fn(), count: vi.fn(), findMany: vi.fn(), findUnique: vi.fn() },
+  serviceCategoryTranslation: { deleteMany: vi.fn(), createMany: vi.fn() },
+  serviceSubcategoryTranslation: { deleteMany: vi.fn(), createMany: vi.fn() },
+  serviceTranslation: { deleteMany: vi.fn(), createMany: vi.fn() },
+  serviceImage: { deleteMany: vi.fn(), createMany: vi.fn() },
+  serviceRequiredSkill: { deleteMany: vi.fn(), createMany: vi.fn() },
+  serviceRequiredTool: { deleteMany: vi.fn(), createMany: vi.fn() },
+  serviceRequiredDocument: { deleteMany: vi.fn(), createMany: vi.fn() },
   serviceArea: { count: vi.fn(), findMany: vi.fn() },
+  serviceAreaCategory: { deleteMany: vi.fn(), createMany: vi.fn() },
+  serviceAreaSubcategory: { deleteMany: vi.fn(), createMany: vi.fn() },
   serviceAreaService: { deleteMany: vi.fn(), createMany: vi.fn() },
-  serviceVariant: { create: vi.fn(), findMany: vi.fn(), deleteMany: vi.fn() },
+  serviceVariant: { create: vi.fn(), update: vi.fn(), findMany: vi.fn(), deleteMany: vi.fn() },
+  serviceAreaVariant: { deleteMany: vi.fn(), createMany: vi.fn() },
+  serviceAddon: { create: vi.fn(), update: vi.fn(), findMany: vi.fn() },
+  servicePriceRule: { create: vi.fn(), update: vi.fn(), findMany: vi.fn() },
+  skill: { findUnique: vi.fn(), create: vi.fn() },
+  tool: { findUnique: vi.fn(), create: vi.fn() },
+  city: { findFirst: vi.fn() },
   maintenancePlan: { count: vi.fn() },
 };
 
@@ -89,6 +106,137 @@ describe('Catalog Service', () => {
       await expect(catalogService.updateService('service-1', { maintenanceIntervalsMonths: [] }))
         .rejects.toMatchObject({ statusCode: 400 });
       expect(prismaMockTx.service.update).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('upsertPriceRule city validation', () => {
+    it('requires and validates active cities before persisting a city pricing rule', async () => {
+      await expect(catalogService.upsertPriceRule('service-1', {
+        type: 'CITY',
+        title: 'City price',
+        price: 500,
+      })).rejects.toMatchObject({ statusCode: 400 });
+      expect(prisma.servicePriceRule.create).not.toHaveBeenCalled();
+
+      vi.mocked(prisma.city.findFirst).mockResolvedValueOnce(null as any);
+      await expect(catalogService.upsertPriceRule('service-1', {
+        type: 'CITY',
+        title: 'City price',
+        price: 500,
+        cityId: 'inactive-city',
+      })).rejects.toMatchObject({ statusCode: 400 });
+      expect(prisma.servicePriceRule.create).not.toHaveBeenCalled();
+
+      vi.mocked(prisma.city.findFirst).mockResolvedValueOnce({ id: 'city-1' } as any);
+      vi.mocked(prisma.servicePriceRule.create).mockResolvedValueOnce({ id: 'rule-1' } as any);
+      await expect(catalogService.upsertPriceRule('service-1', {
+        type: 'CITY',
+        title: 'City price',
+        price: 500,
+        cityId: 'city-1',
+      })).resolves.toMatchObject({ id: 'rule-1' });
+      expect(prisma.city.findFirst).toHaveBeenLastCalledWith({
+        where: { id: 'city-1', isActive: true },
+        select: { id: true },
+      });
+    });
+  });
+
+  describe('importCatalog', () => {
+    it('writes the complete import through one transaction', async () => {
+      vi.mocked(prismaMockTx.serviceCategory.findUnique).mockResolvedValueOnce(null as any);
+      vi.mocked(prismaMockTx.serviceCategory.create).mockResolvedValueOnce({ id: 'category-1' } as any);
+      vi.mocked(prismaMockTx.serviceSubcategory.findUnique).mockResolvedValueOnce(null as any);
+      vi.mocked(prismaMockTx.serviceSubcategory.create).mockResolvedValueOnce({ id: 'subcategory-1' } as any);
+      vi.mocked(prismaMockTx.service.findUnique).mockResolvedValueOnce(null as any);
+      vi.mocked(prismaMockTx.service.create).mockResolvedValueOnce({ id: 'service-1' } as any);
+
+      await expect(catalogService.importCatalog([{
+        name: 'Plumbing',
+        slug: 'plumbing',
+        subcategories: [{
+          name: 'Leaks',
+          slug: 'leaks',
+          services: [{
+            name: 'Tap repair',
+            slug: 'tap-repair',
+            startingPrice: 450,
+            estimatedDurationMins: 60,
+          }],
+        }],
+      }])).resolves.toEqual({
+        categoryCount: 1,
+        subcategoryCount: 1,
+        serviceCount: 1,
+      });
+
+      expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+      expect(prismaMockTx.serviceCategory.create).toHaveBeenCalledTimes(1);
+      expect(prismaMockTx.serviceSubcategory.create).toHaveBeenCalledTimes(1);
+      expect(prismaMockTx.service.create).toHaveBeenCalledTimes(1);
+    });
+
+    it('restores exported service policies and child catalog records inside the import transaction', async () => {
+      prismaMockTx.serviceCategory.findUnique.mockResolvedValueOnce(null as any);
+      prismaMockTx.serviceCategory.create.mockResolvedValueOnce({ id: 'category-1', name: 'Home repair' } as any);
+      prismaMockTx.serviceSubcategory.findUnique.mockResolvedValueOnce(null as any);
+      prismaMockTx.serviceSubcategory.create.mockResolvedValueOnce({ id: 'subcategory-1', name: 'Plumbing' } as any);
+      prismaMockTx.service.findUnique.mockResolvedValueOnce(null as any);
+      prismaMockTx.service.create.mockResolvedValueOnce({ id: 'service-1', name: 'Tap repair' } as any);
+      prismaMockTx.skill.findUnique.mockResolvedValueOnce(null as any);
+      prismaMockTx.skill.create.mockResolvedValueOnce({ id: 'skill-1' } as any);
+      prismaMockTx.serviceVariant.findMany.mockResolvedValueOnce([] as any);
+      prismaMockTx.serviceVariant.create.mockResolvedValueOnce({ id: 'variant-1' } as any);
+      prismaMockTx.serviceAddon.findMany.mockResolvedValueOnce([] as any);
+      prismaMockTx.serviceAddon.create.mockResolvedValueOnce({ id: 'addon-1' } as any);
+      prismaMockTx.servicePriceRule.findMany.mockResolvedValueOnce([] as any);
+      prismaMockTx.servicePriceRule.create.mockResolvedValueOnce({ id: 'rule-1' } as any);
+
+      await catalogService.importCatalog([{
+        name: 'Home repair',
+        slug: 'home-repair',
+        subcategories: [{
+          name: 'Plumbing',
+          slug: 'plumbing',
+          services: [{
+            name: 'Tap repair',
+            slug: 'tap-repair',
+            startingPrice: 450,
+            estimatedDurationMins: 60,
+            publicationStatus: 'DRAFT',
+            bookingEnabled: false,
+            maintenanceEnabled: true,
+            maintenanceIntervalsMonths: [3],
+            guaranteeEnabled: true,
+            guaranteeClaimWindowDays: 30,
+            guaranteeIssueCategories: ['Installation issue'],
+            guaranteeResolutionTypes: ['REWORK'],
+            translations: [{ locale: 'en', name: 'Tap repair' }],
+            images: [{ url: 'https://example.test/tap.jpg', isPrimary: true }],
+            requiredSkills: [{ name: 'Plumbing', slug: 'plumbing' }],
+            requiredDocuments: [{ name: 'License', slug: 'license' }],
+            variants: [{ name: 'Standard', price: 450 }],
+            addons: [{ name: 'Seal replacement', price: 50 }],
+            priceRules: [{ type: 'BASE', title: 'Base', price: 450 }],
+          }],
+        }],
+      }]);
+
+      expect(prismaMockTx.service.create).toHaveBeenCalledWith(expect.objectContaining({
+        data: expect.objectContaining({
+          publicationStatus: 'DRAFT',
+          bookingEnabled: false,
+          maintenanceIntervalsMonths: [3],
+          guaranteeIssueCategories: ['Installation issue'],
+        }),
+      }));
+      expect(prismaMockTx.serviceTranslation.createMany).toHaveBeenCalled();
+      expect(prismaMockTx.serviceImage.createMany).toHaveBeenCalled();
+      expect(prismaMockTx.serviceRequiredSkill.createMany).toHaveBeenCalled();
+      expect(prismaMockTx.serviceRequiredDocument.createMany).toHaveBeenCalled();
+      expect(prismaMockTx.serviceVariant.create).toHaveBeenCalled();
+      expect(prismaMockTx.serviceAddon.create).toHaveBeenCalled();
+      expect(prismaMockTx.servicePriceRule.create).toHaveBeenCalled();
     });
   });
 

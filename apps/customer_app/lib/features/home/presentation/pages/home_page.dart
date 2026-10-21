@@ -234,6 +234,8 @@ class _HomePageState extends ConsumerState<HomePage> {
               queryParameters: {'categorySlug': value},
             ).toString(),
           );
+        } else {
+          context.push('/search');
         }
         return;
       case 'offer':

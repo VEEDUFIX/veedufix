@@ -12,7 +12,7 @@ const bannerFields = {
   isActive: z.boolean().optional(),
   sortOrder: z.number().int().min(0).max(10000).optional(),
   destinationType: z.enum(destinationTypes),
-  destinationValue: z.string().trim().min(1).max(512),
+  destinationValue: z.string().trim().max(512).default(""),
   startsAt: z.string().datetime().nullable().optional(),
   endsAt: z.string().datetime().nullable().optional(),
 };
@@ -21,20 +21,50 @@ function validateDestination(
   value: { destinationType?: string; destinationValue?: string },
   context: z.RefinementCtx,
 ) {
-  if (value.destinationType === "custom_route" && value.destinationValue) {
-    const route = value.destinationValue.trim();
-    if (
-      !route.startsWith("/") ||
-      route.startsWith("//") ||
-      route.includes("\\") ||
-      /[\r\n]/.test(route)
-    ) {
+  const destinationType = value.destinationType;
+  const destinationValue = value.destinationValue?.trim() ?? "";
+  if (
+    (destinationType === "service" || destinationType === "search" || destinationType === "custom_route") &&
+    destinationValue.length === 0
+  ) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: destinationType === "service"
+        ? "A service slug is required"
+        : destinationType === "search"
+          ? "A search query is required"
+          : "A supported Customer app route is required",
+      path: ["destinationValue"],
+    });
+  }
+  if (destinationType === "custom_route" && destinationValue && !isSupportedCustomerBannerRoute(destinationValue)) {
       context.addIssue({
         code: z.ZodIssueCode.custom,
-        message: "Custom destinations must be internal app routes",
+        message: "Custom destination must use a supported Customer app route",
         path: ["destinationValue"],
       });
-    }
+  }
+}
+
+const customerBannerRoutes = [
+  "/app", "/service", "/professional", "/checkout", "/tracking", "/chat",
+  "/search", "/notifications", "/referral", "/support", "/bookings",
+  "/booking", "/invoice", "/arrival-otp", "/completion-otp", "/booking-rating",
+  "/profile", "/cart", "/addresses", "/wallet", "/offers", "/favorites",
+  "/maintenance-plans", "/settings", "/map-picker",
+] as const;
+
+export function isSupportedCustomerBannerRoute(value: string): boolean {
+  const route = value.trim();
+  if (!route.startsWith("/") || route.startsWith("//") || route.includes("\\") || /[\r\n]/.test(route)) {
+    return false;
+  }
+  try {
+    const parsed = new URL(route, "https://veedufix.invalid");
+    return parsed.origin === "https://veedufix.invalid" &&
+      customerBannerRoutes.some((allowed) => parsed.pathname === allowed || parsed.pathname.startsWith(`${allowed}/`));
+  } catch {
+    return false;
   }
 }
 
@@ -43,22 +73,33 @@ async function destinationTargetExists(
   destinationValue: string,
 ): Promise<boolean> {
   if (destinationType === "service") {
+    if (!destinationValue) return false;
     return (await prisma.service.findFirst({
       where: { slug: destinationValue, ...publicServiceEligibility() },
       select: { id: true },
     })) != null;
   }
   if (destinationType === "category") {
+    if (!destinationValue) return true;
     return (await prisma.serviceCategory.findFirst({
-      where: { slug: destinationValue, isActive: true },
+      where: {
+        slug: destinationValue,
+        isActive: true,
+        subcategories: {
+          some: {
+            isActive: true,
+            catalogServices: { some: publicServiceEligibility() },
+          },
+        },
+      },
       select: { id: true },
     })) != null;
   }
   if (destinationType === "custom_route") {
-    return destinationValue.startsWith("/") &&
-      !destinationValue.startsWith("//") &&
-      !destinationValue.includes("\\") &&
-      !/[\r\n]/.test(destinationValue);
+    return isSupportedCustomerBannerRoute(destinationValue);
+  }
+  if (destinationType === "search") {
+    return destinationValue.trim().length > 0;
   }
   return true;
 }
@@ -75,6 +116,15 @@ const updateBannerSchema = z.object({
     (value) => !value.startsAt || !value.endsAt || Date.parse(value.startsAt) <= Date.parse(value.endsAt),
     { message: "Start date must be before end date", path: ["endsAt"] },
   ),
+});
+
+const reorderBannersSchema = z.object({
+  body: z.object({
+    ids: z.array(z.string().trim().min(1)).min(1).max(100).refine(
+      (ids) => new Set(ids).size === ids.length,
+      "A banner can only appear once in the order",
+    ),
+  }),
 });
 
 const internalDestination = z.string().trim().min(1).max(512).refine(
@@ -301,6 +351,59 @@ adminHomeBannersRouter.get("/home-banners", async (_request, response) => {
 });
 
 adminHomeBannersRouter.post(
+  "/home-banners/reorder",
+  validate(reorderBannersSchema),
+  async (request, response) => {
+    const { ids } = request.body as z.infer<typeof reorderBannersSchema>["body"];
+    const existing = await prisma.homeBanner.findMany({ select: { id: true } });
+    const requestedIds = new Set(ids);
+    if (
+      existing.length !== ids.length ||
+      existing.some(({ id }) => !requestedIds.has(id))
+    ) {
+      response.status(400).json({ message: "One or more banners could not be found" });
+      return;
+    }
+    await prisma.$transaction(
+      ids.map((id, sortOrder) => prisma.homeBanner.update({
+        where: { id },
+        data: { sortOrder },
+      })),
+    );
+    response.status(200).json({ success: true });
+  },
+);
+
+adminHomeBannersRouter.get("/home-banner-destinations", async (_request, response) => {
+  const [categories, services] = await Promise.all([
+    prisma.serviceCategory.findMany({
+      where: {
+        isActive: true,
+        subcategories: {
+          some: {
+            isActive: true,
+            catalogServices: { some: publicServiceEligibility() },
+          },
+        },
+      },
+      select: { id: true, name: true, slug: true },
+      orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+    }),
+    prisma.service.findMany({
+      where: publicServiceEligibility(),
+      select: {
+        id: true,
+        name: true,
+        slug: true,
+        category: { select: { name: true } },
+      },
+      orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+    }),
+  ]);
+  response.status(200).json({ categories, services });
+});
+
+adminHomeBannersRouter.post(
   "/home-banners",
   validate(createBannerSchema),
   async (request, response) => {
@@ -315,7 +418,7 @@ adminHomeBannersRouter.post(
         isActive: body.isActive ?? true,
         sortOrder: body.sortOrder ?? 0,
         destinationType: body.destinationType,
-        destinationValue: body.destinationValue,
+        destinationValue: body.destinationValue ?? "",
         startsAt: body.startsAt ? new Date(body.startsAt) : null,
         endsAt: body.endsAt ? new Date(body.endsAt) : null,
       },

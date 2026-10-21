@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:math';
 
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:marketplace_shared/marketplace_shared.dart';
 
 abstract interface class CheckoutRequestKeyStorage {
   Future<String?> read(String key);
@@ -12,7 +13,7 @@ abstract interface class CheckoutRequestKeyStorage {
 class FlutterSecureCheckoutRequestKeyStorage
     implements CheckoutRequestKeyStorage {
   FlutterSecureCheckoutRequestKeyStorage({FlutterSecureStorage? storage})
-    : _storage = storage ?? const FlutterSecureStorage();
+    : _storage = storage ?? SecureStore.createStorage();
 
   final FlutterSecureStorage _storage;
 

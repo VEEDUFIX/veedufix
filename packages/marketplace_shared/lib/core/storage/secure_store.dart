@@ -3,12 +3,13 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 class SecureStore {
   SecureStore(this._storage);
 
-  factory SecureStore.create() => SecureStore(
-        FlutterSecureStorage(
-          aOptions: AndroidOptions(
-            encryptedSharedPreferences: true,
-          ),
-        ),
+  factory SecureStore.create() => SecureStore(createStorage());
+
+  /// Use the same Android encryption mode for every secure-storage instance.
+  /// Mixed `encryptedSharedPreferences` settings against the plugin's shared
+  /// preferences can make existing values unreadable.
+  static FlutterSecureStorage createStorage() => const FlutterSecureStorage(
+        aOptions: AndroidOptions(encryptedSharedPreferences: true),
       );
 
   final FlutterSecureStorage _storage;
