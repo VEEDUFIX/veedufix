@@ -121,6 +121,7 @@ Set<String> allowedRoutesForMode(AppMode mode) {
         '/admin/action-inbox',
         '/search',
         '/analytics',
+        '/admin/ai',
         '/profile',
         '/catalog',
         '/marketing/hero-carousel',

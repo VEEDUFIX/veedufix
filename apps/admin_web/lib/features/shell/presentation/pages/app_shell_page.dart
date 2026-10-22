@@ -151,6 +151,14 @@ class _AppShellPageState extends ConsumerState<AppShellPage> {
                               location,
                               showExpanded,
                             ),
+                            _buildNavItem(
+                              '/admin/ai',
+                              Icons.auto_awesome_outlined,
+                              Icons.auto_awesome,
+                              'AI Assistant',
+                              location,
+                              showExpanded,
+                            ),
                             _buildCategoryHeader(
                                 'Operations', showExpanded, textMuted),
                             _buildNavItem(

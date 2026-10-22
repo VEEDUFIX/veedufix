@@ -9,6 +9,7 @@ import '../features/admin/presentation/pages/admin_dashboard_page.dart';
 import '../features/admin/presentation/pages/action_inbox_page.dart';
 import '../features/admin/presentation/pages/admin_quick_actions_page.dart';
 import '../features/admin/presentation/pages/analytics_page.dart';
+import '../features/admin/presentation/pages/admin_ai_assistant_page.dart';
 import '../features/catalog/presentation/pages/catalog_manager_page.dart';
 import '../features/admin/presentation/pages/home_banner_manager_page.dart';
 import '../features/admin/presentation/pages/home_service_sections_manager_page.dart';
@@ -120,9 +121,18 @@ final routerProvider = Provider<GoRouter>((ref) {
             builder: (context, state) => const AnalyticsPage(),
           ),
           GoRoute(
+            path: '/admin/ai',
+            builder: (context, state) => const AdminAiAssistantPage(),
+          ),
+          GoRoute(
             path: '/catalog',
             builder: (context, state) => CatalogManagerPage(
               showFeaturedOnly: state.uri.queryParameters['view'] == 'hero',
+              initialAiDraft:
+                  state.extra is Map && (state.extra as Map)['aiDraft'] is Map
+                      ? Map<String, dynamic>.from(
+                          (state.extra as Map)['aiDraft'] as Map)
+                      : null,
             ),
           ),
           GoRoute(

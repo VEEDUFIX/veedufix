@@ -501,9 +501,11 @@ class _CatalogEditorSectionHeader extends StatelessWidget {
 }
 
 class CatalogManagerPage extends ConsumerStatefulWidget {
-  const CatalogManagerPage({super.key, this.showFeaturedOnly = false});
+  const CatalogManagerPage(
+      {super.key, this.showFeaturedOnly = false, this.initialAiDraft});
 
   final bool showFeaturedOnly;
+  final Map<String, dynamic>? initialAiDraft;
 
   @override
   ConsumerState<CatalogManagerPage> createState() => _CatalogManagerPageState();
@@ -527,6 +529,7 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
   String _availabilityFilter = 'all';
   _ServiceSort _serviceSort = _ServiceSort.name;
   int _servicePage = 0;
+  bool _initialAiDraftOpened = false;
   static const int _servicePageSize = 25;
 
   @override
@@ -536,6 +539,15 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
     _snapshotFuture = _loadSnapshot();
     if (widget.showFeaturedOnly) {
       _catalogFilter = _CatalogFilter.featured;
+    }
+    if (widget.initialAiDraft != null) {
+      _snapshotFuture.then((snapshot) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted || _initialAiDraftOpened) return;
+          _initialAiDraftOpened = true;
+          _createService(snapshot, initialDraft: widget.initialAiDraft);
+        });
+      });
     }
   }
 
@@ -755,10 +767,12 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
     }
   }
 
-  Future<void> _createService(_CatalogSnapshot snapshot) async {
+  Future<void> _createService(_CatalogSnapshot snapshot,
+      {Map<String, dynamic>? initialDraft}) async {
     Map<String, dynamic>? created;
     final payload = await _showServiceEditor(
       snapshot,
+      initialDraft: initialDraft,
       onSave: (values) async {
         created = await _api.createService(values);
       },
@@ -2122,39 +2136,64 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
   Future<Map<String, dynamic>?> _showServiceEditor(
     _CatalogSnapshot snapshot, {
     _AdminService? existing,
+    Map<String, dynamic>? initialDraft,
     required Future<void> Function(Map<String, dynamic>) onSave,
   }) async {
     final formKey = GlobalKey<FormState>();
+    final requestedCategoryId = initialDraft?['categoryId']?.toString();
+    final categoryIdFromDraft =
+        snapshot.categories.any((item) => item.id == requestedCategoryId)
+            ? requestedCategoryId
+            : null;
+    final requestedSubcategoryId = initialDraft?['subcategoryId']?.toString();
+    final subcategoryIdFromDraft = snapshot.subcategories.any((item) =>
+            item.id == requestedSubcategoryId &&
+            (categoryIdFromDraft == null ||
+                item.categoryId == categoryIdFromDraft))
+        ? requestedSubcategoryId
+        : null;
     final selectedCategoryId = ValueNotifier<String>(
-      existing?.categoryId ?? snapshot.categories.firstOrNull?.id ?? '',
+      existing?.categoryId ??
+          (initialDraft == null
+              ? categoryIdFromDraft ?? snapshot.categories.firstOrNull?.id ?? ''
+              : categoryIdFromDraft ?? ''),
     );
     final selectedSubcategoryId = ValueNotifier<String>(
       existing?.subcategoryId ??
-          snapshot
-              .subcategoriesForCategory(existing?.categoryId ??
-                  snapshot.categories.firstOrNull?.id ??
-                  '')
-              .firstOrNull
-              ?.id ??
-          '',
+          (initialDraft == null
+              ? subcategoryIdFromDraft ??
+                  snapshot
+                      .subcategoriesForCategory(existing?.categoryId ??
+                          snapshot.categories.firstOrNull?.id ??
+                          '')
+                      .firstOrNull
+                      ?.id ??
+                  ''
+              : subcategoryIdFromDraft ?? ''),
     );
-    final nameController = TextEditingController(text: existing?.name ?? '');
+    String draftText(String key) => (initialDraft?[key] is List)
+        ? (initialDraft![key] as List).map((item) => item.toString()).join('\n')
+        : initialDraft?[key]?.toString() ?? '';
+    final nameController =
+        TextEditingController(text: existing?.name ?? draftText('serviceName'));
     final slugController = TextEditingController(text: existing?.slug ?? '');
     final codeController = TextEditingController(text: existing?.code ?? '');
-    final descriptionController =
-        TextEditingController(text: existing?.description ?? '');
-    final shortDescriptionController =
-        TextEditingController(text: existing?.shortDescription ?? '');
-    final inclusionsController =
-        TextEditingController(text: existing?.inclusions.join('\n') ?? '');
-    final exclusionsController =
-        TextEditingController(text: existing?.exclusions.join('\n') ?? '');
-    final requiredSkillsController =
-        TextEditingController(text: existing?.requiredSkills.join('\n') ?? '');
-    final requiredToolsController =
-        TextEditingController(text: existing?.requiredTools.join('\n') ?? '');
+    final descriptionController = TextEditingController(
+        text: existing?.description ?? draftText('description'));
+    final shortDescriptionController = TextEditingController(
+        text: existing?.shortDescription ?? draftText('shortDescription'));
+    final inclusionsController = TextEditingController(
+        text: existing?.inclusions.join('\n') ?? draftText('inclusions'));
+    final exclusionsController = TextEditingController(
+        text: existing?.exclusions.join('\n') ?? draftText('exclusions'));
+    final requiredSkillsController = TextEditingController(
+        text:
+            existing?.requiredSkills.join('\n') ?? draftText('requiredSkills'));
+    final requiredToolsController = TextEditingController(
+        text: existing?.requiredTools.join('\n') ?? draftText('requiredTools'));
     final requiredDocumentsController = TextEditingController(
-        text: existing?.requiredDocuments.join('\n') ?? '');
+        text: existing?.requiredDocuments.join('\n') ??
+            draftText('requiredDocuments'));
     final startingPriceController = TextEditingController(
         text: (existing?.startingPrice ?? 0).toStringAsFixed(0));
     final gstRateController = TextEditingController(
@@ -2162,16 +2201,19 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
     final sacCodeController =
         TextEditingController(text: existing?.sacCode ?? 'PENDING');
     final durationController = TextEditingController(
-        text: (existing?.estimatedDurationMins ?? 0).toString());
+        text: (existing?.estimatedDurationMins ??
+                initialDraft?['estimatedDurationMins'] as int? ??
+                0)
+            .toString());
     final warrantyController =
         TextEditingController(text: (existing?.warrantyDays ?? 0).toString());
     String? iconUrl = existing?.iconUrl;
-    final seoTitleController =
-        TextEditingController(text: existing?.seoTitle ?? '');
-    final seoDescriptionController =
-        TextEditingController(text: existing?.seoDescription ?? '');
-    final seoKeywordsController =
-        TextEditingController(text: existing?.seoKeywords ?? '');
+    final seoTitleController = TextEditingController(
+        text: existing?.seoTitle ?? draftText('seoTitle'));
+    final seoDescriptionController = TextEditingController(
+        text: existing?.seoDescription ?? draftText('seoDescription'));
+    final seoKeywordsController = TextEditingController(
+        text: existing?.seoKeywords ?? draftText('seoKeywords'));
     final cancellationPolicyController =
         TextEditingController(text: existing?.cancellationPolicy ?? '');
     final warrantyTextController =
@@ -2191,8 +2233,8 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
         existing?.guaranteeRequiresPartnerReview ?? false;
     bool guaranteeEvidenceRequired =
         existing?.guaranteeEvidenceRequired ?? false;
-    final requirementsController =
-        TextEditingController(text: existing?.requirements.join('\n') ?? '');
+    final requirementsController = TextEditingController(
+        text: existing?.requirements.join('\n') ?? draftText('requirements'));
     final variantsController = TextEditingController(
       text: _formatServiceOptions(existing?.variants ?? const []),
     );
@@ -2236,7 +2278,7 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
     bool emergency = existing?.emergencyAvailable ?? false;
     bool homeVisit = existing?.homeVisit ?? true;
     bool requiresSiteVisit = existing?.requiresSiteVisit ?? false;
-    bool isActive = existing?.isActive ?? true;
+    bool isActive = existing?.isActive ?? initialDraft == null;
     bool bookingEnabled = existing?.bookingEnabled ?? true;
     bool maintenanceEnabled = existing?.maintenanceEnabled ?? false;
     bool gstApplicable = existing?.gstApplicable ?? true;
@@ -2266,7 +2308,8 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
 
             final subcategories =
                 snapshot.subcategoriesForCategory(selectedCategoryId.value);
-            if (selectedSubcategoryId.value.isEmpty &&
+            if (initialDraft == null &&
+                selectedSubcategoryId.value.isEmpty &&
                 subcategories.isNotEmpty) {
               selectedSubcategoryId.value = subcategories.first.id;
             }
@@ -2290,6 +2333,17 @@ class _CatalogManagerPageState extends ConsumerState<CatalogManagerPage> {
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
+                        if (initialDraft?['aiGeneratedDraft'] == true) ...[
+                          const Card(
+                            child: Padding(
+                              padding: EdgeInsets.all(12),
+                              child: Text(
+                                'AI-generated draft: verify every suggestion. Choose a category and subcategory if they were not matched. Add approved price, tax, SAC, policy, and service options manually. This draft is inactive and unpublished until you review it.',
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                        ],
                         if (saveError != null) ...[
                           Text(saveError!,
                               style: TextStyle(

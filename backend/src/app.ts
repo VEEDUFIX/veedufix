@@ -43,6 +43,7 @@ import { chatRouter } from "./modules/chat/chat.routes.js";
 import { reviewsRouter } from "./modules/reviews/reviews.routes.js";
 import { walletRouter } from "./modules/wallet/wallet.routes.js";
 import { aiRouter } from "./modules/ai/ai.routes.js";
+import { adminAiRouter } from "./modules/admin-ai/admin-ai.routes.js";
 import { supportRouter } from "./modules/support/support.routes.js";
 import { adminSearchRouter } from "./modules/admin/admin-search.routes.js";
 import { adminAuditRouter } from "./modules/admin/admin-audit.routes.js";
@@ -192,6 +193,7 @@ export function createApp() {
   app.use("/api/admin/payouts", payoutRouter);
   app.use("/api/admin/refunds", refundRouter);
   app.use("/api/admin/analytics", adminAnalyticsRouter);
+  app.use("/api/admin/ai", adminAiRouter);
   app.use("/api/admin/customers", adminCustomersRouter);
   app.use("/api/admin/bookings", adminBookingsRouter);
   app.use("/api/admin/coupons", adminCouponsRouter);

@@ -91,6 +91,12 @@ const envSchema = z.object({
   // ── Google ────────────────────────────────────────────────────────────────
   GOOGLE_SERVER_CLIENT_ID: z.string().optional(),
   GOOGLE_MAPS_API_KEY: z.string().optional(),
+  // Optional by design: Admin AI routes expose a configuration-required state
+  // and keep deterministic Admin tools available until credentials are set.
+  GEMINI_API_KEY: z.string().optional(),
+  // Must stay false unless this key belongs to a Google AI Studio project with
+  // billing disabled. The API does not provide a request-level free-only flag.
+  GEMINI_FREE_TIER_CONFIRMED: z.enum(["true", "false"]).default("false").transform((value) => value === "true"),
 
   // ── Firebase / FCM ───────────────────────────────────────────────────────
   /**

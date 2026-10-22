@@ -1,38 +1,46 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
 import { logger } from "../../lib/logger.js";
+import { AiProviderError, backendAiProvider } from "../../lib/ai-provider.js";
 import type { ChatMessage } from "./ai.schemas.js";
+
+export class AiConfigurationError extends Error {
+  constructor() {
+    super("AI chat is disabled until a backend Gemini key and free-tier-only project are configured.");
+    this.name = "AiConfigurationError";
+  }
+}
 
 export class AiService {
   async chat(message: string, chatHistory: ChatMessage[] = []): Promise<string> {
-    const apiKey = process.env.GEMINI_API_KEY;
-
-    if (!apiKey) {
-      return "I'm currently running in offline mode because my API key hasn't been set up yet. Please ask the developer to add GEMINI_API_KEY to the backend .env file!";
-    }
-
     try {
-      const genAI = new GoogleGenerativeAI(apiKey);
-      const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-
-      const chat = model.startChat({
-        history: chatHistory,
-        generationConfig: {
-          maxOutputTokens: 250,
-          temperature: 0.7,
-        },
-      });
-
       const systemPrompt = `You are Veedufix AI, a helpful, friendly, and concise assistant for a home services marketplace app.
 Your job is to help customers find services (like AC repair, Plumbing, Cleaning, Electrician) and answer general questions about the app.
-Keep responses under 3 sentences. Be extremely polite. Suggest booking a professional on the app.`;
-
-      const result = await chat.sendMessage(`${systemPrompt}\n\nCustomer: ${message}`);
-      return result.response.text();
-    } catch (error: any) {
+Keep responses under 3 sentences. Be polite. Suggest booking a professional on the app. Do not request or repeat personal contact details.`;
+      const sanitizedHistory = chatHistory.slice(-6).map((entry) => ({
+        role: entry.role,
+        text: redactCustomerText(entry.parts[0]?.text ?? "", 500)
+      }));
+      return await backendAiProvider.generateText(systemPrompt, {
+        message: redactCustomerText(message, 1000),
+        history: sanitizedHistory
+      });
+    } catch (error) {
+      if (error instanceof AiProviderError && error.code === "AI_CONFIGURATION_REQUIRED") {
+        throw new AiConfigurationError();
+      }
+      if (error instanceof AiProviderError) throw error;
       logger.error({ errorName: error instanceof Error ? error.name : "UnknownError" }, "AI provider request failed");
-      return "Sorry, I'm having trouble connecting to my brain right now. Please try again later!";
+      throw new Error("AI provider request failed");
     }
   }
+}
+
+function redactCustomerText(value: string, maximumLength: number): string {
+  return value
+    .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, "[redacted email]")
+    .replace(/\b(?:\+?\d[\d\s().-]{7,}\d)\b/g, (candidate) =>
+      candidate.replace(/\D/g, "").length >= 10 ? "[redacted phone or number]" : candidate
+    )
+    .slice(0, maximumLength);
 }
 
 export const aiService = new AiService();
